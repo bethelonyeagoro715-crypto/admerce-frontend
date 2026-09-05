@@ -1,6 +1,6 @@
 'use client';
 
-import { useReducer, useEffect } from 'react';
+import { Suspense, useReducer, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import {
   MdPrint,
@@ -11,10 +11,8 @@ import {
   MdPersonOutline,
   MdLocationOn,
 } from 'react-icons/md';
-// ✅ Fixed: file is at src/app/receipt/[orderId]/page.tsx → 3 levels up to reach src/
 import api from '../../../../../services/api';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams and useParams
 export const dynamic = 'force-dynamic';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -43,7 +41,6 @@ interface OrderDetail {
   items?: OrderItem[];
 }
 
-// ─── API response shape ──────────────────────────────────────────────
 interface OrderDetailResponse extends Record<string, unknown> {
   order_id?: string;
   customer_name?: string;
@@ -62,7 +59,7 @@ interface OrderDetailResponse extends Record<string, unknown> {
   items?: OrderItem[];
 }
 
-// ─── Reducer (fixes cascading-setState ESLint warning) ───────────────
+// ─── Reducer ───────────────────────────────────────────────────────
 interface PageState {
   orderData: OrderDetail | null;
   loading: boolean;
@@ -79,10 +76,10 @@ function reducer(state: PageState, action: PageAction): PageState {
   }
 }
 
-// ─── Component ───────────────────────────────────────────────────────
-export default function ReceiptPage() {
-  const router       = useRouter();
-  const params       = useParams<{ orderId: string }>();
+// ─── Component Content ──────────────────────────────────────────
+function ReceiptContent() {
+  const router = useRouter();
+  const params = useParams<{ orderId: string }>();
   const searchParams = useSearchParams();
 
   const orderId = params.orderId || searchParams.get('order_id') || 'Unknown';
@@ -92,7 +89,7 @@ export default function ReceiptPage() {
     loading: true,
   });
 
-  // Fallback values from query params (used when API fetch fails)
+  // Fallback from query params
   const fallbackItems: OrderItem[] = (() => {
     try { return JSON.parse(searchParams.get('items') || '[]') as OrderItem[]; }
     catch { return []; }
@@ -136,7 +133,6 @@ export default function ReceiptPage() {
       });
   }, [orderId]);
 
-  // Resolved display values (API wins over fallback)
   const customerName = orderData?.customer_name || fallback.customer_name;
   const storeName    = orderData?.store_name    || fallback.store_name;
   const total        = orderData?.total_amount != null
@@ -145,7 +141,6 @@ export default function ReceiptPage() {
   const items        = orderData?.items?.length ? orderData.items : fallback.items;
   const storeAddress = orderData?.address || searchParams.get('store_address') || '';
 
-  // ── Actions ─────────────────────────────────────────────────────
   const handlePrint = () => window.print();
   const handleShare = async () => {
     if (navigator.share) {
@@ -185,8 +180,6 @@ export default function ReceiptPage() {
 
       {/* Receipt Card */}
       <div style={css.receiptCard}>
-
-        {/* Gradient header */}
         <div style={css.cardHeader}>
           <div style={css.receiptIconWrapper}>
             <MdReceiptLong size={32} color="#fff" />
@@ -200,7 +193,6 @@ export default function ReceiptPage() {
           </p>
         </div>
 
-        {/* Info rows */}
         <div style={css.infoSection}>
           {[
             { icon: <MdPersonOutline size={18} color="#0504AA" />, label: 'Customer', value: customerName },
@@ -214,7 +206,6 @@ export default function ReceiptPage() {
           ))}
         </div>
 
-        {/* Items */}
         <div style={css.itemsSection}>
           <h3 style={css.itemsTitle}>Items</h3>
           {items.length === 0 ? (
@@ -237,7 +228,6 @@ export default function ReceiptPage() {
           )}
         </div>
 
-        {/* Total */}
         <div style={css.totalSection}>
           <span style={css.totalLabel}>Total Amount</span>
           <span style={css.totalValue}>₦{total.toFixed(0)}</span>
@@ -246,6 +236,14 @@ export default function ReceiptPage() {
         <p style={css.footerNote}>Thank you for your purchase!</p>
       </div>
     </main>
+  );
+}
+
+export default function ReceiptPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading receipt…</div>}>
+      <ReceiptContent />
+    </Suspense>
   );
 }
 

@@ -1,9 +1,9 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MdArrowBack } from 'react-icons/md';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
 const PICKUP_OPTIONS = [
@@ -12,22 +12,18 @@ const PICKUP_OPTIONS = [
   { label: 'Tomorrow', value: 'Tomorrow' },
 ];
 
-export default function PickTimePage() {
+function PickTimeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const handleSelect = (pickupTime: string) => {
-    // Preserve existing query parameters (store_lat, store_lng, etc.)
     const params = new URLSearchParams(searchParams.toString());
     params.set('pickupTime', pickupTime);
-
-    // Navigate to the reservation confirmed page (root path, as you have it)
     router.push(`/reservation-confirmed?${params.toString()}`);
   };
 
   return (
     <div style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
         <button style={styles.backButton} onClick={() => router.back()}>
           <MdArrowBack size={24} color="#000" />
@@ -35,18 +31,11 @@ export default function PickTimePage() {
         <h1 style={styles.title}>Select Pickup Time</h1>
         <div style={{ width: 24 }} />
       </div>
-
-      {/* Body */}
       <div style={styles.content}>
         <p style={styles.prompt}>Choose your preferred pickup window:</p>
-
         <div style={styles.optionsList}>
           {PICKUP_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleSelect(option.value)}
-              style={styles.optionButton}
-            >
+            <button key={option.value} onClick={() => handleSelect(option.value)} style={styles.optionButton}>
               <span style={styles.optionLabel}>{option.label}</span>
               <span style={styles.optionArrow}>›</span>
             </button>
@@ -54,6 +43,14 @@ export default function PickTimePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PickTimePage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>}>
+      <PickTimeContent />
+    </Suspense>
   );
 }
 

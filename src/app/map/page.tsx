@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
-export default function MapRedirectPage() {
+function MapRedirectContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -19,5 +18,13 @@ export default function MapRedirectPage() {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
       <p style={{ color: '#888' }}>Opening map…</p>
     </div>
+  );
+}
+
+export default function MapRedirectPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading map…</div>}>
+      <MapRedirectContent />
+    </Suspense>
   );
 }

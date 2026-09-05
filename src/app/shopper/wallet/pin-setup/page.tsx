@@ -1,14 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MdLock } from 'react-icons/md';
 import api from '../../../../services/api';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
-export default function WalletPinSetupPage() {
+function WalletPinSetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pin, setPin] = useState('');
@@ -23,7 +22,6 @@ export default function WalletPinSetupPage() {
 
     setLoading(true);
     try {
-      // Ensure wallet exists (safe even if already created)
       await api.createWallet();
       await api.setWithdrawalPin(trimmedPin);
 
@@ -31,7 +29,6 @@ export default function WalletPinSetupPage() {
 
       const intendedRole = searchParams.get('intended_role') || 'shopper';
 
-      // Route based on intended role
       switch (intendedRole) {
         case 'shopper':
           router.push('/shopper/home');
@@ -54,7 +51,7 @@ export default function WalletPinSetupPage() {
   };
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, ''); // digits only
+    const value = e.target.value.replace(/\D/g, '');
     if (value.length <= 4) {
       setPin(value);
     }
@@ -107,6 +104,14 @@ export default function WalletPinSetupPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function WalletPinSetupPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading wallet setup…</div>}>
+      <WalletPinSetupContent />
+    </Suspense>
   );
 }
 

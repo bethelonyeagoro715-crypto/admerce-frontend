@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../services/api';
 import {
@@ -10,7 +10,6 @@ import {
 } from 'react-icons/md';
 import type { IconType } from 'react-icons';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -52,8 +51,8 @@ function isStoreItem(v: unknown): v is StoreItem {
   return !!v && typeof v === 'object' && typeof (v as StoreItem).listing_id === 'string';
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-export default function ArrangeStorePage() {
+// ─── Content ──────────────────────────────────────────────────────────────────
+function ArrangeStoreContent() {
   const searchParams = useSearchParams();
   const storeId      = searchParams.get('store_id') || '';
 
@@ -108,7 +107,6 @@ export default function ArrangeStorePage() {
     <main style={S.container}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      {/* Header */}
       <div style={S.header}>
         <h1 style={S.headerTitle}>Arrange Store</h1>
         <button style={S.saveBtn} onClick={() => saveOrder(items.map(i => i.listing_id))}>
@@ -117,7 +115,6 @@ export default function ArrangeStorePage() {
         </button>
       </div>
 
-      {/* List */}
       <div style={S.scrollArea}>
         {items.map((item, index) => {
           const cat    = item.category || '';
@@ -130,8 +127,6 @@ export default function ArrangeStorePage() {
 
           return (
             <div key={item.listing_id}>
-
-              {/* Category pill */}
               {firstOfCat && (
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginTop: index===0?0:16, marginBottom:8 }}>
                   <div style={{ width:28, height:28, borderRadius:'50%', backgroundColor:sh.primaryColor, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -140,8 +135,6 @@ export default function ArrangeStorePage() {
                   <span style={{ fontSize:13, fontWeight:700, color:sh.primaryColor, letterSpacing:0.3 }}>{sh.label}</span>
                 </div>
               )}
-
-              {/* Item card */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -153,11 +146,9 @@ export default function ArrangeStorePage() {
                 padding: '10px 10px 10px 10px',
                 marginBottom: 8,
               }}>
-
-                {/* ── Image ── */}
                 <div style={{
                   width: 56, height: 56,
-                  minWidth: 56,                  // ← prevents flex from squishing it
+                  minWidth: 56,
                   borderRadius: 10,
                   backgroundColor: '#fff',
                   border: '1px solid rgba(0,0,0,0.08)',
@@ -170,8 +161,7 @@ export default function ArrangeStorePage() {
                   }
                 </div>
 
-                {/* ── Title & price ── */}
-                <div style={{ flex:1, minWidth:0 }}>   {/* minWidth:0 lets ellipsis work */}
+                <div style={{ flex:1, minWidth:0 }}>
                   <p style={{
                     fontSize: 14, fontWeight: 600, color: '#1A1A1A',
                     margin: 0, lineHeight: 1.35,
@@ -182,7 +172,6 @@ export default function ArrangeStorePage() {
                   )}
                 </div>
 
-                {/* ── Reorder buttons ── */}
                 <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}>
                   <button
                     onClick={() => moveItem(index, 'up')}
@@ -201,14 +190,12 @@ export default function ArrangeStorePage() {
                     <MdArrowDownward size={18} color={index === items.length-1 ? '#D0D0D0' : sh.primaryColor} />
                   </button>
                 </div>
-
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Toast */}
       {toast && (
         <div style={S.toast}>{toast}</div>
       )}
@@ -216,7 +203,14 @@ export default function ArrangeStorePage() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+export default function ArrangeStorePage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading store arrangement…</div>}>
+      <ArrangeStoreContent />
+    </Suspense>
+  );
+}
+
 const S: Record<string, React.CSSProperties> = {
   container: { display:'flex', flexDirection:'column', height:'100vh', backgroundColor:'#F7F3EE' },
   center:    { display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#F7F3EE' },

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../../services/api';
 import {
@@ -21,10 +21,8 @@ import {
   setStoreId,
 } from '../../../../services/localStorage';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
-// ─── Categories ────────────────────────────────────────────────────
 const CATEGORIES = [
   { id: 'tech_electronics', label: '🔌 Tech & Electronics' },
   { id: 'food_beverage', label: '🍏 Food, Beverage & Consumables' },
@@ -38,7 +36,7 @@ const CATEGORIES = [
   { id: 'media_office', label: '📚 Media, Office & Education' },
 ];
 
-export default function StorekeeperOnboardingStoreDetailsPage() {
+function StoreDetailsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -52,7 +50,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
 
-  // Store image
   const [storeImageFile, setStoreImageFile] = useState<File | null>(null);
   const [storeImagePreview, setStoreImagePreview] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -74,7 +71,7 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
       (pos) => {
         setLat(pos.coords.latitude);
         setLng(pos.coords.longitude);
-        setAddress('Owerri, Imo'); // we'd normally reverse geocode; fallback
+        setAddress('Owerri, Imo');
         setIsDetectingLocation(false);
       },
       () => {
@@ -87,7 +84,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
     );
   }, [isDetectingLocation]);
 
-  // Auto-detect location on mount (web fallback)
   useEffect(() => {
     const timer = setTimeout(() => {
       autoDetectLocation();
@@ -133,13 +129,11 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
     if (!validate()) return;
     setIsLoading(true);
     try {
-      // Upload store image if selected
       let storeImageUrl: string | null = null;
       if (storeImageFile) {
         setIsUploadingImage(true);
         try {
           const uploadResp = await api.uploadStoreImage(storeImageFile);
-          // Safely extract image_url without using `any`
           if (uploadResp && typeof uploadResp === 'object' && 'image_url' in (uploadResp as Record<string, unknown>)) {
             storeImageUrl = (uploadResp as Record<string, unknown>).image_url as string | null | undefined || null;
           } else {
@@ -162,7 +156,7 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
 
       const response = await api.createStore(
         storeName.trim(),
-        '',                       // description
+        '',
         [category],
         address.trim(),
         safeLat,
@@ -191,7 +185,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
 
   return (
     <main style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
         <button style={styles.backBtn} onClick={() => router.back()}>
           <MdArrowBack size={24} color="#000" />
@@ -201,7 +194,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
       </div>
 
       <div style={styles.scrollArea}>
-        {/* Progress Indicator */}
         <div style={styles.progressRow}>
           <span style={styles.stepText}>Step 2 of 2</span>
           <div style={styles.progressBar}>
@@ -209,13 +201,11 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
           </div>
         </div>
 
-        {/* Heading */}
         <h2 style={styles.heading}>Tell us about your store</h2>
         <p style={styles.subHeading}>
           Shoppers will see this information when they find your store.
         </p>
 
-        {/* Store Image */}
         <label style={styles.label}>Store Image</label>
         <div style={styles.imageUploadArea} onClick={() => imageInputRef.current?.click()}>
           {storeImagePreview ? (
@@ -243,7 +233,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
           onChange={handleStoreImageChange}
         />
 
-        {/* Store Name */}
         <div style={styles.inputWrapper}>
           <MdStore size={20} color="#888" style={styles.inputIcon} />
           <input
@@ -255,7 +244,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
           />
         </div>
 
-        {/* Category Picker */}
         <label style={styles.label}>Category</label>
         <div style={styles.categoryGrid}>
           {CATEGORIES.map((cat) => (
@@ -274,7 +262,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
           ))}
         </div>
 
-        {/* Address */}
         <div style={styles.cityRow}>
           <div style={styles.inputWrapper}>
             <MdLocationOn size={20} color="#888" style={styles.inputIcon} />
@@ -300,7 +287,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
           </button>
         </div>
 
-        {/* Contact Phone */}
         <div style={styles.inputWrapper}>
           <MdPhone size={20} color="#888" style={styles.inputIcon} />
           <input
@@ -312,7 +298,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
           />
         </div>
 
-        {/* Business Hours */}
         <div style={styles.inputWrapper}>
           <MdAccessTime size={20} color="#888" style={styles.inputIcon} />
           <input
@@ -324,7 +309,6 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
           />
         </div>
 
-        {/* Submit Button */}
         <button
           onClick={submitStore}
           disabled={isLoading || isUploadingImage}
@@ -342,7 +326,14 @@ export default function StorekeeperOnboardingStoreDetailsPage() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
+export default function StorekeeperOnboardingStoreDetailsPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading store details…</div>}>
+      <StoreDetailsContent />
+    </Suspense>
+  );
+}
+
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',

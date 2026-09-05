@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../services/api';
@@ -15,10 +16,9 @@ import {
   MdVisibilityOff,
 } from 'react-icons/md';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -28,7 +28,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // ─── Navigation helpers (match Flutter exactly) ──────────────────
+  // ─── Navigation helpers ──────────────────────────────────
   const navigateByRoleKey = async (roleKey: string) => {
     switch (roleKey) {
       case 'shopper':
@@ -90,31 +90,26 @@ export default function LoginPage() {
     }
   };
 
-  // ─── Login handler ──────────────────────────────────────────────
+  // ─── Login handler ──────────────────────────────────────
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      // 1. Login
       await api.login(phone.trim(), password);
 
-      // 2. Fetch profile
       const profile = await api.getMyProfile();
 
-      // 3. Save user ID and name
       if (profile.id) {
         setUserId(profile.id as string);
       }
       const name = (profile.nickname ?? profile.phone ?? 'User') as string;
       setUserName(name);
 
-      // 4. Read intended role (stored by onboarding modal)
       const intendedRoleKey = getIntendedRole();
       clearIntendedRole();
 
-      // 5. Determine navigation destination
       if (intendedRoleKey) {
         setActiveRole(intendedRoleKey);
         await navigateByRoleKey(intendedRoleKey);
@@ -136,7 +131,7 @@ export default function LoginPage() {
     }
   };
 
-  // ─── Build query string for signup / forgot-password ───────────
+  // ─── Build query string ────────────────────────────────
   const preserveParams = () => {
     const redirect = searchParams.get('redirect');
     const intendedRole = searchParams.get('intended_role');
@@ -212,7 +207,15 @@ export default function LoginPage() {
   );
 }
 
-// ─── Styles (mirror Flutter) ─────────────────────────────────────
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+// ─── Styles ──────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -300,4 +303,4 @@ const styles: Record<string, React.CSSProperties> = {
     textDecoration: 'none',
     fontSize: '14px',
   },
-};
+};;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../services/api';
 import {
@@ -22,10 +22,9 @@ import {
   MdImage,
 } from 'react-icons/md';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
-// ─── Brand colors (Admerce CTA) ──────────────────────────────────
+// ─── Brand colors ──────────────────────────────────────────────────
 const Brand = {
   bg: '#FAFAFA',
   cardBg: '#FFFFFF',
@@ -33,9 +32,9 @@ const Brand = {
   textPrimary: '#171717',
   textSecondary: '#666666',
   textMuted: '#999999',
-  accent: '#0504AA',          // Admerce primary
-  accentLight: '#3D3BFF',     // lighter shade for gradients
-  accentBg: '#EEEDFF',        // light background tint
+  accent: '#0504AA',
+  accentLight: '#3D3BFF',
+  accentBg: '#EEEDFF',
   border: '#E5E5E5',
   shadowColor: 'rgba(0,0,0,0.1)',
 };
@@ -77,7 +76,7 @@ const suggestions = [
   { emoji: '📦', text: 'Track my recent order' },
 ];
 
-export default function SeaiAskPage() {
+function SeaiAskContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -208,7 +207,7 @@ export default function SeaiAskPage() {
       }
     }
 
-    const idx = messages.length + 1; // index of thinking message
+    const idx = messages.length + 1;
 
     try {
       const stream = api.seaiAsk(
@@ -573,6 +572,14 @@ export default function SeaiAskPage() {
   );
 }
 
+export default function SeaiAskPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading SEAI…</div>}>
+      <SeaiAskContent />
+    </Suspense>
+  );
+}
+
 // ─── Styles ──────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -766,7 +773,6 @@ const styles: Record<string, React.CSSProperties> = {
   aiMessageRow: {
     display: 'flex',
     alignItems: 'flex-start',
-    // spacing handled by parent wrapper
   },
   aiAvatar: {
     width: 28,
@@ -909,7 +915,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-// Inject keyframes for cursor blink and thinking dots
+// Inject keyframes
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
   style.textContent = `

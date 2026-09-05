@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
@@ -16,7 +16,6 @@ import {
 } from 'react-icons/md';
 import api from '../../services/api';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
 interface ReservationConfirmedProps {
@@ -32,7 +31,7 @@ interface ReservationConfirmedProps {
   };
 }
 
-export default function ReservationConfirmedPage() {
+function ReservationConfirmedContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -78,7 +77,6 @@ export default function ReservationConfirmedPage() {
         spread: 70,
         origin: { y: 0.6 },
       });
-      // Navigate to receipt page (correct path)
       router.push(
         `/shopper/orders/receipt/${orderId}?store_name=${encodeURIComponent(storeName)}&total=${total}&customer_name=${encodeURIComponent(customerName)}`
       );
@@ -107,7 +105,6 @@ export default function ReservationConfirmedPage() {
 
   const handleNavigateToStore = () => {
     if (storeLat !== null && storeLng !== null) {
-      // ✅ Fixed: Use /shopper/map instead of /map to match existing route
       router.push(`/shopper/map?lat=${storeLat}&lng=${storeLng}&destination=${encodeURIComponent(storeName)}&navigate=true`);
     } else {
       alert('Store location not available.');
@@ -121,19 +118,13 @@ export default function ReservationConfirmedPage() {
       transition={{ duration: 0.5, ease: 'easeOut' }}
       style={styles.container}
     >
-      {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.title}>Reservation Confirmed</h1>
-        <button
-          onClick={() => setShowDropModal(true)}
-          style={styles.dropIconButton}
-          title="Drop Order"
-        >
+        <button onClick={() => setShowDropModal(true)} style={styles.dropIconButton} title="Drop Order">
           <MdCancel size={28} color="#DC2626" />
         </button>
       </div>
 
-      {/* Content */}
       <div style={styles.content}>
         <motion.div
           initial={{ scale: 0 }}
@@ -147,26 +138,18 @@ export default function ReservationConfirmedPage() {
         <h2 style={styles.heading}>You&apos;re all set!</h2>
         <p style={styles.subheading}>Your reservation is confirmed</p>
 
-        {/* Pickup Time */}
         <div style={styles.timerCard}>
           <MdTimer size={24} color="#0504AA" />
           <span style={styles.timerLabel}>Pickup time: {pickupTime}</span>
         </div>
 
-        {/* Countdown */}
         <div style={styles.countdownContainer}>
           <span style={styles.countdownLabel}>Time remaining</span>
-          <span
-            style={{
-              ...styles.countdownValue,
-              color: remaining > 0 ? '#0504AA' : '#DC2626',
-            }}
-          >
+          <span style={{ ...styles.countdownValue, color: remaining > 0 ? '#0504AA' : '#DC2626' }}>
             {remaining > 0 ? formatTime(remaining) : 'EXPIRED'}
           </span>
         </div>
 
-        {/* Pickup Identifier Card */}
         <div style={styles.identifierCard}>
           <div style={styles.identifierHeader}>
             <MdPersonOutline size={20} color="#0504AA" />
@@ -181,7 +164,6 @@ export default function ReservationConfirmedPage() {
           <p style={styles.total}>Total: ₦{total.toFixed(0)}</p>
         </div>
 
-        {/* Action Buttons */}
         <div style={styles.actions}>
           <motion.button
             whileHover={{ scale: 1.02 }}
@@ -206,7 +188,6 @@ export default function ReservationConfirmedPage() {
         </div>
       </div>
 
-      {/* Drop Confirmation Modal */}
       <AnimatePresence>
         {showDropModal && (
           <motion.div
@@ -229,9 +210,7 @@ export default function ReservationConfirmedPage() {
                 If you drop this order, your payment will be refunded to your wallet.
               </p>
               <div style={styles.modalActions}>
-                <button onClick={() => setShowDropModal(false)} style={styles.modalCancelBtn}>
-                  Cancel
-                </button>
+                <button onClick={() => setShowDropModal(false)} style={styles.modalCancelBtn}>Cancel</button>
                 <button onClick={handleDropOrder} disabled={dropping} style={styles.modalConfirmBtn}>
                   {dropping ? 'Dropping...' : 'Confirm Drop'}
                 </button>
@@ -244,7 +223,14 @@ export default function ReservationConfirmedPage() {
   );
 }
 
-// ... styles unchanged (same as originally provided)
+export default function ReservationConfirmedPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading reservation...</div>}>
+      <ReservationConfirmedContent />
+    </Suspense>
+  );
+}
+
 const styles: Record<string, React.CSSProperties> = {
   container: { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F8F9FA' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', backgroundColor: '#fff', borderBottom: '1px solid #eee' },

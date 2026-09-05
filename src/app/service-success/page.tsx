@@ -1,13 +1,13 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { MdCheckCircle, MdReceiptLong, MdHome } from 'react-icons/md';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
-export default function ServiceSuccessPage() {
+function ServiceSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -68,6 +68,14 @@ export default function ServiceSuccessPage() {
         </button>
       </div>
     </main>
+  );
+}
+
+export default function ServiceSuccessPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading success page…</div>}>
+      <ServiceSuccessContent />
+    </Suspense>
   );
 }
 
