@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -13,7 +14,7 @@ import {
 } from 'react-icons/md';
 import api from '../../services/api';
 
-export default function BookingConfirmedPage() {
+function BookingConfirmedContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -40,7 +41,6 @@ export default function BookingConfirmedPage() {
     }
     try {
       await api.completeServiceBooking(bookingId);
-      // Navigate to service success screen
       const query = new URLSearchParams({
         service_name: serviceName,
         provider_name: providerName,
@@ -49,20 +49,12 @@ export default function BookingConfirmedPage() {
       });
       router.push(`/service-success?${query.toString()}`);
     } catch (err: unknown) {
-      const message =
-        typeof err === 'object' &&
-        err !== null &&
-        'response' in err &&
-        typeof (err as { response?: { data?: { detail?: string } } }).response?.data?.detail === 'string'
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : typeof err === 'object' &&
-              err !== null &&
-              'message' in err &&
-              typeof (err as { message?: string }).message === 'string'
-            ? (err as { message?: string }).message
-            : 'Failed to complete job';
-
-      alert(message);
+      const error = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      const detail = error?.response?.data?.detail || error?.message || 'Failed to complete job';
+      alert(detail);
     }
   };
 
@@ -109,7 +101,6 @@ export default function BookingConfirmedPage() {
       </div>
 
       <div style={styles.actions}>
-        {/* Job Done button */}
         <button
           onClick={handleJobDone}
           style={{ ...styles.button, backgroundColor: '#27AE60' }}
@@ -134,6 +125,14 @@ export default function BookingConfirmedPage() {
         </button>
       </div>
     </main>
+  );
+}
+
+export default function BookingConfirmedPage() {
+  return (
+    <Suspense fallback={<div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>}>
+      <BookingConfirmedContent />
+    </Suspense>
   );
 }
 
