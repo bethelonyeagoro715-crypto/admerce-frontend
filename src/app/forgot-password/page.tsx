@@ -1,204 +1,121 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import api from '../../services/api';
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [phone, setPhone] = useState(searchParams.get('phone') || '');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  // ─── Request OTP ──────────────────────────────────────────────
-  const requestOtp = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    if (!phone.trim()) {
+      alert('Please enter your phone number');
+      return;
+    }
     setLoading(true);
-    setError('');
     try {
       await api.forgotPassword(phone.trim());
-      setOtpSent(true);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+      alert('OTP sent to your phone');
+      router.push(`/verify-otp?phone=${encodeURIComponent(phone.trim())}`);
+    } catch (err) {
+      alert('Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-
-  // ─── Reset Password ───────────────────────────────────────────
-  const resetPassword = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      await api.resetPassword(phone.trim(), otp.trim(), newPassword);
-      // Success – go back to login, preserving any params
-      const params = preserveParams();
-      router.replace(`/login${params ? `?${params}` : ''}`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Password reset failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ─── Preserve URL query params (redirect, intended_role) ─────
-  const preserveParams = () => {
-    const redirect = searchParams.get('redirect');
-    const intendedRole = searchParams.get('intended_role');
-    const p = new URLSearchParams();
-    if (redirect) p.set('redirect', redirect);
-    if (intendedRole) p.set('intended_role', intendedRole);
-    return p.toString();
-  };
-
-  const loginUrl = `/login${preserveParams() ? `?${preserveParams()}` : ''}`;
 
   return (
     <main style={styles.container}>
       <div style={styles.card}>
-        {!otpSent ? (
-          <>
-            <h1 style={styles.heading}>Oops, need a new password?</h1>
-            <p style={styles.subtitle}>No worries – it happens to the best of us.</p>
-
-            <form onSubmit={requestOtp} style={styles.form}>
-              <input
-                type="tel"
-                placeholder="Phone number"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                style={styles.input}
-                required
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  ...styles.button,
-                  opacity: loading ? 0.7 : 1,
-                }}
-              >
-                {loading ? 'Sending...' : 'Send Reset Code'}
-              </button>
-            </form>
-          </>
-        ) : (
-          <>
-            <h1 style={styles.heading}>Reset your password</h1>
-            <p style={styles.subtitle}>We sent a code to your email.</p>
-
-            <form onSubmit={resetPassword} style={styles.form}>
-              <input
-                type="text"
-                placeholder="OTP Code"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                style={styles.input}
-                required
-              />
-              <input
-                type="password"
-                placeholder="New Password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                style={styles.input}
-                required
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  ...styles.button,
-                  opacity: loading ? 0.7 : 1,
-                }}
-              >
-                {loading ? 'Resetting...' : 'Reset Password'}
-              </button>
-            </form>
-          </>
-        )}
-
-        {error && <div style={styles.error}>{error}</div>}
-
-        <a href={loginUrl} style={styles.loginLink}>
-          Remembered your password? Log in
-        </a>
+        <h1 style={styles.title}>Forgot Password</h1>
+        <p style={styles.subtitle}>Enter your phone number to receive an OTP</p>
+        <input
+          style={styles.input}
+          placeholder="Phone number"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          type="tel"
+        />
+        <button style={styles.button} onClick={handleSubmit} disabled={loading}>
+          {loading ? 'Sending...' : 'Send OTP'}
+        </button>
+        <button style={styles.backButton} onClick={() => router.back()}>
+          Back to Login
+        </button>
       </div>
     </main>
   );
 }
 
-// ─── Styles (mirror Flutter) ─────────────────────────────────────
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense fallback={<div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>}>
+      <ForgotPasswordContent />
+    </Suspense>
+  );
+}
+
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
-    backgroundColor: '#ffffff',
-    padding: '24px',
+    backgroundColor: '#F8F9FA',
+    padding: 24,
   },
   card: {
     width: '100%',
-    maxWidth: '400px',
-    textAlign: 'center',
+    maxWidth: 400,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
   },
-  heading: {
-    fontSize: '28px',
-    fontWeight: 900,
+  title: {
+    fontSize: 24,
+    fontWeight: 800,
     color: '#1A1A1A',
-    marginBottom: '8px',
-    marginTop: '60px',
+    margin: 0,
   },
   subtitle: {
-    color: 'grey',
-    fontSize: '16px',
-    marginBottom: '40px',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+    marginBottom: 24,
   },
   input: {
-    padding: '12px 16px',
-    borderRadius: '12px',
-    border: '1px solid #e0e0e0',
-    fontSize: '16px',
-    outline: 'none',
     width: '100%',
-    boxSizing: 'border-box' as const,
+    padding: '12px 16px',
+    borderRadius: 12,
+    border: '1px solid #ccc',
+    fontSize: 16,
+    marginBottom: 16,
   },
   button: {
-    padding: '16px',
+    width: '100%',
+    padding: 14,
     backgroundColor: '#0504AA',
-    color: 'white',
+    color: '#fff',
     border: 'none',
-    borderRadius: '16px',
-    fontSize: '18px',
-    fontWeight: 'bold',
+    borderRadius: 12,
+    fontSize: 16,
+    fontWeight: 600,
     cursor: 'pointer',
-    marginTop: '12px',
+    marginBottom: 12,
   },
-  error: {
-    marginTop: '16px',
-    padding: '12px',
-    backgroundColor: '#ffebee',
-    color: '#c62828',
-    borderRadius: '8px',
-    fontSize: '14px',
-  },
-  loginLink: {
-    display: 'block',
-    marginTop: '16px',
-    color: 'grey',
-    textDecoration: 'none',
-    fontSize: '14px',
+  backButton: {
+    width: '100%',
+    padding: 14,
+    backgroundColor: 'transparent',
+    color: '#0504AA',
+    border: '1px solid #0504AA',
+    borderRadius: 12,
+    fontSize: 16,
+    fontWeight: 600,
+    cursor: 'pointer',
   },
 };
