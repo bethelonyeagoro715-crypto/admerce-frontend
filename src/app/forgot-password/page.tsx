@@ -4,6 +4,9 @@ import { Suspense, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import api from '../../services/api';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 function ForgotPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();

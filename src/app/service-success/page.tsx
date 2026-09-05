@@ -4,6 +4,9 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { MdCheckCircle, MdReceiptLong, MdHome } from 'react-icons/md';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 export default function ServiceSuccessPage() {
   const router = useRouter();
   const searchParams = useSearchParams();

@@ -14,6 +14,9 @@ import {
 // ✅ Fixed: file is at src/app/receipt/[orderId]/page.tsx → 3 levels up to reach src/
 import api from '../../../../../services/api';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams and useParams
+export const dynamic = 'force-dynamic';
+
 // ─── Types ──────────────────────────────────────────────────────────
 interface OrderItem {
   name: string;

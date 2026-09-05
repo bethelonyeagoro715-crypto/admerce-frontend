@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { MdLock } from 'react-icons/md';
 import api from '../../../../services/api';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 export default function WalletPinSetupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();

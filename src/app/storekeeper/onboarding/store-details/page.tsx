@@ -21,6 +21,9 @@ import {
   setStoreId,
 } from '../../../../services/localStorage';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 // ─── Categories ────────────────────────────────────────────────────
 const CATEGORIES = [
   { id: 'tech_electronics', label: '🔌 Tech & Electronics' },

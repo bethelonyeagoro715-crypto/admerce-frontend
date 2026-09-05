@@ -15,6 +15,9 @@ import {
   MdVisibilityOff,
 } from 'react-icons/md';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();

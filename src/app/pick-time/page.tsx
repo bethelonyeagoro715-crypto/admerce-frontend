@@ -3,6 +3,9 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MdArrowBack } from 'react-icons/md';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 const PICKUP_OPTIONS = [
   { label: 'Now - 2 hours', value: '2 hours' },
   { label: '2 - 4 hours', value: '4 hours' },

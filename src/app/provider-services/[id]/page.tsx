@@ -5,7 +5,9 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import api from '../../../services/api';
 
-// ✅ Base URL for your backend (match the one used in api.ts)
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 interface Service {
@@ -48,12 +50,10 @@ function ProviderServicesContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Inline async logic so linter sees awaits before setState
     (async () => {
       try {
         const data = (await api.getProviderServicesByUserId(providerId)) as ProviderServiceResponse[];
 
-        // If no name was passed, try to get it from the first service
         if (!searchParams.get('name') && data.length > 0) {
           const first = data[0];
           const name = first?.business_name || first?.username || 'Service Provider';
@@ -102,6 +102,7 @@ function ProviderServicesContent() {
                   <video
                     src={service.video}
                     poster={service.image || undefined}
+                    controls
                     muted
                     playsInline
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -147,8 +148,7 @@ const styles: Record<string, React.CSSProperties> = {
   grid: { flex: 1, overflowY: 'auto', padding: '12px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' },
   card: { backgroundColor: '#fff', borderRadius: 16, boxShadow: '0 4px 8px rgba(0,0,0,0.06)', overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column' },
   mediaWrap: { height: 140, backgroundColor: '#e0e0e0', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  playIcon: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 36, height: 36, borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#fff' },
+  playIcon: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 36, height: 36, borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#fff', pointerEvents: 'none' },
   info: { padding: '8px' },
   serviceTitle: { fontWeight: 'bold', fontSize: 14, lineHeight: 1.3, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  price: { color: '#7B1FA2', fontWeight: 600 },
 };

@@ -5,6 +5,9 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { MdPrint, MdShare, MdDownload, MdReceiptLong, MdPersonOutline } from 'react-icons/md';
 import api from '../../../../services/api'; // adjust path as needed
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams and useParams
+export const dynamic = 'force-dynamic';
+
 export default function ServiceReceiptPage() {
   const router = useRouter();
   const params = useParams<{ bookingId: string }>();

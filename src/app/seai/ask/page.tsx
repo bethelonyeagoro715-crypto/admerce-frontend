@@ -22,6 +22,9 @@ import {
   MdImage,
 } from 'react-icons/md';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 // ─── Brand colors (Admerce CTA) ──────────────────────────────────
 const Brand = {
   bg: '#FAFAFA',

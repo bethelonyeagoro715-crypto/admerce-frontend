@@ -10,6 +10,9 @@ import {
 } from 'react-icons/md';
 import type { IconType } from 'react-icons';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface StoreItem {
   listing_id: string;

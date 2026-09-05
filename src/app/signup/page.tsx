@@ -4,6 +4,9 @@ import { useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../services/api';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 // ─── Role chip data ─────────────────────────────────────────────
 const ROLE_OPTIONS: { key: string; label: string }[] = [
   { key: 'shopper', label: 'Buy items' },

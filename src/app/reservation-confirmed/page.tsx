@@ -16,6 +16,9 @@ import {
 } from 'react-icons/md';
 import api from '../../services/api';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 interface ReservationConfirmedProps {
   pickupTime?: string;
   storeLat?: number | null;

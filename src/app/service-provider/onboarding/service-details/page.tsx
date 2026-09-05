@@ -20,6 +20,9 @@ import {
   setActiveRole,
 } from '../../../../services/localStorage';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 // ─── Service Categories (simplified; you can expand) ─────────────────
 const SERVICE_CATEGORIES = [
   { id: 'grooming_beauty', label: 'Grooming & Beauty' },

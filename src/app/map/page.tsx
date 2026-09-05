@@ -3,6 +3,9 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 export default function MapRedirectPage() {
   const router = useRouter();
   const searchParams = useSearchParams();

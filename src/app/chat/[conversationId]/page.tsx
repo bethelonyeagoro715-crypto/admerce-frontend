@@ -13,6 +13,9 @@ import {
   MdChatBubbleOutline,
 } from 'react-icons/md';
 
+// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
+export const dynamic = 'force-dynamic';
+
 // ─── Types ──────────────────────────────────────────────────────────
 interface ChatMessage {
   id?: string | number;
