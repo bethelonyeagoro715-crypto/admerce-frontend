@@ -1,14 +1,12 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { Suspense, useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../services/api';
 
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
 export const dynamic = 'force-dynamic';
 
-// ─── Role chip data ─────────────────────────────────────────────
-const ROLE_OPTIONS: { key: string; label: string }[] = [
+const ROLE_OPTIONS = [
   { key: 'shopper', label: 'Buy items' },
   { key: 'storekeeper', label: 'Sell items' },
   { key: 'courier', label: 'Deliver packages' },
@@ -16,7 +14,7 @@ const ROLE_OPTIONS: { key: string; label: string }[] = [
   { key: 'service_provider', label: 'Provide a service' },
 ];
 
-export default function SignupPage() {
+function SignupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const intendedRole = searchParams.get('intended_role') ?? undefined;
@@ -30,38 +28,30 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // ─── Available roles (exclude the intended role, if any) ──────
   const availableRoles = intendedRole
     ? ROLE_OPTIONS.filter((r) => r.key !== intendedRole).map((r) => r.label)
     : ROLE_OPTIONS.map((r) => r.label);
 
-  // ─── Toggle future role chip ──────────────────────────────────
   const toggleRole = (label: string) => {
     setFutureRoles((prev) =>
       prev.includes(label) ? prev.filter((r) => r !== label) : [...prev, label]
     );
   };
 
-  // ─── Submit ────────────────────────────────────────────────────
   const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
     try {
       await api.signup(phone.trim(), password, email.trim(), username.trim());
-
-      // Navigate to OTP verification
       const params = new URLSearchParams();
       params.set('phone', phone.trim());
       if (intendedRole) params.set('intended_role', intendedRole);
       router.push(`/verify-otp?${params.toString()}`);
     } catch (err: unknown) {
       let message = 'Signup failed';
-      if (err instanceof Error) {
-        message = err.message;
-      } else if (typeof err === 'object' && err !== null && 'response' in err) {
-        // Axios error
+      if (err instanceof Error) message = err.message;
+      else if (typeof err === 'object' && err !== null && 'response' in err) {
         const axiosError = err as { response?: { data?: { detail?: string } } };
         message = axiosError.response?.data?.detail ?? message;
       }
@@ -121,7 +111,6 @@ export default function SignupPage() {
             </button>
           </div>
 
-          {/* ─── Future role chips ───────────────────────────── */}
           <p style={styles.chipsLabel}>Which would you also fit in the future?</p>
           <div style={styles.chipsContainer}>
             {availableRoles.map((label) => {
@@ -147,10 +136,7 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            style={{
-              ...styles.button,
-              opacity: loading ? 0.7 : 1,
-            }}
+            style={{ ...styles.button, opacity: loading ? 0.7 : 1 }}
           >
             {loading ? 'Creating account...' : 'Create Account'}
           </button>
@@ -158,10 +144,7 @@ export default function SignupPage() {
 
         {error && <div style={styles.error}>{error}</div>}
 
-        <a
-          href="/login"
-          style={styles.loginLink}
-        >
+        <a href="/login" style={styles.loginLink}>
           Already part of Admerce? Right this way
         </a>
       </div>
@@ -169,7 +152,14 @@ export default function SignupPage() {
   );
 }
 
-// ─── Styles (mirror Flutter) ─────────────────────────────────────
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading signup…</div>}>
+      <SignupContent />
+    </Suspense>
+  );
+}
+
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',

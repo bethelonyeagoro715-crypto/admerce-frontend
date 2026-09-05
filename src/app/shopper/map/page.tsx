@@ -2,10 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import * as L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import api from '../../../services/api';
 import { MdMyLocation } from 'react-icons/md';
+
+// ─── Type imports for Leaflet ──────────────────────────────────────
+import type { Map } from 'leaflet';
+type LeafletModule = typeof import('leaflet');
+
+export const dynamic = 'force-dynamic';
 
 // ─── Types ──────────────────────────────────────────────────────────
 interface StoreLocation {
@@ -16,23 +20,40 @@ interface StoreLocation {
   image_url?: string;
 }
 
-const DEFAULT_LAT = 5.5103; // Owerri/FUTO
+const DEFAULT_LAT = 5.5103;
 const DEFAULT_LNG = 7.0265;
 
 export default function ShopperMapPage() {
   const router = useRouter();
-  const mapRef = useRef<L.Map | null>(null);
+  const mapRef = useRef<Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [leaflet, setLeaflet] = useState<LeafletModule | null>(null);
 
-  // ─── Initialise map and load data ────────────────────────────────
+  // ─── Load Leaflet dynamically ─────────────────────────────────────
   useEffect(() => {
-    // Only run on client
-    if (typeof window === 'undefined' || !mapContainerRef.current) return;
+    if (typeof window === 'undefined') return;
 
-    // Initialise Leaflet map
+    import('leaflet').then((L) => {
+      import('leaflet/dist/leaflet.css');
+      setLeaflet(L);
+    });
+  }, []);
+
+  // ─── Initialize map when Leaflet is ready ────────────────────────
+  useEffect(() => {
+    if (!leaflet || !mapContainerRef.current) return;
+
+    const L = leaflet;
+
+    // Clean up any previous map instance
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+
     const map = L.map(mapContainerRef.current, {
       center: [DEFAULT_LAT, DEFAULT_LNG],
       zoom: 14,
@@ -40,13 +61,13 @@ export default function ShopperMapPage() {
     });
     mapRef.current = map;
 
-    // Add OpenStreetMap tile layer
+    // Tile layer
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(map);
 
-    // ── Load user location ─────────────────────────────────────────
+    // ── User location ─────────────────────────────────────────────
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -54,7 +75,6 @@ export default function ShopperMapPage() {
           const lng = pos.coords.longitude;
           setUserLocation([lat, lng]);
 
-          // Custom user marker (blue dot)
           const userIcon = L.divIcon({
             html: '<div style="width:12px;height:12px;background:#0504AA;border-radius:50%;border:3px solid white;box-shadow:0 0 8px rgba(0,0,0,0.3);"></div>',
             className: '',
@@ -71,7 +91,7 @@ export default function ShopperMapPage() {
       );
     }
 
-    // ── Load store locations ───────────────────────────────────────
+    // ── Load stores ────────────────────────────────────────────────
     const loadStores = async () => {
       try {
         const data = (await api.getStoreLocations()) as unknown as StoreLocation[];
@@ -103,10 +123,12 @@ export default function ShopperMapPage() {
 
     // Cleanup
     return () => {
-      map.remove();
-      mapRef.current = null;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
-  }, [router]);
+  }, [leaflet, router]);
 
   return (
     <main style={{ height: '100vh', width: '100%', position: 'relative' }}>
@@ -141,10 +163,8 @@ export default function ShopperMapPage() {
         </div>
       )}
 
-      {/* Leaflet map container */}
       <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
 
-      {/* Re-center button */}
       {userLocation && (
         <button
           onClick={() => {
