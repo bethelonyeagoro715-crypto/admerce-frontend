@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '../../../services/api';
 import PickTimeBottomSheet from '../../../components/PickTimeBottomSheet';
+import { getToken } from '../../../services/localStorage';   // ✅ added auth helper
 
 // ---------- Types ----------
 type FulfillmentType = 'pickup' | 'delivery';
@@ -65,6 +66,15 @@ export default function ItemDetailPage() {
 
   // NEW: state for bottom sheet
   const [isPickTimeOpen, setIsPickTimeOpen] = useState(false);
+
+  // ✅ Auth check helper – redirects to login if no token
+  const requireAuth = () => {
+    if (!getToken()) {
+      router.push('/login');
+      return false;
+    }
+    return true;
+  };
 
   // ── Helper functions (must be defined before they are called) ──
 
@@ -227,6 +237,9 @@ export default function ItemDetailPage() {
 
   // ── Confirm action ────────────────────────
   const onConfirm = async () => {
+    // ✅ Authentication gate: if no token, redirect to login
+    if (!requireAuth()) return;
+
     if (!listing || !store) return;
 
     if (fulfillmentType === 'delivery') {

@@ -17,7 +17,7 @@ const PUBLIC_PREFIXES = [
   '/courier/onboarding',
   '/flipper/onboarding',
   '/service-provider/onboarding',
-  '/shopper',                  // covers all /shopper/* routes including /shopper/map
+  '/shopper',                  // covers most /shopper/* routes
   '/notifications',
   '/seai-search',
   '/seai/ask',
@@ -39,6 +39,13 @@ const PUBLIC_PREFIXES = [
   '/delivery-confirmation',
   '/shopper/orders/receipt',   // receipt page under shopper
   '/settings',
+];
+
+// Paths that should be protected even though they start with a public prefix
+const PROTECTED_SUB_PATHS = [
+  '/shopper/wallet',
+  '/shopper/inbox',
+  '/shopper/profile',
 ];
 
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/verify-otp'];
@@ -69,7 +76,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/_admin', request.url));
   }
 
-  const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+  // Check if this path is in the protected sub‑paths list
+  const isProtectedSubPath = PROTECTED_SUB_PATHS.some((p) => pathname.startsWith(p));
+
+  const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p)) && !isProtectedSubPath;
   const isAuthRoute = AUTH_ROUTES.some((p) => pathname.startsWith(p));
 
   // Protected route without token → redirect to login
