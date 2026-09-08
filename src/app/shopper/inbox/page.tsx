@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
+import { useAuthGuard } from '../../../hooks/useAuthGuard'; // ✅ import hook
 import {
   MdRefresh,
   MdErrorOutline,
@@ -36,6 +37,8 @@ function formatTime(isoString: string): string {
 }
 
 export default function InboxPage() {
+  useAuthGuard(); // ✅ protect page
+
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,7 +49,6 @@ export default function InboxPage() {
     setError(null);
     try {
       const data = (await api.getConversations()) as Conversation[];
-      // Filter out SEAI conversations (conversation_id ends with '_seai')
       const filtered = data.filter(
         (conv) => !String(conv.conversation_id).endsWith('_seai')
       );
@@ -59,7 +61,6 @@ export default function InboxPage() {
   };
 
   useEffect(() => {
-    // Defer to avoid synchronous setState in effect
     const timer = setTimeout(() => {
       loadConversations();
     }, 0);
@@ -114,7 +115,6 @@ export default function InboxPage() {
 
               return (
                 <div key={index} style={styles.conversationItem} onClick={() => openChat(conv)}>
-                  {/* Avatar */}
                   <div style={styles.avatar}>
                     {avatar ? (
                       <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -123,7 +123,6 @@ export default function InboxPage() {
                     )}
                   </div>
 
-                  {/* Text content */}
                   <div style={styles.itemContent}>
                     <div style={styles.nameRow}>
                       <span style={styles.name}>{name}</span>
@@ -134,7 +133,6 @@ export default function InboxPage() {
                     <div style={styles.lastMessage}>{lastMessage}</div>
                   </div>
 
-                  {/* Time */}
                   {lastTime && <span style={styles.time}>{lastTime}</span>}
                 </div>
               );
@@ -148,131 +146,22 @@ export default function InboxPage() {
 
 // ─── Styles ──────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    backgroundColor: '#fff',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '12px 16px',
-    borderBottom: '1px solid #eee',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 600,
-    color: '#1A1A1A',
-    margin: 0,
-  },
-  refreshBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 4,
-    display: 'flex',
-    alignItems: 'center',
-  },
-  body: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '8px 12px',
-  },
-  center: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    color: '#888',
-  },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: '4px solid #eee',
-    borderTopColor: '#0504AA',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  retryBtn: {
-    padding: '8px 20px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 8,
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-  list: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  conversationItem: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '12px',
-    marginBottom: 6,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    border: '1px solid #eee',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-    cursor: 'pointer',
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: '50%',
-    overflow: 'hidden',
-    backgroundColor: '#0504AA10',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0504AA',
-  },
-  itemContent: {
-    flex: 1,
-  },
-  nameRow: {
-    display: 'flex',
-    alignItems: 'center',
-  },
-  name: {
-    fontSize: 15,
-    fontWeight: 600,
-    color: '#1A1A1A',
-    flex: 1,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  unreadBadge: {
-    backgroundColor: '#0504AA',
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
-    padding: '2px 6px',
-    borderRadius: 10,
-    marginLeft: 8,
-  },
-  lastMessage: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  time: {
-    fontSize: 12,
-    color: '#888',
-    marginLeft: 8,
-    whiteSpace: 'nowrap',
-  },
+  container: { display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#fff' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #eee' },
+  title: { fontSize: 18, fontWeight: 600, color: '#1A1A1A', margin: 0 },
+  refreshBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' },
+  body: { flex: 1, overflowY: 'auto', padding: '8px 12px' },
+  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#888' },
+  spinner: { width: 36, height: 36, border: '4px solid #eee', borderTopColor: '#0504AA', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
+  retryBtn: { padding: '8px 20px', backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 },
+  list: { display: 'flex', flexDirection: 'column' },
+  conversationItem: { display: 'flex', alignItems: 'center', padding: '12px', marginBottom: 6, backgroundColor: '#fff', borderRadius: 12, border: '1px solid #eee', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', cursor: 'pointer' },
+  avatar: { width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', backgroundColor: '#0504AA10', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  avatarText: { fontSize: 18, fontWeight: 'bold', color: '#0504AA' },
+  itemContent: { flex: 1 },
+  nameRow: { display: 'flex', alignItems: 'center' },
+  name: { fontSize: 15, fontWeight: 600, color: '#1A1A1A', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  unreadBadge: { backgroundColor: '#0504AA', color: '#fff', fontSize: 11, fontWeight: 'bold', padding: '2px 6px', borderRadius: 10, marginLeft: 8 },
+  lastMessage: { fontSize: 13, color: '#666', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  time: { fontSize: 12, color: '#888', marginLeft: 8, whiteSpace: 'nowrap' },
 };

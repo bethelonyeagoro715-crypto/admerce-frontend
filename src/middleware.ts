@@ -37,15 +37,8 @@ const PUBLIC_PREFIXES = [
   '/reservation-confirmed',
   '/delivery-setup',
   '/delivery-confirmation',
-  '/shopper/orders/receipt',   // receipt page under shopper
+  '/shopper/orders/receipt',
   '/settings',
-];
-
-// Paths that should be protected even though they start with a public prefix
-const PROTECTED_SUB_PATHS = [
-  '/shopper/wallet',
-  '/shopper/inbox',
-  '/shopper/profile',
 ];
 
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/verify-otp'];
@@ -76,10 +69,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/_admin', request.url));
   }
 
-  // Check if this path is in the protected sub‑paths list
-  const isProtectedSubPath = PROTECTED_SUB_PATHS.some((p) => pathname.startsWith(p));
-
-  const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p)) && !isProtectedSubPath;
+  const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
   const isAuthRoute = AUTH_ROUTES.some((p) => pathname.startsWith(p));
 
   // Protected route without token → redirect to login

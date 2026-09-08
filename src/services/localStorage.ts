@@ -11,6 +11,18 @@ const USER_NAME_KEY = 'user_name';
 const USER_ROLE_KEY = 'user_role'; // for admin checks
 const RESERVATIONS_KEY = 'reservations';
 
+// ---------- Cookie helpers ----------
+function setCookie(name: string, value: string, days: number) {
+  if (typeof document === 'undefined') return;
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; samesite=lax`;
+}
+
+function eraseCookie(name: string) {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${name}=; Max-Age=-99999999; path=/`;
+}
+
 // ---------- Token ----------
 export const getToken = (): string | null => {
   if (typeof window === 'undefined') return null;
@@ -19,10 +31,12 @@ export const getToken = (): string | null => {
 
 export const setToken = (token: string): void => {
   localStorage.setItem(TOKEN_KEY, token);
+  setCookie('auth_token', token, 1);          // ✅ set cookie for middleware
 };
 
 export const clearToken = (): void => {
   localStorage.removeItem(TOKEN_KEY);
+  eraseCookie('auth_token');                  // ✅ clear cookie
 };
 
 // ---------- Active Role ----------
@@ -117,6 +131,7 @@ export const clearUserName = (): void => {
 // ---------- User Role (admin checks) ----------
 export const setUserRole = (role: string): void => {
   localStorage.setItem(USER_ROLE_KEY, role);
+  setCookie('user_role', role, 1);            // ✅ set cookie for middleware
 };
 
 export const getUserRole = (): string | null => {
@@ -126,6 +141,7 @@ export const getUserRole = (): string | null => {
 
 export const clearUserRole = (): void => {
   localStorage.removeItem(USER_ROLE_KEY);
+  eraseCookie('user_role');                   // ✅ clear cookie
 };
 
 // ---------- Onboarding Status (per role) ----------
@@ -175,5 +191,8 @@ export const getReservations = (): Record<string, unknown>[] => {
 export const clear = (): void => {
   if (typeof window !== 'undefined') {
     localStorage.clear();
+    // Also clear our specific cookies if needed
+    eraseCookie('auth_token');
+    eraseCookie('user_role');
   }
 };

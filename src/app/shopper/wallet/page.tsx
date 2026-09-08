@@ -4,6 +4,7 @@ import { useState, useReducer, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
 import { initializePaystack } from '../../../services/paymentService';
+import { useAuthGuard } from '../../../hooks/useAuthGuard'; // ✅ import hook
 import {
   MdAdd,
   MdArrowBack,
@@ -86,11 +87,12 @@ function normalizeTransactions(raw: unknown): Transaction[] {
 
 // ─── Component ───────────────────────────────────────────────────────
 export default function WalletPage() {
+  useAuthGuard(); // ✅ protect page
+
   const router = useRouter();
 
   const [{ balance, email, transactions, loading }, dispatch] = useReducer(walletReducer, initialState);
 
-  // UI-only state (no fetch dependency — safe as standalone useState)
   const [refreshing, setRefreshing]       = useState(false);
   const [showTopUp, setShowTopUp]         = useState(false);
   const [amount, setAmount]               = useState('');
