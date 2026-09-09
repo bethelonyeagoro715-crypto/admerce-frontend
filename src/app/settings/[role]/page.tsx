@@ -100,12 +100,43 @@ export default function SettingsPage() {
   // Appearance
   const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>('system');
 
+  // Load profile and settings
   const loadData = async () => {
     setLoading(true);
     try {
       const profileData = (await api.getMyProfile()) as Profile;
       const rolesData = await api.getOnboardedRoles();
       const active = getActiveRole() || profileData.role || initialRole;
+
+      // Load settings for the active role
+      const settings = (await api.getSettings(active)) as Record<string, unknown>;
+
+      // Populate states from settings (if keys exist)
+      setNotificationsWantedAlerts((settings.notifications_wanted_alerts as boolean) ?? true);
+      setNotificationsFollowedStores((settings.notifications_followed_stores as boolean) ?? true);
+      setNotificationsMessages((settings.notifications_messages as boolean) ?? true);
+      setNotificationsDeliveryUpdates((settings.notifications_delivery_updates as boolean) ?? true);
+      setNotificationsPriceChanges((settings.notifications_price_changes as boolean) ?? false);
+      setNotificationsSaleCompleted((settings.notifications_sale_completed as boolean) ?? false);
+      setNotificationsArbitrage((settings.notifications_arbitrage as boolean) ?? false);
+      setNotificationsNewBooking((settings.notifications_new_booking as boolean) ?? false);
+      setNotificationsBookingReminders((settings.notifications_booking_reminders as boolean) ?? false);
+      setNotificationsEarningsUpdates((settings.notifications_earnings_updates as boolean) ?? false);
+      setAutoAcceptReservations((settings.auto_accept_reservations as boolean) ?? false);
+      setVacationMode((settings.vacation_mode as boolean) ?? false);
+      setDefaultPickupWindow((settings.default_pickup_window as string) ?? '2 hours');
+      setBufferTime((settings.buffer_time as number) ?? 30);
+      setServiceAreaRadius((settings.service_area_radius as number) ?? 10);
+      setDefaultServiceDuration((settings.default_service_duration as number) ?? 60);
+      setCalendarSync((settings.calendar_sync as boolean) ?? false);
+      setAutoApplyKeywords((settings.auto_apply_keywords as boolean) ?? false);
+      setDefaultMarkupType((settings.default_markup_type as string) ?? 'Quick Flip');
+      setPrivacyShowLastName((settings.privacy_show_last_name as boolean) ?? false);
+      setPrivacyShareActivity((settings.privacy_share_activity as boolean) ?? false);
+      setDiscoveryRadius((settings.discovery_radius as number) ?? 50);
+      setPreferredCategories((settings.preferred_categories as string[]) ?? []);
+      setThemeMode((settings.theme_mode as 'system' | 'light' | 'dark') ?? 'system');
+
       setProfile(profileData);
       setOnboardedRoles(rolesData);
       setCurrentRole(active);
@@ -123,6 +154,42 @@ export default function SettingsPage() {
     }, 0);
     return () => clearTimeout(timer);
   }, []);
+
+  // Save all settings to backend
+  const saveSettings = async () => {
+    const settings = {
+      notifications_wanted_alerts: notificationsWantedAlerts,
+      notifications_followed_stores: notificationsFollowedStores,
+      notifications_messages: notificationsMessages,
+      notifications_delivery_updates: notificationsDeliveryUpdates,
+      notifications_price_changes: notificationsPriceChanges,
+      notifications_sale_completed: notificationsSaleCompleted,
+      notifications_arbitrage: notificationsArbitrage,
+      notifications_new_booking: notificationsNewBooking,
+      notifications_booking_reminders: notificationsBookingReminders,
+      notifications_earnings_updates: notificationsEarningsUpdates,
+      auto_accept_reservations: autoAcceptReservations,
+      vacation_mode: vacationMode,
+      default_pickup_window: defaultPickupWindow,
+      buffer_time: bufferTime,
+      service_area_radius: serviceAreaRadius,
+      default_service_duration: defaultServiceDuration,
+      calendar_sync: calendarSync,
+      auto_apply_keywords: autoApplyKeywords,
+      default_markup_type: defaultMarkupType,
+      privacy_show_last_name: privacyShowLastName,
+      privacy_share_activity: privacyShareActivity,
+      discovery_radius: discoveryRadius,
+      preferred_categories: preferredCategories,
+      theme_mode: themeMode,
+    };
+    try {
+      await api.saveSettings(currentRole, settings);
+      alert('Settings saved successfully!');
+    } catch (error) {
+      alert('Failed to save settings. Please try again.');
+    }
+  };
 
   const switchRole = async (role: string) => {
     if (role === currentRole) return;
@@ -143,10 +210,6 @@ export default function SettingsPage() {
       clearLocalStorage();
       router.replace('/');
     }
-  };
-
-  const saveSettings = () => {
-    alert('Settings saved (demo)');
   };
 
   // Avatar upload
@@ -473,6 +536,49 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Global styles for switch */}
+      <style>{`
+        .switch {
+          position: relative;
+          display: inline-block;
+          width: 44px;
+          height: 24px;
+        }
+        .switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+        .slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: #ccc;
+          transition: 0.3s;
+          border-radius: 24px;
+        }
+        .slider:before {
+          position: absolute;
+          content: "";
+          height: 18px;
+          width: 18px;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
+          transition: 0.3s;
+          border-radius: 50%;
+        }
+        .switch input:checked + .slider {
+          background-color: #0504AA;
+        }
+        .switch input:checked + .slider:before {
+          transform: translateX(20px);
+        }
+      `}</style>
     </main>
   );
 }
@@ -500,9 +606,9 @@ function ToggleTile({ title, value, onChanged }: { title: string; value: boolean
   return (
     <div style={styles.toggleRow}>
       <span style={styles.toggleLabel}>{title}</span>
-      <label style={styles.switch}>
+      <label className="switch">
         <input type="checkbox" checked={value} onChange={(e) => onChanged(e.target.checked)} />
-        <span style={styles.slider}></span>
+        <span className="slider"></span>
       </label>
     </div>
   );
@@ -587,11 +693,9 @@ const styles: Record<string, React.CSSProperties> = {
   infoValue: { fontSize: 14, color: '#666' },
   toggleRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px' },
   toggleLabel: { fontSize: 15, color: '#1A1A1A' },
-  switch: { position: 'relative', width: 44, height: 24 },
-  slider: { position: 'absolute', inset: 0, backgroundColor: '#ccc', borderRadius: 24, transition: '0.3s' },
-  sliderInput: { flex: 1, margin: '0 8px' },
   sliderRow: { display: 'flex', alignItems: 'center', padding: '10px 16px' },
   sliderLabel: { fontSize: 15, color: '#1A1A1A', width: 120 },
+  sliderInput: { flex: 1, margin: '0 8px' },
   sliderValue: { fontSize: 14, color: '#666', width: 50, textAlign: 'right' },
   dropdownRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px' },
   dropdownLabel: { fontSize: 15, color: '#1A1A1A' },
@@ -608,10 +712,3 @@ const styles: Record<string, React.CSSProperties> = {
   secondaryBtn: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px', borderRadius: 8, border: '1px solid #0504AA', background: 'none', color: '#0504AA', fontWeight: 600, cursor: 'pointer' },
   primaryBtn: { width: '100%', padding: '14px', backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
 };
-
-// Spinner keyframes
-if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
-  style.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
-  document.head.appendChild(style);
-}
