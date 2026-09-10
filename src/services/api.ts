@@ -381,6 +381,14 @@ class ApiService {
     return res.data;
   }
 
+  // ✅ Delete a listing belonging to the logged-in storekeeper
+  public async deleteListing(
+    listingId: string
+  ): Promise<{ success: boolean; deleted: string }> {
+    const res = await this.axios.delete(`/storekeeper/listing/${listingId}`);
+    return res.data;
+  }
+
   public async getStoreOrders(storeId: string): Promise<JsonArray> {
     const res = await this.axios.get(`/storekeeper/orders/${storeId}`);
     return res.data;
@@ -1405,9 +1413,9 @@ class ApiService {
   }
 
   public async getOrderDetail(orderId: string): Promise<JsonObject> {
-  const res = await this.axios.get(`/wallet/order/${orderId}`);
-  return res.data;
-}
+    const res = await this.axios.get(`/wallet/order/${orderId}`);
+    return res.data;
+  }
 }
 
 export default ApiService.getInstance();

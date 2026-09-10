@@ -25,15 +25,31 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
 }
 
+function extractErrorMessage(err: unknown): string {
+  if (typeof err === 'object' && err !== null) {
+    const e = err as {
+      response?: { data?: { detail?: unknown } };
+      message?: unknown;
+    };
+    const detail = e.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (typeof e.message === 'string') return e.message;
+  }
+  return 'Could not delete item. Please try again.';
+}
+
 export default function StorekeeperItemsPage() {
   const router = useRouter();
 
   const [allItems, setAllItems] = useState<StoreItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const loadItems = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       const store = (await api.getMyStore()) as { store_id?: string } | null;
       if (store?.store_id) {
@@ -69,9 +85,28 @@ export default function StorekeeperItemsPage() {
     router.push(`/storekeeper/edit-item/${id}`);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Delete this item?')) {
-      alert(`Delete item ${id} – not implemented yet`);
+  const handleDelete = async (id: string) => {
+    const confirmed = window.confirm(
+      "Delete this item? This can't be undone."
+    );
+    if (!confirmed) return;
+
+    setErrorMsg(null);
+    setDeletingId(id);
+
+    // Optimistic removal so the UI feels instant
+    const previousItems = allItems;
+    setAllItems((prev) => prev.filter((item) => item.listing_id !== id));
+
+    try {
+      await api.deleteListing(id);
+    } catch (err: unknown) {
+      // Roll back if the server rejected the delete
+      setAllItems(previousItems);
+      setErrorMsg(extractErrorMessage(err));
+      console.error('Delete failed:', err);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -94,6 +129,20 @@ export default function StorekeeperItemsPage() {
         />
       </div>
 
+      {/* Error banner */}
+      {errorMsg && (
+        <div style={styles.errorBanner}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg(null)}
+            style={styles.errorDismiss}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Content */}
       <div style={styles.content}>
         {loading ? (
@@ -109,33 +158,64 @@ export default function StorekeeperItemsPage() {
           <div style={styles.list}>
             {filteredItems.map((item) => {
               const image = resolveImageUrl(item.image_url);
+              const isDeleting = deletingId === item.listing_id;
               return (
-                <div key={item.listing_id} style={styles.itemCard}>
+                <div
+                  key={item.listing_id}
+                  style={{
+                    ...styles.itemCard,
+                    opacity: isDeleting ? 0.5 : 1,
+                  }}
+                >
                   <div style={styles.itemAvatar}>
                     {image ? (
-                      <img src={image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img
+                        src={image}
+                        alt=""
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
                     ) : (
                       <MdInventory size={24} color="#888" />
                     )}
                   </div>
                   <div style={styles.itemInfo}>
-                    <div style={styles.itemTitle}>{item.title || 'Untitled'}</div>
-                    <div style={styles.itemPrice}>₦{Number(item.price || 0).toFixed(0)}</div>
+                    <div style={styles.itemTitle}>
+                      {item.title || 'Untitled'}
+                    </div>
+                    <div style={styles.itemPrice}>
+                      ₦{Number(item.price || 0).toFixed(0)}
+                    </div>
                   </div>
                   <div style={styles.itemActions}>
                     <button
                       onClick={() => handleEdit(item.listing_id)}
-                      style={styles.iconBtn}
+                      style={{
+                        ...styles.iconBtn,
+                        cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      }}
                       title="Edit"
+                      disabled={isDeleting}
                     >
                       <MdEdit size={20} color="#0504AA" />
                     </button>
                     <button
                       onClick={() => handleDelete(item.listing_id)}
-                      style={styles.iconBtn}
+                      style={{
+                        ...styles.iconBtn,
+                        cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      }}
                       title="Delete"
+                      disabled={isDeleting}
                     >
-                      <MdDelete size={20} color="#FF0000" />
+                      {isDeleting ? (
+                        <div style={styles.smallSpinner} />
+                      ) : (
+                        <MdDelete size={20} color="#FF0000" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -186,6 +266,27 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#1A1A1A',
     padding: '8px 0',
   },
+  errorBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    margin: '0 16px 8px',
+    padding: '10px 12px',
+    backgroundColor: '#FFEBEE',
+    border: '1px solid #FFCDD2',
+    borderRadius: 8,
+    color: '#B71C1C',
+    fontSize: 13,
+  },
+  errorDismiss: {
+    background: 'none',
+    border: 'none',
+    color: '#B71C1C',
+    fontSize: 18,
+    lineHeight: 1,
+    cursor: 'pointer',
+    padding: '0 4px',
+  },
   content: {
     flex: 1,
     overflowY: 'auto',
@@ -206,6 +307,14 @@ const styles: Record<string, React.CSSProperties> = {
     borderTopColor: '#0504AA',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
+  },
+  smallSpinner: {
+    width: 16,
+    height: 16,
+    border: '2px solid #eee',
+    borderTopColor: '#FF0000',
+    borderRadius: '50%',
+    animation: 'spin 0.7s linear infinite',
   },
   list: {
     display: 'flex',
