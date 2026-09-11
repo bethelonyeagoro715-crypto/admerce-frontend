@@ -33,7 +33,10 @@ function resolveImageUrl(url: string | null | undefined): string | null {
 
 function formatTime(isoString: string): string {
   try {
-    return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(isoString).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   } catch {
     return '';
   }
@@ -63,13 +66,30 @@ export default function ChatPage() {
   const isSeaiConversation =
     otherUserId.toLowerCase() === 'seai' || conversationId.includes('_seai');
 
+  // Whether the URL carried a real recipient ID.
+  const hasRecipient = Boolean(otherUserId);
+
+  // ── Derived UI state (no setState inside the effect) ──────────────
+  // When there's no recipient, we can't fetch anything — surface that
+  // as a derived error and treat loading as finished.
+  const displayError = !hasRecipient
+    ? 'Missing recipient information. Please open this chat from your inbox.'
+    : error;
+
+  const showLoading = hasRecipient && isLoading;
+
   useEffect(() => {
     if (isSeaiConversation) {
       router.replace('/seai/ask');
       return;
     }
 
-    // Load current user
+    // No recipient → nothing to fetch. Do NOT call setState here; the
+    // render above already derives the correct UI from `hasRecipient`.
+    if (!hasRecipient) {
+      return;
+    }
+
     const getCurrentUser = async () => {
       try {
         const profile = (await api.getMyProfile()) as Record<string, unknown>;
@@ -79,7 +99,6 @@ export default function ChatPage() {
       }
     };
 
-    // Load messages
     const loadMessages = async () => {
       setIsLoading(true);
       setError(null);
@@ -89,7 +108,9 @@ export default function ChatPage() {
         };
         setMessages(data.messages || []);
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Failed to load messages');
+        setError(
+          err instanceof Error ? err.message : 'Failed to load messages'
+        );
       } finally {
         setIsLoading(false);
       }
@@ -102,7 +123,7 @@ export default function ChatPage() {
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [conversationId, otherUserId, isSeaiConversation, router]);
+  }, [conversationId, otherUserId, isSeaiConversation, hasRecipient, router]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -114,10 +135,14 @@ export default function ChatPage() {
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text || sending) return;
+    if (!hasRecipient) {
+      alert('Cannot send: missing recipient.');
+      return;
+    }
 
     setSending(true);
     try {
-      await api.sendMessage(otherUserId || conversationId, text);
+      await api.sendMessage(otherUserId, text);
       const newMsg: ChatMessage = {
         id: Date.now(),
         sender_id: currentUserId || 'me',
@@ -144,7 +169,14 @@ export default function ChatPage() {
 
   if (isSeaiConversation) {
     return (
-      <main style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <main
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+        }}
+      >
         <div style={{ textAlign: 'center' }}>
           <MdChatBubbleOutline size={48} color="#ccc" />
           <p>Redirecting to SEAI...</p>
@@ -168,7 +200,9 @@ export default function ChatPage() {
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : (
-            <span style={styles.avatarText}>{otherUserName.charAt(0).toUpperCase()}</span>
+            <span style={styles.avatarText}>
+              {otherUserName.charAt(0).toUpperCase()}
+            </span>
           )}
         </div>
         <span style={styles.headerName}>{otherUserName}</span>
@@ -179,24 +213,48 @@ export default function ChatPage() {
         <button style={styles.iconBtn} onClick={startVideoCall} title="Video call">
           <MdVideocam size={22} color="#0504AA" />
         </button>
-        <button style={styles.iconBtn} onClick={() => window.location.reload()} title="Refresh">
+        <button
+          style={styles.iconBtn}
+          onClick={() => window.location.reload()}
+          title="Refresh"
+        >
           <MdRefresh size={22} color="#0504AA" />
         </button>
       </div>
 
       {/* Messages */}
       <div ref={scrollContainerRef} style={styles.messagesContainer}>
-        {isLoading ? (
+        {showLoading ? (
           <div style={styles.center}>
             <div style={styles.spinner} />
           </div>
-        ) : error ? (
+        ) : displayError ? (
           <div style={styles.center}>
             <MdErrorOutline size={48} color="#ef9a9a" />
-            <p style={{ color: '#666', margin: '8px 0 16px' }}>Failed to load messages</p>
-            <button onClick={() => window.location.reload()} style={styles.retryBtn}>
-              Retry
-            </button>
+            <p
+              style={{
+                color: '#666',
+                margin: '8px 0 16px',
+                textAlign: 'center',
+              }}
+            >
+              {displayError}
+            </p>
+            {hasRecipient ? (
+              <button
+                onClick={() => window.location.reload()}
+                style={styles.retryBtn}
+              >
+                Retry
+              </button>
+            ) : (
+              <button
+                onClick={() => router.push('/shopper/inbox')}
+                style={styles.retryBtn}
+              >
+                Back to Inbox
+              </button>
+            )}
           </div>
         ) : messages.length === 0 ? (
           <div style={styles.center}>
@@ -227,10 +285,20 @@ export default function ChatPage() {
                         <img
                           src={resolveImageUrl(avatar) || ''}
                           alt=""
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
                         />
                       ) : (
-                        <span style={{ fontSize: 12, fontWeight: 'bold', color: '#0504AA' }}>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 'bold',
+                            color: '#0504AA',
+                          }}
+                        >
                           {senderName.charAt(0).toUpperCase()}
                         </span>
                       )}
@@ -248,12 +316,21 @@ export default function ChatPage() {
                     }}
                   >
                     {!isMine && (
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#0504AA', marginBottom: 4 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: '#0504AA',
+                          marginBottom: 4,
+                        }}
+                      >
                         {senderName}
                       </div>
                     )}
                     <div>{msg.text}</div>
-                    <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>{time}</div>
+                    <div style={{ fontSize: 10, opacity: 0.7, marginTop: 4 }}>
+                      {time}
+                    </div>
                   </div>
                 </div>
               );
@@ -267,21 +344,26 @@ export default function ChatPage() {
       <div style={styles.inputArea}>
         <input
           type="text"
-          placeholder="Type a message..."
+          placeholder={
+            hasRecipient ? 'Type a message...' : 'Missing recipient'
+          }
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') sendMessage();
           }}
           style={styles.input}
+          disabled={!hasRecipient}
         />
         <button
           onClick={sendMessage}
-          disabled={!inputText.trim() || sending}
+          disabled={!inputText.trim() || sending || !hasRecipient}
           style={{
             ...styles.sendBtn,
-            backgroundColor: inputText.trim() ? '#0504AA' : '#e0e0e0',
-            cursor: inputText.trim() ? 'pointer' : 'not-allowed',
+            backgroundColor:
+              inputText.trim() && hasRecipient ? '#0504AA' : '#e0e0e0',
+            cursor:
+              inputText.trim() && hasRecipient ? 'pointer' : 'not-allowed',
           }}
         >
           <MdSend size={20} color="#fff" />
