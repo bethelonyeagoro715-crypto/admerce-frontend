@@ -41,6 +41,14 @@ function resolveImageUrl(url: string | null | undefined): string {
   return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
 }
 
+// Build a stable conversation URL segment for the (me, peer) pair.
+// The chat page uses `otherUserId` to load messages, so this segment
+// just needs to be deterministic and stable per pair.
+function buildConversationId(myUserId: string, otherUserId: string): string {
+  const pair = [myUserId || 'me', otherUserId].sort();
+  return `${pair[0]}_${pair[1]}`;
+}
+
 export default function ItemDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -220,6 +228,38 @@ export default function ItemDetailPage() {
       alert(msg);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ── Chat with storekeeper ────────────────
+  // Opens the chat screen with the seller's user ID and display info
+  // carried through as query params, so the chat page can load messages
+  // and render the header correctly.
+  const openChatWithStore = async () => {
+    if (!store) return;
+    if (!requireAuth()) return;
+
+    const otherUserId = store.owner_id;
+    if (!otherUserId) {
+      alert('Seller information is unavailable.');
+      return;
+    }
+
+    try {
+      const me = (await api.getMyProfile()) as { id?: string };
+      const myId = me?.id || '';
+      const conversationId = buildConversationId(myId, otherUserId);
+
+      const qs = new URLSearchParams();
+      qs.set('otherUserId', otherUserId);
+      qs.set('otherUserName', store.name || 'Store');
+      if (store.store_image_url) {
+        qs.set('otherUserAvatar', store.store_image_url);
+      }
+
+      router.push(`/chat/${conversationId}?${qs.toString()}`);
+    } catch {
+      alert('Could not open chat. Please try again.');
     }
   };
 
@@ -436,7 +476,11 @@ export default function ItemDetailPage() {
           <span style={{ color: '#666', flex: 1 }}>
             Sold by {store?.name ?? 'Unknown Store'}
           </span>
-          <button onClick={() => router.push(`/chat/${listing.store_id}`)} style={styles.iconBtn} title="Message Storekeeper">
+          <button
+            onClick={openChatWithStore}
+            style={styles.iconBtn}
+            title="Message Storekeeper"
+          >
             💬
           </button>
         </div>
