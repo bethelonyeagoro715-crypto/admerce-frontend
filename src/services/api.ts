@@ -1416,6 +1416,17 @@ class ApiService {
     const res = await this.axios.get(`/wallet/order/${orderId}`);
     return res.data;
   }
+
+  public async changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<JsonObject> {
+  const res = await this.axios.post('/auth/change-password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+  return res.data;
+}
 }
 
 export default ApiService.getInstance();
