@@ -16,7 +16,7 @@ function VerifyOtpContent() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [countdown, setCountdown] = useState(60);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     timerRef.current = setInterval(() => {
@@ -43,9 +43,28 @@ function VerifyOtpContent() {
 
     setLoading(true);
     try {
-      await api.verifyAccount(phone, trimmedOtp);
-      alert('✅ Verification successful!');
-      router.push(`/wallet-pin-setup?intended_role=${intendedRole}`);
+      const result = (await api.verifyAccount(phone, trimmedOtp)) as {
+        purpose?: string;
+        access_token?: string;
+        user_id?: string;
+      };
+
+      // ── Password-reset flow ───────────────────────────────────────
+      // The OTP came from /auth/forgot-password. Do NOT send the user
+      // to the wallet PIN screen — hand the verified OTP off to the
+      // reset-password screen so they can set a new password.
+      if (result.purpose === 'reset_password') {
+        router.replace(
+          `/reset-password?phone=${encodeURIComponent(phone)}` +
+            `&otp=${encodeURIComponent(trimmedOtp)}`
+        );
+        return;
+      }
+
+      // ── Signup verification flow ──────────────────────────────────
+      // A JWT was issued and stored by api.verifyAccount(). Continue
+      // to the wallet PIN setup step.
+      router.replace(`/wallet-pin-setup?intended_role=${intendedRole}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       alert(`Verification failed: ${message}`);
@@ -139,21 +158,96 @@ function VerifyOtpContent() {
 
 export default function VerifyOtpPage() {
   return (
-    <Suspense fallback={<div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>}>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            height: '100vh',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          Loading...
+        </div>
+      }
+    >
       <VerifyOtpContent />
     </Suspense>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#FFFFFF', padding: 24 },
-  card: { width: '100%', maxWidth: 420, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 32, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', textAlign: 'center' },
+  container: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 32,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+    textAlign: 'center',
+  },
   iconWrapper: { marginBottom: 24 },
   heading: { fontSize: 28, fontWeight: 900, color: '#1A1A1A', margin: 0 },
   subtitle: { fontSize: 16, color: '#666', marginTop: 8 },
-  otpInput: { width: '100%', marginTop: 40, padding: '16px', fontSize: 24, letterSpacing: 8, textAlign: 'center', border: '1px solid #ccc', borderRadius: 12, outline: 'none', backgroundColor: '#fff' },
-  primaryBtn: { width: '100%', padding: '16px', backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 16, fontSize: 18, fontWeight: 700, cursor: 'pointer', marginTop: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  spinner: { width: 24, height: 24, border: '3px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
-  resendRow: { marginTop: 16, display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: 14 },
-  resendBtn: { background: 'none', border: 'none', color: '#0504AA', fontWeight: 600, cursor: 'pointer', fontSize: 14, textDecoration: 'underline' },
+  otpInput: {
+    width: '100%',
+    marginTop: 40,
+    padding: '16px',
+    fontSize: 24,
+    letterSpacing: 8,
+    textAlign: 'center',
+    border: '1px solid #ccc',
+    borderRadius: 12,
+    outline: 'none',
+    backgroundColor: '#fff',
+  },
+  primaryBtn: {
+    width: '100%',
+    padding: '16px',
+    backgroundColor: '#0504AA',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 16,
+    fontSize: 18,
+    fontWeight: 700,
+    cursor: 'pointer',
+    marginTop: 24,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  spinner: {
+    width: 24,
+    height: 24,
+    border: '3px solid rgba(255,255,255,0.3)',
+    borderTopColor: '#fff',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  resendRow: {
+    marginTop: 16,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    fontSize: 14,
+  },
+  resendBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#0504AA',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontSize: 14,
+    textDecoration: 'underline',
+  },
 };

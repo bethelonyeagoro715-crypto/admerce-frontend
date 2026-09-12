@@ -9,6 +9,7 @@ const PUBLIC_PREFIXES = [
   '/signup',
   '/forgot-password',
   '/verify-otp',
+  '/reset-password',           // ← added: needed for forgot-password flow
   '/kyc',
   '/verification',
   '/kyc-onboarding',
@@ -17,7 +18,7 @@ const PUBLIC_PREFIXES = [
   '/courier/onboarding',
   '/flipper/onboarding',
   '/service-provider/onboarding',
-  '/shopper',                  // covers most /shopper/* routes
+  '/shopper',
   '/notifications',
   '/seai-search',
   '/seai/ask',
@@ -69,7 +70,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/_admin', request.url));
   }
 
-  const isPublic = PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+  // '/' matches only the literal root path.
+  // Every other entry is a prefix match.
+  const isPublic = PUBLIC_PREFIXES.some((p) =>
+    p === '/' ? pathname === '/' : pathname.startsWith(p)
+  );
   const isAuthRoute = AUTH_ROUTES.some((p) => pathname.startsWith(p));
 
   // Protected route without token → redirect to login
@@ -77,14 +82,19 @@ export function middleware(request: NextRequest) {
     const intendedRole = inferIntendedRole(pathname);
     const redirect = encodeURIComponent(pathname + request.nextUrl.search);
     return NextResponse.redirect(
-      new URL(`/login?intended_role=${intendedRole}&redirect=${redirect}`, request.url)
+      new URL(
+        `/login?intended_role=${intendedRole}&redirect=${redirect}`,
+        request.url
+      )
     );
   }
 
   // Logged in but on an auth route → redirect to appropriate dashboard
   if (token && isAuthRoute) {
-    const intendedRole = searchParams.get('intended_role') || userRole || 'shopper';
-    const onboardedRoles = request.cookies.get('onboarded_roles')?.value?.split(',') ?? [];
+    const intendedRole =
+      searchParams.get('intended_role') || userRole || 'shopper';
+    const onboardedRoles =
+      request.cookies.get('onboarded_roles')?.value?.split(',') ?? [];
     const destination = getPostLoginRedirect(intendedRole, onboardedRoles);
     return NextResponse.redirect(new URL(destination, request.url));
   }
