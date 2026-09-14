@@ -12,26 +12,46 @@ import {
 } from 'react-icons/md';
 import type { IconType } from 'react-icons';
 
-function UserAvatar({ imageUrl, name }: { imageUrl?: string; name: string }) {
+// ─── Colors ─────────────────────────────────────────────────────────
+const NAV_BG = '#FFFFFF';
+const NAV_BORDER = '#E5E5E5';
+const ACTIVE_COLOR = '#0504AA';
+const INACTIVE_COLOR = 'rgba(26, 26, 26, 0.55)';
+const ACTIVE_AVATAR_RING = '#0504AA';
+
+function UserAvatar({
+  imageUrl,
+  name,
+  active,
+}: {
+  imageUrl?: string;
+  name: string;
+  active: boolean;
+}) {
   const initials = (name || '?')[0].toUpperCase();
   return (
     <div
       style={{
-        width: 48,
-        height: 48,
+        width: 28,
+        height: 28,
         borderRadius: '50%',
         overflow: 'hidden',
-        backgroundColor: '#e0e0e0',
+        backgroundColor: '#F0F0F0',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontWeight: 700,
-        fontSize: 20,
+        fontSize: 12,
         color: '#0504AA',
+        border: active ? `2px solid ${ACTIVE_AVATAR_RING}` : '2px solid transparent',
+        boxSizing: 'border-box',
       }}
     >
       {imageUrl ? (
-        <img src={imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <img
+          src={imageUrl}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
       ) : (
         <span style={{ fontWeight: 'bold' }}>{initials}</span>
       )}
@@ -88,7 +108,6 @@ export default function StorekeeperLayout({ children }: { children: React.ReactN
   };
 
   useEffect(() => {
-    // Defer to avoid synchronous setState in effect
     const timer = setTimeout(() => {
       loadProfile();
       checkSetup();
@@ -96,7 +115,6 @@ export default function StorekeeperLayout({ children }: { children: React.ReactN
     return () => clearTimeout(timer);
   }, []);
 
-  // Determine active tab from pathname
   let currentIndex = 0;
   if (pathname.startsWith('/storekeeper/items')) currentIndex = 1;
   else if (pathname.startsWith('/storekeeper/orders')) currentIndex = 2;
@@ -121,8 +139,24 @@ export default function StorekeeperLayout({ children }: { children: React.ReactN
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <div style={{ width: 36, height: 36, border: '4px solid #eee', borderTopColor: '#0504AA', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+        }}
+      >
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            border: '4px solid #eee',
+            borderTopColor: '#0504AA',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }}
+        />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -132,52 +166,78 @@ export default function StorekeeperLayout({ children }: { children: React.ReactN
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ flex: 1, overflowY: 'auto' }}>{children}</div>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 64 }}>
+        {children}
+      </div>
 
       {hasStore !== false && (
-        <div style={styles.navBar}>
-          <NavItem Icon={MdDashboard} label="Home" active={currentIndex === 0} onTap={() => navigate(0)} />
-          <NavItem Icon={MdInventory} label="Items" active={currentIndex === 1} onTap={() => navigate(1)} />
-          <NavItem Icon={MdReceipt} label="Orders" active={currentIndex === 2} onTap={() => navigate(2)} />
-          <NavItem Icon={MdChatBubbleOutline} label="Inbox" active={currentIndex === 3} onTap={() => navigate(3)} />
-          <NavItem Icon={MdAccountBalanceWallet} label="Wallet" active={currentIndex === 4} onTap={() => navigate(4)} />
+        <nav style={styles.navBar}>
+          <NavItem
+            Icon={MdDashboard}
+            label="Home"
+            active={currentIndex === 0}
+            onTap={() => navigate(0)}
+          />
+          <NavItem
+            Icon={MdInventory}
+            label="Items"
+            active={currentIndex === 1}
+            onTap={() => navigate(1)}
+          />
+          <NavItem
+            Icon={MdReceipt}
+            label="Orders"
+            active={currentIndex === 2}
+            onTap={() => navigate(2)}
+          />
+          <NavItem
+            Icon={MdChatBubbleOutline}
+            label="Inbox"
+            active={currentIndex === 3}
+            onTap={() => navigate(3)}
+          />
+          <NavItem
+            Icon={MdAccountBalanceWallet}
+            label="Wallet"
+            active={currentIndex === 4}
+            onTap={() => navigate(4)}
+          />
+
           <div
             onClick={() => navigate(5)}
             style={{
               display: 'flex',
-              flexDirection: 'column' as const,
+              flexDirection: 'column',
               alignItems: 'center',
+              justifyContent: 'center',
               cursor: 'pointer',
-              minWidth: 60,
+              flex: 1,
+              gap: 2,
             }}
           >
-            <div
-              style={{
-                borderRadius: '50%',
-                border: currentIndex === 5 ? '2px solid #0504AA' : '2px solid transparent',
-                padding: 2,
-              }}
-            >
-              <UserAvatar imageUrl={profile?.avatar_url} name={avatarName} />
-            </div>
+            <UserAvatar
+              imageUrl={profile?.avatar_url}
+              name={avatarName}
+              active={currentIndex === 5}
+            />
             <span
               style={{
                 fontSize: 10,
-                fontWeight: currentIndex === 5 ? 'bold' : 'normal',
-                color: currentIndex === 5 ? '#0504AA' : 'rgba(26,26,26,0.6)',
-                marginTop: 2,
+                fontWeight: currentIndex === 5 ? 600 : 400,
+                color: currentIndex === 5 ? ACTIVE_COLOR : INACTIVE_COLOR,
+                lineHeight: 1,
               }}
             >
               Profile
             </span>
           </div>
-        </div>
+        </nav>
       )}
     </div>
   );
 }
 
-// ─── NavItem component ──────────────────────────────────────────
+// ─── NavItem ────────────────────────────────────────────────────────
 function NavItem({
   Icon,
   label,
@@ -194,22 +254,23 @@ function NavItem({
       onClick={onTap}
       style={{
         display: 'flex',
-        flexDirection: 'column' as const,
+        flexDirection: 'column',
         alignItems: 'center',
+        justifyContent: 'center',
         cursor: 'pointer',
-        padding: '8px 12px',
-        borderRadius: 20,
-        backgroundColor: active ? 'rgba(5,4,170,0.1)' : 'transparent',
-        transition: 'background-color 0.3s',
+        flex: 1,
+        gap: 2,
+        padding: '4px 0',
+        WebkitTapHighlightColor: 'transparent',
       }}
     >
-      <Icon size={24} color={active ? '#0504AA' : 'rgba(26,26,26,0.6)'} />
+      <Icon size={22} color={active ? ACTIVE_COLOR : INACTIVE_COLOR} />
       <span
         style={{
           fontSize: 10,
-          fontWeight: active ? 'bold' : 'normal',
-          color: active ? '#0504AA' : 'rgba(26,26,26,0.6)',
-          marginTop: 2,
+          fontWeight: active ? 600 : 400,
+          color: active ? ACTIVE_COLOR : INACTIVE_COLOR,
+          lineHeight: 1,
         }}
       >
         {label}
@@ -218,19 +279,22 @@ function NavItem({
   );
 }
 
+// ─── Styles ────────────────────────────────────────────────────────
 const styles = {
   navBar: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
     display: 'flex',
     justifyContent: 'space-around',
     alignItems: 'center',
-    padding: '8px 16px',
-    margin: '0 16px 8px',
-    height: 64,
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-    position: 'sticky',
-    bottom: 0,
-    zIndex: 10,
+    backgroundColor: NAV_BG,
+    borderTop: `1px solid ${NAV_BORDER}`,
+    paddingTop: 10,
+    paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
+    paddingLeft: 'env(safe-area-inset-left)',
+    paddingRight: 'env(safe-area-inset-right)',
+    zIndex: 100,
   } as React.CSSProperties,
 };
