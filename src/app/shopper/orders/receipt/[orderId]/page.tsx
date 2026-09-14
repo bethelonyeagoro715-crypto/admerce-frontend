@@ -10,6 +10,7 @@ import {
   MdStore,
   MdPersonOutline,
   MdLocationOn,
+  MdPerson,
 } from 'react-icons/md';
 import api from '../../../../../services/api';
 
@@ -27,6 +28,7 @@ interface OrderDetail {
   order_id: string;
   customer_name: string;
   store_name: string;
+  storekeeper_name?: string;
   total_amount?: string | number;
   status?: string;
   item_amount?: string | number;
@@ -45,6 +47,7 @@ interface OrderDetailResponse extends Record<string, unknown> {
   order_id?: string;
   customer_name?: string;
   store_name?: string;
+  storekeeper_name?: string;
   total_amount?: string | number;
   status?: string;
   item_amount?: string | number;
@@ -76,6 +79,18 @@ function reducer(state: PageState, action: PageAction): PageState {
   }
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────
+function shortenId(id: string, head = 8): string {
+  if (!id) return '';
+  return id.length > head ? id.slice(0, head) : id;
+}
+
+function safeNumber(v: unknown): number {
+  if (v === null || v === undefined || v === '') return 0;
+  const n = parseFloat(String(v));
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ─── Component Content ──────────────────────────────────────────
 function ReceiptContent() {
   const router = useRouter();
@@ -96,34 +111,37 @@ function ReceiptContent() {
   })();
 
   const fallback = {
-    customer_name: searchParams.get('customer_name') || 'Customer',
-    store_name:    searchParams.get('store_name')    || 'Store',
-    total_amount:  parseFloat(searchParams.get('total') || '0'),
-    items:         fallbackItems,
+    customer_name:   searchParams.get('customer_name')   || '',
+    store_name:      searchParams.get('store_name')      || '',
+    storekeeper_name: searchParams.get('storekeeper_name') || '',
+    total_amount:    safeNumber(searchParams.get('total')),
+    items:           fallbackItems,
   };
 
   useEffect(() => {
-    api.adminGetOrderDetail(orderId)
+    // Use the wallet order endpoint — it returns real customer + storekeeper names.
+    api.getOrderDetail(orderId)
       .then((raw: unknown) => {
         const res = raw as OrderDetailResponse;
         dispatch({
           type: 'LOADED',
           data: {
-            order_id:      res.order_id      ?? orderId,
-            customer_name: res.customer_name ?? '',
-            store_name:    res.store_name    ?? '',
-            total_amount:  res.total_amount,
-            status:        res.status,
-            item_amount:   res.item_amount,
-            delivery_fee:  res.delivery_fee,
-            listing_id:    res.listing_id,
-            quantity:      res.quantity,
-            created_at:    res.created_at,
-            expires_at:    res.expires_at,
-            address:       res.address,
-            latitude:      res.latitude,
-            longitude:     res.longitude,
-            items:         res.items,
+            order_id:         res.order_id         ?? orderId,
+            customer_name:    res.customer_name    ?? '',
+            store_name:       res.store_name       ?? '',
+            storekeeper_name: res.storekeeper_name ?? '',
+            total_amount:     res.total_amount,
+            status:           res.status,
+            item_amount:      res.item_amount,
+            delivery_fee:     res.delivery_fee,
+            listing_id:       res.listing_id,
+            quantity:         res.quantity,
+            created_at:       res.created_at,
+            expires_at:       res.expires_at,
+            address:          res.address,
+            latitude:         res.latitude,
+            longitude:        res.longitude,
+            items:            res.items,
           },
         });
       })
@@ -133,13 +151,39 @@ function ReceiptContent() {
       });
   }, [orderId]);
 
-  const customerName = orderData?.customer_name || fallback.customer_name;
-  const storeName    = orderData?.store_name    || fallback.store_name;
+  // ── Resolved display values ─────────────────────────────────────
+  const rawCustomerName    = orderData?.customer_name    || fallback.customer_name;
+  const rawStoreName       = orderData?.store_name       || fallback.store_name;
+  const rawStorekeeperName = orderData?.storekeeper_name || fallback.storekeeper_name;
+
+  // Never show the literal string 'Customer' or 'Store' as a fallback —
+  // instead show a neutral placeholder so the layout stays clean.
+  const customerName    = (rawCustomerName    && rawCustomerName    !== 'Customer')    ? rawCustomerName    : 'Customer';
+  const storeName       = (rawStoreName       && rawStoreName       !== 'Store')       ? rawStoreName       : '—';
+  const storekeeperName = (rawStorekeeperName && rawStorekeeperName !== 'Storekeeper') ? rawStorekeeperName : '';
+
   const total        = orderData?.total_amount != null
-    ? parseFloat(String(orderData.total_amount))
+    ? safeNumber(orderData.total_amount)
     : fallback.total_amount;
+  const itemAmount   = safeNumber(orderData?.item_amount);
+  const deliveryFee  = safeNumber(orderData?.delivery_fee);
+  const quantity     = Number(orderData?.quantity ?? 1);
+  const listingId    = orderData?.listing_id ?? '';
+
   const items        = orderData?.items?.length ? orderData.items : fallback.items;
   const storeAddress = orderData?.address || searchParams.get('store_address') || '';
+
+  // If the backend didn't send an items array but escrow has a listing,
+  // synthesize a single row from the escrow fields.
+  const synthesizedItems: OrderItem[] = items.length === 0 && listingId
+    ? [{
+        name: `Item #${shortenId(listingId)}`,
+        price: quantity > 0 ? itemAmount / quantity : itemAmount,
+        quantity,
+      }]
+    : [];
+
+  const displayItems = items.length > 0 ? items : synthesizedItems;
 
   const handlePrint = () => window.print();
   const handleShare = async () => {
@@ -162,6 +206,19 @@ function ReceiptContent() {
   );
 
   const now = new Date();
+
+  // Compose the info rows dynamically so 'Storekeeper' and 'Address' only
+  // appear when we actually have a value.
+  const infoRows = [
+    { icon: <MdPersonOutline size={18} color="#0504AA" />, label: 'Customer',   value: customerName },
+    { icon: <MdStore        size={18} color="#0504AA" />, label: 'Store',      value: storeName    },
+    ...(storekeeperName
+      ? [{ icon: <MdPerson size={18} color="#0504AA" />, label: 'Storekeeper', value: storekeeperName }]
+      : []),
+    ...(storeAddress
+      ? [{ icon: <MdLocationOn size={18} color="#0504AA" />, label: 'Address', value: storeAddress }]
+      : []),
+  ];
 
   return (
     <main style={css.container}>
@@ -194,11 +251,7 @@ function ReceiptContent() {
         </div>
 
         <div style={css.infoSection}>
-          {[
-            { icon: <MdPersonOutline size={18} color="#0504AA" />, label: 'Customer', value: customerName },
-            { icon: <MdStore        size={18} color="#0504AA" />, label: 'Store',    value: storeName    },
-            ...(storeAddress ? [{ icon: <MdLocationOn size={18} color="#0504AA" />, label: 'Address', value: storeAddress }] : []),
-          ].map(({ icon, label, value }) => (
+          {infoRows.map(({ icon, label, value }) => (
             <div key={label} style={css.infoRow}>
               <div style={css.infoLabel}>{icon}<span>{label}</span></div>
               <span style={css.infoValue}>{value}</span>
@@ -208,13 +261,13 @@ function ReceiptContent() {
 
         <div style={css.itemsSection}>
           <h3 style={css.itemsTitle}>Items</h3>
-          {items.length === 0 ? (
+          {displayItems.length === 0 ? (
             <p style={{ color: '#888' }}>No items in this order.</p>
           ) : (
             <div style={css.itemsList}>
-              {items.map((item, index) => {
+              {displayItems.map((item, index) => {
                 const qty      = item.quantity || 1;
-                const price    = parseFloat(String(item.price || 0));
+                const price    = safeNumber(item.price);
                 const subtotal = qty * price;
                 return (
                   <div key={index} style={css.itemRow}>
@@ -224,6 +277,14 @@ function ReceiptContent() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {deliveryFee > 0 && (
+            <div style={{ ...css.itemRow, marginTop: 8, color: '#666' }}>
+              <span style={css.itemName}>Delivery fee</span>
+              <span style={css.itemQty} />
+              <span style={css.itemSubtotal}>₦{deliveryFee.toFixed(0)}</span>
             </div>
           )}
         </div>
