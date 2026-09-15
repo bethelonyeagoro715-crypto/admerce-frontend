@@ -21,6 +21,7 @@ import {
   MdLocationOn,
   MdBuild,
   MdNavigation,
+  MdCheck,
 } from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
@@ -104,7 +105,12 @@ function typeBadgeLabel(type: string | undefined): string {
   return 'ITEM';
 }
 
-// ─── Vertical, photo-forward result card ──────────────────────────
+// ─── Branded thinking cursor — pulsing rotating square ───────────
+function SeaiCursor() {
+  return <span className="seai-cursor" aria-hidden />;
+}
+
+// ─── Vertical result card ──────────────────────────────────────────
 function SeaiResultCard({
   card,
   onTap,
@@ -147,7 +153,6 @@ function SeaiResultCard({
         style={styles.tileTap}
         aria-label={`Open ${card.title || 'result'}`}
       >
-        {/* Large hero image */}
         <div style={styles.tileImageWrap}>
           {image ? (
             <img src={image} alt="" style={styles.tileImage} />
@@ -162,7 +167,6 @@ function SeaiResultCard({
               )}
             </div>
           )}
-
           <span
             style={{
               ...styles.tileBadge,
@@ -171,37 +175,29 @@ function SeaiResultCard({
           >
             {typeBadgeLabel(card.type)}
           </span>
-
-          {/* Distance pill overlaid bottom-left of image, like a photo tag */}
           {typeof distance === 'number' && (
             <span style={styles.tileDistancePill}>
               <MdLocationOn size={11} color="#fff" />
-              <span style={{ marginLeft: 3 }}>
-                {distance.toFixed(1)} km
-              </span>
+              <span style={{ marginLeft: 3 }}>{distance.toFixed(1)} km</span>
             </span>
           )}
         </div>
 
-        {/* Text block */}
         <div style={styles.tileBody}>
           <div style={styles.tileTitle} title={card.title || ''}>
             {card.title || 'Untitled'}
           </div>
-
           {showPrice && (
             <div style={styles.tilePrice}>
               ₦{Number(card.price).toLocaleString('en-NG')}
             </div>
           )}
-
           {subtitle && (
             <div style={styles.tileSubtitle} title={subtitle}>
               <MdStore size={12} color="#64748B" />
               <span style={{ marginLeft: 4 }}>{subtitle}</span>
             </div>
           )}
-
           {travel !== undefined && (
             <div style={styles.tileTravel}>~{travel} min away</div>
           )}
@@ -209,11 +205,7 @@ function SeaiResultCard({
       </button>
 
       {directions && (
-        <button
-          type="button"
-          onClick={handleDirections}
-          style={styles.directionsBtn}
-        >
+        <button type="button" onClick={handleDirections} style={styles.directionsBtn}>
           <MdNavigation size={14} color={Brand.accent} />
           <span style={{ marginLeft: 4 }}>Directions</span>
         </button>
@@ -238,6 +230,13 @@ function SeaiAskContent() {
   const [isLoadingRecents, setIsLoadingRecents] = useState(false);
   const [inputHasText, setInputHasText] = useState(false);
   const [isCortexMode, setIsCortexMode] = useState(false);
+
+  // Editing state — only one message editable at a time
+  const [editing, setEditing] = useState<{
+    index: number;
+    text: string;
+    role: Role;
+  } | null>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -279,6 +278,7 @@ function SeaiAskContent() {
   const clearConversation = () => {
     setMessages([]);
     setIsStreaming(false);
+    setEditing(null);
     if (inputRef.current) inputRef.current.focus();
   };
 
@@ -302,9 +302,8 @@ function SeaiAskContent() {
     }
   };
 
-  const copyMessage = (text: string) => {
+  const copyText = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('Copied');
   };
 
   const retryMessage = (index: number) => {
@@ -312,11 +311,43 @@ function SeaiAskContent() {
       const userMsg = messages[index - 1];
       const newMessages = messages.slice(0, index - 1);
       setMessages(newMessages);
-      sendMessage(userMsg.text);
+      sendMessage(userMsg.text, newMessages);
     }
   };
 
-  const sendMessage = async (overrideText?: string) => {
+  // ─── Edit handlers ───────────────────────────────────────────
+  const startEdit = (index: number) => {
+    const m = messages[index];
+    setEditing({ index, text: m.text, role: m.role });
+  };
+
+  const cancelEdit = () => setEditing(null);
+
+  const saveEdit = () => {
+    if (!editing) return;
+    const { index, text, role } = editing;
+
+    if (role === 'seai') {
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], text };
+        return updated;
+      });
+      setEditing(null);
+      return;
+    }
+
+    // User message: truncate everything from this message onward, then resend
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const truncated = messages.slice(0, index);
+    setMessages(truncated);
+    setEditing(null);
+    setTimeout(() => sendMessage(trimmed, truncated), 0);
+  };
+
+  // ─── Send ────────────────────────────────────────────────────
+  const sendMessage = async (overrideText?: string, overrideHistory?: Message[]) => {
     const text = (overrideText ?? inputRef.current?.value ?? '').trim();
     if (!text || isStreaming) return;
 
@@ -325,6 +356,8 @@ function SeaiAskContent() {
       setInputHasText(false);
       inputRef.current.blur();
     }
+
+    const baseMessages = overrideHistory ?? messages;
 
     const userMsg: Message = {
       role: 'user',
@@ -341,12 +374,12 @@ function SeaiAskContent() {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMsg, thinkingMsg]);
+    setMessages([...baseMessages, userMsg, thinkingMsg]);
     setIsStreaming(true);
     scrollToBottom();
 
     const history: { role: string; content: string }[] = [];
-    for (const m of [...messages, userMsg]) {
+    for (const m of [...baseMessages, userMsg]) {
       if (m.role === 'user') {
         history.push({ role: 'user', content: m.text });
       } else if (!m.isThinking && m.text) {
@@ -354,7 +387,7 @@ function SeaiAskContent() {
       }
     }
 
-    const idx = messages.length + 1;
+    const idx = baseMessages.length + 1;
 
     try {
       const stream = api.seaiAsk(
@@ -514,7 +547,7 @@ function SeaiAskContent() {
       </div>
       <h2 style={styles.greeting}>Hi there.</h2>
       <p style={styles.subGreeting}>How can I help you today?</p>
-      <div style={styles.suggestionsGrid}>
+      <div className="seai-suggestions" style={styles.suggestionsGrid}>
         {suggestions.map((s, i) => (
           <button
             key={i}
@@ -529,81 +562,145 @@ function SeaiAskContent() {
     </div>
   );
 
+  // ─── Edit overlay on messages ────────────────────────────────
+  const renderEditable = (msg: Message, i: number) => (
+    <div style={styles.editWrap}>
+      <textarea
+        value={editing?.text ?? ''}
+        onChange={(e) =>
+          setEditing((prev) => (prev ? { ...prev, text: e.target.value } : prev))
+        }
+        style={styles.editTextarea}
+        rows={3}
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') cancelEdit();
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveEdit();
+        }}
+      />
+      <div style={styles.editActions}>
+        <button onClick={cancelEdit} style={styles.editCancel}>
+          Cancel
+        </button>
+        <button onClick={saveEdit} style={styles.editSave}>
+          <MdCheck size={16} color="#fff" />
+          <span style={{ marginLeft: 4 }}>
+            {msg.role === 'user' ? 'Save & resend' : 'Save'}
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+
   const renderChat = () => (
-    <div style={styles.chatList}>
-      {messages.map((msg, i) => (
-        <div key={i} style={{ marginBottom: '20px' }}>
-          {msg.role === 'user' ? (
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <div style={styles.userBubble}>{msg.text}</div>
-            </div>
-          ) : (
-            <div style={styles.aiMessageRow}>
-              <div style={styles.aiAvatar}>
-                <MdAutoAwesome size={14} color="#FFFFFF" />
-              </div>
-              <div style={styles.aiBubble}>
-                {msg.isThinking ? (
-                  <div style={styles.thinkingDots}>
-                    <span className="dot" />
-                    <span className="dot" />
-                    <span className="dot" />
-                  </div>
-                ) : msg.text ? (
-                  <div style={{ whiteSpace: 'pre-wrap' }}>
-                    {msg.text}
-                    {msg.isStreaming && <span style={styles.cursor}>|</span>}
-                  </div>
-                ) : null}
+    <div className="seai-chat-list" style={styles.chatList}>
+      {messages.map((msg, i) => {
+        const isEditing = editing?.index === i;
 
-                {/* Vertical card grid */}
-                {msg.cards && msg.cards.length > 0 && (
-                  <div style={styles.cardStack}>
-                    {msg.cards.map((card, cIdx) => (
-                      <SeaiResultCard
-                        key={cIdx}
-                        card={card}
-                        onTap={() => handleCardTap(card)}
-                      />
-                    ))}
-                  </div>
+        return (
+          <div key={i} style={{ marginBottom: '20px' }}>
+            {msg.role === 'user' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                {isEditing ? (
+                  renderEditable(msg, i)
+                ) : (
+                  <div style={styles.userBubble}>{msg.text}</div>
                 )}
-
-                {!msg.isThinking && !msg.isStreaming && msg.text && (
-                  <div style={styles.actionBar}>
+                {!isEditing && !msg.isStreaming && msg.text && (
+                  <div style={{ ...styles.actionBar, justifyContent: 'flex-end' }}>
                     <button
-                      onClick={() => copyMessage(msg.text)}
+                      onClick={() => copyText(msg.text)}
                       style={styles.actionBtn}
                       title="Copy"
                     >
-                      <MdContentCopy size={16} color="#666" />
+                      <MdContentCopy size={14} color="#666" />
                     </button>
                     <button
-                      onClick={() => retryMessage(i)}
+                      onClick={() => startEdit(i)}
                       style={styles.actionBtn}
-                      title="Retry"
+                      title="Edit"
                     >
-                      <MdRefresh size={16} color="#666" />
-                    </button>
-                    <button style={styles.actionBtn} title="Good response">
-                      <MdThumbUp size={16} color="#666" />
-                    </button>
-                    <button style={styles.actionBtn} title="Bad response">
-                      <MdThumbDown size={16} color="#666" />
+                      <MdEdit size={14} color="#666" />
                     </button>
                   </div>
                 )}
               </div>
-            </div>
-          )}
-        </div>
-      ))}
+            ) : (
+              <div style={styles.aiMessageRow}>
+                <div style={styles.aiAvatar}>
+                  <MdAutoAwesome size={14} color="#FFFFFF" />
+                </div>
+                <div style={styles.aiBubble}>
+                  {msg.isThinking ? (
+                    <div style={styles.thinkingDots}>
+                      <span className="dot" />
+                      <span className="dot" />
+                      <span className="dot" />
+                    </div>
+                  ) : isEditing ? (
+                    renderEditable(msg, i)
+                  ) : msg.text ? (
+                    <div style={{ whiteSpace: 'pre-wrap' }}>
+                      {msg.text}
+                      {msg.isStreaming && <SeaiCursor />}
+                    </div>
+                  ) : null}
+
+                  {msg.cards && msg.cards.length > 0 && (
+                    <div className="seai-card-stack" style={styles.cardStack}>
+                      {msg.cards.map((card, cIdx) => (
+                        <SeaiResultCard
+                          key={cIdx}
+                          card={card}
+                          onTap={() => handleCardTap(card)}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {!msg.isThinking && !msg.isStreaming && msg.text && !isEditing && (
+                    <div style={styles.actionBar}>
+                      <button
+                        onClick={() => copyText(msg.text)}
+                        style={styles.actionBtn}
+                        title="Copy"
+                      >
+                        <MdContentCopy size={15} color="#666" />
+                      </button>
+                      <button
+                        onClick={() => startEdit(i)}
+                        style={styles.actionBtn}
+                        title="Edit"
+                      >
+                        <MdEdit size={15} color="#666" />
+                      </button>
+                      <button
+                        onClick={() => retryMessage(i)}
+                        style={styles.actionBtn}
+                        title="Retry"
+                      >
+                        <MdRefresh size={15} color="#666" />
+                      </button>
+                      <button style={styles.actionBtn} title="Good response">
+                        <MdThumbUp size={15} color="#666" />
+                      </button>
+                      <button style={styles.actionBtn} title="Bad response">
+                        <MdThumbDown size={15} color="#666" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
       <div ref={messagesEndRef} />
     </div>
   );
 
   const renderInputArea = () => (
-    <div style={styles.inputArea}>
+    <div className="seai-input-area" style={styles.inputArea}>
       <div style={styles.inputBox}>
         <textarea
           ref={inputRef}
@@ -655,6 +752,7 @@ function SeaiAskContent() {
         />
       )}
       <div
+        className="seai-sidebar"
         style={{
           ...styles.sidebar,
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
@@ -665,10 +763,7 @@ function SeaiAskContent() {
             <MdAutoAwesome size={14} color="#FFFFFF" />
           </div>
           <span style={{ fontWeight: 600 }}>Admerce AI</span>
-          <button
-            onClick={() => setDrawerOpen(false)}
-            style={styles.closeBtn}
-          >
+          <button onClick={() => setDrawerOpen(false)} style={styles.closeBtn}>
             <MdClose size={20} color="#666" />
           </button>
         </div>
@@ -679,11 +774,7 @@ function SeaiAskContent() {
           }}
           style={styles.newChatBtn}
         >
-          <MdEdit
-            size={16}
-            color={Brand.accent}
-            style={{ marginRight: 8 }}
-          />
+          <MdEdit size={16} color={Brand.accent} style={{ marginRight: 8 }} />
           New chat
         </button>
         <div style={styles.recentLabel}>Recent</div>
@@ -691,13 +782,7 @@ function SeaiAskContent() {
           {isLoadingRecents ? (
             <div style={{ textAlign: 'center', padding: 16 }}>Loading...</div>
           ) : conversations.length === 0 ? (
-            <div
-              style={{
-                color: Brand.textMuted,
-                fontSize: 13,
-                padding: 16,
-              }}
-            >
+            <div style={{ color: Brand.textMuted, fontSize: 13, padding: 16 }}>
               No conversations yet
             </div>
           ) : (
@@ -720,8 +805,8 @@ function SeaiAskContent() {
     <main style={styles.container}>
       {renderSidebar()}
 
-      <div style={styles.main}>
-        <div style={styles.header}>
+      <div className="seai-main" style={styles.main}>
+        <div className="seai-header" style={styles.header}>
           <button
             onClick={() => setDrawerOpen(!drawerOpen)}
             style={styles.iconBtn}
@@ -738,9 +823,7 @@ function SeaiAskContent() {
                 width: 14,
                 height: 14,
                 borderRadius: '50%',
-                backgroundColor: isCortexMode
-                  ? Brand.accentLight
-                  : Brand.accent,
+                backgroundColor: isCortexMode ? Brand.accentLight : Brand.accent,
                 marginRight: 6,
               }}
             />
@@ -763,7 +846,7 @@ function SeaiAskContent() {
           )}
         </div>
 
-        <div style={styles.body}>
+        <div className="seai-body" style={styles.body}>
           {inChat ? renderChat() : renderWelcome()}
         </div>
 
@@ -888,12 +971,14 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
+    minWidth: 0,
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     padding: '8px 16px',
     backgroundColor: Brand.bg,
+    flexShrink: 0,
   },
   iconBtn: {
     background: 'none',
@@ -917,6 +1002,7 @@ const styles: Record<string, React.CSSProperties> = {
   body: {
     flex: 1,
     overflowY: 'auto',
+    minHeight: 0,
   },
   welcomeContainer: {
     display: 'flex',
@@ -973,6 +1059,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   chatList: {
     padding: '16px',
+    maxWidth: 900,
+    margin: '0 auto',
+    width: '100%',
   },
   userBubble: {
     maxWidth: '75%',
@@ -984,10 +1073,12 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
     boxShadow: `0 4px 10px rgba(5,4,170,0.2)`,
     wordBreak: 'break-word',
+    whiteSpace: 'pre-wrap',
   },
   aiMessageRow: {
     display: 'flex',
     alignItems: 'flex-start',
+    gap: 12,
   },
   aiAvatar: {
     width: 28,
@@ -997,7 +1088,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
     flexShrink: 0,
     marginTop: 2,
   },
@@ -1016,23 +1106,64 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     height: 24,
   },
-  cursor: {
-    display: 'inline-block',
-    width: 2,
-    height: 18,
+
+  // ── Edit UI ──────────────────────────────────────────────────
+  editWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    width: '100%',
+    maxWidth: 620,
+  },
+  editTextarea: {
+    width: '100%',
+    padding: 12,
+    fontSize: 15,
+    lineHeight: 1.5,
+    borderRadius: 12,
+    border: `1.5px solid ${Brand.accent}`,
+    outline: 'none',
+    resize: 'vertical',
+    fontFamily: 'inherit',
+    color: Brand.textPrimary,
+    backgroundColor: '#fff',
+    boxSizing: 'border-box',
+  },
+  editActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  editCancel: {
+    padding: '8px 14px',
+    borderRadius: 10,
+    border: `1px solid ${Brand.border}`,
+    backgroundColor: '#fff',
+    color: Brand.textSecondary,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  editSave: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '8px 14px',
+    borderRadius: 10,
+    border: 'none',
     backgroundColor: Brand.accent,
-    animation: 'blink 0.8s infinite',
-    marginLeft: 2,
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
   },
 
   // ── Vertical card grid ────────────────────────────────────────
   cardStack: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
     gap: 14,
     marginTop: 14,
     width: '100%',
-    maxWidth: 720,
   },
   tile: {
     display: 'flex',
@@ -1056,7 +1187,7 @@ const styles: Record<string, React.CSSProperties> = {
   tileImageWrap: {
     position: 'relative',
     width: '100%',
-    aspectRatio: '1 / 1',      // ← square image, ChatGPT-style
+    aspectRatio: '1 / 1',
     backgroundColor: '#EEF2FF',
     display: 'flex',
     alignItems: 'center',
@@ -1157,8 +1288,9 @@ const styles: Record<string, React.CSSProperties> = {
   // ── Action bar ────────────────────────────────────────────────
   actionBar: {
     display: 'flex',
-    gap: 4,
-    marginTop: 10,
+    gap: 2,
+    marginTop: 8,
+    flexWrap: 'wrap',
   },
   actionBtn: {
     background: 'none',
@@ -1168,12 +1300,14 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 6,
   },
 
   // ── Input area ────────────────────────────────────────────────
   inputArea: {
     padding: '8px 16px 12px',
     backgroundColor: Brand.bg,
+    flexShrink: 0,
   },
   inputBox: {
     backgroundColor: Brand.cardBg,
@@ -1193,6 +1327,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '14px 18px 0',
     background: 'transparent',
     fontFamily: 'inherit',
+    boxSizing: 'border-box',
   },
   inputActions: {
     display: 'flex',
@@ -1226,15 +1361,87 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-// ─── Keyframes ───────────────────────────────────────────────────
+// ─── Global keyframes + responsive rules ─────────────────────────
+const GLOBAL_CSS = `
+  /* Branded SEAI thinking cursor — pulsing rotating brand square */
+  @keyframes seaiPulse {
+    0%, 100% {
+      transform: scale(0.85) rotate(0deg);
+      opacity: 0.7;
+    }
+    50% {
+      transform: scale(1.15) rotate(45deg);
+      opacity: 1;
+    }
+  }
+  .seai-cursor {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+    background: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
+    box-shadow: 0 0 10px rgba(5, 4, 170, 0.55), inset 0 0 4px rgba(255,255,255,0.35);
+    animation: seaiPulse 1.1s ease-in-out infinite;
+  }
+
+  /* Thinking dots */
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1); }
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #0504AA;
+    animation: bounce 1.2s infinite;
+    opacity: 0.6;
+  }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+
+  /* Blink keyframe kept for back-compat */
+  @keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: 0 } }
+
+  /* ─── Mobile responsiveness ─────────────────────────────── */
+  @media (max-width: 640px) {
+    .seai-chat-list {
+      padding: 12px !important;
+    }
+    .seai-card-stack {
+      grid-template-columns: 1fr 1fr !important;
+      gap: 10px !important;
+    }
+    .seai-sidebar {
+      width: 82% !important;
+      max-width: 320px;
+    }
+    .seai-suggestions {
+      grid-template-columns: 1fr !important;
+      max-width: 100% !important;
+    }
+    .seai-header {
+      padding: 6px 8px !important;
+    }
+    .seai-input-area {
+      padding: 6px 10px 10px !important;
+    }
+    .seai-header button[aria-label="New chat"] {
+      display: none;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .seai-card-stack {
+      grid-template-columns: 1fr !important;
+    }
+  }
+`;
+
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
-  style.textContent = `
-    @keyframes blink { 0%,100% {opacity:1} 50% {opacity:0} }
-    .dot { width: 6px; height: 6px; border-radius: 50%; background-color: #999; animation: bounce 1.2s infinite; }
-    .dot:nth-child(2) { animation-delay: 0.2s; }
-    .dot:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes bounce { 0%,80%,100% { transform: scale(0); } 40% { transform: scale(1); } }
-  `;
+  style.textContent = GLOBAL_CSS;
   document.head.appendChild(style);
 }
