@@ -105,12 +105,10 @@ function typeBadgeLabel(type: string | undefined): string {
   return 'ITEM';
 }
 
-// ─── Branded thinking cursor — pulsing rotating square ───────────
 function SeaiCursor() {
   return <span className="seai-cursor" aria-hidden />;
 }
 
-// ─── Vertical result card ──────────────────────────────────────────
 function SeaiResultCard({
   card,
   onTap,
@@ -214,7 +212,6 @@ function SeaiResultCard({
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────
 function SeaiAskContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -231,7 +228,6 @@ function SeaiAskContent() {
   const [inputHasText, setInputHasText] = useState(false);
   const [isCortexMode, setIsCortexMode] = useState(false);
 
-  // Editing state — only one message editable at a time
   const [editing, setEditing] = useState<{
     index: number;
     text: string;
@@ -315,7 +311,6 @@ function SeaiAskContent() {
     }
   };
 
-  // ─── Edit handlers ───────────────────────────────────────────
   const startEdit = (index: number) => {
     const m = messages[index];
     setEditing({ index, text: m.text, role: m.role });
@@ -337,7 +332,6 @@ function SeaiAskContent() {
       return;
     }
 
-    // User message: truncate everything from this message onward, then resend
     const trimmed = text.trim();
     if (!trimmed) return;
     const truncated = messages.slice(0, index);
@@ -346,7 +340,6 @@ function SeaiAskContent() {
     setTimeout(() => sendMessage(trimmed, truncated), 0);
   };
 
-  // ─── Send ────────────────────────────────────────────────────
   const sendMessage = async (overrideText?: string, overrideHistory?: Message[]) => {
     const text = (overrideText ?? inputRef.current?.value ?? '').trim();
     if (!text || isStreaming) return;
@@ -562,8 +555,7 @@ function SeaiAskContent() {
     </div>
   );
 
-  // ─── Edit overlay on messages ────────────────────────────────
-  const renderEditable = (msg: Message, i: number) => (
+  const renderEditable = (msg: Message) => (
     <div style={styles.editWrap}>
       <textarea
         value={editing?.text ?? ''}
@@ -598,13 +590,15 @@ function SeaiAskContent() {
         const isEditing = editing?.index === i;
 
         return (
-          <div key={i} style={{ marginBottom: '20px' }}>
+          <div key={i} className="seai-msg-row" style={styles.msgRow}>
             {msg.role === 'user' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <div className="seai-user-wrap" style={styles.userWrap}>
                 {isEditing ? (
-                  renderEditable(msg, i)
+                  renderEditable(msg)
                 ) : (
-                  <div style={styles.userBubble}>{msg.text}</div>
+                  <div className="seai-user-bubble" style={styles.userBubble}>
+                    {msg.text}
+                  </div>
                 )}
                 {!isEditing && !msg.isStreaming && msg.text && (
                   <div style={{ ...styles.actionBar, justifyContent: 'flex-end' }}>
@@ -638,9 +632,9 @@ function SeaiAskContent() {
                       <span className="dot" />
                     </div>
                   ) : isEditing ? (
-                    renderEditable(msg, i)
+                    renderEditable(msg)
                   ) : msg.text ? (
-                    <div style={{ whiteSpace: 'pre-wrap' }}>
+                    <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                       {msg.text}
                       {msg.isStreaming && <SeaiCursor />}
                     </div>
@@ -802,7 +796,7 @@ function SeaiAskContent() {
   );
 
   return (
-    <main style={styles.container}>
+    <main className="seai-container" style={styles.container}>
       {renderSidebar()}
 
       <div className="seai-main" style={styles.main}>
@@ -838,6 +832,7 @@ function SeaiAskContent() {
               onClick={clearConversation}
               style={styles.iconBtn}
               title="New chat"
+              aria-label="New chat"
             >
               <MdEdit size={20} color="#666" />
             </button>
@@ -882,6 +877,8 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
     height: '100vh',
+    width: '100%',
+    maxWidth: '100vw',
     backgroundColor: Brand.bg,
     position: 'relative',
     overflow: 'hidden',
@@ -972,6 +969,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     minWidth: 0,
+    width: '100%',
   },
   header: {
     display: 'flex',
@@ -1002,7 +1000,9 @@ const styles: Record<string, React.CSSProperties> = {
   body: {
     flex: 1,
     overflowY: 'auto',
+    overflowX: 'hidden',
     minHeight: 0,
+    width: '100%',
   },
   welcomeContainer: {
     display: 'flex',
@@ -1062,9 +1062,22 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 900,
     margin: '0 auto',
     width: '100%',
+    boxSizing: 'border-box',
+  },
+  msgRow: {
+    width: '100%',
+    maxWidth: '100%',
+    marginBottom: 20,
+  },
+  userWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    width: '100%',
+    maxWidth: '100%',
   },
   userBubble: {
-    maxWidth: '75%',
+    maxWidth: '85%',
     padding: '12px 16px',
     borderRadius: 18,
     background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
@@ -1073,12 +1086,16 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
     boxShadow: `0 4px 10px rgba(5,4,170,0.2)`,
     wordBreak: 'break-word',
+    overflowWrap: 'anywhere',
     whiteSpace: 'pre-wrap',
+    boxSizing: 'border-box',
   },
   aiMessageRow: {
     display: 'flex',
     alignItems: 'flex-start',
     gap: 12,
+    width: '100%',
+    maxWidth: '100%',
   },
   aiAvatar: {
     width: 28,
@@ -1097,8 +1114,10 @@ const styles: Record<string, React.CSSProperties> = {
     color: Brand.textPrimary,
     fontSize: 15,
     lineHeight: 1.65,
+    overflowWrap: 'anywhere',
     wordBreak: 'break-word',
     minWidth: 0,
+    maxWidth: '100%',
   },
   thinkingDots: {
     display: 'flex',
@@ -1106,14 +1125,13 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     height: 24,
   },
-
-  // ── Edit UI ──────────────────────────────────────────────────
   editWrap: {
     display: 'flex',
     flexDirection: 'column',
     gap: 8,
     width: '100%',
-    maxWidth: 620,
+    maxWidth: '100%',
+    boxSizing: 'border-box',
   },
   editTextarea: {
     width: '100%',
@@ -1133,6 +1151,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'flex-end',
     gap: 8,
+    flexWrap: 'wrap',
   },
   editCancel: {
     padding: '8px 14px',
@@ -1156,14 +1175,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
   },
-
-  // ── Vertical card grid ────────────────────────────────────────
   cardStack: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
     gap: 14,
     marginTop: 14,
     width: '100%',
+    maxWidth: '100%',
   },
   tile: {
     display: 'flex',
@@ -1173,6 +1191,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#fff',
     border: 'none',
     boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
+    width: '100%',
   },
   tileTap: {
     display: 'flex',
@@ -1284,8 +1303,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: Brand.accent,
   },
-
-  // ── Action bar ────────────────────────────────────────────────
   actionBar: {
     display: 'flex',
     gap: 2,
@@ -1302,12 +1319,12 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     borderRadius: 6,
   },
-
-  // ── Input area ────────────────────────────────────────────────
   inputArea: {
     padding: '8px 16px 12px',
     backgroundColor: Brand.bg,
     flexShrink: 0,
+    width: '100%',
+    boxSizing: 'border-box',
   },
   inputBox: {
     backgroundColor: Brand.cardBg,
@@ -1363,6 +1380,11 @@ const styles: Record<string, React.CSSProperties> = {
 
 // ─── Global keyframes + responsive rules ─────────────────────────
 const GLOBAL_CSS = `
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
   /* Branded SEAI thinking cursor — pulsing rotating brand square */
   @keyframes seaiPulse {
     0%, 100% {
@@ -1402,7 +1424,6 @@ const GLOBAL_CSS = `
   .dot:nth-child(2) { animation-delay: 0.2s; }
   .dot:nth-child(3) { animation-delay: 0.4s; }
 
-  /* Blink keyframe kept for back-compat */
   @keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: 0 } }
 
   /* ─── Mobile responsiveness ─────────────────────────────── */
@@ -1410,38 +1431,66 @@ const GLOBAL_CSS = `
     .seai-chat-list {
       padding: 12px !important;
     }
+
+    /* Full-width cards on mobile — one per row */
     .seai-card-stack {
-      grid-template-columns: 1fr 1fr !important;
-      gap: 10px !important;
+      grid-template-columns: 1fr !important;
+      gap: 12px !important;
     }
+
     .seai-sidebar {
       width: 82% !important;
       max-width: 320px;
     }
+
     .seai-suggestions {
       grid-template-columns: 1fr !important;
       max-width: 100% !important;
     }
+
     .seai-header {
       padding: 6px 8px !important;
     }
+
     .seai-input-area {
       padding: 6px 10px 10px !important;
     }
-    .seai-header button[aria-label="New chat"] {
-      display: none;
+
+    .seai-container {
+      width: 100vw !important;
+      max-width: 100vw !important;
+    }
+
+    .seai-body {
+      width: 100% !important;
+      max-width: 100vw !important;
+      overflow-x: hidden !important;
+    }
+
+    .seai-msg-row,
+    .seai-user-wrap,
+    .seai-main {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+
+    .seai-user-bubble {
+      max-width: 88% !important;
     }
   }
 
   @media (max-width: 380px) {
-    .seai-card-stack {
-      grid-template-columns: 1fr !important;
+    .seai-chat-list {
+      padding: 10px !important;
     }
   }
 `;
 
 if (typeof document !== 'undefined') {
+  const existing = document.getElementById('seai-global-css');
+  if (existing) existing.remove();
   const style = document.createElement('style');
+  style.id = 'seai-global-css';
   style.textContent = GLOBAL_CSS;
   document.head.appendChild(style);
 }
