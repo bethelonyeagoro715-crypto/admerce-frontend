@@ -11,15 +11,15 @@ import {
   MdAdd,
   MdMic,
   MdArrowUpward,
-  MdCameraAlt,
-  MdPhotoLibrary,
-  MdInsertDriveFile,
   MdContentCopy,
   MdRefresh,
   MdThumbUp,
   MdThumbDown,
   MdChevronRight,
   MdImage,
+  MdStore,
+  MdLocationOn,
+  MdBuild,
 } from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
@@ -54,13 +54,27 @@ interface Message {
 
 interface ResultCard {
   type?: 'item' | 'service' | 'store';
+
+  // Product / listing
+  listing_id?: string;
+  store_name?: string;
+  store_id?: string;
+
+  // Service
+  service_id?: string;
+  provider_name?: string;
+  provider_image_url?: string;
+  provider_id?: string;
+
+  // Store
+  description?: string;
+
+  // Shared
   title?: string;
   price?: number;
   distance_km?: number;
-  image_url?: string;
-  listing_id?: string;
-  service_id?: string;
-  store_id?: string;
+  image_url?: string | null;
+
   [key: string]: unknown;
 }
 
@@ -76,6 +90,118 @@ const suggestions = [
   { emoji: '📦', text: 'Track my recent order' },
 ];
 
+// ─── Image URL resolver ───────────────────────────────────────────
+function resolveImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
+}
+
+// ─── Rich result card ─────────────────────────────────────────────
+function SeaiResultCard({
+  card,
+  onTap,
+}: {
+  card: ResultCard;
+  onTap: () => void;
+}) {
+  const isItem = card.type === 'item' || (!card.type && !!card.listing_id);
+  const isService = card.type === 'service' || !!card.service_id;
+  const isStore = card.type === 'store' || (!!card.store_id && !card.listing_id);
+
+  const image = resolveImageUrl(
+    (card.image_url as string | undefined) || card.provider_image_url
+  );
+
+  // Subtitle: store name (items), provider name (services), description (stores)
+  const subtitle = isItem
+    ? card.store_name || 'Unknown store'
+    : isService
+    ? card.provider_name || 'Service Provider'
+    : (card.description as string) || '';
+
+  const typeLabel = isItem ? 'Product' : isService ? 'Service' : 'Store';
+  const typeColor = isItem ? Brand.accent : isService ? '#7C3AED' : '#059669';
+  const typeBg = isItem ? '#EEEDFF' : isService ? '#F3E8FF' : '#DCFCE7';
+
+  const showPrice = (isItem || isService) && typeof card.price === 'number' && card.price > 0;
+
+  return (
+    <button type="button" onClick={onTap} style={styles.card} aria-label={`Open ${card.title}`}>
+      {/* Image */}
+      <div style={styles.cardImage}>
+        {image ? (
+          <img src={image} alt="" style={styles.cardImg} />
+        ) : (
+          <div style={styles.cardImgPlaceholder}>
+            {isStore ? (
+              <MdStore size={28} color="#C7D2FE" />
+            ) : isService ? (
+              <MdBuild size={28} color="#C7D2FE" />
+            ) : (
+              <MdImage size={28} color="#C7D2FE" />
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Body */}
+      <div style={styles.cardBody}>
+        <div style={styles.cardTitleRow}>
+          <div style={styles.cardTitle} title={card.title || ''}>
+            {card.title || 'Untitled'}
+          </div>
+        </div>
+
+        {subtitle ? (
+          <div style={styles.cardSubtitle} title={subtitle}>
+            {isStore ? (
+              subtitle
+            ) : (
+              <>
+                <MdStore size={12} color="#64748B" />
+                <span style={{ marginLeft: 4 }}>{subtitle}</span>
+              </>
+            )}
+          </div>
+        ) : null}
+
+        <div style={styles.cardMetaRow}>
+          {showPrice ? (
+            <span style={styles.cardPrice}>
+              ₦{Number(card.price).toLocaleString('en-NG')}
+            </span>
+          ) : (
+            <span style={styles.cardPriceMuted}>—</span>
+          )}
+
+          {typeof card.distance_km === 'number' && (
+            <span style={styles.cardDistance}>
+              <MdLocationOn size={12} color="#64748B" />
+              <span style={{ marginLeft: 2 }}>
+                {Number(card.distance_km).toFixed(1)} km
+              </span>
+            </span>
+          )}
+        </div>
+
+        <span
+          style={{
+            ...styles.cardBadge,
+            color: typeColor,
+            backgroundColor: typeBg,
+          }}
+        >
+          {typeLabel}
+        </span>
+      </div>
+
+      <MdChevronRight size={20} color="#94A3B8" style={styles.cardChevron} />
+    </button>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────
 function SeaiAskContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -232,6 +358,7 @@ function SeaiAskContent() {
 
       let full = '';
       let done = false;
+      let cardsReceived: ResultCard[] | null = null;
 
       for await (const event of stream) {
         for (const line of event.split('\n')) {
@@ -243,6 +370,8 @@ function SeaiAskContent() {
           }
           try {
             const json = JSON.parse(payload);
+
+            // ── Text chunk ─────────────────────────────────
             if (json.text) {
               full += json.text as string;
               setMessages((prev) => {
@@ -255,27 +384,40 @@ function SeaiAskContent() {
                 return updated;
               });
               scrollToBottom();
-            } else if (json.type === 'action') {
-              const data = json.data as Record<string, unknown>;
-              const intent = data.intent as string | undefined;
+              continue;
+            }
 
-              if (intent === 'search_results' && data.results) {
-                const cards = data.results as ResultCard[];
+            // ── Action event ───────────────────────────────
+            if (json.type === 'action') {
+              const data = (json.data || {}) as Record<string, unknown>;
+
+              // Search results → attach rich cards. We detect this two ways
+              // because the backend may or may not include an `intent` field:
+              // either it's explicitly `search_results`, or the payload has
+              // a `results` array.
+              const intent =
+                (json.intent as string | undefined) ||
+                (data.intent as string | undefined);
+              const hasResults =
+                Array.isArray(data.results) && (data.results as unknown[]).length > 0;
+
+              if (intent === 'search_results' || hasResults) {
+                cardsReceived = (data.results as ResultCard[]) || [];
                 setMessages((prev) => {
                   const updated = [...prev];
                   updated[idx] = {
                     ...updated[idx],
                     text: full,
                     isStreaming: false,
-                    cards,
+                    cards: cardsReceived || [],
                   };
                   return updated;
                 });
-                setIsStreaming(false);
                 scrollToBottom();
-                return;
+                continue;
               }
 
+              // Other actions (navigation-style)
               if (intent === 'open_chat') {
                 const userId = data.user_id as string | undefined;
                 if (userId) router.push(`/chat/${userId}`);
@@ -310,6 +452,7 @@ function SeaiAskContent() {
           ...updated[idx],
           text: full,
           isStreaming: false,
+          cards: cardsReceived ?? updated[idx].cards,
         };
         return updated;
       });
@@ -337,9 +480,9 @@ function SeaiAskContent() {
   const inChat = messages.length > 0;
 
   const handleCardTap = (card: ResultCard) => {
-    if (card.type === 'service' && card.service_id) {
+    if (card.service_id) {
       router.push(`/service-detail/${card.service_id}`);
-    } else if (card.type === 'store' && card.store_id) {
+    } else if (card.store_id && !card.listing_id) {
       router.push(`/store-detail/${card.store_id}`);
     } else if (card.listing_id) {
       router.push(`/item-detail/${card.listing_id}`);
@@ -386,39 +529,26 @@ function SeaiAskContent() {
                     <span className="dot" />
                     <span className="dot" />
                   </div>
-                ) : (
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
-                )}
-                {msg.isStreaming && <span style={styles.cursor}>|</span>}
+                ) : msg.text ? (
+                  <div style={{ whiteSpace: 'pre-wrap' }}>
+                    {msg.text}
+                    {msg.isStreaming && <span style={styles.cursor}>|</span>}
+                  </div>
+                ) : null}
+
+                {/* Rich result cards */}
                 {msg.cards && msg.cards.length > 0 && (
-                  <div style={{ marginTop: 8 }}>
+                  <div style={styles.cardStack}>
                     {msg.cards.map((card, cIdx) => (
-                      <div key={cIdx} style={styles.card} onClick={() => handleCardTap(card)}>
-                        <div style={styles.cardImage}>
-                          {card.image_url ? (
-                            <img
-                              src={card.image_url.startsWith('http') ? card.image_url : `${card.image_url}`}
-                              alt=""
-                              style={{ width: 48, height: 48, objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <MdImage size={24} color="#999" />
-                          )}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={styles.cardTitle}>{card.title}</div>
-                          {card.price !== undefined && (
-                            <div style={styles.cardPrice}>₦{Number(card.price).toFixed(0)}</div>
-                          )}
-                          {card.distance_km !== undefined && (
-                            <div style={styles.cardDistance}>{Number(card.distance_km).toFixed(1)} km</div>
-                          )}
-                        </div>
-                        <MdChevronRight color="#999" />
-                      </div>
+                      <SeaiResultCard
+                        key={cIdx}
+                        card={card}
+                        onTap={() => handleCardTap(card)}
+                      />
                     ))}
                   </div>
                 )}
+
                 {!msg.isThinking && !msg.isStreaming && msg.text && (
                   <div style={styles.actionBar}>
                     <button onClick={() => copyMessage(msg.text)} style={styles.actionBtn} title="Copy">
@@ -628,6 +758,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     padding: 4,
+    marginLeft: 'auto',
   },
   newChatBtn: {
     display: 'flex',
@@ -789,13 +920,11 @@ const styles: Record<string, React.CSSProperties> = {
   aiBubble: {
     flex: 1,
     backgroundColor: 'transparent',
-    borderRadius: 0,
-    padding: 0,
-    boxShadow: 'none',
     color: Brand.textPrimary,
     fontSize: 15,
     lineHeight: 1.65,
     wordBreak: 'break-word',
+    minWidth: 0,
   },
   thinkingDots: {
     display: 'flex',
@@ -811,40 +940,118 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'blink 0.8s infinite',
     marginLeft: 2,
   },
+  cardStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    marginTop: 12,
+  },
   card: {
     display: 'flex',
     alignItems: 'center',
-    padding: 10,
-    marginBottom: 8,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    width: '100%',
+    maxWidth: 420,
+    padding: 0,
     border: `1px solid ${Brand.border}`,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    boxShadow: '0 2px 8px rgba(15,23,42,0.05)',
+    overflow: 'hidden',
+    textAlign: 'left',
     cursor: 'pointer',
-    boxShadow: `0 1px 3px ${Brand.shadowColor}`,
+    transition: 'box-shadow 0.15s, transform 0.15s',
   },
   cardImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#F5F5F5',
+    width: 84,
+    height: 84,
+    flexShrink: 0,
+    backgroundColor: '#EEF2FF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+  },
+  cardImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  cardImgPlaceholder: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF2FF',
+  },
+  cardBody: {
+    flex: 1,
+    padding: '10px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 3,
+    minWidth: 0,
+  },
+  cardTitleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
   },
   cardTitle: {
-    fontWeight: 600,
     fontSize: 14,
-    color: Brand.textPrimary,
+    fontWeight: 600,
+    color: '#0F172A',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    lineHeight: 1.3,
+    flex: 1,
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    display: 'flex',
+    alignItems: 'center',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  cardMetaRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 2,
   },
   cardPrice: {
+    fontSize: 14,
+    fontWeight: 700,
     color: Brand.accent,
-    fontSize: 13,
+  },
+  cardPriceMuted: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#94A3B8',
   },
   cardDistance: {
-    fontSize: 12,
-    color: Brand.textMuted,
+    fontSize: 11,
+    color: '#64748B',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  cardBadge: {
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    padding: '2px 6px',
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    textTransform: 'uppercase',
+    marginTop: 3,
+  },
+  cardChevron: {
+    marginRight: 6,
+    flexShrink: 0,
   },
   actionBar: {
     display: 'flex',
