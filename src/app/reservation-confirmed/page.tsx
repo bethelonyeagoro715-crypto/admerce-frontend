@@ -18,47 +18,149 @@ import api from '../../services/api';
 
 export const dynamic = 'force-dynamic';
 
-interface ReservationConfirmedProps {
-  pickupTime?: string;
-  storeLat?: number | null;
-  storeLng?: number | null;
-  storeName?: string;
-  orderDetails?: {
-    order_id?: string;
-    customer_name?: string;
-    items?: unknown[];
-    total?: number | string;
-  };
+interface OrderDetail {
+  order_id?: string;
+  status?: string;
+  total_amount?: number | string;
+  item_amount?: number | string;
+  delivery_fee?: number | string;
+  quantity?: number;
+  store_id?: string;
+  storekeeper_id?: string;
+  customer_name?: string;
+  store_name?: string;
+  expires_at?: string;
+  created_at?: string;
+  address?: string;
+  [key: string]: unknown;
+}
+
+interface StoreDetail {
+  store_id?: string;
+  name?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  [key: string]: unknown;
 }
 
 function ReservationConfirmedContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const pickupTime = searchParams.get('pickup_time') || '3 hours';
-  const storeLat = searchParams.get('store_lat') ? parseFloat(searchParams.get('store_lat')!) : null;
-  const storeLng = searchParams.get('store_lng') ? parseFloat(searchParams.get('store_lng')!) : null;
-  const storeName = searchParams.get('store_name') || 'Store';
-  const [orderId] = useState(() => searchParams.get('order_id') || `ORD-${Date.now()}`);
-  const customerName = searchParams.get('customer_name') || 'Customer';
-  const total = searchParams.get('total') ? parseFloat(searchParams.get('total')!) : 0;
+  // ── Values from URL (may be missing when arriving from the saved tab)
+  const [orderId] = useState(
+    () => searchParams.get('order_id') || `ORD-${Date.now()}`
+  );
 
-  const [remaining, setRemaining] = useState<number>(() => {
-    const numericPart = pickupTime.replace(/\D/g, '');
-    const hours = numericPart ? parseInt(numericPart, 10) : 3;
-    return hours * 3600;
-  });
+  const urlPickupTime = searchParams.get('pickup_time');
+  const urlStoreName = searchParams.get('store_name');
+  const urlCustomerName = searchParams.get('customer_name');
+  const urlTotal = searchParams.get('total');
+  const urlStoreLat = searchParams.get('store_lat');
+  const urlStoreLng = searchParams.get('store_lng');
+
+  // ── Live state, initially populated from URL
+  const [pickupTime, setPickupTime] = useState(urlPickupTime || '3 hours');
+  const [storeName, setStoreName] = useState(urlStoreName || '');
+  const [customerName, setCustomerName] = useState(urlCustomerName || '');
+  const [total, setTotal] = useState<number>(
+    urlTotal ? parseFloat(urlTotal) : 0
+  );
+  const [storeLat, setStoreLat] = useState<number | null>(
+    urlStoreLat ? parseFloat(urlStoreLat) : null
+  );
+  const [storeLng, setStoreLng] = useState<number | null>(
+    urlStoreLng ? parseFloat(urlStoreLng) : null
+  );
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+
+  const [enriching, setEnriching] = useState(true);
   const [showDropModal, setShowDropModal] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [remaining, setRemaining] = useState<number>(0);
 
+  // ── Fetch order details to fill missing fields ───────────────
   useEffect(() => {
-    if (remaining <= 0) return;
-    const timer = setInterval(() => {
-      setRemaining((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [remaining > 0]);
+    let cancelled = false;
+
+    const load = async () => {
+      if (!orderId) return;
+
+      // If we already have everything from the URL, don't fetch
+      const hasEverything =
+        urlStoreName && urlTotal && urlCustomerName && urlStoreLat && urlStoreLng;
+
+      if (hasEverything) {
+        setEnriching(false);
+        return;
+      }
+
+      try {
+        const raw = (await api.getOrderDetail(orderId)) as OrderDetail;
+        if (cancelled) return;
+
+        if (!urlCustomerName && raw.customer_name) {
+          setCustomerName(raw.customer_name);
+        }
+        if (!urlStoreName && raw.store_name) {
+          setStoreName(raw.store_name);
+        }
+        if (!urlTotal && raw.total_amount != null) {
+          setTotal(Number(raw.total_amount));
+        }
+        if (raw.expires_at) {
+          setExpiresAt(String(raw.expires_at));
+        }
+
+        // If we still don't have a store name, try the store endpoint
+        if (!urlStoreName && !raw.store_name && raw.store_id) {
+          try {
+            const store = (await api.getStoreById(String(raw.store_id))) as StoreDetail;
+            if (!cancelled && store?.name) setStoreName(store.name);
+            if (!cancelled && store?.latitude != null && store?.longitude != null) {
+              setStoreLat(Number(store.latitude));
+              setStoreLng(Number(store.longitude));
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } catch (e) {
+        console.warn('Could not enrich reservation:', e);
+      } finally {
+        if (!cancelled) setEnriching(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
+
+  // ── Countdown: prefer expires_at, fall back to pickup_time ───
+  useEffect(() => {
+    const compute = () => {
+      if (expiresAt) {
+        const target = new Date(expiresAt).getTime();
+        if (!isNaN(target)) {
+          const ms = target - Date.now();
+          setRemaining(ms > 0 ? Math.floor(ms / 1000) : 0);
+          return;
+        }
+      }
+      // Fallback: parse "3 hours" style string
+      const numeric = (pickupTime || '').replace(/\D/g, '');
+      const hours = numeric ? parseInt(numeric, 10) : 3;
+      setRemaining(hours * 3600);
+    };
+    compute();
+    const id = setInterval(compute, 1000);
+    return () => clearInterval(id);
+  }, [expiresAt, pickupTime]);
 
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -72,13 +174,11 @@ function ReservationConfirmedContent() {
     setCompleting(true);
     try {
       await api.confirmOrder(orderId);
-      confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
+      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
       router.push(
-        `/shopper/orders/receipt/${orderId}?store_name=${encodeURIComponent(storeName)}&total=${total}&customer_name=${encodeURIComponent(customerName)}`
+        `/shopper/orders/receipt/${orderId}?store_name=${encodeURIComponent(
+          storeName
+        )}&total=${total}&customer_name=${encodeURIComponent(customerName)}`
       );
     } catch (error) {
       console.error(error);
@@ -93,7 +193,7 @@ function ReservationConfirmedContent() {
     try {
       await api.returnOrder(orderId);
       alert('Order dropped. Refund processed.');
-      router.push('/wallet');
+      router.push('/shopper/wallet');
     } catch (error) {
       console.error(error);
       alert('Failed to drop order. Please try again.');
@@ -105,11 +205,20 @@ function ReservationConfirmedContent() {
 
   const handleNavigateToStore = () => {
     if (storeLat !== null && storeLng !== null) {
-      router.push(`/shopper/map?lat=${storeLat}&lng=${storeLng}&destination=${encodeURIComponent(storeName)}&navigate=true`);
+      router.push(
+        `/shopper/map?lat=${storeLat}&lng=${storeLng}&destination=${encodeURIComponent(
+          storeName || 'Store'
+        )}&navigate=true`
+      );
     } else {
       alert('Store location not available.');
     }
   };
+
+  // ── Pretty display values ────────────────────────────────────
+  const displayStore = storeName || 'Store';
+  const displayCustomer = customerName || 'Customer';
+  const shortOrder = orderId.length > 8 ? orderId.substring(0, 8) : orderId;
 
   return (
     <motion.main
@@ -120,7 +229,11 @@ function ReservationConfirmedContent() {
     >
       <div style={styles.header}>
         <h1 style={styles.title}>Reservation Confirmed</h1>
-        <button onClick={() => setShowDropModal(true)} style={styles.dropIconButton} title="Drop Order">
+        <button
+          onClick={() => setShowDropModal(true)}
+          style={styles.dropIconButton}
+          title="Drop Order"
+        >
           <MdCancel size={28} color="#DC2626" />
         </button>
       </div>
@@ -140,12 +253,19 @@ function ReservationConfirmedContent() {
 
         <div style={styles.timerCard}>
           <MdTimer size={24} color="#0504AA" />
-          <span style={styles.timerLabel}>Pickup time: {pickupTime}</span>
+          <span style={styles.timerLabel}>
+            Pickup time: {pickupTime}
+          </span>
         </div>
 
         <div style={styles.countdownContainer}>
           <span style={styles.countdownLabel}>Time remaining</span>
-          <span style={{ ...styles.countdownValue, color: remaining > 0 ? '#0504AA' : '#DC2626' }}>
+          <span
+            style={{
+              ...styles.countdownValue,
+              color: remaining > 0 ? '#0504AA' : '#DC2626',
+            }}
+          >
             {remaining > 0 ? formatTime(remaining) : 'EXPIRED'}
           </span>
         </div>
@@ -155,13 +275,24 @@ function ReservationConfirmedContent() {
             <MdPersonOutline size={20} color="#0504AA" />
             <span style={styles.identifierTitle}>Pickup for</span>
           </div>
-          <p style={styles.customerName}>{customerName}</p>
-          <p style={styles.orderId}>Order #{orderId.slice(-4)}</p>
+          <p style={styles.customerName}>
+            {enriching && !customerName ? '—' : displayCustomer}
+          </p>
+          <p style={styles.orderId}>Order #{shortOrder}</p>
           <div style={styles.storeRow}>
             <MdStore size={16} color="#666" />
-            <span style={styles.storeName}>{storeName}</span>
+            <span style={styles.storeName}>
+              {enriching && !storeName ? 'Loading…' : displayStore}
+            </span>
           </div>
-          <p style={styles.total}>Total: ₦{total.toFixed(0)}</p>
+          {total > 0 && (
+            <p style={styles.total}>
+              Total: ₦{total.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
+            </p>
+          )}
+          {total === 0 && enriching && (
+            <p style={styles.total}>Total: —</p>
+          )}
         </div>
 
         <div style={styles.actions}>
@@ -169,19 +300,32 @@ function ReservationConfirmedContent() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handlePickUpComplete}
-            disabled={completing}
-            style={styles.primaryBtn}
+            disabled={completing || enriching}
+            style={{
+              ...styles.primaryBtn,
+              opacity: completing || enriching ? 0.6 : 1,
+            }}
           >
             <MdArrowForward size={20} color="#fff" />
             {completing ? 'Processing...' : 'Pick Up & Complete'}
           </motion.button>
 
-          <button onClick={handleNavigateToStore} style={styles.outlineBtn}>
+          <button
+            onClick={handleNavigateToStore}
+            disabled={storeLat === null || storeLng === null}
+            style={{
+              ...styles.outlineBtn,
+              opacity: storeLat === null || storeLng === null ? 0.5 : 1,
+            }}
+          >
             <MdDirections size={20} color="#0504AA" />
             Navigate to Store
           </button>
 
-          <button onClick={() => setShowDropModal(true)} style={styles.dropBtn}>
+          <button
+            onClick={() => setShowDropModal(true)}
+            style={styles.dropBtn}
+          >
             <MdCancelPresentation size={20} color="#DC2626" />
             Drop Order (Refund)
           </button>
@@ -207,11 +351,21 @@ function ReservationConfirmedContent() {
             >
               <h3 style={styles.modalTitle}>Drop Order?</h3>
               <p style={styles.modalText}>
-                If you drop this order, your payment will be refunded to your wallet.
+                If you drop this order, your payment will be refunded to your
+                wallet.
               </p>
               <div style={styles.modalActions}>
-                <button onClick={() => setShowDropModal(false)} style={styles.modalCancelBtn}>Cancel</button>
-                <button onClick={handleDropOrder} disabled={dropping} style={styles.modalConfirmBtn}>
+                <button
+                  onClick={() => setShowDropModal(false)}
+                  style={styles.modalCancelBtn}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDropOrder}
+                  disabled={dropping}
+                  style={styles.modalConfirmBtn}
+                >
                   {dropping ? 'Dropping...' : 'Confirm Drop'}
                 </button>
               </div>
@@ -225,43 +379,213 @@ function ReservationConfirmedContent() {
 
 export default function ReservationConfirmedPage() {
   return (
-    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading reservation...</div>}>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100vh',
+          }}
+        >
+          Loading reservation...
+        </div>
+      }
+    >
       <ReservationConfirmedContent />
     </Suspense>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F8F9FA' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', backgroundColor: '#fff', borderBottom: '1px solid #eee' },
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: '100vh',
+    backgroundColor: '#F8F9FA',
+  },
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '14px 16px',
+    backgroundColor: '#fff',
+    borderBottom: '1px solid #eee',
+  },
   title: { fontSize: 20, fontWeight: 700, color: '#1A1A1A' },
-  dropIconButton: { background: 'none', border: 'none', cursor: 'pointer', padding: 4 },
-  content: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 16px', textAlign: 'center' },
+  dropIconButton: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 4,
+  },
+  content: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '24px 16px',
+    textAlign: 'center',
+  },
   successIconWrapper: { marginBottom: 16 },
   heading: { fontSize: 28, fontWeight: 800, color: '#1A1A1A', margin: 0 },
   subheading: { fontSize: 16, color: '#666', marginTop: 4 },
-  timerCard: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', backgroundColor: '#EEF2FF', borderRadius: 20, marginTop: 24 },
+  timerCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '12px 20px',
+    backgroundColor: '#EEF2FF',
+    borderRadius: 20,
+    marginTop: 24,
+  },
   timerLabel: { fontSize: 16, fontWeight: 600, color: '#0504AA' },
-  countdownContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 16 },
+  countdownContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    marginTop: 16,
+  },
   countdownLabel: { fontSize: 14, color: '#888' },
-  countdownValue: { fontSize: 32, fontWeight: 800, letterSpacing: 1 },
-  identifierCard: { width: '100%', maxWidth: 400, backgroundColor: '#fff', borderRadius: 20, padding: 24, marginTop: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.06)', textAlign: 'left' },
-  identifierHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 },
+  countdownValue: {
+    fontSize: 32,
+    fontWeight: 800,
+    letterSpacing: 1,
+  },
+  identifierCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    marginTop: 24,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+    textAlign: 'left',
+  },
+  identifierHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   identifierTitle: { fontSize: 14, fontWeight: 600, color: '#666' },
-  customerName: { fontSize: 28, fontWeight: 800, color: '#0504AA', margin: 0 },
+  customerName: {
+    fontSize: 28,
+    fontWeight: 800,
+    color: '#0504AA',
+    margin: 0,
+  },
   orderId: { fontSize: 14, color: '#888', marginTop: 4 },
-  storeRow: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 },
+  storeRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
   storeName: { fontSize: 15, fontWeight: 600, color: '#333' },
   total: { marginTop: 12, fontSize: 16, fontWeight: 700, color: '#1A1A1A' },
-  actions: { width: '100%', maxWidth: 400, marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 },
-  primaryBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 16, fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(5,4,170,0.3)' },
-  outlineBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, backgroundColor: 'transparent', color: '#0504AA', border: '1px solid #0504AA', borderRadius: 16, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
-  dropBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, backgroundColor: 'transparent', color: '#DC2626', border: '1px solid #DC2626', borderRadius: 16, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
-  modalOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  modalCard: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '90%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
-  modalTitle: { fontSize: 20, fontWeight: 700, marginBottom: 12, color: '#1A1A1A' },
-  modalText: { fontSize: 14, color: '#4B5563', marginBottom: 24, lineHeight: 1.5 },
-  modalActions: { display: 'flex', gap: 12, justifyContent: 'flex-end' },
-  modalCancelBtn: { padding: '10px 20px', backgroundColor: 'transparent', color: '#6B7280', border: '1px solid #E5E7EB', borderRadius: 12, cursor: 'pointer', fontWeight: 600 },
-  modalConfirmBtn: { padding: '10px 20px', backgroundColor: '#DC2626', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', fontWeight: 600 },
+  actions: {
+    width: '100%',
+    maxWidth: 400,
+    marginTop: 24,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+  },
+  primaryBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    backgroundColor: '#0504AA',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 16,
+    fontSize: 16,
+    fontWeight: 700,
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(5,4,170,0.3)',
+  },
+  outlineBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    backgroundColor: 'transparent',
+    color: '#0504AA',
+    border: '1px solid #0504AA',
+    borderRadius: 16,
+    fontSize: 16,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  dropBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    backgroundColor: 'transparent',
+    color: '#DC2626',
+    border: '1px solid #DC2626',
+    borderRadius: 16,
+    fontSize: 16,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 700,
+    marginBottom: 12,
+    color: '#1A1A1A',
+  },
+  modalText: {
+    fontSize: 14,
+    color: '#4B5563',
+    marginBottom: 24,
+    lineHeight: 1.5,
+  },
+  modalActions: {
+    display: 'flex',
+    gap: 12,
+    justifyContent: 'flex-end',
+  },
+  modalCancelBtn: {
+    padding: '10px 20px',
+    backgroundColor: 'transparent',
+    color: '#6B7280',
+    border: '1px solid #E5E7EB',
+    borderRadius: 12,
+    cursor: 'pointer',
+    fontWeight: 600,
+  },
+  modalConfirmBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#DC2626',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 12,
+    cursor: 'pointer',
+    fontWeight: 600,
+  },
 };
