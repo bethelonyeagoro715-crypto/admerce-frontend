@@ -25,7 +25,6 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// ─── Brand colors ──────────────────────────────────────────────────
 const Brand = {
   bg: '#FAFAFA',
   cardBg: '#FFFFFF',
@@ -40,7 +39,6 @@ const Brand = {
   shadowColor: 'rgba(0,0,0,0.1)',
 };
 
-// ─── Types ────────────────────────────────────────────────────────
 type Role = 'user' | 'seai';
 
 interface Message {
@@ -55,23 +53,15 @@ interface Message {
 
 interface ResultCard {
   type?: 'item' | 'service' | 'store';
-
-  // Product / listing
   listing_id?: string;
   store_name?: string;
   store_id?: string;
   store_image_url?: string;
-
-  // Service
   service_id?: string;
   provider_name?: string;
   provider_image_url?: string;
   provider_id?: string;
-
-  // Store
   description?: string;
-
-  // Shared
   title?: string;
   price?: number;
   distance_km?: number;
@@ -81,7 +71,6 @@ interface ResultCard {
   latitude?: number;
   longitude?: number;
   directions_url?: string;
-
   [key: string]: unknown;
 }
 
@@ -97,7 +86,6 @@ const suggestions = [
   { emoji: '📦', text: 'Track my recent order' },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -110,7 +98,13 @@ function typeBadgeColor(type: string | undefined): string {
   return '#0504AA';
 }
 
-// ─── Rich result card (image-grid tile) ───────────────────────────
+function typeBadgeLabel(type: string | undefined): string {
+  if (type === 'service') return 'SERVICE';
+  if (type === 'store') return 'STORE';
+  return 'ITEM';
+}
+
+// ─── Vertical, photo-forward result card ──────────────────────────
 function SeaiResultCard({
   card,
   onTap,
@@ -126,16 +120,19 @@ function SeaiResultCard({
     (card.image_url as string | undefined) || card.provider_image_url
   );
 
-  // Subtitle: store name for items, provider name for services, address for stores
   let subtitle = '';
   if (isItem) subtitle = (card.store_name as string) || '';
   else if (isService) subtitle = (card.provider_name as string) || '';
   else if (isStore) subtitle = (card.address as string) || (card.description as string) || '';
 
-  const typeLabel = isItem ? 'Product' : isService ? 'Service' : 'Store';
-  const showPrice = (isItem || isService) && typeof card.price === 'number' && card.price > 0;
+  const showPrice =
+    (isItem || isService) &&
+    typeof card.price === 'number' &&
+    card.price > 0;
+
   const travel = card.travel_minutes as number | undefined;
   const directions = card.directions_url as string | undefined;
+  const distance = card.distance_km as number | undefined;
 
   const handleDirections = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -150,29 +147,40 @@ function SeaiResultCard({
         style={styles.tileTap}
         aria-label={`Open ${card.title || 'result'}`}
       >
-        {/* Large image area */}
+        {/* Large hero image */}
         <div style={styles.tileImageWrap}>
           {image ? (
             <img src={image} alt="" style={styles.tileImage} />
           ) : (
             <div style={styles.tilePlaceholder}>
               {isStore ? (
-                <MdStore size={40} color="#C7D2FE" />
+                <MdStore size={48} color="#C7D2FE" />
               ) : isService ? (
-                <MdBuild size={40} color="#C7D2FE" />
+                <MdBuild size={48} color="#C7D2FE" />
               ) : (
-                <MdImage size={40} color="#C7D2FE" />
+                <MdImage size={48} color="#C7D2FE" />
               )}
             </div>
           )}
+
           <span
             style={{
               ...styles.tileBadge,
               backgroundColor: typeBadgeColor(card.type),
             }}
           >
-            {typeLabel}
+            {typeBadgeLabel(card.type)}
           </span>
+
+          {/* Distance pill overlaid bottom-left of image, like a photo tag */}
+          {typeof distance === 'number' && (
+            <span style={styles.tileDistancePill}>
+              <MdLocationOn size={11} color="#fff" />
+              <span style={{ marginLeft: 3 }}>
+                {distance.toFixed(1)} km
+              </span>
+            </span>
+          )}
         </div>
 
         {/* Text block */}
@@ -194,14 +202,8 @@ function SeaiResultCard({
             </div>
           )}
 
-          {typeof card.distance_km === 'number' && (
-            <div style={styles.tileDistance}>
-              <MdLocationOn size={12} color="#64748B" />
-              <span style={{ marginLeft: 3 }}>
-                {Number(card.distance_km).toFixed(1)} km
-                {travel ? ` · ~${travel} min` : ''}
-              </span>
-            </div>
+          {travel !== undefined && (
+            <div style={styles.tileTravel}>~{travel} min away</div>
           )}
         </div>
       </button>
@@ -390,7 +392,6 @@ function SeaiAskContent() {
           try {
             const json = JSON.parse(payload);
 
-            // ── Text chunk ─────────────────────────────────
             if (json.text) {
               full += json.text as string;
               setMessages((prev) => {
@@ -406,7 +407,6 @@ function SeaiAskContent() {
               continue;
             }
 
-            // ── Action event ───────────────────────────────
             if (json.type === 'action') {
               const data = (json.data || {}) as Record<string, unknown>;
 
@@ -433,7 +433,6 @@ function SeaiAskContent() {
                 continue;
               }
 
-              // Navigation-style actions
               if (intent === 'open_chat') {
                 const userId = data.user_id as string | undefined;
                 if (userId) router.push(`/chat/${userId}`);
@@ -508,8 +507,6 @@ function SeaiAskContent() {
     }
   };
 
-  // ─── UI Components ────────────────────────────────────────────
-
   const renderWelcome = () => (
     <div style={styles.welcomeContainer}>
       <div style={styles.logo}>
@@ -535,7 +532,7 @@ function SeaiAskContent() {
   const renderChat = () => (
     <div style={styles.chatList}>
       {messages.map((msg, i) => (
-        <div key={i} style={{ marginBottom: '16px' }}>
+        <div key={i} style={{ marginBottom: '20px' }}>
           {msg.role === 'user' ? (
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <div style={styles.userBubble}>{msg.text}</div>
@@ -559,7 +556,7 @@ function SeaiAskContent() {
                   </div>
                 ) : null}
 
-                {/* Rich result cards — grid */}
+                {/* Vertical card grid */}
                 {msg.cards && msg.cards.length > 0 && (
                   <div style={styles.cardStack}>
                     {msg.cards.map((card, cIdx) => (
@@ -724,7 +721,6 @@ function SeaiAskContent() {
       {renderSidebar()}
 
       <div style={styles.main}>
-        {/* Header */}
         <div style={styles.header}>
           <button
             onClick={() => setDrawerOpen(!drawerOpen)}
@@ -767,12 +763,10 @@ function SeaiAskContent() {
           )}
         </div>
 
-        {/* Body */}
         <div style={styles.body}>
           {inChat ? renderChat() : renderWelcome()}
         </div>
 
-        {/* Input area */}
         {renderInputArea()}
       </div>
     </main>
@@ -1031,22 +1025,23 @@ const styles: Record<string, React.CSSProperties> = {
     marginLeft: 2,
   },
 
-  // ── Cards grid ────────────────────────────────────────────────
+  // ── Vertical card grid ────────────────────────────────────────
   cardStack: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-    gap: 12,
-    marginTop: 12,
+    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+    gap: 14,
+    marginTop: 14,
     width: '100%',
+    maxWidth: 720,
   },
   tile: {
     display: 'flex',
     flexDirection: 'column',
     borderRadius: 14,
-    border: `1px solid ${Brand.border}`,
-    backgroundColor: '#fff',
     overflow: 'hidden',
-    boxShadow: '0 2px 8px rgba(15,23,42,0.05)',
+    backgroundColor: '#fff',
+    border: 'none',
+    boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
   },
   tileTap: {
     display: 'flex',
@@ -1061,11 +1056,12 @@ const styles: Record<string, React.CSSProperties> = {
   tileImageWrap: {
     position: 'relative',
     width: '100%',
-    height: 160,
+    aspectRatio: '1 / 1',      // ← square image, ChatGPT-style
     backgroundColor: '#EEF2FF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   tileImage: {
     width: '100%',
@@ -1083,7 +1079,7 @@ const styles: Record<string, React.CSSProperties> = {
   tileBadge: {
     position: 'absolute',
     top: 8,
-    right: 8,
+    left: 8,
     fontSize: 9,
     fontWeight: 700,
     letterSpacing: 0.6,
@@ -1092,11 +1088,24 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 6,
     textTransform: 'uppercase',
   },
+  tileDistancePill: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    display: 'flex',
+    alignItems: 'center',
+    padding: '3px 7px',
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 600,
+  },
   tileBody: {
     padding: '10px 12px 12px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 4,
+    gap: 3,
   },
   tileTitle: {
     fontSize: 14,
@@ -1123,11 +1132,10 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  tileDistance: {
+  tileTravel: {
     fontSize: 11,
-    color: '#64748B',
-    display: 'flex',
-    alignItems: 'center',
+    color: '#94A3B8',
+    fontWeight: 500,
   },
   directionsBtn: {
     display: 'flex',
@@ -1135,7 +1143,6 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 4,
     padding: '8px 10px',
-    borderTop: `1px solid ${Brand.border}`,
     backgroundColor: '#F8FAFC',
     border: 'none',
     borderTopWidth: 1,
@@ -1151,7 +1158,7 @@ const styles: Record<string, React.CSSProperties> = {
   actionBar: {
     display: 'flex',
     gap: 4,
-    marginTop: 8,
+    marginTop: 10,
   },
   actionBtn: {
     background: 'none',
