@@ -20,6 +20,7 @@ import {
   MdStore,
   MdLocationOn,
   MdBuild,
+  MdNavigation,
 } from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
@@ -59,6 +60,7 @@ interface ResultCard {
   listing_id?: string;
   store_name?: string;
   store_id?: string;
+  store_image_url?: string;
 
   // Service
   service_id?: string;
@@ -73,7 +75,12 @@ interface ResultCard {
   title?: string;
   price?: number;
   distance_km?: number;
+  travel_minutes?: number;
   image_url?: string | null;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  directions_url?: string;
 
   [key: string]: unknown;
 }
@@ -90,14 +97,20 @@ const suggestions = [
   { emoji: '📦', text: 'Track my recent order' },
 ];
 
-// ─── Image URL resolver ───────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
   return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
 }
 
-// ─── Rich result card ─────────────────────────────────────────────
+function typeBadgeColor(type: string | undefined): string {
+  if (type === 'service') return '#7C3AED';
+  if (type === 'store') return '#059669';
+  return '#0504AA';
+}
+
+// ─── Rich result card (image-grid tile) ───────────────────────────
 function SeaiResultCard({
   card,
   onTap,
@@ -113,91 +126,97 @@ function SeaiResultCard({
     (card.image_url as string | undefined) || card.provider_image_url
   );
 
-  // Subtitle: store name (items), provider name (services), description (stores)
-  const subtitle = isItem
-    ? card.store_name || 'Unknown store'
-    : isService
-    ? card.provider_name || 'Service Provider'
-    : (card.description as string) || '';
+  // Subtitle: store name for items, provider name for services, address for stores
+  let subtitle = '';
+  if (isItem) subtitle = (card.store_name as string) || '';
+  else if (isService) subtitle = (card.provider_name as string) || '';
+  else if (isStore) subtitle = (card.address as string) || (card.description as string) || '';
 
   const typeLabel = isItem ? 'Product' : isService ? 'Service' : 'Store';
-  const typeColor = isItem ? Brand.accent : isService ? '#7C3AED' : '#059669';
-  const typeBg = isItem ? '#EEEDFF' : isService ? '#F3E8FF' : '#DCFCE7';
-
   const showPrice = (isItem || isService) && typeof card.price === 'number' && card.price > 0;
+  const travel = card.travel_minutes as number | undefined;
+  const directions = card.directions_url as string | undefined;
+
+  const handleDirections = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (directions) window.open(directions, '_blank', 'noopener,noreferrer');
+  };
 
   return (
-    <button type="button" onClick={onTap} style={styles.card} aria-label={`Open ${card.title}`}>
-      {/* Image */}
-      <div style={styles.cardImage}>
-        {image ? (
-          <img src={image} alt="" style={styles.cardImg} />
-        ) : (
-          <div style={styles.cardImgPlaceholder}>
-            {isStore ? (
-              <MdStore size={28} color="#C7D2FE" />
-            ) : isService ? (
-              <MdBuild size={28} color="#C7D2FE" />
-            ) : (
-              <MdImage size={28} color="#C7D2FE" />
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Body */}
-      <div style={styles.cardBody}>
-        <div style={styles.cardTitleRow}>
-          <div style={styles.cardTitle} title={card.title || ''}>
-            {card.title || 'Untitled'}
-          </div>
+    <div style={styles.tile}>
+      <button
+        type="button"
+        onClick={onTap}
+        style={styles.tileTap}
+        aria-label={`Open ${card.title || 'result'}`}
+      >
+        {/* Large image area */}
+        <div style={styles.tileImageWrap}>
+          {image ? (
+            <img src={image} alt="" style={styles.tileImage} />
+          ) : (
+            <div style={styles.tilePlaceholder}>
+              {isStore ? (
+                <MdStore size={40} color="#C7D2FE" />
+              ) : isService ? (
+                <MdBuild size={40} color="#C7D2FE" />
+              ) : (
+                <MdImage size={40} color="#C7D2FE" />
+              )}
+            </div>
+          )}
+          <span
+            style={{
+              ...styles.tileBadge,
+              backgroundColor: typeBadgeColor(card.type),
+            }}
+          >
+            {typeLabel}
+          </span>
         </div>
 
-        {subtitle ? (
-          <div style={styles.cardSubtitle} title={subtitle}>
-            {isStore ? (
-              subtitle
-            ) : (
-              <>
-                <MdStore size={12} color="#64748B" />
-                <span style={{ marginLeft: 4 }}>{subtitle}</span>
-              </>
-            )}
+        {/* Text block */}
+        <div style={styles.tileBody}>
+          <div style={styles.tileTitle} title={card.title || ''}>
+            {card.title || 'Untitled'}
           </div>
-        ) : null}
 
-        <div style={styles.cardMetaRow}>
-          {showPrice ? (
-            <span style={styles.cardPrice}>
+          {showPrice && (
+            <div style={styles.tilePrice}>
               ₦{Number(card.price).toLocaleString('en-NG')}
-            </span>
-          ) : (
-            <span style={styles.cardPriceMuted}>—</span>
+            </div>
+          )}
+
+          {subtitle && (
+            <div style={styles.tileSubtitle} title={subtitle}>
+              <MdStore size={12} color="#64748B" />
+              <span style={{ marginLeft: 4 }}>{subtitle}</span>
+            </div>
           )}
 
           {typeof card.distance_km === 'number' && (
-            <span style={styles.cardDistance}>
+            <div style={styles.tileDistance}>
               <MdLocationOn size={12} color="#64748B" />
-              <span style={{ marginLeft: 2 }}>
+              <span style={{ marginLeft: 3 }}>
                 {Number(card.distance_km).toFixed(1)} km
+                {travel ? ` · ~${travel} min` : ''}
               </span>
-            </span>
+            </div>
           )}
         </div>
+      </button>
 
-        <span
-          style={{
-            ...styles.cardBadge,
-            color: typeColor,
-            backgroundColor: typeBg,
-          }}
+      {directions && (
+        <button
+          type="button"
+          onClick={handleDirections}
+          style={styles.directionsBtn}
         >
-          {typeLabel}
-        </span>
-      </div>
-
-      <MdChevronRight size={20} color="#94A3B8" style={styles.cardChevron} />
-    </button>
+          <MdNavigation size={14} color={Brand.accent} />
+          <span style={{ marginLeft: 4 }}>Directions</span>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -391,15 +410,12 @@ function SeaiAskContent() {
             if (json.type === 'action') {
               const data = (json.data || {}) as Record<string, unknown>;
 
-              // Search results → attach rich cards. We detect this two ways
-              // because the backend may or may not include an `intent` field:
-              // either it's explicitly `search_results`, or the payload has
-              // a `results` array.
               const intent =
                 (json.intent as string | undefined) ||
                 (data.intent as string | undefined);
               const hasResults =
-                Array.isArray(data.results) && (data.results as unknown[]).length > 0;
+                Array.isArray(data.results) &&
+                (data.results as unknown[]).length > 0;
 
               if (intent === 'search_results' || hasResults) {
                 cardsReceived = (data.results as ResultCard[]) || [];
@@ -417,7 +433,7 @@ function SeaiAskContent() {
                 continue;
               }
 
-              // Other actions (navigation-style)
+              // Navigation-style actions
               if (intent === 'open_chat') {
                 const userId = data.user_id as string | undefined;
                 if (userId) router.push(`/chat/${userId}`);
@@ -462,7 +478,10 @@ function SeaiAskContent() {
       setMessages((prev) => {
         const updated = [...prev];
         const lastIdx = updated.length - 1;
-        if (lastIdx >= 0 && (updated[lastIdx].isThinking || updated[lastIdx].isStreaming)) {
+        if (
+          lastIdx >= 0 &&
+          (updated[lastIdx].isThinking || updated[lastIdx].isStreaming)
+        ) {
           updated[lastIdx] = {
             ...updated[lastIdx],
             isThinking: false,
@@ -500,7 +519,11 @@ function SeaiAskContent() {
       <p style={styles.subGreeting}>How can I help you today?</p>
       <div style={styles.suggestionsGrid}>
         {suggestions.map((s, i) => (
-          <button key={i} onClick={() => sendMessage(s.text)} style={styles.suggestionChip}>
+          <button
+            key={i}
+            onClick={() => sendMessage(s.text)}
+            style={styles.suggestionChip}
+          >
             <span style={{ marginRight: 8 }}>{s.emoji}</span>
             <span>{s.text}</span>
           </button>
@@ -536,7 +559,7 @@ function SeaiAskContent() {
                   </div>
                 ) : null}
 
-                {/* Rich result cards */}
+                {/* Rich result cards — grid */}
                 {msg.cards && msg.cards.length > 0 && (
                   <div style={styles.cardStack}>
                     {msg.cards.map((card, cIdx) => (
@@ -551,10 +574,18 @@ function SeaiAskContent() {
 
                 {!msg.isThinking && !msg.isStreaming && msg.text && (
                   <div style={styles.actionBar}>
-                    <button onClick={() => copyMessage(msg.text)} style={styles.actionBtn} title="Copy">
+                    <button
+                      onClick={() => copyMessage(msg.text)}
+                      style={styles.actionBtn}
+                      title="Copy"
+                    >
                       <MdContentCopy size={16} color="#666" />
                     </button>
-                    <button onClick={() => retryMessage(i)} style={styles.actionBtn} title="Retry">
+                    <button
+                      onClick={() => retryMessage(i)}
+                      style={styles.actionBtn}
+                      title="Retry"
+                    >
                       <MdRefresh size={16} color="#666" />
                     </button>
                     <button style={styles.actionBtn} title="Good response">
@@ -620,20 +651,42 @@ function SeaiAskContent() {
 
   const renderSidebar = () => (
     <>
-      {drawerOpen && <div style={styles.sidebarOverlay} onClick={() => setDrawerOpen(false)} />}
-      <div style={{ ...styles.sidebar, transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)' }}>
+      {drawerOpen && (
+        <div
+          style={styles.sidebarOverlay}
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+      <div
+        style={{
+          ...styles.sidebar,
+          transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+        }}
+      >
         <div style={styles.sidebarHeader}>
-          <div style={styles.sidebarLogo}><MdAutoAwesome size={14} color="#FFFFFF" /></div>
+          <div style={styles.sidebarLogo}>
+            <MdAutoAwesome size={14} color="#FFFFFF" />
+          </div>
           <span style={{ fontWeight: 600 }}>Admerce AI</span>
-          <button onClick={() => setDrawerOpen(false)} style={styles.closeBtn}>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            style={styles.closeBtn}
+          >
             <MdClose size={20} color="#666" />
           </button>
         </div>
         <button
-          onClick={() => { clearConversation(); setDrawerOpen(false); }}
+          onClick={() => {
+            clearConversation();
+            setDrawerOpen(false);
+          }}
           style={styles.newChatBtn}
         >
-          <MdEdit size={16} color={Brand.accent} style={{ marginRight: 8 }} />
+          <MdEdit
+            size={16}
+            color={Brand.accent}
+            style={{ marginRight: 8 }}
+          />
           New chat
         </button>
         <div style={styles.recentLabel}>Recent</div>
@@ -641,10 +694,22 @@ function SeaiAskContent() {
           {isLoadingRecents ? (
             <div style={{ textAlign: 'center', padding: 16 }}>Loading...</div>
           ) : conversations.length === 0 ? (
-            <div style={{ color: Brand.textMuted, fontSize: 13, padding: 16 }}>No conversations yet</div>
+            <div
+              style={{
+                color: Brand.textMuted,
+                fontSize: 13,
+                padding: 16,
+              }}
+            >
+              No conversations yet
+            </div>
           ) : (
             conversations.map((c) => (
-              <button key={c.id} onClick={() => loadConversation(c.id)} style={styles.conversationItem}>
+              <button
+                key={c.id}
+                onClick={() => loadConversation(c.id)}
+                style={styles.conversationItem}
+              >
                 {c.title || `Conversation ${c.id}`}
               </button>
             ))
@@ -661,17 +726,25 @@ function SeaiAskContent() {
       <div style={styles.main}>
         {/* Header */}
         <div style={styles.header}>
-          <button onClick={() => setDrawerOpen(!drawerOpen)} style={styles.iconBtn}>
+          <button
+            onClick={() => setDrawerOpen(!drawerOpen)}
+            style={styles.iconBtn}
+          >
             <MdMenu size={22} color="#666" />
           </button>
           <div style={{ flex: 1 }} />
-          <button onClick={() => setIsCortexMode(!isCortexMode)} style={styles.modelToggle}>
+          <button
+            onClick={() => setIsCortexMode(!isCortexMode)}
+            style={styles.modelToggle}
+          >
             <span
               style={{
                 width: 14,
                 height: 14,
                 borderRadius: '50%',
-                backgroundColor: isCortexMode ? Brand.accentLight : Brand.accent,
+                backgroundColor: isCortexMode
+                  ? Brand.accentLight
+                  : Brand.accent,
                 marginRight: 6,
               }}
             />
@@ -682,7 +755,11 @@ function SeaiAskContent() {
           </button>
           <div style={{ flex: 1 }} />
           {inChat ? (
-            <button onClick={clearConversation} style={styles.iconBtn} title="New chat">
+            <button
+              onClick={clearConversation}
+              style={styles.iconBtn}
+              title="New chat"
+            >
               <MdEdit size={20} color="#666" />
             </button>
           ) : (
@@ -704,7 +781,20 @@ function SeaiAskContent() {
 
 export default function SeaiAskPage() {
   return (
-    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading SEAI…</div>}>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100vh',
+          }}
+        >
+          Loading SEAI…
+        </div>
+      }
+    >
       <SeaiAskContent />
     </Suspense>
   );
@@ -940,42 +1030,49 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'blink 0.8s infinite',
     marginLeft: 2,
   },
+
+  // ── Cards grid ────────────────────────────────────────────────
   cardStack: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+    gap: 12,
+    marginTop: 12,
+    width: '100%',
+  },
+  tile: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 8,
-    marginTop: 12,
-  },
-  card: {
-    display: 'flex',
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 420,
-    padding: 0,
-    border: `1px solid ${Brand.border}`,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    boxShadow: '0 2px 8px rgba(15,23,42,0.05)',
+    border: `1px solid ${Brand.border}`,
+    backgroundColor: '#fff',
     overflow: 'hidden',
-    textAlign: 'left',
-    cursor: 'pointer',
-    transition: 'box-shadow 0.15s, transform 0.15s',
+    boxShadow: '0 2px 8px rgba(15,23,42,0.05)',
   },
-  cardImage: {
-    width: 84,
-    height: 84,
-    flexShrink: 0,
+  tileTap: {
+    display: 'flex',
+    flexDirection: 'column',
+    textAlign: 'left',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    width: '100%',
+  },
+  tileImageWrap: {
+    position: 'relative',
+    width: '100%',
+    height: 160,
     backgroundColor: '#EEF2FF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardImg: {
+  tileImage: {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
   },
-  cardImgPlaceholder: {
+  tilePlaceholder: {
     width: '100%',
     height: '100%',
     display: 'flex',
@@ -983,31 +1080,41 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     backgroundColor: '#EEF2FF',
   },
-  cardBody: {
-    flex: 1,
-    padding: '10px 12px',
+  tileBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    color: '#fff',
+    padding: '3px 7px',
+    borderRadius: 6,
+    textTransform: 'uppercase',
+  },
+  tileBody: {
+    padding: '10px 12px 12px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 3,
-    minWidth: 0,
+    gap: 4,
   },
-  cardTitleRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 6,
-  },
-  cardTitle: {
+  tileTitle: {
     fontSize: 14,
     fontWeight: 600,
     color: '#0F172A',
+    lineHeight: 1.3,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    lineHeight: 1.3,
-    flex: 1,
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
   },
-  cardSubtitle: {
+  tilePrice: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: Brand.accent,
+  },
+  tileSubtitle: {
     fontSize: 12,
     color: '#64748B',
     display: 'flex',
@@ -1016,43 +1123,31 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  cardMetaRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginTop: 2,
-  },
-  cardPrice: {
-    fontSize: 14,
-    fontWeight: 700,
-    color: Brand.accent,
-  },
-  cardPriceMuted: {
-    fontSize: 14,
-    fontWeight: 600,
-    color: '#94A3B8',
-  },
-  cardDistance: {
+  tileDistance: {
     fontSize: 11,
     color: '#64748B',
     display: 'flex',
     alignItems: 'center',
   },
-  cardBadge: {
-    fontSize: 9,
-    fontWeight: 700,
-    letterSpacing: 0.6,
-    padding: '2px 6px',
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    textTransform: 'uppercase',
-    marginTop: 3,
+  directionsBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    padding: '8px 10px',
+    borderTop: `1px solid ${Brand.border}`,
+    backgroundColor: '#F8FAFC',
+    border: 'none',
+    borderTopWidth: 1,
+    borderTopStyle: 'solid',
+    borderTopColor: Brand.border,
+    cursor: 'pointer',
+    fontSize: 12,
+    fontWeight: 600,
+    color: Brand.accent,
   },
-  cardChevron: {
-    marginRight: 6,
-    flexShrink: 0,
-  },
+
+  // ── Action bar ────────────────────────────────────────────────
   actionBar: {
     display: 'flex',
     gap: 4,
@@ -1067,6 +1162,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // ── Input area ────────────────────────────────────────────────
   inputArea: {
     padding: '8px 16px 12px',
     backgroundColor: Brand.bg,
@@ -1122,7 +1219,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-// Inject keyframes
+// ─── Keyframes ───────────────────────────────────────────────────
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
   style.textContent = `
