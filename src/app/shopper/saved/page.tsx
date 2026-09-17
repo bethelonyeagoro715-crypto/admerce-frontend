@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../services/api';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
 import {
@@ -84,6 +84,10 @@ const TABS = [
 
 type Tab = (typeof TABS)[number];
 
+function isValidTab(value: string | null): value is Tab {
+  return !!value && (TABS as readonly string[]).includes(value);
+}
+
 function fmtNaira(v: unknown): string {
   const n = Number(v ?? 0);
   if (!Number.isFinite(n)) return '₦0';
@@ -108,12 +112,19 @@ function fmtDate(iso: string | undefined): string {
   }
 }
 
-export default function SavedPage() {
+function SavedPageContent() {
   useAuthGuard();
 
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<Tab>('Items');
+  // ✅ Initial tab comes from ?tab=Bookings (or any TABS value).
+  //    Defaults to Items.
+  const initialTab: Tab = isValidTab(searchParams.get('tab'))
+    ? (searchParams.get('tab') as Tab)
+    : 'Items';
+
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,11 +139,22 @@ export default function SavedPage() {
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
 
+  // ✅ Keep the URL in sync when the user switches tabs — so the deep link
+  //    stays shareable and browser back/forward works.
+  useEffect(() => {
+    const current = searchParams.get('tab');
+    if (current !== activeTab) {
+      const next = new URLSearchParams(searchParams.toString());
+      next.set('tab', activeTab);
+      router.replace(`/shopper/saved?${next.toString()}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   const loadAllData = useCallback(async () => {
     setError(null);
 
-    // Placeholder data — no backend endpoints yet for these two.
-    // Replace when /shopper/saved/list and /shopper/wanted/list exist.
+    // Placeholder data — real endpoints not built yet
     setSavedItems([
       { id: '1', name: 'Meat Pie', price: '₦200', store: 'Norman Eateries' },
     ]);
@@ -140,7 +162,6 @@ export default function SavedPage() {
       { id: '1', name: 'Chicken Pie', notes: 'Looking for good quality' },
     ]);
 
-    // Parallel fetch — one round-trip instead of five.
     const results = await Promise.allSettled([
       api.getWalletOrders(['locked', 'accepted']),
       api.getWalletOrders(['dispatched']),
@@ -180,7 +201,9 @@ export default function SavedPage() {
 
     if (basketResult.status === 'fulfilled') {
       const raw = basketResult.value as BasketResponse | null;
-      const items = Array.isArray(raw?.items) ? (raw!.items as BasketItem[]) : [];
+      const items = Array.isArray(raw?.items)
+        ? (raw!.items as BasketItem[])
+        : [];
       setBasketItems(items);
       setBasketTotal(Number(raw?.total ?? 0));
     } else {
@@ -195,8 +218,6 @@ export default function SavedPage() {
       setHistory([]);
     }
 
-    // Only flag an error if EVERYTHING failed — otherwise partial data is
-    // still useful and we degrade gracefully.
     const allFailed = results.every((r) => r.status === 'rejected');
     if (allFailed) {
       setError(
@@ -231,18 +252,9 @@ export default function SavedPage() {
     );
   };
 
-  const openDelivery = (order: WalletOrder) => {
-    // Same confirmation screen — deliveries are just a later escrow state
-    router.push(
-      `/reservation-confirmed?order_id=${order.order_id}&pickup_time=${encodeURIComponent(
-        order.pickup_time || 'Now',
-      )}`,
-    );
-  };
+  const openDelivery = (order: WalletOrder) => openReservation(order);
 
   const openBooking = (booking: ServiceBooking) => {
-    // Route to the booking detail page if it exists; fall back to the
-    // service detail page otherwise (which shows the provider).
     if (booking.booking_id) {
       router.push(`/shopper/bookings/${booking.booking_id}`);
     } else if (booking.service_id) {
@@ -254,7 +266,6 @@ export default function SavedPage() {
     router.push(`/shopper/orders/receipt/${order.order_id}`);
   };
 
-  // ── Search filter ────────────────────────────────────────────
   const q = query.trim().toLowerCase();
 
   const applyFilter = <T extends Record<string, unknown>>(
@@ -284,10 +295,14 @@ export default function SavedPage() {
     [history, q],
   );
 
-  // ── Tab renderers ────────────────────────────────────────────
   const renderItemsTab = () => {
     if (savedItems.length === 0) {
-      return <EmptyState icon={<MdInventory size={44} color="#C7D2FE" />} text="No saved items yet." />;
+      return (
+        <EmptyState
+          icon={<MdInventory size={44} color="#C7D2FE" />}
+          text="No saved items yet."
+        />
+      );
     }
     return (
       <div style={styles.list}>
@@ -313,7 +328,12 @@ export default function SavedPage() {
 
   const renderWantedTab = () => {
     if (wantedAlerts.length === 0) {
-      return <EmptyState icon={<MdNotificationsActive size={44} color="#C7D2FE" />} text="No wanted alerts." />;
+      return (
+        <EmptyState
+          icon={<MdNotificationsActive size={44} color="#C7D2FE" />}
+          text="No wanted alerts."
+        />
+      );
     }
     return (
       <div style={styles.list}>
@@ -335,7 +355,11 @@ export default function SavedPage() {
       return (
         <EmptyState
           icon={<MdEventNote size={44} color="#C7D2FE" />}
-          text={q ? `No reservations match "${query}"` : 'No active reservations.'}
+          text={
+            q
+              ? `No reservations match "${query}"`
+              : 'No active reservations.'
+          }
         />
       );
     }
@@ -351,7 +375,9 @@ export default function SavedPage() {
           >
             <MdEventNote size={20} color="#0504AA" style={{ marginRight: 8 }} />
             <div style={styles.cardContent}>
-              <div style={styles.cardTitle}>Order #{shortId(order.order_id)}</div>
+              <div style={styles.cardTitle}>
+                Order #{shortId(order.order_id)}
+              </div>
               <div style={styles.cardSubtitle}>
                 {fmtNaira(order.total_amount)} · {order.store_name || 'Pickup'}
               </div>
@@ -368,7 +394,11 @@ export default function SavedPage() {
       return (
         <EmptyState
           icon={<MdLocalShipping size={44} color="#C7D2FE" />}
-          text={q ? `No deliveries match "${query}"` : 'No active deliveries.'}
+          text={
+            q
+              ? `No deliveries match "${query}"`
+              : 'No active deliveries.'
+          }
         />
       );
     }
@@ -382,11 +412,18 @@ export default function SavedPage() {
             role="button"
             tabIndex={0}
           >
-            <MdLocalShipping size={20} color="#0504AA" style={{ marginRight: 8 }} />
+            <MdLocalShipping
+              size={20}
+              color="#0504AA"
+              style={{ marginRight: 8 }}
+            />
             <div style={styles.cardContent}>
-              <div style={styles.cardTitle}>Order #{shortId(order.order_id)}</div>
+              <div style={styles.cardTitle}>
+                Order #{shortId(order.order_id)}
+              </div>
               <div style={styles.cardSubtitle}>
-                {fmtNaira(order.total_amount)} · {order.status || 'In transit'}
+                {fmtNaira(order.total_amount)} ·{' '}
+                {order.status || 'In transit'}
               </div>
             </div>
             <MdChevronRight size={16} color="#999" />
@@ -401,7 +438,9 @@ export default function SavedPage() {
       return (
         <EmptyState
           icon={<MdBuild size={44} color="#C7D2FE" />}
-          text={q ? `No bookings match "${query}"` : 'No service bookings.'}
+          text={
+            q ? `No bookings match "${query}"` : 'No service bookings.'
+          }
         />
       );
     }
@@ -421,7 +460,8 @@ export default function SavedPage() {
                 {booking.service_title || booking.title || 'Booking'}
               </div>
               <div style={styles.cardSubtitle}>
-                Status: {booking.status || '—'} · {fmtDate(booking.created_at)}
+                Status: {booking.status || '—'} ·{' '}
+                {fmtDate(booking.created_at)}
               </div>
             </div>
             <MdChevronRight size={16} color="#999" />
@@ -450,7 +490,11 @@ export default function SavedPage() {
             role="button"
             tabIndex={0}
           >
-            <MdShoppingBasket size={20} color="#0504AA" style={{ marginRight: 8 }} />
+            <MdShoppingBasket
+              size={20}
+              color="#0504AA"
+              style={{ marginRight: 8 }}
+            />
             <div style={styles.cardContent}>
               <div style={styles.cardTitle}>
                 {item.title || 'Item'} × {item.quantity ?? 1}
@@ -502,12 +546,22 @@ export default function SavedPage() {
               tabIndex={0}
             >
               {isReturnedOrExpired ? (
-                <MdCancel size={20} color="#FF0000" style={{ marginRight: 8 }} />
+                <MdCancel
+                  size={20}
+                  color="#FF0000"
+                  style={{ marginRight: 8 }}
+                />
               ) : (
-                <MdCheckCircle size={20} color="#00AA00" style={{ marginRight: 8 }} />
+                <MdCheckCircle
+                  size={20}
+                  color="#00AA00"
+                  style={{ marginRight: 8 }}
+                />
               )}
               <div style={styles.cardContent}>
-                <div style={styles.cardTitle}>Order #{shortId(order.order_id)}</div>
+                <div style={styles.cardTitle}>
+                  Order #{shortId(order.order_id)}
+                </div>
                 <div style={styles.cardSubtitle}>
                   {fmtNaira(order.total_amount)} · {order.status || '—'} ·{' '}
                   {fmtDate(order.created_at)}
@@ -542,7 +596,6 @@ export default function SavedPage() {
 
   return (
     <main style={styles.container}>
-      {/* Tab bar */}
       <div style={styles.tabBar}>
         {TABS.map((tab) => (
           <button
@@ -551,7 +604,9 @@ export default function SavedPage() {
             style={{
               ...styles.tab,
               borderBottom:
-                activeTab === tab ? '2px solid #0504AA' : '2px solid transparent',
+                activeTab === tab
+                  ? '2px solid #0504AA'
+                  : '2px solid transparent',
               color: activeTab === tab ? '#0504AA' : '#666',
               fontWeight: activeTab === tab ? 700 : 400,
             }}
@@ -569,13 +624,14 @@ export default function SavedPage() {
             size={22}
             color="#0504AA"
             style={{
-              animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none',
+              animation: isRefreshing
+                ? 'spin 0.8s linear infinite'
+                : 'none',
             }}
           />
         </button>
       </div>
 
-      {/* Search */}
       <div style={styles.searchWrap}>
         <MdSearch size={18} color="#94A3B8" />
         <input
@@ -587,7 +643,6 @@ export default function SavedPage() {
         />
       </div>
 
-      {/* Content */}
       <div style={styles.content}>
         {isLoading ? (
           <div style={styles.center}>
@@ -611,6 +666,27 @@ export default function SavedPage() {
   );
 }
 
+export default function SavedPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            height: '100vh',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          Loading…
+        </div>
+      }
+    >
+      <SavedPageContent />
+    </Suspense>
+  );
+}
+
 function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
     <div style={styles.center}>
@@ -620,7 +696,6 @@ function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -723,7 +798,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 12,
     border: '1px solid #EEF2FF',
     cursor: 'pointer',
-    transition: 'box-shadow 0.15s ease',
   },
   cardContent: {
     flex: 1,

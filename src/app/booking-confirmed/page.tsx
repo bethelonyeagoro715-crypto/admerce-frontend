@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -13,9 +13,6 @@ import {
   MdWork,
 } from 'react-icons/md';
 import api from '../../services/api';
-
-// ✅ Next.js 16.3 fix: prevent static prerendering because we use useSearchParams
-export const dynamic = 'force-dynamic';
 
 function BookingConfirmedContent() {
   const router = useRouter();
@@ -56,7 +53,10 @@ function BookingConfirmedContent() {
         response?: { data?: { detail?: string } };
         message?: string;
       };
-      const detail = error?.response?.data?.detail || error?.message || 'Failed to complete job';
+      const detail =
+        error?.response?.data?.detail ||
+        error?.message ||
+        'Failed to complete job';
       alert(detail);
     }
   };
@@ -73,7 +73,9 @@ function BookingConfirmedContent() {
       </motion.div>
 
       <h2 style={styles.heading}>Booking Confirmed!</h2>
-      <p style={styles.subheading}>Your service has been booked successfully.</p>
+      <p style={styles.subheading}>
+        Your service has been booked successfully.
+      </p>
 
       <div style={styles.card}>
         <div style={styles.row}>
@@ -93,7 +95,9 @@ function BookingConfirmedContent() {
         </div>
         <div style={styles.row}>
           <span style={styles.label}>Amount</span>
-          <span style={styles.value}>₦{Number(amount).toFixed(0)}</span>
+          <span style={styles.value}>
+            ₦{Number(amount).toFixed(0)}
+          </span>
         </div>
         {bookingId && (
           <div style={styles.row}>
@@ -119,9 +123,16 @@ function BookingConfirmedContent() {
           <MdHome size={20} color="#fff" />
           Back to Home
         </button>
+
+        {/* ✅ Routes to the Bookings tab of the unified saved screen */}
         <button
-          onClick={() => router.push('/order-history')}
-          style={{ ...styles.button, backgroundColor: 'transparent', border: '1px solid #0504AA', color: '#0504AA' }}
+          onClick={() => router.push('/shopper/saved?tab=Bookings')}
+          style={{
+            ...styles.button,
+            backgroundColor: 'transparent',
+            border: '1px solid #0504AA',
+            color: '#0504AA',
+          }}
         >
           <MdListAlt size={20} color="#0504AA" />
           View Bookings
@@ -133,7 +144,20 @@ function BookingConfirmedContent() {
 
 export default function BookingConfirmedPage() {
   return (
-    <Suspense fallback={<div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading...</div>}>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            height: '100vh',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          Loading...
+        </div>
+      }
+    >
       <BookingConfirmedContent />
     </Suspense>
   );
