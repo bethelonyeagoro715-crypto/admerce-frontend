@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -11,43 +11,140 @@ import {
   MdHome,
   MdListAlt,
   MdWork,
+  MdErrorOutline,
+  MdPerson,
+  MdChat,
 } from 'react-icons/md';
 import api from '../../services/api';
+
+interface BookingDetail {
+  booking_id?: string;
+  service_id?: string;
+  service_title?: string;
+  title?: string;
+  provider_id?: string;
+  provider_name?: string;
+  customer_id?: string;
+  customer_name?: string;
+  status?: string;
+  amount?: number | string;
+  scheduled_for?: string;
+  created_at?: string;
+  notes?: string;
+  [key: string]: unknown;
+}
+
+function fmtDateTime(iso: string | undefined | null): string {
+  if (!iso) return 'Not specified';
+  try {
+    return new Date(iso).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return String(iso);
+  }
+}
 
 function BookingConfirmedContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const serviceName = searchParams.get('service_name') || 'Service';
-  const providerName = searchParams.get('provider_name') || 'Provider';
-  const scheduledFor = searchParams.get('scheduled_for') || '';
-  const amount = searchParams.get('amount') || '0';
-  const bookingId = searchParams.get('booking_id') || '';
+  const bookingIdFromUrl = searchParams.get('booking_id') || '';
 
-  const formattedDate = scheduledFor
-    ? new Date(scheduledFor).toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : 'Not specified';
+  // Initial values from URL — used for the fresh-booking flow where the
+  // booking API call hasn't finished yet (or where no API call is needed).
+  const [serviceName, setServiceName] = useState(
+    searchParams.get('service_name') || 'Service',
+  );
+  const [providerName, setProviderName] = useState(
+    searchParams.get('provider_name') || 'Provider',
+  );
+  const [customerName, setCustomerName] = useState(
+    searchParams.get('customer_name') || '',
+  );
+  const [scheduledFor, setScheduledFor] = useState(
+    searchParams.get('scheduled_for') || '',
+  );
+  const [amount, setAmount] = useState(searchParams.get('amount') || '0');
+  const [bookingId, setBookingId] = useState(bookingIdFromUrl);
+  const [status, setStatus] = useState<string>('');
 
-  const handleJobDone = async () => {
+  const [enriching, setEnriching] = useState(false);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [completing, setCompleting] = useState(false);
+
+  // ✅ Enrich from API when we only have a booking_id.
+  //    This is what makes "tap a booking in the saved list" work: the
+  //    saved screen only knows the booking_id, and we fill in the rest.
+  useEffect(() => {
+    if (!bookingIdFromUrl) return;
+
+    // If the URL already has the full payload (fresh-booking flow), skip.
+    const hasFullUrl =
+      !!searchParams.get('service_name') &&
+      !!searchParams.get('provider_name') &&
+      !!searchParams.get('amount');
+
+    if (hasFullUrl) return;
+
+    let cancelled = false;
+
+    (async () => {
+      setEnriching(true);
+      setEnrichError(null);
+      try {
+        const data = (await api.getServiceBookingDetail(
+          bookingIdFromUrl,
+        )) as BookingDetail;
+
+        if (cancelled) return;
+
+        setBookingId(data.booking_id || bookingIdFromUrl);
+        setServiceName(data.service_title || data.title || 'Service');
+        setProviderName(data.provider_name || 'Provider');
+        setCustomerName(data.customer_name || '');
+        setScheduledFor(data.scheduled_for || data.created_at || '');
+        setAmount(String(data.amount ?? 0));
+        setStatus(data.status || '');
+      } catch (err: unknown) {
+        if (cancelled) return;
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Could not load booking details.';
+        setEnrichError(msg);
+      } finally {
+        if (!cancelled) setEnriching(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingIdFromUrl]);
+
+  const handleJobDone = useCallback(async () => {
     if (!bookingId) {
       alert('Booking ID missing');
       return;
     }
+    setCompleting(true);
     try {
       await api.completeServiceBooking(bookingId);
-      const query = new URLSearchParams({
-        service_name: serviceName,
-        provider_name: providerName,
-        amount,
-        booking_id: bookingId,
-      });
-      router.push(`/service-success?${query.toString()}`);
+      // Refresh to reflect the new status
+      try {
+        const refreshed = (await api.getServiceBookingDetail(
+          bookingId,
+        )) as BookingDetail;
+        setStatus(refreshed.status || 'completed');
+      } catch {
+        setStatus('completed');
+      }
     } catch (err: unknown) {
       const error = err as {
         response?: { data?: { detail?: string } };
@@ -58,8 +155,49 @@ function BookingConfirmedContent() {
         error?.message ||
         'Failed to complete job';
       alert(detail);
+    } finally {
+      setCompleting(false);
+    }
+  }, [bookingId]);
+
+  const handleBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/shopper/home');
     }
   };
+
+  const formattedDate = fmtDateTime(scheduledFor);
+  const amountNumber = Number(amount) || 0;
+  const isCompleted = status === 'completed';
+
+  // ── Loading state for the enrich call ────────────────────────
+  if (enriching) {
+    return (
+      <main style={styles.container}>
+        <div style={styles.spinner} />
+      </main>
+    );
+  }
+
+  // ── Error state when enrichment failed ───────────────────────
+  if (enrichError && !bookingId) {
+    return (
+      <main style={styles.container}>
+        <MdErrorOutline size={56} color="#EF9A9A" />
+        <p style={{ marginTop: 12, color: '#B71C1C', textAlign: 'center' }}>
+          {enrichError}
+        </p>
+        <button
+          onClick={handleBack}
+          style={{ ...styles.button, backgroundColor: '#0504AA', marginTop: 16 }}
+        >
+          Back
+        </button>
+      </main>
+    );
+  }
 
   return (
     <main style={styles.container}>
@@ -69,12 +207,16 @@ function BookingConfirmedContent() {
         transition={{ type: 'spring', stiffness: 260, damping: 20 }}
         style={styles.iconWrapper}
       >
-        <MdCheckCircle size={64} color="#16A34A" />
+        <MdCheckCircle size={64} color={isCompleted ? '#16A34A' : '#16A34A'} />
       </motion.div>
 
-      <h2 style={styles.heading}>Booking Confirmed!</h2>
+      <h2 style={styles.heading}>
+        {isCompleted ? 'Booking Complete!' : 'Booking Confirmed!'}
+      </h2>
       <p style={styles.subheading}>
-        Your service has been booked successfully.
+        {isCompleted
+          ? 'Funds have been released to the provider.'
+          : 'Your service has been booked successfully.'}
       </p>
 
       <div style={styles.card}>
@@ -88,6 +230,13 @@ function BookingConfirmedContent() {
           <span style={styles.label}>Provider</span>
           <span style={styles.value}>{providerName}</span>
         </div>
+        {customerName && (
+          <div style={styles.row}>
+            <MdPerson size={20} color="#0504AA" />
+            <span style={styles.label}>Customer</span>
+            <span style={styles.value}>{customerName}</span>
+          </div>
+        )}
         <div style={styles.row}>
           <MdCalendarToday size={20} color="#0504AA" />
           <span style={styles.label}>When</span>
@@ -95,26 +244,64 @@ function BookingConfirmedContent() {
         </div>
         <div style={styles.row}>
           <span style={styles.label}>Amount</span>
-          <span style={styles.value}>
-            ₦{Number(amount).toFixed(0)}
-          </span>
+          <span style={styles.value}>₦{amountNumber.toFixed(0)}</span>
         </div>
         {bookingId && (
           <div style={styles.row}>
             <span style={styles.label}>Booking ID</span>
-            <span style={styles.value}>{bookingId}</span>
+            <span style={styles.value}>{bookingId.slice(0, 8)}</span>
+          </div>
+        )}
+        {status && (
+          <div style={styles.row}>
+            <span style={styles.label}>Status</span>
+            <span
+              style={{
+                ...styles.value,
+                color: isCompleted ? '#166534' : '#92400E',
+              }}
+            >
+              {isCompleted ? 'Completed' : status}
+            </span>
           </div>
         )}
       </div>
 
       <div style={styles.actions}>
-        <button
-          onClick={handleJobDone}
-          style={{ ...styles.button, backgroundColor: '#27AE60' }}
-        >
-          <MdWork size={20} color="#fff" />
-          Job Done
-        </button>
+        {!isCompleted && bookingId && (
+          <button
+            onClick={handleJobDone}
+            disabled={completing}
+            style={{
+              ...styles.button,
+              backgroundColor: '#27AE60',
+              opacity: completing ? 0.6 : 1,
+              cursor: completing ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <MdWork size={20} color="#fff" />
+            {completing ? 'Completing…' : 'Job Done'}
+          </button>
+        )}
+
+        {bookingId && (
+          <button
+            onClick={() => {
+              // Open chat with the provider/customer — requires their ID
+              // from the enriched data. Fallback: go to inbox.
+              router.push('/shopper/inbox');
+            }}
+            style={{
+              ...styles.button,
+              backgroundColor: 'transparent',
+              border: '1px solid #0504AA',
+              color: '#0504AA',
+            }}
+          >
+            <MdChat size={20} color="#0504AA" />
+            Message
+          </button>
+        )}
 
         <button
           onClick={() => router.push('/shopper/home')}
@@ -124,7 +311,6 @@ function BookingConfirmedContent() {
           Back to Home
         </button>
 
-        {/* ✅ Routes to the Bookings tab of the unified saved screen */}
         <button
           onClick={() => router.push('/shopper/saved?tab=Bookings')}
           style={{
@@ -135,7 +321,7 @@ function BookingConfirmedContent() {
           }}
         >
           <MdListAlt size={20} color="#0504AA" />
-          View Bookings
+          View all bookings
         </button>
       </div>
     </main>
@@ -146,15 +332,8 @@ export default function BookingConfirmedPage() {
   return (
     <Suspense
       fallback={
-        <div
-          style={{
-            height: '100vh',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          Loading...
+        <div style={styles.container}>
+          <div style={styles.spinner} />
         </div>
       }
     >
@@ -173,9 +352,23 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#F8F9FA',
     padding: 24,
   },
+  spinner: {
+    width: 40,
+    height: 40,
+    border: '4px solid #eee',
+    borderTopColor: '#0504AA',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
   iconWrapper: { marginBottom: 16 },
   heading: { fontSize: 28, fontWeight: 800, color: '#1A1A1A', margin: 0 },
-  subheading: { fontSize: 16, color: '#666', marginTop: 4, marginBottom: 24 },
+  subheading: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 4,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
   card: {
     width: '100%',
     maxWidth: 400,
@@ -191,8 +384,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 12,
     fontSize: 14,
   },
-  label: { color: '#888', fontWeight: 600, minWidth: 80 },
-  value: { color: '#1A1A1A', fontWeight: 600, flex: 1 },
+  label: { color: '#888', fontWeight: 600, minWidth: 90 },
+  value: { color: '#1A1A1A', fontWeight: 600, flex: 1, textAlign: 'right' },
   actions: {
     width: '100%',
     maxWidth: 400,
@@ -213,3 +406,10 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
 };
+
+if (typeof document !== 'undefined' && !document.getElementById('booking-kf')) {
+  const s = document.createElement('style');
+  s.id = 'booking-kf';
+  s.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
+  document.head.appendChild(s);
+}
