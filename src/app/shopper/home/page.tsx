@@ -49,10 +49,16 @@ const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
 // width and minWidth, but we compute sizes relative to this baseline.
 const REF_WIDTH = 200;
 
+// ✅ Fall back to NEXT_PUBLIC_API_URL if NEXT_PUBLIC_API_BASE is empty,
+// matching the fallback chain in services/api.ts
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
-  return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    '';
+  return `${base}${url}`;
 }
 
 // Compute a scaled height from an image's natural dimensions, clamped so
@@ -310,12 +316,19 @@ export default function ShopperHomePage() {
   const [showFilter, setShowFilter] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // ✅ Slider state — drives the horizontal track translate
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+
   const noteworthyTimer = useRef<NodeJS.Timeout | null>(null);
   const sessionItemsShown = useRef<string[]>([]);
 
   const touchStartY = useRef<number | null>(null);
-  const touchStartX = useRef<number | null>(null);
-  const swipeTriggered = useRef(false);
+  const dragStartX = useRef<number | null>(null);
+  const dragStartY = useRef<number | null>(null);
+  const dragOffsetRef = useRef(0);
+  const axisDecided = useRef(false);
+  const isDraggingRef = useRef(false);
 
   // ─── Location ───────────────────────────────────────────────────────
   const getCurrentLocation = async (): Promise<GeolocationPosition | null> => {
@@ -510,18 +523,26 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ─── Touch handlers ─────────────────────────────────────────────────
+  // ─── Touch handlers (slider + pull-to-refresh) ──────────────────────
   const handleTouchStart = (e: React.TouchEvent) => {
+    dragStartX.current = e.touches[0].clientX;
+    dragStartY.current = e.touches[0].clientY;
+    dragOffsetRef.current = 0;
+    axisDecided.current = false;
+    isDraggingRef.current = false;
+
     if (window.scrollY === 0) {
       touchStartY.current = e.touches[0].clientY;
     }
-    touchStartX.current = e.touches[0].clientX;
-    swipeTriggered.current = false;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartY.current !== null) {
-      const deltaY = e.touches[0].clientY - touchStartY.current;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+
+    // Pull-to-refresh — only if user hasn't started a horizontal drag yet
+    if (touchStartY.current !== null && !isDraggingRef.current) {
+      const deltaY = currentY - touchStartY.current;
       if (deltaY > 80 && !isRefreshing) {
         setIsRefreshing(true);
         touchStartY.current = null;
@@ -530,30 +551,55 @@ export default function ShopperHomePage() {
       }
     }
 
-    if (touchStartX.current !== null && !swipeTriggered.current) {
-      const deltaX = e.touches[0].clientX - touchStartX.current;
-      const deltaY =
-        touchStartY.current !== null
-          ? e.touches[0].clientY - touchStartY.current
-          : 0;
+    if (dragStartX.current === null || dragStartY.current === null) return;
+    const deltaX = currentX - dragStartX.current;
+    const deltaY = currentY - dragStartY.current;
 
-      if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
-        swipeTriggered.current = true;
-        if (deltaX < 0) {
-          setCurrentTab((prev) => Math.min(prev + 1, 2));
-        } else {
-          setCurrentTab((prev) => Math.max(prev - 1, 0));
+    // Decide axis once — first 10px of movement locks direction
+    if (!axisDecided.current) {
+      if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+        axisDecided.current = true;
+        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+          isDraggingRef.current = true;
+          setIsDragging(true);
         }
-        touchStartX.current = null;
-        touchStartY.current = null;
       }
     }
+
+    if (!isDraggingRef.current) return;
+
+    // Edge resistance — pull gets harder at first / last panel
+    let offset = deltaX;
+    if (
+      (currentTab === 0 && offset > 0) ||
+      (currentTab === 2 && offset < 0)
+    ) {
+      offset = offset * 0.3;
+    }
+    dragOffsetRef.current = offset;
+    setDragOffset(offset);
   };
 
   const handleTouchEnd = () => {
-    touchStartX.current = null;
+    if (isDraggingRef.current) {
+      const threshold = (window.innerWidth || 375) * 0.2;
+      const offset = dragOffsetRef.current;
+
+      if (offset < -threshold && currentTab < 2) {
+        setCurrentTab(currentTab + 1);
+      } else if (offset > threshold && currentTab > 0) {
+        setCurrentTab(currentTab - 1);
+      }
+
+      setDragOffset(0);
+      dragOffsetRef.current = 0;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+    }
+    axisDecided.current = false;
+    dragStartX.current = null;
+    dragStartY.current = null;
     touchStartY.current = null;
-    swipeTriggered.current = false;
   };
 
   // ─── Navigation ─────────────────────────────────────────────────────
@@ -572,8 +618,11 @@ export default function ShopperHomePage() {
     }
   };
   const handleStorePress = (id: string) => router.push(`/store-detail/${id}`);
+  // ✅ Fixed: was `/providers/${id}` (404). Correct route is `/shopper/provider-services/${id}`.
   const handleProviderPress = (id: string, name: string) =>
-    router.push(`/providers/${id}?name=${encodeURIComponent(name)}`);
+    router.push(
+      `/shopper/provider-services/${id}?name=${encodeURIComponent(name)}`,
+    );
 
   // ─── Size functions for the masonry library ─────────────────────────
   const getItemCardSize = useCallback(
@@ -588,6 +637,11 @@ export default function ShopperHomePage() {
     async (provider: Provider) => computeImageHeight(provider.image, 60),
     [],
   );
+
+  // ✅ Slider track translate — each panel is 1/3 of the 300%-wide track,
+  // so shifting by 33.3333% per tab shows exactly one panel. dragOffset is
+  // added in px for finger-follow.
+  const trackTransform = `translateX(calc(-${currentTab * 33.3333}% + ${dragOffset}px))`;
 
   // ─── Render ─────────────────────────────────────────────────────────
   return (
@@ -728,12 +782,15 @@ export default function ShopperHomePage() {
         ))}
       </div>
 
-      {/* Tab content — one masonry grid per tab */}
+      {/* ✅ Slidable tab content — 300% wide track, 3 panels side by side.
+          Drag follows finger; release snaps to nearest panel. Pull-to-refresh
+          and vertical scroll are preserved by axis detection. */}
       <div
         style={styles.tabContent}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
         {isRefreshing && (
           <div style={styles.refreshIndicator}>
@@ -741,8 +798,21 @@ export default function ShopperHomePage() {
           </div>
         )}
 
-        {currentTab === 0 && (
-          <>
+        <div
+          style={{
+            display: 'flex',
+            width: '300%',
+            height: '100%',
+            transform: trackTransform,
+            transition: isDragging
+              ? 'none'
+              : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)',
+            willChange: 'transform',
+            touchAction: 'pan-y',
+          }}
+        >
+          {/* Panel 0 — BUYTEMS */}
+          <div style={styles.panel}>
             {loadingItems ? (
               <div style={styles.centeredMsg}>Loading items…</div>
             ) : items.length === 0 ? (
@@ -762,11 +832,10 @@ export default function ShopperHomePage() {
                 minWidth={160}
               />
             )}
-          </>
-        )}
+          </div>
 
-        {currentTab === 1 && (
-          <>
+          {/* Panel 1 — SHOPNSTORE */}
+          <div style={styles.panel}>
             {loadingStores ? (
               <div style={styles.centeredMsg}>Loading stores…</div>
             ) : stores.length === 0 ? (
@@ -782,11 +851,10 @@ export default function ShopperHomePage() {
                 minWidth={160}
               />
             )}
-          </>
-        )}
+          </div>
 
-        {currentTab === 2 && (
-          <>
+          {/* Panel 2 — SERVOOKS */}
+          <div style={styles.panel}>
             {loadingServices ? (
               <div style={styles.centeredMsg}>Loading service providers…</div>
             ) : providers.length === 0 ? (
@@ -805,8 +873,8 @@ export default function ShopperHomePage() {
                 minWidth={160}
               />
             )}
-          </>
-        )}
+          </div>
+        </div>
       </div>
 
       {/* Filter Modal */}
@@ -929,7 +997,15 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minHeight: 0,
     position: 'relative',
+    // ✅ overflow: hidden clips the two off-screen panels of the 300% track.
     overflow: 'hidden',
+  },
+  // ✅ Each slider panel occupies 1/3 of the 300%-wide track = 100% viewport.
+  panel: {
+    width: '33.3333%',
+    flex: '0 0 33.3333%',
+    minHeight: 0,
+    alignSelf: 'flex-start',
   },
   centeredMsg: {
     textAlign: 'center',
