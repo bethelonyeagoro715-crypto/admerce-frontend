@@ -6,6 +6,7 @@ import api from '../../../services/api';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
 import {
   MdRefresh,
+  MdNotificationsActive,
   MdEventNote,
   MdLocalShipping,
   MdBuild,
@@ -16,6 +17,11 @@ import {
   MdShoppingBasket,
   MdSearch,
   MdImage,
+  MdAdd,
+  MdDeleteOutline,
+  MdToggleOn,
+  MdToggleOff,
+  MdClose,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -27,6 +33,18 @@ interface SavedListing {
   store_id?: string | null;
   store_name?: string | null;
   saved_at?: string | null;
+}
+
+interface WantedAlert {
+  id: number;
+  user_id: string;
+  title: string;
+  notes?: string | null;
+  category?: string | null;
+  budget?: number | null;
+  is_active: boolean;
+  created_at?: string | null;
+  expires_at?: string | null;
 }
 
 interface WalletOrder {
@@ -69,9 +87,9 @@ interface BasketResponse {
   [key: string]: unknown;
 }
 
-// ✅ Wanted tab removed — no backend table or endpoint exists yet.
 const TABS = [
   'Items',
+  'Wanted',
   'Reservations',
   'Deliveries',
   'Bookings',
@@ -137,12 +155,21 @@ function SavedPageContent() {
   const [query, setQuery] = useState('');
 
   const [savedItems, setSavedItems] = useState<SavedListing[]>([]);
+  const [wantedAlerts, setWantedAlerts] = useState<WantedAlert[]>([]);
   const [reservations, setReservations] = useState<WalletOrder[]>([]);
   const [deliveries, setDeliveries] = useState<WalletOrder[]>([]);
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
   const [basketItems, setBasketItems] = useState<BasketItem[]>([]);
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
+
+  // Create-alert sheet
+  const [showCreateWanted, setShowCreateWanted] = useState(false);
+  const [newWantedTitle, setNewWantedTitle] = useState('');
+  const [newWantedNotes, setNewWantedNotes] = useState('');
+  const [newWantedBudget, setNewWantedBudget] = useState('');
+  const [creatingWanted, setCreatingWanted] = useState(false);
+  const [createWantedError, setCreateWantedError] = useState<string | null>(null);
 
   // Sync URL with tab
   useEffect(() => {
@@ -160,6 +187,7 @@ function SavedPageContent() {
 
     const results = await Promise.allSettled([
       api.getSavedItems(),
+      api.getWantedAlerts(),
       api.getWalletOrders(['locked', 'accepted']),
       api.getWalletOrders(['dispatched']),
       api.getServiceBookings(),
@@ -169,6 +197,7 @@ function SavedPageContent() {
 
     const [
       savedResult,
+      wantedResult,
       reservationsResult,
       deliveriesResult,
       bookingsResult,
@@ -181,6 +210,13 @@ function SavedPageContent() {
       setSavedItems(Array.isArray(raw) ? (raw as SavedListing[]) : []);
     } else {
       setSavedItems([]);
+    }
+
+    if (wantedResult.status === 'fulfilled') {
+      const raw = wantedResult.value;
+      setWantedAlerts(Array.isArray(raw) ? (raw as WantedAlert[]) : []);
+    } else {
+      setWantedAlerts([]);
     }
 
     if (reservationsResult.status === 'fulfilled') {
@@ -206,9 +242,7 @@ function SavedPageContent() {
 
     if (basketResult.status === 'fulfilled') {
       const raw = basketResult.value as BasketResponse | null;
-      const items = Array.isArray(raw?.items)
-        ? (raw!.items as BasketItem[])
-        : [];
+      const items = Array.isArray(raw?.items) ? (raw!.items as BasketItem[]) : [];
       setBasketItems(items);
       setBasketTotal(Number(raw?.total ?? 0));
     } else {
@@ -271,6 +305,63 @@ function SavedPageContent() {
     router.push(`/shopper/orders/receipt/${order.order_id}`);
   };
 
+  // ── Wanted actions ─────────────────────────────────────────────
+  const handleCreateWanted = async () => {
+    const title = newWantedTitle.trim();
+    if (!title) {
+      setCreateWantedError('Please enter what you\'re looking for.');
+      return;
+    }
+    setCreatingWanted(true);
+    setCreateWantedError(null);
+    try {
+      const budgetNum = newWantedBudget.trim() ? Number(newWantedBudget) : undefined;
+      if (budgetNum !== undefined && (!Number.isFinite(budgetNum) || budgetNum < 0)) {
+        setCreateWantedError('Budget must be a positive number.');
+        setCreatingWanted(false);
+        return;
+      }
+      await api.createWantedAlert({
+        title,
+        notes: newWantedNotes.trim() || undefined,
+        budget: budgetNum,
+      });
+      setShowCreateWanted(false);
+      setNewWantedTitle('');
+      setNewWantedNotes('');
+      setNewWantedBudget('');
+      await loadAllData();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not create alert.';
+      setCreateWantedError(msg);
+    } finally {
+      setCreatingWanted(false);
+    }
+  };
+
+  const handleDeleteWanted = async (id: number) => {
+    if (!window.confirm('Delete this wanted alert?')) return;
+    try {
+      await api.deleteWantedAlert(id);
+      setWantedAlerts((prev) => prev.filter((a) => a.id !== id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete.');
+    }
+  };
+
+  const handleToggleWanted = async (id: number) => {
+    try {
+      const res = (await api.toggleWantedAlert(id)) as { is_active?: boolean };
+      setWantedAlerts((prev) =>
+        prev.map((a) =>
+          a.id === id ? { ...a, is_active: res.is_active ?? !a.is_active } : a,
+        ),
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to toggle.');
+    }
+  };
+
   const q = query.trim().toLowerCase();
 
   const applyFilter = <T extends Record<string, unknown>>(
@@ -284,8 +375,21 @@ function SavedPageContent() {
   };
 
   const filteredSaved = useMemo(
-    () => applyFilter(savedItems as unknown as Record<string, unknown>[], ['title', 'store_name']) as unknown as SavedListing[],
+    () =>
+      applyFilter(savedItems as unknown as Record<string, unknown>[], [
+        'title',
+        'store_name',
+      ]) as unknown as SavedListing[],
     [savedItems, q],
+  );
+  const filteredWanted = useMemo(
+    () =>
+      applyFilter(wantedAlerts as unknown as Record<string, unknown>[], [
+        'title',
+        'notes',
+        'category',
+      ]) as unknown as WantedAlert[],
+    [wantedAlerts, q],
   );
   const filteredReservations = useMemo(
     () => applyFilter(reservations, ['order_id', 'store_name', 'status']),
@@ -316,9 +420,7 @@ function SavedPageContent() {
       return (
         <EmptyState
           icon={<MdInventory size={44} color="#C7D2FE" />}
-          text={
-            q ? `No saved items match "${query}"` : 'No saved items yet.'
-          }
+          text={q ? `No saved items match "${query}"` : 'No saved items yet.'}
         />
       );
     }
@@ -341,33 +443,99 @@ function SavedPageContent() {
                     src={image}
                     alt=""
                     loading="lazy"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
                   <MdImage size={22} color="#94A3B8" />
                 )}
               </div>
               <div style={styles.cardContent}>
-                <div style={styles.cardTitle}>
-                  {item.title || 'Listing'}
-                </div>
+                <div style={styles.cardTitle}>{item.title || 'Listing'}</div>
                 <div style={styles.cardSubtitle}>
                   {item.store_name || 'Store'}
                   {item.saved_at ? ` · Saved ${fmtDate(item.saved_at)}` : ''}
                 </div>
               </div>
-              <div style={styles.cardTrailing}>
-                {fmtNaira(item.price)}
-              </div>
+              <div style={styles.cardTrailing}>{fmtNaira(item.price)}</div>
               <MdChevronRight size={16} color="#999" />
             </div>
           );
         })}
       </div>
+    );
+  };
+
+  const renderWantedTab = () => {
+    return (
+      <>
+        {/* Create button at the top */}
+        <button
+          onClick={() => setShowCreateWanted(true)}
+          style={styles.createAlertBtn}
+        >
+          <MdAdd size={20} color="#fff" />
+          <span style={{ marginLeft: 6 }}>Post what you&apos;re looking for</span>
+        </button>
+
+        {filteredWanted.length === 0 ? (
+          <EmptyState
+            icon={<MdNotificationsActive size={44} color="#C7D2FE" />}
+            text={
+              q
+                ? `No alerts match "${query}"`
+                : 'No wanted alerts yet. Post one so sellers can find you.'
+            }
+          />
+        ) : (
+          <div style={styles.list}>
+            {filteredWanted.map((alert) => (
+              <div
+                key={alert.id}
+                style={{
+                  ...styles.card,
+                  opacity: alert.is_active ? 1 : 0.55,
+                }}
+              >
+                <MdNotificationsActive
+                  size={20}
+                  color={alert.is_active ? '#0504AA' : '#94A3B8'}
+                  style={{ marginRight: 8 }}
+                />
+                <div style={styles.cardContent}>
+                  <div style={styles.cardTitle}>{alert.title}</div>
+                  {alert.notes ? (
+                    <div style={styles.cardSubtitle}>{alert.notes}</div>
+                  ) : null}
+                  <div style={styles.cardMeta}>
+                    {alert.budget != null && `Budget: ${fmtNaira(alert.budget)} · `}
+                    {alert.is_active ? 'Active' : 'Paused'}
+                    {alert.created_at ? ` · ${fmtDate(alert.created_at)}` : ''}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleToggleWanted(alert.id)}
+                  style={styles.iconBtn}
+                  title={alert.is_active ? 'Pause alert' : 'Resume alert'}
+                >
+                  {alert.is_active ? (
+                    <MdToggleOn size={24} color="#0504AA" />
+                  ) : (
+                    <MdToggleOff size={24} color="#94A3B8" />
+                  )}
+                </button>
+                <button
+                  onClick={() => handleDeleteWanted(alert.id)}
+                  style={styles.iconBtn}
+                  title="Delete"
+                >
+                  <MdDeleteOutline size={20} color="#EF4444" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
     );
   };
 
@@ -599,6 +767,8 @@ function SavedPageContent() {
     switch (activeTab) {
       case 'Items':
         return renderItemsTab();
+      case 'Wanted':
+        return renderWantedTab();
       case 'Reservations':
         return renderReservationsTab();
       case 'Deliveries':
@@ -642,9 +812,7 @@ function SavedPageContent() {
             size={22}
             color="#0504AA"
             style={{
-              animation: isRefreshing
-                ? 'spin 0.8s linear infinite'
-                : 'none',
+              animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none',
             }}
           />
         </button>
@@ -678,6 +846,90 @@ function SavedPageContent() {
           renderActiveTab()
         )}
       </div>
+
+      {/* Create wanted alert sheet */}
+      {showCreateWanted && (
+        <div
+          style={styles.modalOverlay}
+          onClick={() => !creatingWanted && setShowCreateWanted(false)}
+        >
+          <div style={styles.sheet} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.sheetHeader}>
+              <h3 style={styles.sheetTitle}>Post a wanted alert</h3>
+              <button
+                onClick={() => setShowCreateWanted(false)}
+                style={styles.iconBtn}
+                disabled={creatingWanted}
+              >
+                <MdClose size={22} color="#666" />
+              </button>
+            </div>
+
+            <p style={styles.sheetHelper}>
+              Tell sellers what you&apos;re looking for. Your alert stays active
+              for 30 days.
+            </p>
+
+            <label style={styles.fieldLabel}>
+              What are you looking for?
+              <input
+                type="text"
+                value={newWantedTitle}
+                onChange={(e) => setNewWantedTitle(e.target.value)}
+                placeholder="e.g. Chicken Pie, iPhone 14, Standing fan"
+                style={styles.textInput}
+                maxLength={120}
+                autoFocus
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Details (optional)
+              <textarea
+                value={newWantedNotes}
+                onChange={(e) => setNewWantedNotes(e.target.value)}
+                placeholder="Any specific requirements?"
+                style={{ ...styles.textInput, minHeight: 72, resize: 'vertical' }}
+                maxLength={500}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Budget (optional, ₦)
+              <input
+                type="number"
+                inputMode="decimal"
+                value={newWantedBudget}
+                onChange={(e) => setNewWantedBudget(e.target.value)}
+                placeholder="e.g. 5000"
+                style={styles.textInput}
+                min={0}
+              />
+            </label>
+
+            {createWantedError && (
+              <div style={styles.inlineError}>{createWantedError}</div>
+            )}
+
+            <button
+              onClick={handleCreateWanted}
+              disabled={creatingWanted || !newWantedTitle.trim()}
+              style={{
+                ...styles.primaryBtn,
+                marginTop: 16,
+                opacity:
+                  creatingWanted || !newWantedTitle.trim() ? 0.5 : 1,
+                cursor:
+                  creatingWanted || !newWantedTitle.trim()
+                    ? 'not-allowed'
+                    : 'pointer',
+              }}
+            >
+              {creatingWanted ? 'Posting…' : 'Post alert'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
@@ -747,6 +999,15 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     marginLeft: 'auto',
   },
+  iconBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 4,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   searchWrap: {
     display: 'flex',
     alignItems: 'center',
@@ -802,6 +1063,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     color: '#888',
     margin: 0,
+    maxWidth: 300,
+    lineHeight: 1.5,
   },
   list: {
     display: 'flex',
@@ -816,6 +1079,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 12,
     border: '1px solid #EEF2FF',
     cursor: 'pointer',
+    transition: 'opacity 0.2s',
   },
   thumb: {
     width: 44,
@@ -849,12 +1113,32 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  cardMeta: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 3,
+  },
   cardTrailing: {
     fontSize: 15,
     fontWeight: 600,
     color: '#0504AA',
     marginLeft: 8,
     whiteSpace: 'nowrap',
+  },
+  createAlertBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    padding: '12px 20px',
+    marginBottom: 12,
+    backgroundColor: '#0504AA',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 12,
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   basketFooter: {
     marginTop: 12,
@@ -891,5 +1175,72 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
     width: '100%',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(15,23,42,0.5)',
+    display: 'flex',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    zIndex: 200,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '85vh',
+    overflowY: 'auto',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: '16px 20px 32px',
+    boxShadow: '0 -8px 24px rgba(0,0,0,0.12)',
+  },
+  sheetHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: 700,
+    color: '#1A1A1A',
+    margin: 0,
+  },
+  sheetHelper: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 1.5,
+    margin: '4px 0 16px',
+  },
+  fieldLabel: {
+    display: 'block',
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  textInput: {
+    display: 'block',
+    width: '100%',
+    marginTop: 6,
+    padding: '12px 14px',
+    fontSize: 14,
+    color: '#1A1A1A',
+    backgroundColor: '#fff',
+    border: '1px solid #E2E8F0',
+    borderRadius: 10,
+    outline: 'none',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit',
+  },
+  inlineError: {
+    padding: '10px 12px',
+    backgroundColor: '#FEE2E2',
+    border: '1px solid #FECACA',
+    borderRadius: 10,
+    color: '#B71C1C',
+    fontSize: 13,
   },
 };

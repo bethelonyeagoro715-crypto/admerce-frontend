@@ -1504,6 +1504,33 @@ class ApiService {
   const res = await this.axios.get('/shopper/saved');
   return res.data;
 }
+
+// ✅ Wanted alerts
+public async getWantedAlerts(): Promise<JsonArray> {
+  const res = await this.axios.get('/shopper/wanted');
+  return res.data;
+}
+
+public async createWantedAlert(payload: {
+  title: string;
+  notes?: string;
+  category?: string;
+  budget?: number;
+  lat?: number;
+  lng?: number;
+}): Promise<JsonObject> {
+  const res = await this.axios.post('/shopper/wanted', payload);
+  return res.data;
+}
+
+public async deleteWantedAlert(alertId: number): Promise<void> {
+  await this.axios.delete(`/shopper/wanted/${alertId}`);
+}
+
+public async toggleWantedAlert(alertId: number): Promise<JsonObject> {
+  const res = await this.axios.patch(`/shopper/wanted/${alertId}/toggle`);
+  return res.data;
+}
 }
 
 export default ApiService.getInstance();
