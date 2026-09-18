@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { MasonryGrid, getImageSize } from 'react-masonry-virtualized';
 import api from '../../../services/api';
 import {
   MdSearch,
@@ -44,17 +45,42 @@ const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
   `https://picsum.photos/800/400?random=${i * 10}`
 );
 
+// Reference column width. The library auto-fits columns based on container
+// width and minWidth, but we compute sizes relative to this baseline.
+const REF_WIDTH = 200;
+
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
   return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
 }
 
+// Compute a scaled height from an image's natural dimensions, clamped so
+// extreme aspect ratios (very tall panoramas) don't wreck the layout.
+async function computeImageHeight(
+  imageUrl: string | null,
+  bodyHeight: number,
+): Promise<{ width: number; height: number }> {
+  const fallbackHeight = REF_WIDTH * 1.1 + bodyHeight; // ~square fallback
+  if (!imageUrl) return { width: REF_WIDTH, height: fallbackHeight };
+
+  try {
+    const { width, height } = await getImageSize(imageUrl);
+    if (!width || !height) return { width: REF_WIDTH, height: fallbackHeight };
+
+    const scaled = (height / width) * REF_WIDTH;
+    // Clamp image portion between 0.6× and 1.75× the column width
+    const clamped = Math.max(REF_WIDTH * 0.6, Math.min(scaled, REF_WIDTH * 1.75));
+    return { width: REF_WIDTH, height: clamped + bodyHeight };
+  } catch {
+    return { width: REF_WIDTH, height: fallbackHeight };
+  }
+}
+
 // ─── Typed response shapes ─────────────────────────────────────────────────
 interface RecallCandidate {
   listing_id: string | number;
 }
-
 interface RankedItem {
   listing_id: string | number;
   image_url?: string;
@@ -62,7 +88,6 @@ interface RankedItem {
   price?: number;
   store_name?: string;
 }
-
 interface StoreLocation {
   store_id: string;
   store_name?: string;
@@ -70,7 +95,6 @@ interface StoreLocation {
   lat: number;
   lng: number;
 }
-
 interface ServiceItem {
   provider_id: string;
   business_name?: string;
@@ -86,7 +110,6 @@ interface Item {
   price: string;
   storeName: string;
 }
-
 interface Store {
   id: string;
   name: string;
@@ -94,7 +117,6 @@ interface Store {
   lat: number;
   lng: number;
 }
-
 interface Provider {
   id: string;
   name: string;
@@ -102,7 +124,7 @@ interface Provider {
   serviceCount: number;
 }
 
-// ─── Hoisted sub-components ────────────────────────────────────────────────
+// ─── Sub-components ────────────────────────────────────────────────────────
 function LocationBanner({
   locationDenied,
   onEnableLocation,
@@ -127,7 +149,9 @@ function LocationBanner({
         gap: 8,
       }}
     >
-      <span style={{ flex: 1 }}>📍 Location access was denied – showing default results.</span>
+      <span style={{ flex: 1 }}>
+        📍 Location access was denied – showing default results.
+      </span>
       <button
         onClick={onEnableLocation}
         style={{
@@ -147,74 +171,50 @@ function LocationBanner({
   );
 }
 
+// ─── Pinterest-style cards (image on top with natural aspect) ─────────────
 function ItemCard({
   item,
-  index,
   onPress,
   onVisualSearch,
 }: {
   item: Item;
-  index: number;
   onPress: (id: string) => void;
   onVisualSearch: (image: string | null) => void;
 }) {
-  const aspectRatio = 0.7 + (index % 3) * 0.15;
-  const height = 180 / aspectRatio;
-
   return (
     <div style={styles.card} onClick={() => onPress(item.id)}>
-      <div style={{ position: 'relative' }}>
+      <div style={styles.imageWrap}>
+        {item.image ? (
+          <img src={item.image} alt="" loading="lazy" style={styles.image} />
+        ) : (
+          <div style={styles.imagePlaceholder}>
+            <MdImage size={36} color="#9e9e9e" />
+          </div>
+        )}
+
+        {/* Visual search button */}
         <div
-          style={{
-            height: `${height}px`,
-            background: item.image ? `url(${item.image}) center/cover` : '#e0e0e0',
-            borderRadius: '16px 16px 0 0',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {!item.image && <MdImage size={32} color="#9e9e9e" />}
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 12,
-            right: 12,
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            backgroundColor: 'rgba(255,255,255,0.95)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-          }}
+          style={styles.visualSearchBtn}
           onClick={(e) => {
             e.stopPropagation();
             onVisualSearch(item.image);
           }}
           title="Visual Search"
         >
-          <MdSearch size={20} color="#0504AA" />
+          <MdSearch size={18} color="#0504AA" />
         </div>
       </div>
-      <div style={{ padding: '8px' }}>
-        <div
-          style={{
-            fontWeight: 700,
-            fontSize: 14,
-            lineHeight: 1.3,
-            marginBottom: 4,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
+
+      <div style={styles.cardBody}>
+        <div style={styles.cardTitle} title={item.title}>
           {item.title}
         </div>
-        <div style={{ color: '#0504AA', fontWeight: 600 }}>{item.price}</div>
+        <div style={styles.cardPrice}>{item.price}</div>
+        {item.storeName && (
+          <div style={styles.cardStore} title={item.storeName}>
+            {item.storeName}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -229,19 +229,21 @@ function StoreCard({
 }) {
   return (
     <div style={styles.card} onClick={() => onPress(store.id)}>
-      <div
-        style={{
-          height: 140,
-          background: store.image ? `url(${store.image}) center/cover` : '#e0e0e0',
-          borderRadius: '16px 16px 0 0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {!store.image && <MdStorefront size={32} color="#9e9e9e" />}
+      <div style={styles.imageWrap}>
+        {store.image ? (
+          <img src={store.image} alt="" loading="lazy" style={styles.image} />
+        ) : (
+          <div style={styles.imagePlaceholder}>
+            <MdStorefront size={36} color="#9e9e9e" />
+          </div>
+        )}
       </div>
-      <div style={{ padding: '8px', fontWeight: 700, fontSize: 14 }}>{store.name}</div>
+      <div style={styles.cardBody}>
+        <div style={styles.cardTitle} title={store.name}>
+          {store.name}
+        </div>
+        <div style={styles.cardStore}>Store</div>
+      </div>
     </div>
   );
 }
@@ -253,35 +255,31 @@ function ProviderCard({
   provider: Provider;
   onPress: (id: string, name: string) => void;
 }) {
+  const initials = (provider.name || '?')[0].toUpperCase();
   return (
-    <div style={styles.card} onClick={() => onPress(provider.id, provider.name)}>
-      <div
-        style={{
-          height: 140,
-          background: provider.image
-            ? `url(${provider.image}) center/cover`
-            : 'linear-gradient(135deg, #7B1FA2, #9C27B0)',
-          borderRadius: '16px 16px 0 0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        {!provider.image && <MdBusiness size={40} color="#fff" />}
+    <div
+      style={styles.card}
+      onClick={() => onPress(provider.id, provider.name)}
+    >
+      <div style={styles.imageWrap}>
+        {provider.image ? (
+          <img
+            src={provider.image}
+            alt=""
+            loading="lazy"
+            style={styles.image}
+          />
+        ) : (
+          <div style={styles.providerPlaceholder}>
+            <span style={styles.providerInitials}>{initials}</span>
+          </div>
+        )}
       </div>
-      <div style={{ padding: '8px' }}>
-        <div
-          style={{
-            fontWeight: 700,
-            fontSize: 14,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
+      <div style={styles.cardBody}>
+        <div style={styles.cardTitle} title={provider.name}>
           {provider.name}
         </div>
-        <div style={{ fontSize: 12, color: '#666' }}>
+        <div style={styles.cardStore}>
           {provider.serviceCount} service{provider.serviceCount > 1 ? 's' : ''}
         </div>
       </div>
@@ -289,7 +287,7 @@ function ProviderCard({
   );
 }
 
-// ─── Main page component ───────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────────────────
 export default function ShopperHomePage() {
   const router = useRouter();
 
@@ -305,7 +303,8 @@ export default function ShopperHomePage() {
   const [loadingStores, setLoadingStores] = useState(true);
   const [loadingServices, setLoadingServices] = useState(true);
 
-  const [cachedPosition, setCachedPosition] = useState<GeolocationPosition | null>(null);
+  const [cachedPosition, setCachedPosition] =
+    useState<GeolocationPosition | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
 
   const [showFilter, setShowFilter] = useState(false);
@@ -314,12 +313,11 @@ export default function ShopperHomePage() {
   const noteworthyTimer = useRef<NodeJS.Timeout | null>(null);
   const sessionItemsShown = useRef<string[]>([]);
 
-  // Touch tracking for pull-to-refresh and swipe
   const touchStartY = useRef<number | null>(null);
   const touchStartX = useRef<number | null>(null);
   const swipeTriggered = useRef(false);
 
-  // ─── Location helpers ──────────────────────────────────────────────────
+  // ─── Location ───────────────────────────────────────────────────────
   const getCurrentLocation = async (): Promise<GeolocationPosition | null> => {
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
@@ -337,7 +335,7 @@ export default function ShopperHomePage() {
           setLocationDenied(true);
           resolve(null);
         },
-        { timeout: 10000, maximumAge: 0 }
+        { timeout: 10000, maximumAge: 0 },
       );
     });
   };
@@ -355,7 +353,7 @@ export default function ShopperHomePage() {
       ]);
     } else {
       alert(
-        'Location access was denied. Please enable it in your browser settings (click the lock icon in the address bar) and try again.'
+        'Location access was denied. Please enable it in your browser settings (click the lock icon in the address bar) and try again.',
       );
     }
   };
@@ -364,7 +362,7 @@ export default function ShopperHomePage() {
     getCurrentLocation().then(setCachedPosition);
   }, []);
 
-  // ─── New & Noteworthy rotation ─────────────────────────────────────────
+  // ─── New & Noteworthy rotation ───────────────────────────────────────
   useEffect(() => {
     noteworthyTimer.current = setInterval(() => {
       setNoteworthyIndex((prev) => (prev + 1) % noteworthyImages.length);
@@ -374,7 +372,7 @@ export default function ShopperHomePage() {
     };
   }, []);
 
-  // ─── Feed loaders ──────────────────────────────────────────────────────
+  // ─── Feed loaders ─────────────────────────────────────────────────────
   const loadItems = async (lat: number, lng: number, loadMore = false) => {
     if (!loadMore) {
       setLoadingItems(true);
@@ -390,7 +388,9 @@ export default function ShopperHomePage() {
         collab: 0.1,
       });
 
-      const candidates: RecallCandidate[] = Array.isArray(recallData.candidates)
+      const candidates: RecallCandidate[] = Array.isArray(
+        recallData.candidates,
+      )
         ? (recallData.candidates as RecallCandidate[])
         : [];
       if (!candidates.length) {
@@ -399,13 +399,24 @@ export default function ShopperHomePage() {
       }
 
       const candidateIds = candidates.map((c) => c.listing_id.toString());
-      const rankData = await api.rankFeed(lat, lng, candidateIds, sessionItemsShown.current);
+      const rankData = await api.rankFeed(
+        lat,
+        lng,
+        candidateIds,
+        sessionItemsShown.current,
+      );
       const feed: RankedItem[] = Array.isArray(rankData?.feed)
         ? (rankData.feed as RankedItem[])
         : [];
 
       feed.forEach((item, index) => {
-        api.logSeaiEvent('impression', item.listing_id.toString(), lat, lng, index);
+        api.logSeaiEvent(
+          'impression',
+          item.listing_id.toString(),
+          lat,
+          lng,
+          index,
+        );
       });
 
       const newItems: Item[] = feed.map((item) => ({
@@ -431,7 +442,8 @@ export default function ShopperHomePage() {
 
   const loadStores = async (_lat: number, _lng: number) => {
     try {
-      const locations = (await api.getStoreLocations()) as unknown as StoreLocation[];
+      const locations =
+        (await api.getStoreLocations()) as unknown as StoreLocation[];
       setStores(
         locations.map((loc) => ({
           id: loc.store_id,
@@ -439,7 +451,7 @@ export default function ShopperHomePage() {
           image: resolveImageUrl(loc.image_url),
           lat: loc.lat,
           lng: loc.lng,
-        }))
+        })),
       );
     } catch {
       // ignore
@@ -450,7 +462,8 @@ export default function ShopperHomePage() {
 
   const loadServices = async (_lat: number, _lng: number) => {
     try {
-      const services = (await api.listServices()) as unknown as ServiceItem[];
+      const services =
+        (await api.listServices()) as unknown as ServiceItem[];
       const providerMap = new Map<string, Provider>();
 
       for (const s of services) {
@@ -459,7 +472,9 @@ export default function ShopperHomePage() {
           providerMap.set(s.provider_id, {
             id: s.provider_id,
             name: s.business_name ?? s.username ?? 'Service Provider',
-            image: resolveImageUrl(s.business_image_url) ?? resolveImageUrl(s.avatar_url),
+            image:
+              resolveImageUrl(s.business_image_url) ??
+              resolveImageUrl(s.avatar_url),
             serviceCount: 0,
           });
         }
@@ -484,7 +499,6 @@ export default function ShopperHomePage() {
     }
   }, [cachedPosition]);
 
-  // ─── Refresh handler (returns Promise) ────────────────────────────────
   const onRefresh = async (): Promise<void> => {
     const pos = await getCurrentLocation();
     const lat = pos?.coords.latitude ?? 5.5103;
@@ -496,7 +510,7 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ─── Touch handlers (pull-to-refresh + swipe tabs) ───────────────────
+  // ─── Touch handlers ─────────────────────────────────────────────────
   const handleTouchStart = (e: React.TouchEvent) => {
     if (window.scrollY === 0) {
       touchStartY.current = e.touches[0].clientY;
@@ -506,7 +520,6 @@ export default function ShopperHomePage() {
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    // Pull-to-refresh (vertical)
     if (touchStartY.current !== null) {
       const deltaY = e.touches[0].clientY - touchStartY.current;
       if (deltaY > 80 && !isRefreshing) {
@@ -517,12 +530,12 @@ export default function ShopperHomePage() {
       }
     }
 
-    // Swipe-to-change-tabs (horizontal)
     if (touchStartX.current !== null && !swipeTriggered.current) {
       const deltaX = e.touches[0].clientX - touchStartX.current;
-      const deltaY = touchStartY.current !== null
-        ? e.touches[0].clientY - touchStartY.current
-        : 0;
+      const deltaY =
+        touchStartY.current !== null
+          ? e.touches[0].clientY - touchStartY.current
+          : 0;
 
       if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
         swipeTriggered.current = true;
@@ -531,7 +544,6 @@ export default function ShopperHomePage() {
         } else {
           setCurrentTab((prev) => Math.max(prev - 1, 0));
         }
-        // Reset to avoid re-triggering
         touchStartX.current = null;
         touchStartY.current = null;
       }
@@ -544,7 +556,7 @@ export default function ShopperHomePage() {
     swipeTriggered.current = false;
   };
 
-  // ─── Navigation helpers ────────────────────────────────────────────────
+  // ─── Navigation ─────────────────────────────────────────────────────
   const openSearch = () => router.push('/seai-search');
   const openBasket = () => router.push('/basket');
   const openNotifications = () => router.push('/notifications');
@@ -561,16 +573,32 @@ export default function ShopperHomePage() {
   };
   const handleStorePress = (id: string) => router.push(`/store-detail/${id}`);
   const handleProviderPress = (id: string, name: string) =>
-    router.push(`/provider-services/${id}?name=${encodeURIComponent(name)}`);
+    router.push(`/providers/${id}?name=${encodeURIComponent(name)}`);
 
-  // ─── Render ────────────────────────────────────────────────────────────
+  // ─── Size functions for the masonry library ─────────────────────────
+  const getItemCardSize = useCallback(
+    async (item: Item) => computeImageHeight(item.image, 76),
+    [],
+  );
+  const getStoreCardSize = useCallback(
+    async (store: Store) => computeImageHeight(store.image, 56),
+    [],
+  );
+  const getProviderCardSize = useCallback(
+    async (provider: Provider) => computeImageHeight(provider.image, 60),
+    [],
+  );
+
+  // ─── Render ─────────────────────────────────────────────────────────
   return (
     <div style={styles.container}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* App Bar */}
       <div style={styles.appBar}>
-        <div style={{ fontWeight: 600, color: '#0504AA', fontSize: 18 }}>Admerce</div>
+        <div style={{ fontWeight: 600, color: '#0504AA', fontSize: 18 }}>
+          Admerce
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button style={styles.iconBtn} onClick={openSearch} title="Search">
             <MdSearch size={24} color="#0504AA" />
@@ -578,7 +606,11 @@ export default function ShopperHomePage() {
           <button style={styles.iconBtn} onClick={openBasket} title="Basket">
             <MdShoppingBasket size={24} color="#0504AA" />
           </button>
-          <button style={styles.iconBtn} onClick={openNotifications} title="Notifications">
+          <button
+            style={styles.iconBtn}
+            onClick={openNotifications}
+            title="Notifications"
+          >
             <MdNotificationsNone size={24} color="#0504AA" />
           </button>
           <button style={styles.iconBtn} onClick={openFilter} title="Filters">
@@ -587,7 +619,6 @@ export default function ShopperHomePage() {
         </div>
       </div>
 
-      {/* Location denied banner */}
       <LocationBanner
         locationDenied={locationDenied}
         onEnableLocation={requestLocationManually}
@@ -598,11 +629,23 @@ export default function ShopperHomePage() {
         {!isNoteworthyCollapsed ? (
           <>
             <div style={{ padding: '0 16px', marginBottom: 4 }}>
-              <div style={{ borderRadius: 20, overflow: 'hidden', position: 'relative', height: 180 }}>
+              <div
+                style={{
+                  borderRadius: 20,
+                  overflow: 'hidden',
+                  position: 'relative',
+                  height: 180,
+                }}
+              >
                 <img
                   src={noteworthyImages[noteworthyIndex]}
                   alt="Noteworthy"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.8s' }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    transition: 'opacity 0.8s',
+                  }}
                 />
                 <div
                   style={{
@@ -622,7 +665,12 @@ export default function ShopperHomePage() {
             </div>
             <div style={{ textAlign: 'right', paddingRight: 16 }}>
               <button
-                style={{ background: 'none', border: 'none', color: '#0504AA', cursor: 'pointer' }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#0504AA',
+                  cursor: 'pointer',
+                }}
                 onClick={() => setIsNoteworthyCollapsed(true)}
               >
                 <MdExpandLess size={24} />
@@ -632,7 +680,12 @@ export default function ShopperHomePage() {
         ) : (
           <div style={{ textAlign: 'right', paddingRight: 16 }}>
             <button
-              style={{ background: 'none', border: 'none', color: '#0504AA', cursor: 'pointer' }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#0504AA',
+                cursor: 'pointer',
+              }}
               onClick={() => setIsNoteworthyCollapsed(false)}
             >
               <MdExpandMore size={24} />
@@ -641,8 +694,15 @@ export default function ShopperHomePage() {
         )}
       </div>
 
-      {/* Pill Tabs (no refresh button) */}
-      <div style={{ display: 'flex', justifyContent: 'space-evenly', alignItems: 'center', marginBottom: 12 }}>
+      {/* Pill Tabs */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-evenly',
+          alignItems: 'center',
+          marginBottom: 12,
+        }}
+      >
         {['BUYTEMS', 'SHOPNSTORE', 'SERVOOKS'].map((tab, i) => (
           <button
             key={i}
@@ -650,7 +710,10 @@ export default function ShopperHomePage() {
             style={{
               padding: '8px 20px',
               borderRadius: 20,
-              border: currentTab === i ? '1px solid #0504AA' : '1px solid rgba(26,26,26,0.3)',
+              border:
+                currentTab === i
+                  ? '1px solid #0504AA'
+                  : '1px solid rgba(26,26,26,0.3)',
               background: currentTab === i ? '#0504AA' : 'transparent',
               color: currentTab === i ? '#fff' : '#1A1A1A',
               fontWeight: 600,
@@ -665,9 +728,9 @@ export default function ShopperHomePage() {
         ))}
       </div>
 
-      {/* Tab Content (with pull-to-refresh and swipeable tabs) */}
+      {/* Tab content — one masonry grid per tab */}
       <div
-        style={{ flex: 1, overflowY: 'auto', padding: '0 12px', position: 'relative' }}
+        style={styles.tabContent}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -681,22 +744,23 @@ export default function ShopperHomePage() {
         {currentTab === 0 && (
           <>
             {loadingItems ? (
-              <div style={{ textAlign: 'center', padding: 40 }}>Loading items...</div>
+              <div style={styles.centeredMsg}>Loading items…</div>
             ) : items.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40 }}>No items yet.</div>
+              <div style={styles.centeredMsg}>No items yet.</div>
             ) : (
-              <div style={{ columns: '2 1px', columnGap: 12 }}>
-                {items.map((item, idx) => (
-                  <div key={item.id} style={{ breakInside: 'avoid', marginBottom: 12 }}>
-                    <ItemCard
-                      item={item}
-                      index={idx}
-                      onPress={handleItemPress}
-                      onVisualSearch={handleVisualSearch}
-                    />
-                  </div>
-                ))}
-              </div>
+              <MasonryGrid
+                items={items}
+                renderItem={(item: Item) => (
+                  <ItemCard
+                    item={item}
+                    onPress={handleItemPress}
+                    onVisualSearch={handleVisualSearch}
+                  />
+                )}
+                getItemSize={getItemCardSize}
+                gap={10}
+                minWidth={160}
+              />
             )}
           </>
         )}
@@ -704,17 +768,19 @@ export default function ShopperHomePage() {
         {currentTab === 1 && (
           <>
             {loadingStores ? (
-              <div style={{ textAlign: 'center', padding: 40 }}>Loading stores...</div>
+              <div style={styles.centeredMsg}>Loading stores…</div>
             ) : stores.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40 }}>No stores yet.</div>
+              <div style={styles.centeredMsg}>No stores yet.</div>
             ) : (
-              <div style={{ columns: '2 1px', columnGap: 12 }}>
-                {stores.map((store) => (
-                  <div key={store.id} style={{ breakInside: 'avoid', marginBottom: 12 }}>
-                    <StoreCard store={store} onPress={handleStorePress} />
-                  </div>
-                ))}
-              </div>
+              <MasonryGrid
+                items={stores}
+                renderItem={(store: Store) => (
+                  <StoreCard store={store} onPress={handleStorePress} />
+                )}
+                getItemSize={getStoreCardSize}
+                gap={10}
+                minWidth={160}
+              />
             )}
           </>
         )}
@@ -722,17 +788,22 @@ export default function ShopperHomePage() {
         {currentTab === 2 && (
           <>
             {loadingServices ? (
-              <div style={{ textAlign: 'center', padding: 40 }}>Loading service providers...</div>
+              <div style={styles.centeredMsg}>Loading service providers…</div>
             ) : providers.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40 }}>No service providers yet.</div>
+              <div style={styles.centeredMsg}>No service providers yet.</div>
             ) : (
-              <div style={{ columns: '2 1px', columnGap: 12 }}>
-                {providers.map((provider) => (
-                  <div key={provider.id} style={{ breakInside: 'avoid', marginBottom: 12 }}>
-                    <ProviderCard provider={provider} onPress={handleProviderPress} />
-                  </div>
-                ))}
-              </div>
+              <MasonryGrid
+                items={providers}
+                renderItem={(provider: Provider) => (
+                  <ProviderCard
+                    provider={provider}
+                    onPress={handleProviderPress}
+                  />
+                )}
+                getItemSize={getProviderCardSize}
+                gap={10}
+                minWidth={160}
+              />
             )}
           </>
         )}
@@ -741,14 +812,30 @@ export default function ShopperHomePage() {
       {/* Filter Modal */}
       {showFilter && (
         <div style={styles.modalOverlay} onClick={closeFilter}>
-          <div style={styles.filterSheet} onClick={(e) => e.stopPropagation()}>
+          <div
+            style={styles.filterSheet}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div
-              style={{ width: 40, height: 4, background: 'rgba(0,0,0,0.2)', borderRadius: 2, margin: '0 auto 16px' }}
+              style={{
+                width: 40,
+                height: 4,
+                background: 'rgba(0,0,0,0.2)',
+                borderRadius: 2,
+                margin: '0 auto 16px',
+              }}
             />
             <h3 style={{ fontSize: 18, fontWeight: 700 }}>
               {currentTab === 2 ? 'Filter Services' : 'Filter Items'}
             </h3>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
               {(currentTab === 2
                 ? serviceCategories.map((c) => `${c.emoji} ${c.name}`)
                 : kProductCategories
@@ -772,9 +859,22 @@ export default function ShopperHomePage() {
             {currentTab !== 2 && (
               <div style={{ marginTop: 16 }}>
                 <div>Max Price: ₦--</div>
-                <input type="range" min="1000" max="200000" step="1000" style={{ width: '100%' }} disabled />
+                <input
+                  type="range"
+                  min="1000"
+                  max="200000"
+                  step="1000"
+                  style={{ width: '100%' }}
+                  disabled
+                />
                 <div>Distance: -- km</div>
-                <input type="range" min="1" max="50" style={{ width: '100%' }} disabled />
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  style={{ width: '100%' }}
+                  disabled
+                />
               </div>
             )}
             <button
@@ -820,17 +920,103 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: '4px',
+    padding: 4,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  tabContent: {
+    flex: 1,
+    minHeight: 0,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  centeredMsg: {
+    textAlign: 'center',
+    padding: 40,
+    color: '#888',
+  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    boxShadow: '0 4px 8px rgba(0,0,0,0.06)',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
     overflow: 'hidden',
     cursor: 'pointer',
+    width: '100%',
+  },
+  imageWrap: {
+    position: 'relative',
+    width: '100%',
+    backgroundColor: '#f0f0f0',
+  },
+  image: {
+    display: 'block',
+    width: '100%',
+    height: 'auto',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    aspectRatio: '1 / 1',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e0e0e0',
+  },
+  providerPlaceholder: {
+    width: '100%',
+    aspectRatio: '1 / 1',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'linear-gradient(135deg, #7B1FA2, #9C27B0)',
+  },
+  providerInitials: {
+    fontSize: 48,
+    fontWeight: 700,
+    color: '#fff',
+  },
+  visualSearchBtn: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    width: 32,
+    height: 32,
+    borderRadius: '50%',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+  },
+  cardBody: {
+    padding: '8px 10px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  cardTitle: {
+    fontWeight: 600,
+    fontSize: 13,
+    lineHeight: 1.3,
+    color: '#0F172A',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+  },
+  cardPrice: {
+    color: '#0504AA',
+    fontWeight: 700,
+    fontSize: 13,
+  },
+  cardStore: {
+    fontSize: 11,
+    color: '#64748B',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   modalOverlay: {
     position: 'fixed',
@@ -858,7 +1044,7 @@ const styles: Record<string, React.CSSProperties> = {
     right: 0,
     display: 'flex',
     justifyContent: 'center',
-    padding: '8px',
+    padding: 8,
     zIndex: 5,
     background: 'rgba(248,249,250,0.9)',
   },
