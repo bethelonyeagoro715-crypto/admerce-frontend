@@ -6,7 +6,6 @@ import api from '../../../services/api';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
 import {
   MdRefresh,
-  MdNotificationsActive,
   MdEventNote,
   MdLocalShipping,
   MdBuild,
@@ -16,20 +15,18 @@ import {
   MdInventory,
   MdShoppingBasket,
   MdSearch,
+  MdImage,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
-interface SavedItem {
-  id: string;
-  name: string;
-  price: string;
-  store: string;
-}
-
-interface WantedAlert {
-  id: string;
-  name: string;
-  notes: string;
+interface SavedListing {
+  listing_id: string;
+  title?: string | null;
+  price?: number | string | null;
+  image_url?: string | null;
+  store_id?: string | null;
+  store_name?: string | null;
+  saved_at?: string | null;
 }
 
 interface WalletOrder {
@@ -72,9 +69,9 @@ interface BasketResponse {
   [key: string]: unknown;
 }
 
+// ✅ Wanted tab removed — no backend table or endpoint exists yet.
 const TABS = [
   'Items',
-  'Wanted',
   'Reservations',
   'Deliveries',
   'Bookings',
@@ -99,7 +96,7 @@ function shortId(id: string | undefined): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
 
-function fmtDate(iso: string | undefined): string {
+function fmtDate(iso: string | undefined | null): string {
   if (!iso) return '—';
   try {
     return new Date(iso).toLocaleDateString('en-GB', {
@@ -108,8 +105,19 @@ function fmtDate(iso: string | undefined): string {
       year: 'numeric',
     });
   } catch {
-    return iso;
+    return iso ?? '—';
   }
+}
+
+function resolveImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  const base =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_API_BASE ||
+    '';
+  if (!base) return url;
+  return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
 function SavedPageContent() {
@@ -118,8 +126,6 @@ function SavedPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // ✅ Initial tab comes from ?tab=Bookings (or any TABS value).
-  //    Defaults to Items.
   const initialTab: Tab = isValidTab(searchParams.get('tab'))
     ? (searchParams.get('tab') as Tab)
     : 'Items';
@@ -130,8 +136,7 @@ function SavedPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
-  const [savedItems, setSavedItems] = useState<SavedItem[]>([]);
-  const [wantedAlerts, setWantedAlerts] = useState<WantedAlert[]>([]);
+  const [savedItems, setSavedItems] = useState<SavedListing[]>([]);
   const [reservations, setReservations] = useState<WalletOrder[]>([]);
   const [deliveries, setDeliveries] = useState<WalletOrder[]>([]);
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
@@ -139,8 +144,7 @@ function SavedPageContent() {
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
 
-  // ✅ Keep the URL in sync when the user switches tabs — so the deep link
-  //    stays shareable and browser back/forward works.
+  // Sync URL with tab
   useEffect(() => {
     const current = searchParams.get('tab');
     if (current !== activeTab) {
@@ -154,15 +158,8 @@ function SavedPageContent() {
   const loadAllData = useCallback(async () => {
     setError(null);
 
-    // Placeholder data — real endpoints not built yet
-    setSavedItems([
-      { id: '1', name: 'Meat Pie', price: '₦200', store: 'Norman Eateries' },
-    ]);
-    setWantedAlerts([
-      { id: '1', name: 'Chicken Pie', notes: 'Looking for good quality' },
-    ]);
-
     const results = await Promise.allSettled([
+      api.getSavedItems(),
       api.getWalletOrders(['locked', 'accepted']),
       api.getWalletOrders(['dispatched']),
       api.getServiceBookings(),
@@ -171,12 +168,20 @@ function SavedPageContent() {
     ]);
 
     const [
+      savedResult,
       reservationsResult,
       deliveriesResult,
       bookingsResult,
       basketResult,
       historyResult,
     ] = results;
+
+    if (savedResult.status === 'fulfilled') {
+      const raw = savedResult.value;
+      setSavedItems(Array.isArray(raw) ? (raw as SavedListing[]) : []);
+    } else {
+      setSavedItems([]);
+    }
 
     if (reservationsResult.status === 'fulfilled') {
       const raw = reservationsResult.value;
@@ -278,6 +283,10 @@ function SavedPageContent() {
     );
   };
 
+  const filteredSaved = useMemo(
+    () => applyFilter(savedItems as unknown as Record<string, unknown>[], ['title', 'store_name']) as unknown as SavedListing[],
+    [savedItems, q],
+  );
   const filteredReservations = useMemo(
     () => applyFilter(reservations, ['order_id', 'store_name', 'status']),
     [reservations, q],
@@ -287,7 +296,13 @@ function SavedPageContent() {
     [deliveries, q],
   );
   const filteredBookings = useMemo(
-    () => applyFilter(bookings, ['service_title', 'title', 'status', 'booking_id']),
+    () =>
+      applyFilter(bookings, [
+        'service_title',
+        'title',
+        'status',
+        'booking_id',
+      ]),
     [bookings, q],
   );
   const filteredHistory = useMemo(
@@ -295,57 +310,63 @@ function SavedPageContent() {
     [history, q],
   );
 
+  // ─── Tab renderers ────────────────────────────────────────────
   const renderItemsTab = () => {
-    if (savedItems.length === 0) {
+    if (filteredSaved.length === 0) {
       return (
         <EmptyState
           icon={<MdInventory size={44} color="#C7D2FE" />}
-          text="No saved items yet."
+          text={
+            q ? `No saved items match "${query}"` : 'No saved items yet.'
+          }
         />
       );
     }
-    return (
-      <div style={styles.list}>
-        {savedItems.map((item) => (
-          <div
-            key={item.id}
-            style={styles.card}
-            onClick={() => router.push(`/item-detail/${item.id}`)}
-            role="button"
-            tabIndex={0}
-          >
-            <div style={styles.cardContent}>
-              <div style={styles.cardTitle}>{item.name}</div>
-              <div style={styles.cardSubtitle}>{item.store}</div>
-            </div>
-            <div style={styles.cardTrailing}>{item.price}</div>
-            <MdChevronRight size={16} color="#999" />
-          </div>
-        ))}
-      </div>
-    );
-  };
 
-  const renderWantedTab = () => {
-    if (wantedAlerts.length === 0) {
-      return (
-        <EmptyState
-          icon={<MdNotificationsActive size={44} color="#C7D2FE" />}
-          text="No wanted alerts."
-        />
-      );
-    }
     return (
       <div style={styles.list}>
-        {wantedAlerts.map((alert) => (
-          <div key={alert.id} style={styles.card}>
-            <div style={styles.cardContent}>
-              <div style={styles.cardTitle}>{alert.name}</div>
-              <div style={styles.cardSubtitle}>{alert.notes}</div>
+        {filteredSaved.map((item) => {
+          const image = resolveImageUrl(item.image_url);
+          return (
+            <div
+              key={item.listing_id}
+              style={styles.card}
+              onClick={() => router.push(`/item-detail/${item.listing_id}`)}
+              role="button"
+              tabIndex={0}
+            >
+              <div style={styles.thumb}>
+                {image ? (
+                  <img
+                    src={image}
+                    alt=""
+                    loading="lazy"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                ) : (
+                  <MdImage size={22} color="#94A3B8" />
+                )}
+              </div>
+              <div style={styles.cardContent}>
+                <div style={styles.cardTitle}>
+                  {item.title || 'Listing'}
+                </div>
+                <div style={styles.cardSubtitle}>
+                  {item.store_name || 'Store'}
+                  {item.saved_at ? ` · Saved ${fmtDate(item.saved_at)}` : ''}
+                </div>
+              </div>
+              <div style={styles.cardTrailing}>
+                {fmtNaira(item.price)}
+              </div>
+              <MdChevronRight size={16} color="#999" />
             </div>
-            <MdNotificationsActive size={20} color="#0504AA" />
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -379,7 +400,8 @@ function SavedPageContent() {
                 Order #{shortId(order.order_id)}
               </div>
               <div style={styles.cardSubtitle}>
-                {fmtNaira(order.total_amount)} · {order.store_name || 'Pickup'}
+                {fmtNaira(order.total_amount)} ·{' '}
+                {order.store_name || 'Pickup'}
               </div>
             </div>
             <MdChevronRight size={16} color="#999" />
@@ -438,9 +460,7 @@ function SavedPageContent() {
       return (
         <EmptyState
           icon={<MdBuild size={44} color="#C7D2FE" />}
-          text={
-            q ? `No bookings match "${query}"` : 'No service bookings.'
-          }
+          text={q ? `No bookings match "${query}"` : 'No service bookings.'}
         />
       );
     }
@@ -579,8 +599,6 @@ function SavedPageContent() {
     switch (activeTab) {
       case 'Items':
         return renderItemsTab();
-      case 'Wanted':
-        return renderWantedTab();
       case 'Reservations':
         return renderReservationsTab();
       case 'Deliveries':
@@ -724,7 +742,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: '8px',
+    padding: 8,
     display: 'flex',
     alignItems: 'center',
     marginLeft: 'auto',
@@ -792,12 +810,24 @@ const styles: Record<string, React.CSSProperties> = {
   card: {
     display: 'flex',
     alignItems: 'center',
-    padding: '12px',
+    padding: 12,
     marginBottom: 10,
     backgroundColor: '#fff',
     borderRadius: 12,
     border: '1px solid #EEF2FF',
     cursor: 'pointer',
+  },
+  thumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    marginRight: 10,
+    flexShrink: 0,
   },
   cardContent: {
     flex: 1,

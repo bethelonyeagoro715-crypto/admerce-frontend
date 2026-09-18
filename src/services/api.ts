@@ -1499,6 +1499,11 @@ class ApiService {
     const res = await this.axios.post(path, data);
     return res.data;
   }
+
+  public async getSavedItems(): Promise<JsonArray> {
+  const res = await this.axios.get('/shopper/saved');
+  return res.data;
+}
 }
 
 export default ApiService.getInstance();
