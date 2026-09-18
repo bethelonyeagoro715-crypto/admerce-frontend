@@ -283,6 +283,7 @@ function SavedPageContent() {
     setIsRefreshing(false);
   };
 
+  // ─── Navigation ───────────────────────────────────────────────
   const openReservation = (order: WalletOrder) => {
     router.push(
       `/reservation-confirmed?order_id=${order.order_id}&pickup_time=${encodeURIComponent(
@@ -293,10 +294,15 @@ function SavedPageContent() {
 
   const openDelivery = (order: WalletOrder) => openReservation(order);
 
+  // ✅ Route to the same screen the fresh-booking flow uses. We only pass
+  //    the booking_id — the confirmation page enriches the rest from the API.
   const openBooking = (booking: ServiceBooking) => {
     if (booking.booking_id) {
-      router.push(`/shopper/bookings/${booking.booking_id}`);
+      router.push(
+        `/booking-confirmed?booking_id=${encodeURIComponent(booking.booking_id)}`,
+      );
     } else if (booking.service_id) {
+      // Fallback for old rows that predate booking_id support
       router.push(`/service-detail/${booking.service_id}`);
     }
   };
@@ -305,18 +311,23 @@ function SavedPageContent() {
     router.push(`/shopper/orders/receipt/${order.order_id}`);
   };
 
-  // ── Wanted actions ─────────────────────────────────────────────
+  // ─── Wanted actions ────────────────────────────────────────────
   const handleCreateWanted = async () => {
     const title = newWantedTitle.trim();
     if (!title) {
-      setCreateWantedError('Please enter what you\'re looking for.');
+      setCreateWantedError("Please enter what you're looking for.");
       return;
     }
     setCreatingWanted(true);
     setCreateWantedError(null);
     try {
-      const budgetNum = newWantedBudget.trim() ? Number(newWantedBudget) : undefined;
-      if (budgetNum !== undefined && (!Number.isFinite(budgetNum) || budgetNum < 0)) {
+      const budgetNum = newWantedBudget.trim()
+        ? Number(newWantedBudget)
+        : undefined;
+      if (
+        budgetNum !== undefined &&
+        (!Number.isFinite(budgetNum) || budgetNum < 0)
+      ) {
         setCreateWantedError('Budget must be a positive number.');
         setCreatingWanted(false);
         return;
@@ -332,7 +343,8 @@ function SavedPageContent() {
       setNewWantedBudget('');
       await loadAllData();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not create alert.';
+      const msg =
+        err instanceof Error ? err.message : 'Could not create alert.';
       setCreateWantedError(msg);
     } finally {
       setCreatingWanted(false);
@@ -354,7 +366,9 @@ function SavedPageContent() {
       const res = (await api.toggleWantedAlert(id)) as { is_active?: boolean };
       setWantedAlerts((prev) =>
         prev.map((a) =>
-          a.id === id ? { ...a, is_active: res.is_active ?? !a.is_active } : a,
+          a.id === id
+            ? { ...a, is_active: res.is_active ?? !a.is_active }
+            : a,
         ),
       );
     } catch (err) {
@@ -362,6 +376,7 @@ function SavedPageContent() {
     }
   };
 
+  // ─── Filtering ─────────────────────────────────────────────────
   const q = query.trim().toLowerCase();
 
   const applyFilter = <T extends Record<string, unknown>>(
@@ -414,7 +429,7 @@ function SavedPageContent() {
     [history, q],
   );
 
-  // ─── Tab renderers ────────────────────────────────────────────
+  // ─── Tab renderers ─────────────────────────────────────────────
   const renderItemsTab = () => {
     if (filteredSaved.length === 0) {
       return (
@@ -443,7 +458,11 @@ function SavedPageContent() {
                     src={image}
                     alt=""
                     loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
                   />
                 ) : (
                   <MdImage size={22} color="#94A3B8" />
@@ -468,13 +487,14 @@ function SavedPageContent() {
   const renderWantedTab = () => {
     return (
       <>
-        {/* Create button at the top */}
         <button
           onClick={() => setShowCreateWanted(true)}
           style={styles.createAlertBtn}
         >
           <MdAdd size={20} color="#fff" />
-          <span style={{ marginLeft: 6 }}>Post what you&apos;re looking for</span>
+          <span style={{ marginLeft: 6 }}>
+            Post what you&apos;re looking for
+          </span>
         </button>
 
         {filteredWanted.length === 0 ? (
@@ -507,7 +527,8 @@ function SavedPageContent() {
                     <div style={styles.cardSubtitle}>{alert.notes}</div>
                   ) : null}
                   <div style={styles.cardMeta}>
-                    {alert.budget != null && `Budget: ${fmtNaira(alert.budget)} · `}
+                    {alert.budget != null &&
+                      `Budget: ${fmtNaira(alert.budget)} · `}
                     {alert.is_active ? 'Active' : 'Paused'}
                     {alert.created_at ? ` · ${fmtDate(alert.created_at)}` : ''}
                   </div>
@@ -866,8 +887,8 @@ function SavedPageContent() {
             </div>
 
             <p style={styles.sheetHelper}>
-              Tell sellers what you&apos;re looking for. Your alert stays active
-              for 30 days.
+              Tell sellers what you&apos;re looking for. Your alert stays
+              active for 30 days.
             </p>
 
             <label style={styles.fieldLabel}>
@@ -889,7 +910,11 @@ function SavedPageContent() {
                 value={newWantedNotes}
                 onChange={(e) => setNewWantedNotes(e.target.value)}
                 placeholder="Any specific requirements?"
-                style={{ ...styles.textInput, minHeight: 72, resize: 'vertical' }}
+                style={{
+                  ...styles.textInput,
+                  minHeight: 72,
+                  resize: 'vertical',
+                }}
                 maxLength={500}
               />
             </label>
