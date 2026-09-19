@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import api from '../../../services/api';
 import {
   MdArrowBack,
   MdPhone,
   MdVideocam,
-  MdRefresh,
+  MdMoreVert,
   MdSend,
+  MdMic,
   MdErrorOutline,
   MdChatBubbleOutline,
   MdReply,
@@ -17,6 +18,11 @@ import {
   MdDelete,
   MdClose,
   MdCheck,
+  MdAttachFile,
+  MdEmojiEmotions,
+  MdDone,
+  MdDoneAll,
+  MdSearch,
 } from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
@@ -83,6 +89,36 @@ function formatTime(isoString: string): string {
   }
 }
 
+function formatDate(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
+  } catch {
+    return '';
+  }
+}
+
+function groupMessagesByDate(messages: ChatMessage[]) {
+  const groups: { date: string; messages: ChatMessage[] }[] = [];
+  let lastDate = '';
+  for (const msg of messages) {
+    const date = msg.created_at ? formatDate(msg.created_at) : '';
+    if (date !== lastDate) {
+      groups.push({ date, messages: [msg] });
+      lastDate = date;
+    } else {
+      groups[groups.length - 1].messages.push(msg);
+    }
+  }
+  return groups;
+}
+
+const DOUBLE_TAP_MS = 300;
 const LONG_PRESS_MS = 500;
 
 export default function ChatPage() {
@@ -101,6 +137,8 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
+  const [copyToast, setCopyToast] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
 
   const [replyDraft, setReplyDraft] = useState<ReplyDraft | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
@@ -111,6 +149,7 @@ export default function ChatPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastTapRef = useRef<{ id: string | number; time: number } | null>(null);
 
   const isSeaiConversation =
     otherUserId.toLowerCase() === 'seai' || conversationId.includes('_seai');
@@ -131,9 +170,7 @@ export default function ChatPage() {
       try {
         const profile = (await api.getMyProfile()) as Record<string, unknown>;
         setCurrentUserId((profile.id as string) || null);
-      } catch {
-        // ignore
-      }
+      } catch { }
 
       setIsLoading(true);
       setError(null);
@@ -169,20 +206,50 @@ export default function ChatPage() {
     };
   }, [contextMenu]);
 
+  // ─── Double-tap to reply ───────────────────────────────────────────────────
+  const handleDoubleTap = useCallback(
+    (msg: ChatMessage) => {
+      if (msg.deleted_for_everyone) return;
+      const senderName = msg.sender_id === currentUserId ? 'You' : otherUserName;
+      let previewText = msg.text || '';
+      if (!previewText && msg.audio_url) previewText = 'Voice note';
+      if (!previewText && msg.image_url) previewText = 'Photo';
+      setReplyDraft({ id: msg.id!, senderName, previewText });
+      setEditDraft(null);
+      setInputText('');
+      setTimeout(() => inputRef.current?.focus(), 50);
+    },
+    [currentUserId, otherUserName, setReplyDraft, setEditDraft, setInputText],
+  );
+
+  const handleBubbleTap = useCallback(
+    (msg: ChatMessage) => {
+      if (msg.deleted_for_everyone) return;
+      const now = Date.now();
+      if (
+        lastTapRef.current &&
+        lastTapRef.current.id === msg.id &&
+        now - lastTapRef.current.time < DOUBLE_TAP_MS
+      ) {
+        lastTapRef.current = null;
+        handleDoubleTap(msg);
+      } else {
+        lastTapRef.current = { id: msg.id!, time: now };
+      }
+    },
+    [handleDoubleTap],
+  );
+
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text || sending) return;
-    if (!hasRecipient) {
-      alert('Cannot send: missing recipient.');
-      return;
-    }
+    if (!hasRecipient) { alert('Cannot send: missing recipient.'); return; }
 
     if (editDraft) {
       setSending(true);
       try {
         const result = (await api.editMessage(editDraft.id, text)) as {
-          text: string;
-          edited_at: string;
+          text: string; edited_at: string;
         };
         setMessages((prev) =>
           prev.map((m) =>
@@ -205,11 +272,8 @@ export default function ChatPage() {
     try {
       const replyId = replyDraft ? Number(replyDraft.id) : undefined;
       const result = (await api.sendMessage(otherUserId, text, replyId)) as {
-        id?: string | number;
-        created_at?: string;
-        reply_to_id?: number | null;
+        id?: string | number; created_at?: string; reply_to_id?: number | null;
       };
-
       const newMsg: ChatMessage = {
         id: result.id || Date.now(),
         sender_id: currentUserId || 'me',
@@ -221,7 +285,6 @@ export default function ChatPage() {
         reply_to_sender_name: replyDraft?.senderName ?? null,
         reply_to_deleted: false,
       };
-
       setMessages((prev) => [...prev, newMsg]);
       setInputText('');
       setReplyDraft(null);
@@ -232,31 +295,21 @@ export default function ChatPage() {
     }
   };
 
-  const openContextMenu = (
-    e: React.MouseEvent | React.TouchEvent,
-    msg: ChatMessage,
-  ) => {
+  const openContextMenu = (e: React.MouseEvent | React.TouchEvent, msg: ChatMessage) => {
     e.preventDefault();
     e.stopPropagation();
-
     const isMine = msg.sender_id === currentUserId;
-    const text = msg.text || '';
     const isDeleted = !!msg.deleted_for_everyone;
-
-    let clientX = 0;
-    let clientY = 0;
+    let clientX = 0, clientY = 0;
     if ('touches' in e && e.touches.length > 0) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
+      clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
     } else if ('clientX' in e) {
-      clientX = (e as React.MouseEvent).clientX;
-      clientY = (e as React.MouseEvent).clientY;
+      clientX = (e as React.MouseEvent).clientX; clientY = (e as React.MouseEvent).clientY;
     }
-
     setContextMenu({
       messageId: msg.id!,
       isMine,
-      hasText: Boolean(text) && !isDeleted,
+      hasText: Boolean(msg.text) && !isDeleted,
       isDeleted,
       x: clientX,
       y: clientY,
@@ -265,22 +318,18 @@ export default function ChatPage() {
 
   const handleTouchStart = (e: React.TouchEvent, msg: ChatMessage) => {
     if (msg.deleted_for_everyone) return;
-    longPressTimer.current = setTimeout(() => {
-      openContextMenu(e, msg);
-    }, LONG_PRESS_MS);
+    longPressTimer.current = setTimeout(() => { openContextMenu(e, msg); }, LONG_PRESS_MS);
   };
 
   const handleTouchMove = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent, msg: ChatMessage) => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
+      handleBubbleTap(msg);
     }
   };
 
@@ -288,28 +337,30 @@ export default function ChatPage() {
     if (!contextMenu) return;
     const msg = messages.find((m) => m.id === contextMenu.messageId);
     if (!msg) return;
-    const senderName = msg.sender_id === currentUserId ? 'You' : otherUserName;
-    let previewText = msg.text || '';
-    if (!previewText && msg.audio_url) previewText = 'Voice note';
-    if (!previewText && msg.image_url) previewText = 'Photo';
-    setReplyDraft({ id: contextMenu.messageId, senderName, previewText });
-    setEditDraft(null);
-    setInputText('');
+    handleDoubleTap(msg);
     setContextMenu(null);
-    setTimeout(() => inputRef.current?.focus(), 50);
   };
 
   const handleCopy = async () => {
     if (!contextMenu) return;
     const msg = messages.find((m) => m.id === contextMenu.messageId);
-    if (!msg?.text) {
-      setContextMenu(null);
-      return;
-    }
+    if (!msg?.text) { setContextMenu(null); return; }
     try {
       await navigator.clipboard.writeText(msg.text);
+      setCopyToast(true);
+      setTimeout(() => setCopyToast(false), 2000);
     } catch {
-      alert('Could not copy');
+      // fallback for older browsers
+      const el = document.createElement('textarea');
+      el.value = msg.text;
+      el.style.position = 'fixed';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopyToast(true);
+      setTimeout(() => setCopyToast(false), 2000);
     }
     setContextMenu(null);
   };
@@ -360,10 +411,7 @@ export default function ChatPage() {
   };
 
   const startCall = (video: boolean) => {
-    if (!hasRecipient) {
-      alert('Cannot start a call without a recipient.');
-      return;
-    }
+    if (!hasRecipient) { alert('Cannot start a call without a recipient.'); return; }
     const qs = new URLSearchParams();
     qs.set('video', video ? '1' : '0');
     qs.set('name', otherUserName);
@@ -371,277 +419,280 @@ export default function ChatPage() {
     router.push(`/chat/${conversationId}/call?${qs.toString()}`);
   };
 
+  const groupedMessages = groupMessagesByDate(messages);
+
   if (isSeaiConversation) {
     return (
-      <main style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <div style={{ textAlign: 'center' }}>
-          <MdChatBubbleOutline size={48} color="#ccc" />
-          <p>Redirecting to SEAI...</p>
-        </div>
+      <main style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#ECE5DD' }}>
+        <p style={{ color: '#555' }}>Redirecting to SEAI...</p>
       </main>
     );
   }
 
+  const showMicButton = !inputText.trim();
+
   return (
-    <main style={styles.container}>
-      <div style={styles.header}>
-        <button style={styles.backBtn} onClick={() => router.back()}>
-          <MdArrowBack size={24} color="#1A1A1A" />
+    <main style={s.root}>
+      {/* ── Header ─────────────────────────────────── */}
+      <div style={s.header}>
+        <button style={s.iconBtn} onClick={() => router.back()}>
+          <MdArrowBack size={24} color="#fff" />
         </button>
-        <div style={styles.avatar}>
+        <div style={s.avatarWrap}>
           {otherUserAvatar ? (
-            <img src={resolveImageUrl(otherUserAvatar) || ''} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={resolveImageUrl(otherUserAvatar) || ''} alt="" style={s.avatarImg} />
           ) : (
-            <span style={styles.avatarText}>{otherUserName.charAt(0).toUpperCase()}</span>
+            <span style={s.avatarInitial}>{otherUserName.charAt(0).toUpperCase()}</span>
           )}
         </div>
-        <span style={styles.headerName}>{otherUserName}</span>
+        <div style={s.headerInfo}>
+          <span style={s.headerName}>{otherUserName}</span>
+          <span style={s.headerStatus}>online</span>
+        </div>
         <div style={{ flex: 1 }} />
-        <button style={styles.iconBtn} onClick={() => startCall(false)} title="Voice call">
-          <MdPhone size={22} color="#0504AA" />
+        <button style={s.iconBtn} onClick={() => startCall(false)} title="Voice call">
+          <MdPhone size={22} color="#fff" />
         </button>
-        <button style={styles.iconBtn} onClick={() => startCall(true)} title="Video call">
-          <MdVideocam size={22} color="#0504AA" />
+        <button style={s.iconBtn} onClick={() => startCall(true)} title="Video call">
+          <MdVideocam size={22} color="#fff" />
         </button>
-        <button style={styles.iconBtn} onClick={() => window.location.reload()} title="Refresh">
-          <MdRefresh size={22} color="#0504AA" />
+        <button style={s.iconBtn} title="More">
+          <MdMoreVert size={22} color="#fff" />
         </button>
       </div>
 
-      <div ref={scrollContainerRef} style={styles.messagesContainer}>
+      {/* ── Background wallpaper strip ─────────────── */}
+      <div style={s.wallpaper} />
+
+      {/* ── Messages ───────────────────────────────── */}
+      <div ref={scrollContainerRef} style={s.messages}>
         {showLoading ? (
-          <div style={styles.center}><div style={styles.spinner} /></div>
+          <div style={s.center}><div style={s.spinner} /></div>
         ) : displayError ? (
-          <div style={styles.center}>
+          <div style={s.center}>
             <MdErrorOutline size={48} color="#ef9a9a" />
-            <p style={{ color: '#666', margin: '8px 0 16px', textAlign: 'center' }}>{displayError}</p>
+            <p style={{ color: '#555', margin: '8px 0 16px', textAlign: 'center' }}>{displayError}</p>
             {hasRecipient ? (
-              <button onClick={() => window.location.reload()} style={styles.retryBtn}>Retry</button>
+              <button onClick={() => window.location.reload()} style={s.retryBtn}>Retry</button>
             ) : (
-              <button onClick={() => router.push('/shopper/inbox')} style={styles.retryBtn}>Back to Inbox</button>
+              <button onClick={() => router.push('/shopper/inbox')} style={s.retryBtn}>Back to Inbox</button>
             )}
           </div>
         ) : messages.length === 0 ? (
-          <div style={styles.center}>
+          <div style={s.center}>
             <MdChatBubbleOutline size={48} color="#ccc" />
             <p style={{ color: '#888', marginTop: 8 }}>No messages yet</p>
-            <p style={{ color: '#aaa', fontSize: 12 }}>Say hello!</p>
+            <p style={{ color: '#aaa', fontSize: 12 }}>Double-tap a message to reply</p>
           </div>
         ) : (
-          <div>
-            {messages.map((msg, idx) => {
-              const isMine = msg.sender_id === currentUserId;
-              const senderName = isMine ? 'You' : otherUserName;
-              const avatar = isMine ? null : otherUserAvatar;
-              const time = msg.created_at ? formatTime(msg.created_at) : '';
-              const isDeleted = !!msg.deleted_for_everyone;
+          <>
+            {groupedMessages.map((group) => (
+              <div key={group.date}>
+                {/* Date pill */}
+                <div style={s.datePill}><span style={s.datePillText}>{group.date}</span></div>
 
-              return (
-                <div key={msg.id ?? idx} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', marginBottom: 12 }}>
-                  {!isMine && (
-                    <div style={styles.messageAvatar}>
-                      {avatar ? (
-                        <img src={resolveImageUrl(avatar) || ''} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <span style={{ fontSize: 12, fontWeight: 'bold', color: '#0504AA' }}>{senderName.charAt(0).toUpperCase()}</span>
-                      )}
-                    </div>
-                  )}
-                  <div
-                    style={{
-                      maxWidth: '78%',
-                      padding: '10px 14px',
-                      borderRadius: 16,
-                      backgroundColor: isMine ? '#0504AA' : '#f0f0f0',
-                      color: isMine ? '#fff' : '#1A1A1A',
-                      marginLeft: isMine ? 8 : 0,
-                      marginRight: isMine ? 0 : 8,
-                      opacity: isDeleted ? 0.7 : 1,
-                      cursor: isDeleted ? 'default' : 'pointer',
-                      userSelect: 'none',
-                      WebkitUserSelect: 'none',
-                      touchAction: 'pan-y',
-                    }}
-                    onContextMenu={(e) => !isDeleted && openContextMenu(e, msg)}
-                    onTouchStart={(e) => handleTouchStart(e, msg)}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    onTouchCancel={handleTouchEnd}
-                  >
-                    {msg.reply_to_id && (
-                      <div style={{
-                        borderLeft: `3px solid ${isMine ? 'rgba(255,255,255,0.5)' : '#0504AA'}`,
-                        paddingLeft: 8,
-                        marginBottom: 6,
-                        opacity: 0.9,
-                      }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2 }}>
-                          {msg.reply_to_sender_name || 'Reply'}
+                {group.messages.map((msg, idx) => {
+                  const isMine = msg.sender_id === currentUserId;
+                  const time = msg.created_at ? formatTime(msg.created_at) : '';
+                  const isDeleted = !!msg.deleted_for_everyone;
+
+                  return (
+                    <div
+                      key={msg.id ?? idx}
+                      style={{
+                        display: 'flex',
+                        justifyContent: isMine ? 'flex-end' : 'flex-start',
+                        marginBottom: 2,
+                        paddingLeft: isMine ? 60 : 0,
+                        paddingRight: isMine ? 0 : 60,
+                      }}
+                    >
+                      {/* Bubble */}
+                      <div
+                        style={{
+                          ...s.bubble,
+                          backgroundColor: isMine ? '#DCF8C6' : '#fff',
+                          borderTopLeftRadius: isMine ? 16 : 4,
+                          borderTopRightRadius: isMine ? 4 : 16,
+                          borderBottomLeftRadius: 16,
+                          borderBottomRightRadius: 16,
+                        }}
+                        onClick={() => handleBubbleTap(msg)}
+                        onDoubleClick={() => handleDoubleTap(msg)}
+                        onContextMenu={(e) => !isDeleted && openContextMenu(e, msg)}
+                        onTouchStart={(e) => handleTouchStart(e, msg)}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={(e) => handleTouchEnd(e, msg)}
+                        onTouchCancel={handleTouchMove}
+                      >
+                        {/* Reply quote */}
+                        {msg.reply_to_id && (
+                          <div style={{
+                            ...s.replyQuote,
+                            borderLeftColor: isMine ? '#25D366' : '#0504AA',
+                          }}>
+                            <div style={s.replyQuoteName}>
+                              {msg.reply_to_sender_name || 'Reply'}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#555', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {msg.reply_to_deleted ? 'This message was deleted' : (msg.reply_to_text || '').slice(0, 80)}
+                            </div>
+                          </div>
+                        )}
+
+                        {isDeleted ? (
+                          <div style={s.deletedText}>
+                            <MdClose size={14} style={{ marginRight: 4 }} />
+                            {isMine ? 'You deleted this message' : 'This message was deleted'}
+                          </div>
+                        ) : (
+                          <>
+                            {msg.audio_url && (
+                              <audio controls src={resolveImageUrl(msg.audio_url) || undefined} style={{ width: 220, marginBottom: msg.text ? 4 : 0 }} />
+                            )}
+                            {msg.image_url && (
+                              <img src={resolveImageUrl(msg.image_url) || ''} alt="" style={{ maxWidth: 220, borderRadius: 8, marginBottom: msg.text ? 4 : 0, display: 'block' }} />
+                            )}
+                            {msg.text && (
+                              <div style={s.msgText}>{msg.text}</div>
+                            )}
+                          </>
+                        )}
+
+                        {/* Time + ticks */}
+                        <div style={s.metaRow}>
+                          {msg.edited_at && !isDeleted && <span style={s.editedLabel}>edited</span>}
+                          <span style={s.timeText}>{time}</span>
+                          {isMine && !isDeleted && (
+                            <MdDoneAll size={14} color="#53bdeb" style={{ marginLeft: 2 }} />
+                          )}
                         </div>
-                        <div style={{
-                          fontSize: 12,
-                          fontStyle: msg.reply_to_deleted ? 'italic' : 'normal',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}>
-                          {msg.reply_to_deleted ? 'This message was deleted' : (msg.reply_to_text || '').slice(0, 80)}
-                        </div>
                       </div>
-                    )}
-
-                    {!isMine && !isDeleted && (
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#0504AA', marginBottom: 4 }}>
-                        {senderName}
-                      </div>
-                    )}
-
-                    {isDeleted ? (
-                      <div style={{ fontStyle: 'italic', opacity: 0.65, fontSize: 14 }}>
-                        This message was deleted
-                      </div>
-                    ) : (
-                      <>
-                        {msg.audio_url && (
-                          <audio controls src={resolveImageUrl(msg.audio_url) || undefined} style={{ width: 220, marginBottom: msg.text ? 6 : 0 }} />
-                        )}
-                        {msg.image_url && (
-                          <img src={resolveImageUrl(msg.image_url) || ''} alt="" style={{ maxWidth: 220, borderRadius: 8, marginBottom: msg.text ? 6 : 0 }} />
-                        )}
-                        {msg.text && (
-                          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</div>
-                        )}
-                      </>
-                    )}
-
-                    <div style={{
-                      fontSize: 10,
-                      opacity: 0.7,
-                      marginTop: 4,
-                      display: 'flex',
-                      gap: 6,
-                      justifyContent: 'flex-end',
-                      alignItems: 'center',
-                    }}>
-                      {msg.edited_at && !isDeleted && <span style={{ fontStyle: 'italic' }}>(edited)</span>}
-                      <span>{time}</span>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
+                  );
+                })}
+              </div>
+            ))}
+            <div ref={messagesEndRef} style={{ height: 8 }} />
+          </>
         )}
       </div>
 
+      {/* ── Reply / Edit preview bar ─────────────── */}
       {(replyDraft || editDraft) && (
-        <div style={styles.previewBar}>
+        <div style={s.previewBar}>
+          <div style={{ width: 4, borderRadius: 2, backgroundColor: '#25D366', alignSelf: 'stretch', marginRight: 10, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={styles.previewLabel}>
-              {editDraft ? 'Editing message' : `Replying to ${replyDraft?.senderName}`}
+            <div style={s.previewLabel}>
+              {editDraft ? (
+                <><MdEdit size={13} style={{ marginRight: 4 }} />Editing message</>
+              ) : (
+                <><MdReply size={13} style={{ marginRight: 4 }} />Replying to {replyDraft?.senderName}</>
+              )}
             </div>
-            <div style={styles.previewText}>
+            <div style={s.previewText}>
               {editDraft ? editDraft.originalText : replyDraft?.previewText}
             </div>
           </div>
-          <button
-            style={styles.previewCloseBtn}
-            onClick={() => {
-              setReplyDraft(null);
-              setEditDraft(null);
-              setInputText('');
-            }}
-          >
+          <button style={s.previewClose} onClick={() => { setReplyDraft(null); setEditDraft(null); setInputText(''); }}>
             <MdClose size={20} color="#666" />
           </button>
         </div>
       )}
 
-      <div style={styles.inputArea}>
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder={hasRecipient ? 'Type a message...' : 'Missing recipient'}
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage();
-            }
-            if (e.key === 'Escape' && (replyDraft || editDraft)) {
-              setReplyDraft(null);
-              setEditDraft(null);
-              setInputText('');
-            }
-          }}
-          style={styles.input}
-          disabled={!hasRecipient}
-        />
+      {/* ── Input bar ────────────────────────────── */}
+      <div style={s.inputBar}>
+        <div style={s.inputRow}>
+          <button style={s.inputIcon}><MdEmojiEmotions size={24} color="#8696A0" /></button>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Type a message"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+              if (e.key === 'Escape' && (replyDraft || editDraft)) { setReplyDraft(null); setEditDraft(null); setInputText(''); }
+            }}
+            style={s.input}
+            disabled={!hasRecipient}
+          />
+          <button style={s.inputIcon}><MdAttachFile size={24} color="#8696A0" /></button>
+        </div>
         <button
-          onClick={sendMessage}
-          disabled={!inputText.trim() || sending || !hasRecipient}
           style={{
-            ...styles.sendBtn,
-            backgroundColor: inputText.trim() && hasRecipient ? '#0504AA' : '#e0e0e0',
-            cursor: inputText.trim() && hasRecipient ? 'pointer' : 'not-allowed',
+            ...s.sendCircle,
+            backgroundColor: '#25D366',
           }}
+          onClick={showMicButton ? () => setIsRecording((r) => !r) : sendMessage}
+          disabled={!hasRecipient}
+          title={showMicButton ? 'Voice note' : (editDraft ? 'Save edit' : 'Send')}
         >
-          {editDraft ? <MdCheck size={20} color="#fff" /> : <MdSend size={20} color="#fff" />}
+          {showMicButton ? (
+            <MdMic size={22} color="#fff" />
+          ) : editDraft ? (
+            <MdCheck size={22} color="#fff" />
+          ) : (
+            <MdSend size={22} color="#fff" />
+          )}
         </button>
       </div>
 
+      {/* ── Copy toast ───────────────────────────── */}
+      {copyToast && (
+        <div style={s.toast}>
+          <MdCheck size={16} color="#fff" style={{ marginRight: 6 }} />
+          Text copied to clipboard
+        </div>
+      )}
+
+      {/* ── Context menu ─────────────────────────── */}
       {contextMenu && (
         <div
           style={{
-            ...styles.contextMenu,
+            ...s.ctxMenu,
             left: Math.max(8, Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 360) - 200)),
-            top: Math.max(8, Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 640) - 280)),
+            top: Math.max(8, Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 640) - 300)),
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button style={styles.contextItem} onClick={handleReply}>
-            <MdReply size={18} />
-            <span>Reply</span>
+          <button style={s.ctxItem} onClick={handleReply}>
+            <MdReply size={18} color="#25D366" /><span>Reply</span>
           </button>
           {contextMenu.hasText && (
-            <button style={styles.contextItem} onClick={handleCopy}>
-              <MdContentCopy size={18} />
-              <span>Copy</span>
+            <button style={s.ctxItem} onClick={handleCopy}>
+              <MdContentCopy size={18} color="#8696A0" /><span>Copy</span>
             </button>
           )}
           {contextMenu.isMine && contextMenu.hasText && (
-            <button style={styles.contextItem} onClick={handleEdit}>
-              <MdEdit size={18} />
-              <span>Edit</span>
+            <button style={s.ctxItem} onClick={handleEdit}>
+              <MdEdit size={18} color="#8696A0" /><span>Edit</span>
             </button>
           )}
           {contextMenu.isMine && (
-            <button style={{ ...styles.contextItem, color: '#DC2626' }} onClick={requestDeleteAll}>
-              <MdDelete size={18} />
-              <span>Delete for everyone</span>
+            <button style={{ ...s.ctxItem, color: '#DC2626' }} onClick={requestDeleteAll}>
+              <MdDelete size={18} color="#DC2626" /><span>Delete for everyone</span>
             </button>
           )}
-          <button style={{ ...styles.contextItem, color: '#DC2626' }} onClick={requestDeleteMe}>
-            <MdDelete size={18} />
-            <span>Delete for me</span>
+          <button style={{ ...s.ctxItem, color: '#DC2626' }} onClick={requestDeleteMe}>
+            <MdDelete size={18} color="#DC2626" /><span>Delete for me</span>
           </button>
         </div>
       )}
 
+      {/* ── Confirm delete dialog ─────────────────── */}
       {confirmDelete && (
-        <div style={styles.confirmOverlay} onClick={() => setConfirmDelete(null)}>
-          <div style={styles.confirmDialog} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Delete message?</div>
-            <div style={{ fontSize: 14, color: '#666', marginBottom: 20 }}>
+        <div style={s.overlay} onClick={() => setConfirmDelete(null)}>
+          <div style={s.dialog} onClick={(e) => e.stopPropagation()}>
+            <div style={s.dialogTitle}>Delete message?</div>
+            <div style={s.dialogBody}>
               {confirmDelete.scope === 'all'
-                ? 'This will delete the message for everyone in this chat. This cannot be undone.'
+                ? 'This will delete the message for everyone. This cannot be undone.'
                 : 'This will remove the message from your view only.'}
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button style={styles.cancelBtn} onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button style={styles.deleteBtn} onClick={confirmDeleteAction}>Delete</button>
+            <div style={s.dialogActions}>
+              <button style={s.cancelBtn} onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button style={s.deleteBtn} onClick={confirmDeleteAction}>Delete</button>
             </div>
           </div>
         </div>
@@ -650,30 +701,197 @@ export default function ChatPage() {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: { display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#fff' },
-  header: { display: 'flex', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid #eee', backgroundColor: '#fff' },
-  backBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' },
-  avatar: { width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', backgroundColor: '#0504AA10', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
-  avatarText: { fontSize: 16, fontWeight: 'bold', color: '#0504AA' },
-  headerName: { fontSize: 16, fontWeight: 600, color: '#1A1A1A', marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' },
-  messagesContainer: { flex: 1, overflowY: 'auto', padding: '16px' },
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#888' },
-  spinner: { width: 36, height: 36, border: '4px solid #eee', borderTopColor: '#0504AA', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
-  retryBtn: { padding: '8px 20px', backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 },
-  messageAvatar: { width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', backgroundColor: '#0504AA10', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 8, flexShrink: 0 },
-  inputArea: { display: 'flex', alignItems: 'center', padding: '8px 12px', borderTop: '1px solid #eee', backgroundColor: '#fff' },
-  input: { flex: 1, padding: '10px 16px', borderRadius: 24, border: '1px solid #e0e0e0', outline: 'none', fontSize: 14, backgroundColor: '#f5f5f5' },
-  sendBtn: { width: 40, height: 40, borderRadius: '50%', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 8, flexShrink: 0 },
-  previewBar: { display: 'flex', alignItems: 'center', padding: '8px 12px', backgroundColor: '#F5F3FF', borderTop: '1px solid #E0D7FF', gap: 8 },
-  previewLabel: { fontSize: 11, fontWeight: 700, color: '#0504AA', marginBottom: 2 },
+/* ─── Styles ─────────────────────────────────────────────────── */
+const s: Record<string, React.CSSProperties> = {
+  root: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100dvh',
+    backgroundColor: '#ECE5DD',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  /* header */
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '8px 6px 8px 4px',
+    backgroundColor: '#128C7E',
+    zIndex: 10,
+    gap: 2,
+  },
+  iconBtn: {
+    background: 'none', border: 'none', cursor: 'pointer',
+    padding: 8, display: 'flex', alignItems: 'center', borderRadius: '50%',
+  },
+  avatarWrap: {
+    width: 38, height: 38, borderRadius: '50%',
+    backgroundColor: '#ffffff30',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden', marginLeft: 4, flexShrink: 0,
+  },
+  avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  avatarInitial: { fontSize: 16, fontWeight: 700, color: '#fff' },
+  headerInfo: { display: 'flex', flexDirection: 'column', marginLeft: 8 },
+  headerName: { fontSize: 16, fontWeight: 600, color: '#fff', lineHeight: 1.2 },
+  headerStatus: { fontSize: 12, color: '#d0f0e8' },
+
+  /* wallpaper */
+  wallpaper: {
+    position: 'absolute', inset: 0, top: 58,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1' fill='%23128C7E' opacity='0.07'/%3E%3C/svg%3E")`,
+    pointerEvents: 'none', zIndex: 0,
+  },
+
+  /* messages */
+  messages: {
+    flex: 1, overflowY: 'auto', padding: '8px 12px',
+    position: 'relative', zIndex: 1,
+  },
+  center: {
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    height: '100%', color: '#888',
+  },
+  spinner: {
+    width: 36, height: 36, border: '4px solid #ddd',
+    borderTopColor: '#128C7E', borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  retryBtn: {
+    padding: '8px 20px', backgroundColor: '#128C7E', color: '#fff',
+    border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600,
+  },
+
+  /* date pill */
+  datePill: {
+    display: 'flex', justifyContent: 'center', margin: '12px 0 6px',
+  },
+  datePillText: {
+    backgroundColor: '#D1F4CC',
+    color: '#555', fontSize: 12, fontWeight: 500,
+    padding: '3px 12px', borderRadius: 12,
+    boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+  },
+
+  /* bubble */
+  bubble: {
+    maxWidth: '100%',
+    padding: '6px 10px 4px',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+    cursor: 'pointer',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    touchAction: 'pan-y',
+  },
+  replyQuote: {
+    borderLeftWidth: 4, borderLeftStyle: 'solid',
+    paddingLeft: 8, marginBottom: 6,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 4, padding: '4px 8px',
+  },
+  replyQuoteName: { fontSize: 12, fontWeight: 700, color: '#128C7E', marginBottom: 2 },
+  deletedText: {
+    fontStyle: 'italic', color: '#999', fontSize: 14,
+    display: 'flex', alignItems: 'center',
+  },
+  msgText: { fontSize: 14.5, color: '#111', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4 },
+  metaRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+    gap: 3, marginTop: 3,
+  },
+  editedLabel: { fontSize: 10, color: '#8696A0', fontStyle: 'italic' },
+  timeText: { fontSize: 11, color: '#8696A0' },
+
+  /* reply/edit preview bar */
+  previewBar: {
+    display: 'flex', alignItems: 'center',
+    padding: '8px 12px',
+    backgroundColor: '#fff',
+    borderTop: '1px solid #E0E0E0',
+    gap: 0, zIndex: 2,
+  },
+  previewLabel: {
+    fontSize: 12, fontWeight: 700, color: '#128C7E',
+    marginBottom: 2, display: 'flex', alignItems: 'center',
+  },
   previewText: { fontSize: 13, color: '#555', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  previewCloseBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' },
-  contextMenu: { position: 'fixed', zIndex: 1000, backgroundColor: '#fff', borderRadius: 12, boxShadow: '0 6px 24px rgba(0,0,0,0.18)', padding: 4, minWidth: 180 },
-  contextItem: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px', background: 'none', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 500, color: '#1A1A1A', textAlign: 'left' },
-  confirmOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 20 },
-  confirmDialog: { backgroundColor: '#fff', borderRadius: 16, padding: 24, maxWidth: 340, width: '100%', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' },
-  cancelBtn: { flex: 1, padding: 12, backgroundColor: '#f0f0f0', color: '#333', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14 },
-  deleteBtn: { flex: 1, padding: 12, backgroundColor: '#DC2626', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14 },
+  previewClose: { background: 'none', border: 'none', cursor: 'pointer', padding: 6, marginLeft: 8 },
+
+  /* input bar */
+  inputBar: {
+    display: 'flex', alignItems: 'center',
+    padding: '6px 8px', gap: 8,
+    backgroundColor: '#F0F0F0', zIndex: 2,
+  },
+  inputRow: {
+    flex: 1, display: 'flex', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 24,
+    padding: '4px 4px 4px 4px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  },
+  inputIcon: {
+    background: 'none', border: 'none', cursor: 'pointer',
+    padding: '4px 8px', display: 'flex', alignItems: 'center', flexShrink: 0,
+  },
+  input: {
+    flex: 1, border: 'none', outline: 'none',
+    fontSize: 15, backgroundColor: 'transparent',
+    padding: '6px 4px', color: '#111',
+  },
+  sendCircle: {
+    width: 46, height: 46, borderRadius: '50%',
+    border: 'none', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+    boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+  },
+
+  /* copy toast */
+  toast: {
+    position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+    backgroundColor: '#333', color: '#fff',
+    padding: '8px 16px', borderRadius: 20, fontSize: 13,
+    display: 'flex', alignItems: 'center',
+    zIndex: 9999, boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    whiteSpace: 'nowrap',
+  },
+
+  /* context menu */
+  ctxMenu: {
+    position: 'fixed', zIndex: 1000,
+    backgroundColor: '#fff', borderRadius: 8,
+    boxShadow: '0 6px 24px rgba(0,0,0,0.2)',
+    padding: '4px 0', minWidth: 190,
+  },
+  ctxItem: {
+    display: 'flex', alignItems: 'center', gap: 12,
+    width: '100%', padding: '12px 16px',
+    background: 'none', border: 'none', borderRadius: 0,
+    cursor: 'pointer', fontSize: 14.5, color: '#1A1A1A', textAlign: 'left',
+  },
+
+  /* confirm delete */
+  overlay: {
+    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 2000, padding: 20,
+  },
+  dialog: {
+    backgroundColor: '#fff', borderRadius: 12,
+    padding: '24px 20px', maxWidth: 320, width: '100%',
+    boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+  },
+  dialogTitle: { fontSize: 17, fontWeight: 700, marginBottom: 8, color: '#111' },
+  dialogBody: { fontSize: 14, color: '#666', marginBottom: 20, lineHeight: 1.5 },
+  dialogActions: { display: 'flex', gap: 10, justifyContent: 'flex-end' },
+  cancelBtn: {
+    padding: '10px 20px', backgroundColor: 'transparent',
+    color: '#128C7E', border: 'none', borderRadius: 8,
+    cursor: 'pointer', fontWeight: 600, fontSize: 14,
+  },
+  deleteBtn: {
+    padding: '10px 20px', backgroundColor: '#DC2626',
+    color: '#fff', border: 'none', borderRadius: 8,
+    cursor: 'pointer', fontWeight: 600, fontSize: 14,
+  },
 };
