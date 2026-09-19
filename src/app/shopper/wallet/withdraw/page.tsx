@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../../services/api';
 import {
@@ -29,7 +29,6 @@ export default function WithdrawPage() {
   const [bankName, setBankName] = useState('');
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
-  const [showPinPrompt, setShowPinPrompt] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -205,7 +204,7 @@ export default function WithdrawPage() {
           <div style={css.successCard}>
             <MdCheckCircle size={64} color="#4CDE80" />
             <h2 style={css.successTitle}>Withdrawal Successful</h2>
-            <p style={css.successSub}>Your money is on the way 💸</p>
+            <p style={css.successSub}>Your money is on the way</p>
           </div>
         </div>
       )}
@@ -219,7 +218,9 @@ const KF = `
 `;
 
 const css: Record<string, React.CSSProperties> = {
-  root: { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F0F4FF', fontFamily: 'Inter, system-ui, sans-serif' },
+  // ✅ Removed `fontFamily: 'Inter, system-ui, sans-serif'` — was overriding
+  // the global Google Sans Flex set in globals.css. Now inherits.
+  root: { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F0F4FF' },
   loadScreen: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0504AA' },
   loadRing: { width: 40, height: 40, border: '3px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
   hero: { backgroundColor: '#0504AA', backgroundImage: 'radial-gradient(ellipse at 80% 20%, #1A0FB8 0%, #0504AA 50%, #03037A 100%)', padding: '0 20px 32px' },
