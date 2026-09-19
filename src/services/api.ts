@@ -19,7 +19,6 @@ interface Card {
 // ─── Error helper (module-level, can be used by callers too) ────────
 export function extractErrorDetail(err: unknown, fallback = 'Something went wrong.'): string {
   if (err instanceof Error && err.message) {
-    // Axios network errors carry a `.message` too — check response first
     const ax = err as AxiosError;
     if (ax.response?.data) {
       const data = ax.response.data as Record<string, unknown>;
@@ -45,8 +44,6 @@ class ApiService {
   private _isAdminCache: boolean | null = null;
   static userRole: string | null = null;
 
-  // 🔧 Prefer NEXT_PUBLIC_API_URL, then NEXT_PUBLIC_API_BASE, then a hard
-  //    production fallback. `||` (not `??`) so empty strings are skipped.
   static readonly baseUrl =
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_API_BASE ||
@@ -55,10 +52,9 @@ class ApiService {
   private constructor() {
     this.axios = axios.create({
       baseURL: ApiService.baseUrl,
-      timeout: 60_000,          // ✅ bumped from 30s — Render cold starts need ~45s
+      timeout: 60_000,
     });
 
-    // ── Interceptor: retry once on timeout (cold start) ───────────
     this.axios.interceptors.response.use(
       (r) => r,
       async (err: AxiosError) => {
@@ -76,12 +72,10 @@ class ApiService {
       },
     );
 
-    // ── Interceptor: 401 → clear token so the next navigation redirects
     this.axios.interceptors.response.use(
       (r) => r,
       (err: AxiosError) => {
         if (err.response?.status === 401) {
-          // Stale/expired token — clear local state so guards push to /login
           this._token = null;
           delete this.axios.defaults.headers.common['Authorization'];
           clearToken();
@@ -104,7 +98,6 @@ class ApiService {
 
   // ---------- Token & Role Management ----------
   private async loadTokenFromStorage(): Promise<void> {
-    // localStorage is synchronous — this is async only for signature compat.
     const token = getToken();
     if (token) {
       this._token = token;
@@ -413,7 +406,6 @@ class ApiService {
     return res.data;
   }
 
-  // ─── Card Management ─────────────────────────────────────────
   public async getWalletCards(): Promise<Card[]> {
     const res = await this.axios.get('/wallet/cards');
     return Array.isArray(res.data) ? (res.data as Card[]) : [];
@@ -732,7 +724,6 @@ class ApiService {
     };
     if (mode) body.mode = mode;
 
-    // ✅ Read token from storage — never rely on stale `this._token`
     const token = this._token || getToken() || '';
 
     const response = await fetch(`${ApiService.baseUrl}/seai/ask`, {
@@ -1117,19 +1108,30 @@ class ApiService {
   }
 
   // ======================== CHAT ========================
-  public async sendMessage(receiverId: string, text: string, imageUrl?: string): Promise<JsonObject> {
+  // ✅ FIX: sendMessage now supports reply_to_id. Third parameter is a
+  //    reply target, NOT an image URL. Replies now work end-to-end.
+  public async sendMessage(
+    receiverId: string,
+    text: string,
+    replyToId?: number | null,
+  ): Promise<JsonObject> {
     const res = await this.axios.post('/chat/send', {
       receiver_id: receiverId,
       text,
-      image_url: imageUrl,
+      reply_to_id: replyToId ?? null,
     });
     return res.data;
   }
 
-  public async sendVoiceNote(receiverId: string, audioFile: File): Promise<JsonObject> {
+  public async sendVoiceNote(
+    receiverId: string,
+    audioFile: File,
+    replyToId?: number | null,
+  ): Promise<JsonObject> {
     const form = new FormData();
     form.append('receiver_id', receiverId);
     form.append('audio', audioFile);
+    if (replyToId != null) form.append('reply_to_id', String(replyToId));
     const res = await this.axios.post('/chat/send-voice', form);
     return res.data;
   }
@@ -1150,7 +1152,6 @@ class ApiService {
     return res.data;
   }
 
-  // Alias for getMessages — kept for backwards compatibility
   public async getConversationMessages(conversationId: string): Promise<JsonObject> {
     return this.getMessages(conversationId);
   }
@@ -1166,6 +1167,29 @@ class ApiService {
     const params: Record<string, string | number> = { limit };
     if (beforeId) params.before_id = beforeId;
     const res = await this.axios.get(`/chat/messages/user/${userId}`, { params });
+    return res.data;
+  }
+
+  public async editMessage(
+    messageId: string | number,
+    text: string,
+  ): Promise<JsonObject> {
+    const res = await this.axios.put(`/chat/message/${messageId}`, { text });
+    return res.data;
+  }
+
+  public async deleteMessage(
+    messageId: string | number,
+    scope: 'me' | 'all' = 'me',
+  ): Promise<JsonObject> {
+    const res = await this.axios.delete(`/chat/message/${messageId}`, {
+      params: { scope },
+    });
+    return res.data;
+  }
+
+  public async getCallRoom(conversationId: string): Promise<JsonObject> {
+    const res = await this.axios.get(`/chat/call/room/${conversationId}`);
     return res.data;
   }
 
@@ -1210,7 +1234,6 @@ class ApiService {
     return res.data;
   }
 
-  // SEAI Conversations
   public async getRecentConversations(): Promise<JsonArray> {
     const res = await this.axios.get('/chat/seai/conversations');
     return res.data;
@@ -1407,7 +1430,6 @@ class ApiService {
   }
 
   public async isAdminUser(): Promise<boolean> {
-    // ✅ Cache — invalidated on setToken/clearToken/fetchAndStoreUserRole
     if (this._isAdminCache !== null) return this._isAdminCache;
 
     try {
@@ -1491,64 +1513,42 @@ class ApiService {
     return res.data;
   }
 
-  /**
-   * ⚠️ Escape hatch — kept for backwards compatibility. Prefer a typed
-   *    method. Do not add new callers.
-   */
   public async post(path: string, data: JsonObject): Promise<JsonObject> {
     const res = await this.axios.post(path, data);
     return res.data;
   }
 
   public async getSavedItems(): Promise<JsonArray> {
-  const res = await this.axios.get('/shopper/saved');
-  return res.data;
-}
+    const res = await this.axios.get('/shopper/saved');
+    return res.data;
+  }
 
-// ✅ Wanted alerts
-public async getWantedAlerts(): Promise<JsonArray> {
-  const res = await this.axios.get('/shopper/wanted');
-  return res.data;
-}
+  // ✅ Wanted alerts
+  public async getWantedAlerts(): Promise<JsonArray> {
+    const res = await this.axios.get('/shopper/wanted');
+    return res.data;
+  }
 
-public async createWantedAlert(payload: {
-  title: string;
-  notes?: string;
-  category?: string;
-  budget?: number;
-  lat?: number;
-  lng?: number;
-}): Promise<JsonObject> {
-  const res = await this.axios.post('/shopper/wanted', payload);
-  return res.data;
-}
+  public async createWantedAlert(payload: {
+    title: string;
+    notes?: string;
+    category?: string;
+    budget?: number;
+    lat?: number;
+    lng?: number;
+  }): Promise<JsonObject> {
+    const res = await this.axios.post('/shopper/wanted', payload);
+    return res.data;
+  }
 
-public async deleteWantedAlert(alertId: number): Promise<void> {
-  await this.axios.delete(`/shopper/wanted/${alertId}`);
-}
+  public async deleteWantedAlert(alertId: number): Promise<void> {
+    await this.axios.delete(`/shopper/wanted/${alertId}`);
+  }
 
-public async toggleWantedAlert(alertId: number): Promise<JsonObject> {
-  const res = await this.axios.patch(`/shopper/wanted/${alertId}/toggle`);
-  return res.data;
-}
-
-public async editMessage(
-  messageId: string | number,
-  text: string,
-): Promise<JsonObject> {
-  const res = await this.axios.put(`/chat/message/${messageId}`, { text });
-  return res.data;
-}
-
-public async deleteMessage(
-  messageId: string | number,
-  scope: 'me' | 'all' = 'me',
-): Promise<JsonObject> {
-  const res = await this.axios.delete(`/chat/message/${messageId}`, {
-    params: { scope },
-  });
-  return res.data;
-}
+  public async toggleWantedAlert(alertId: number): Promise<JsonObject> {
+    const res = await this.axios.patch(`/shopper/wanted/${alertId}/toggle`);
+    return res.data;
+  }
 }
 
 export default ApiService.getInstance();

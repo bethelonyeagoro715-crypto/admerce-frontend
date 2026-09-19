@@ -45,12 +45,8 @@ const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
   `https://picsum.photos/800/400?random=${i * 10}`
 );
 
-// Reference column width. The library auto-fits columns based on container
-// width and minWidth, but we compute sizes relative to this baseline.
 const REF_WIDTH = 200;
 
-// ✅ Fall back to NEXT_PUBLIC_API_URL if NEXT_PUBLIC_API_BASE is empty,
-// matching the fallback chain in services/api.ts
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -61,13 +57,11 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   return `${base}${url}`;
 }
 
-// Compute a scaled height from an image's natural dimensions, clamped so
-// extreme aspect ratios (very tall panoramas) don't wreck the layout.
 async function computeImageHeight(
   imageUrl: string | null,
   bodyHeight: number,
 ): Promise<{ width: number; height: number }> {
-  const fallbackHeight = REF_WIDTH * 1.1 + bodyHeight; // ~square fallback
+  const fallbackHeight = REF_WIDTH * 1.1 + bodyHeight;
   if (!imageUrl) return { width: REF_WIDTH, height: fallbackHeight };
 
   try {
@@ -75,7 +69,6 @@ async function computeImageHeight(
     if (!width || !height) return { width: REF_WIDTH, height: fallbackHeight };
 
     const scaled = (height / width) * REF_WIDTH;
-    // Clamp image portion between 0.6× and 1.75× the column width
     const clamped = Math.max(REF_WIDTH * 0.6, Math.min(scaled, REF_WIDTH * 1.75));
     return { width: REF_WIDTH, height: clamped + bodyHeight };
   } catch {
@@ -177,7 +170,6 @@ function LocationBanner({
   );
 }
 
-// ─── Pinterest-style cards (image on top with natural aspect) ─────────────
 function ItemCard({
   item,
   onPress,
@@ -197,8 +189,6 @@ function ItemCard({
             <MdImage size={36} color="#9e9e9e" />
           </div>
         )}
-
-        {/* Visual search button */}
         <div
           style={styles.visualSearchBtn}
           onClick={(e) => {
@@ -316,7 +306,6 @@ export default function ShopperHomePage() {
   const [showFilter, setShowFilter] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // ✅ Slider state — drives the horizontal track translate
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
@@ -523,7 +512,7 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ─── Touch handlers (slider + pull-to-refresh) ──────────────────────
+  // ─── Touch handlers ─────────────────────────────────────────────────
   const handleTouchStart = (e: React.TouchEvent) => {
     dragStartX.current = e.touches[0].clientX;
     dragStartY.current = e.touches[0].clientY;
@@ -540,7 +529,6 @@ export default function ShopperHomePage() {
     const currentX = e.touches[0].clientX;
     const currentY = e.touches[0].clientY;
 
-    // Pull-to-refresh — only if user hasn't started a horizontal drag yet
     if (touchStartY.current !== null && !isDraggingRef.current) {
       const deltaY = currentY - touchStartY.current;
       if (deltaY > 80 && !isRefreshing) {
@@ -555,7 +543,6 @@ export default function ShopperHomePage() {
     const deltaX = currentX - dragStartX.current;
     const deltaY = currentY - dragStartY.current;
 
-    // Decide axis once — first 10px of movement locks direction
     if (!axisDecided.current) {
       if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
         axisDecided.current = true;
@@ -568,7 +555,6 @@ export default function ShopperHomePage() {
 
     if (!isDraggingRef.current) return;
 
-    // Edge resistance — pull gets harder at first / last panel
     let offset = deltaX;
     if (
       (currentTab === 0 && offset > 0) ||
@@ -618,7 +604,7 @@ export default function ShopperHomePage() {
     }
   };
   const handleStorePress = (id: string) => router.push(`/store-detail/${id}`);
-  // ✅ Fixed: was `/providers/${id}` (404). Correct route is `/provider-services/${id}`.
+  // ✅ Fixed: was `/providers/${id}` (404). Actual route is `/provider-services/${id}`.
   const handleProviderPress = (id: string, name: string) =>
     router.push(
       `/provider-services/${id}?name=${encodeURIComponent(name)}`,
@@ -638,9 +624,6 @@ export default function ShopperHomePage() {
     [],
   );
 
-  // ✅ Slider track translate — each panel is 1/3 of the 300%-wide track,
-  // so shifting by 33.3333% per tab shows exactly one panel. dragOffset is
-  // added in px for finger-follow.
   const trackTransform = `translateX(calc(-${currentTab * 33.3333}% + ${dragOffset}px))`;
 
   // ─── Render ─────────────────────────────────────────────────────────
@@ -782,9 +765,7 @@ export default function ShopperHomePage() {
         ))}
       </div>
 
-      {/* ✅ Slidable tab content — 300% wide track, 3 panels side by side.
-          Drag follows finger; release snaps to nearest panel. Pull-to-refresh
-          and vertical scroll are preserved by axis detection. */}
+      {/* Slidable tab content */}
       <div
         style={styles.tabContent}
         onTouchStart={handleTouchStart}
@@ -997,10 +978,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minHeight: 0,
     position: 'relative',
-    // ✅ overflow: hidden clips the two off-screen panels of the 300% track.
     overflow: 'hidden',
   },
-  // ✅ Each slider panel occupies 1/3 of the 300%-wide track = 100% viewport.
   panel: {
     width: '33.3333%',
     flex: '0 0 33.3333%',

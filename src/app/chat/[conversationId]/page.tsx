@@ -203,7 +203,7 @@ export default function ChatPage() {
 
     setSending(true);
     try {
-      const replyId = replyDraft ? String(replyDraft.id) : undefined;
+      const replyId = replyDraft ? Number(replyDraft.id) : undefined;
       const result = (await api.sendMessage(otherUserId, text, replyId)) as {
         id?: string | number;
         created_at?: string;
