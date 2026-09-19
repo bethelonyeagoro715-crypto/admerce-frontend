@@ -4,7 +4,7 @@ import { useState, useReducer, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
 import { initializePaystack } from '../../../services/paymentService';
-import { useAuthGuard } from '../../../hooks/useAuthGuard'; // ✅ import hook
+import { useAuthGuard } from '../../../hooks/useAuthGuard';
 import {
   MdAdd,
   MdArrowBack,
@@ -15,6 +15,8 @@ import {
   MdCreditCard,
   MdArrowUpward,
   MdAccountBalanceWallet,
+  MdVisibility,
+  MdVisibilityOff,
 } from 'react-icons/md';
 
 // ─── API response shapes (no `any`) ─────────────────────────────────
@@ -37,7 +39,7 @@ interface Transaction {
   date: string;
 }
 
-// ─── Fetch state + reducer (fixes cascading-setState ESLint warning) ─
+// ─── Fetch state + reducer ───────────────────────────────────────────
 interface WalletState {
   balance: number;
   email: string;
@@ -87,7 +89,7 @@ function normalizeTransactions(raw: unknown): Transaction[] {
 
 // ─── Component ───────────────────────────────────────────────────────
 export default function WalletPage() {
-  useAuthGuard(); // ✅ protect page
+  useAuthGuard();
 
   const router = useRouter();
 
@@ -103,8 +105,8 @@ export default function WalletPage() {
     try {
       const [balData, txnData, profileData] = await Promise.all([
         api.getWalletBalance() as Promise<BalanceResponse>,
-        // getWalletTransactions is not in the current ApiService type;
-        // cast through unknown so we don't use `any` directly
+        // NOTE: replace with api.getWalletTransactions() once the method
+        // exists on api.ts — currently this always returns [] (see caveat).
         (api.getWalletBalance as unknown as () => Promise<unknown>)
           .call(api)
           .then(() => [] as unknown[])
@@ -191,7 +193,9 @@ export default function WalletPage() {
               onClick={() => setBalanceVisible(v => !v)}
               aria-label={balanceVisible ? 'Hide balance' : 'Show balance'}
             >
-              {balanceVisible ? '👁' : '🙈'}
+              {balanceVisible
+                ? <MdVisibility size={16} color="#fff" />
+                : <MdVisibilityOff size={16} color="#fff" />}
             </button>
           </div>
           <div style={css.balValue}>
@@ -327,7 +331,9 @@ const KF = `
 
 // ─── Styles ───────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
-  root:        { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F0F4FF', fontFamily: 'Inter, system-ui, sans-serif', overflowX: 'hidden' },
+  // ✅ Removed `fontFamily: 'Inter, system-ui, sans-serif'` — was overriding
+  // the global Google Sans Flex Variable set in globals.css. Now inherits.
+  root:        { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F0F4FF', overflowX: 'hidden' },
   loadScreen:  { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0504AA' },
   loadRing:    { width: 40, height: 40, border: '3px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
   hero:        { position: 'relative', backgroundColor: '#0504AA', backgroundImage: 'radial-gradient(ellipse at 80% 20%, #1A0FB8 0%, #0504AA 50%, #03037A 100%)', padding: '0 20px 36px', overflow: 'hidden' },
@@ -338,7 +344,7 @@ const css: Record<string, React.CSSProperties> = {
   heroTitle:   { fontSize: 16, fontWeight: 600, color: '#fff', letterSpacing: 0.3 },
   balanceBlock:{ marginBottom: 20 },
   balLabel:    { fontSize: 12, color: 'rgba(255,255,255,0.65)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 },
-  eyeBtn:      { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 },
+  eyeBtn:      { background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', lineHeight: 1 },
   balValue:    { fontSize: 42, fontWeight: 800, color: '#fff', letterSpacing: -1, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 },
   balSub:      { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 10, letterSpacing: 0.5 },
   statRow:     { display: 'flex', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: '8px 14px', gap: 4, backdropFilter: 'blur(4px)' },
