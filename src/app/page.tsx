@@ -58,11 +58,13 @@ export default function WelcomePage() {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: 'easeOut' }}
       >
+        {/* ✅ Fixed: was /admerce_symbol.png (missing). Now uses the live PWA icon. */}
         <Image
-          src="/admerce_symbol.png"
+          src="/icons/icon-512x512.png"
           alt="Admerce"
           width={200}
           height={200}
+          priority
           style={styles.logo}
         />
       </motion.div>
@@ -112,14 +114,16 @@ const styles = {
     backgroundColor: 'white',
   },
   logo: {
-    height: 300,
-    width: 800,
+    // ✅ Fixed: was 800x300 (mismatched the 200x200 props and squashed the pin).
+    // The icon is square — style it square.
+    height: 200,
+    width: 200,
     objectFit: 'contain' as const,
   },
   appName: {
     marginTop: 16,
     fontSize: 28,
-    fontWeight: 1000,
+    fontWeight: 800, // ✅ was 1000 — not a valid font-weight in most browsers
     color: '#0f06b1',
   },
   dotsContainer: {
