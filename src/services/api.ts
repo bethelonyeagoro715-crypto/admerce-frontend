@@ -1531,6 +1531,24 @@ public async toggleWantedAlert(alertId: number): Promise<JsonObject> {
   const res = await this.axios.patch(`/shopper/wanted/${alertId}/toggle`);
   return res.data;
 }
+
+public async editMessage(
+  messageId: string | number,
+  text: string,
+): Promise<JsonObject> {
+  const res = await this.axios.put(`/chat/message/${messageId}`, { text });
+  return res.data;
+}
+
+public async deleteMessage(
+  messageId: string | number,
+  scope: 'me' | 'all' = 'me',
+): Promise<JsonObject> {
+  const res = await this.axios.delete(`/chat/message/${messageId}`, {
+    params: { scope },
+  });
+  return res.data;
+}
 }
 
 export default ApiService.getInstance();
