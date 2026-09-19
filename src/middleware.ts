@@ -9,7 +9,7 @@ const PUBLIC_PREFIXES = [
   '/signup',
   '/forgot-password',
   '/verify-otp',
-  '/reset-password',           // ← added: needed for forgot-password flow
+  '/reset-password',
   '/kyc',
   '/verification',
   '/kyc-onboarding',
@@ -44,6 +44,39 @@ const PUBLIC_PREFIXES = [
 
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/verify-otp'];
 
+// ✅ Static asset prefixes — middleware must NEVER intercept these.
+const STATIC_PREFIXES = [
+  '/_next/',
+  '/icons/',
+  '/fonts/',
+  '/images/',
+  '/assets/',
+];
+
+// ✅ Exact-path static files.
+const STATIC_FILES = [
+  '/favicon.ico',
+  '/apple-icon.png',
+  '/manifest.webmanifest',
+  '/manifest.json',
+  '/robots.txt',
+  '/sitemap.xml',
+];
+
+// ✅ Static asset extensions — belt-and-suspenders for anything not caught above.
+const STATIC_EXTENSIONS = [
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.avif',
+  '.ico', '.woff', '.woff2', '.ttf', '.otf', '.eot',
+  '.css', '.js', '.mjs', '.map', '.json', '.webmanifest', '.xml', '.txt',
+];
+
+function isStaticAsset(pathname: string): boolean {
+  if (STATIC_PREFIXES.some((p) => pathname.startsWith(p))) return true;
+  if (STATIC_FILES.includes(pathname)) return true;
+  const lower = pathname.toLowerCase();
+  return STATIC_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
 function inferIntendedRole(location: string): string {
   if (location.startsWith('/storekeeper')) return 'storekeeper';
   if (location.startsWith('/courier')) return 'courier';
@@ -62,6 +95,14 @@ function inferIntendedRole(location: string): string {
 
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
+
+  // ✅ FIX: Never intercept static assets. This is what was breaking
+  // /_next/image (→ 307 → login), which in turn broke the landing splash
+  // logo, PWA icons, and previously the Product Sans fonts.
+  if (isStaticAsset(pathname)) {
+    return NextResponse.next();
+  }
+
   const token = request.cookies.get('auth_token')?.value;
   const userRole = request.cookies.get('user_role')?.value;
 
@@ -128,5 +169,8 @@ function getPostLoginRedirect(role: string, onboardedRoles: string[]): string {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  // ✅ Simplified matcher — the in-function isStaticAsset() check does the
+  // heavy lifting. `_next` (no slash) excludes both /_next/static and
+  // /_next/image in a single term.
+  matcher: ['/((?!api|_next|favicon).*)'],
 };
