@@ -19,10 +19,10 @@ import {
   MdVisibilityOff,
 } from 'react-icons/md';
 
-// ─── API response shapes (no `any`) ─────────────────────────────────
+// ─── API response shapes ────────────────────────────────────────────
 interface BalanceResponse { balance?: number }
 interface ProfileResponse { email?: string }
-interface RawTransaction  {
+interface RawTransaction {
   id: string | number;
   type?: string;
   amount?: number | string;
@@ -105,12 +105,10 @@ export default function WalletPage() {
     try {
       const [balData, txnData, profileData] = await Promise.all([
         api.getWalletBalance() as Promise<BalanceResponse>,
-        // NOTE: replace with api.getWalletTransactions() once the method
-        // exists on api.ts — currently this always returns [] (see caveat).
-        (api.getWalletBalance as unknown as () => Promise<unknown>)
-          .call(api)
-          .then(() => [] as unknown[])
-          .catch(() => [] as unknown[]),
+        // ✅ Fixed: now calls the real transactions endpoint.
+        // Previously called getWalletBalance again and discarded the result,
+        // which is why the list always showed "No transactions yet".
+        api.getWalletTransactions(20, 0).catch(() => [] as unknown[]),
         api.getMyProfile() as Promise<ProfileResponse>,
       ]);
       dispatch({
@@ -173,7 +171,6 @@ export default function WalletPage() {
         <div style={css.watermark} aria-hidden>₦</div>
         <div style={css.shimmer} aria-hidden />
 
-        {/* Top bar */}
         <div style={css.topBar}>
           <button style={css.ghostBtn} onClick={() => router.back()} aria-label="Back">
             <MdArrowBack size={22} color="#fff" />
@@ -184,7 +181,6 @@ export default function WalletPage() {
           </button>
         </div>
 
-        {/* Balance */}
         <div style={css.balanceBlock}>
           <div style={css.balLabel}>
             Available Balance
@@ -204,7 +200,6 @@ export default function WalletPage() {
           <div style={css.balSub}>Admerce Wallet&nbsp;&nbsp;·&nbsp;&nbsp;•••• 0421</div>
         </div>
 
-        {/* Mini stat pills */}
         <div style={css.statRow}>
           <div style={css.statPill}>
             <MdTrendingUp size={14} color="#4CDE80" />
@@ -223,7 +218,6 @@ export default function WalletPage() {
       {/* ── Sheet ─────────────────────────────────────────────── */}
       <div style={css.sheet}>
 
-        {/* Quick actions */}
         <div style={css.actionsGrid}>
           {([
             { icon: <MdAdd size={20} color="#fff" />,         label: 'Top Up',   bg: '#0504AA', action: () => setShowTopUp(true)                          },
@@ -279,7 +273,6 @@ export default function WalletPage() {
         </div>
       </div>
 
-      {/* ── Top-up modal (bottom sheet) ───────────────────────── */}
       {showTopUp && (
         <div style={css.overlay} onClick={() => setShowTopUp(false)}>
           <div style={css.bottomSheet} onClick={e => e.stopPropagation()}>
@@ -331,8 +324,6 @@ const KF = `
 
 // ─── Styles ───────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
-  // ✅ Removed `fontFamily: 'Inter, system-ui, sans-serif'` — was overriding
-  // the global Google Sans Flex Variable set in globals.css. Now inherits.
   root:        { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F0F4FF', overflowX: 'hidden' },
   loadScreen:  { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0504AA' },
   loadRing:    { width: 40, height: 40, border: '3px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
