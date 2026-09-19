@@ -3,6 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '../../../services/api';
+import {
+  MdArrowBack,
+  MdShare,
+  MdStar,
+  MdStarBorder,
+  MdStorefront,
+  MdImage,
+} from 'react-icons/md';
 
 interface Store {
   store_id: string;
@@ -78,11 +86,11 @@ export default function StoreDetailPage() {
   const shareStore = async () => {
     if (!store) return;
     const message = `
-🌟 Check out ${store.name} on Admerce!
+Check out ${store.name} on Admerce!
 
-📍 ${store.address ?? 'Address not available'}
+${store.address ?? 'Address not available'}
 
-🔗 https://admerce.com/store/${storeId}
+https://admerce.com/store/${storeId}
     `.trim();
 
     try {
@@ -93,7 +101,6 @@ export default function StoreDetailPage() {
           url: `https://admerce.com/store/${storeId}`,
         });
       } else {
-        // Fallback: copy to clipboard
         await navigator.clipboard.writeText(message);
         alert('Store link copied to clipboard!');
       }
@@ -105,7 +112,11 @@ export default function StoreDetailPage() {
   const resolveImageUrl = (url?: string) => {
     if (!url) return '';
     if (url.startsWith('http')) return url;
-    return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
+    const base =
+      process.env.NEXT_PUBLIC_API_BASE ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      '';
+    return `${base}${url}`;
   };
 
   if (loading) {
@@ -125,25 +136,33 @@ export default function StoreDetailPage() {
   }
 
   const storeImage = resolveImageUrl(store.store_image_url);
-  const categories: string[] = Array.isArray(store.category) ? store.category : [];
+  const categories: string[] = Array.isArray(store.category)
+    ? store.category
+    : [];
 
   return (
     <main style={styles.container}>
       {/* App Bar */}
       <div style={styles.appBar}>
-        <button onClick={() => router.back()} style={styles.backBtn}>←</button>
+        <button onClick={() => router.back()} style={styles.backBtn}>
+          <MdArrowBack size={24} color="#333" />
+        </button>
         <h1 style={styles.title}>{store.name}</h1>
         <div style={styles.actions}>
           <button
             onClick={toggleFollow}
             disabled={followLoading}
-            style={{ ...styles.iconBtn, color: isFollowing ? '#FFA000' : '#666' }}
+            style={styles.iconBtn}
             title={isFollowing ? 'Unfollow' : 'Follow'}
           >
-            {isFollowing ? '⭐' : '☆'}
+            {isFollowing ? (
+              <MdStar size={24} color="#FFA000" />
+            ) : (
+              <MdStarBorder size={24} color="#666" />
+            )}
           </button>
           <button onClick={shareStore} style={styles.iconBtn} title="Share">
-            📤
+            <MdShare size={22} color="#333" />
           </button>
         </div>
       </div>
@@ -153,16 +172,18 @@ export default function StoreDetailPage() {
         <div style={styles.header}>
           <div style={styles.avatar}>
             {storeImage ? (
-              <img src={storeImage} alt={store.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img
+                src={storeImage}
+                alt={store.name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             ) : (
-              <span style={{ fontSize: 30 }}>🏪</span>
+              <MdStorefront size={28} color="#0504AA" />
             )}
           </div>
           <div style={{ flex: 1 }}>
             <h2 style={styles.storeName}>{store.name}</h2>
-            {store.address && (
-              <p style={styles.address}>{store.address}</p>
-            )}
+            {store.address && <p style={styles.address}>{store.address}</p>}
           </div>
         </div>
 
@@ -170,7 +191,9 @@ export default function StoreDetailPage() {
         {categories.length > 0 && (
           <div style={styles.categories}>
             {categories.map((cat, idx) => (
-              <span key={idx} style={styles.categoryChip}>{cat}</span>
+              <span key={idx} style={styles.categoryChip}>
+                {cat}
+              </span>
             ))}
           </div>
         )}
@@ -178,7 +201,9 @@ export default function StoreDetailPage() {
         {/* Items grid */}
         <h3 style={styles.sectionTitle}>Items</h3>
         {items.length === 0 ? (
-          <p style={{ color: '#888', textAlign: 'center', marginTop: 20 }}>No items in this store</p>
+          <p style={{ color: '#888', textAlign: 'center', marginTop: 20 }}>
+            No items in this store
+          </p>
         ) : (
           <div style={styles.itemsGrid}>
             {items.map((item) => {
@@ -187,13 +212,23 @@ export default function StoreDetailPage() {
                 <div
                   key={item.listing_id}
                   style={styles.itemCard}
-                  onClick={() => router.push(`/item-detail/${item.listing_id}`)}
+                  onClick={() =>
+                    router.push(`/item-detail/${item.listing_id}`)
+                  }
                 >
                   <div style={styles.itemImage}>
                     {itemImage ? (
-                      <img src={itemImage} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img
+                        src={itemImage}
+                        alt={item.title}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
                     ) : (
-                      <span style={{ fontSize: 32, color: '#999' }}>📷</span>
+                      <MdImage size={32} color="#999" />
                     )}
                   </div>
                   <div style={styles.itemTitle}>
@@ -209,7 +244,7 @@ export default function StoreDetailPage() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
+// ─── Styles ─────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   center: {
     display: 'flex',
@@ -237,10 +272,11 @@ const styles: Record<string, React.CSSProperties> = {
   backBtn: {
     background: 'none',
     border: 'none',
-    fontSize: 20,
     cursor: 'pointer',
     marginRight: 12,
-    color: '#333',
+    padding: 4,
+    display: 'flex',
+    alignItems: 'center',
   },
   title: {
     fontSize: 20,
@@ -258,9 +294,11 @@ const styles: Record<string, React.CSSProperties> = {
   iconBtn: {
     background: 'none',
     border: 'none',
-    fontSize: 22,
     cursor: 'pointer',
     padding: 4,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollArea: {
     flex: 1,
