@@ -1,27 +1,15 @@
 /* src/app/globals.css */
 
-@font-face {
-  font-family: 'Product Sans';
-  src: url('/fonts/ProductSans-Regular.woff2') format('woff2'),
-       url('/fonts/ProductSans-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-}
+/* ✅ Removed Product Sans @font-face blocks — replaced by
+   @fontsource-variable/google-sans-flex (imported in layout.tsx).
+   This kills the /fonts/ProductSans-*.woff2 404s AND the
+   /fonts/ProductSans-*.ttf 307 redirects in one move. */
 
-@font-face {
-  font-family: 'Product Sans';
-  src: url('/fonts/ProductSans-Bold.woff2') format('woff2'),
-       url('/fonts/ProductSans-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-}
-
-/* Add more weights if you have them (e.g. 300, 500, 900) */
-
-/* Apply Product Sans globally */
+/* ✅ Apply Google Sans Flex globally */
 html,
 body {
-  font-family: 'Product Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "Google Sans Flex Variable", -apple-system, BlinkMacSystemFont,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   margin: 0;
@@ -33,11 +21,19 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }

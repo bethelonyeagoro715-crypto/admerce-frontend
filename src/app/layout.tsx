@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/google-sans-flex"; // ✅ Added — loads Google Sans Flex variable font
 import "./globals.css";
 import NotificationInitializer from "../components/NotificationInitializer";
 
