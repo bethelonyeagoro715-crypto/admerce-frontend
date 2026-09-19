@@ -618,10 +618,10 @@ export default function ShopperHomePage() {
     }
   };
   const handleStorePress = (id: string) => router.push(`/store-detail/${id}`);
-  // ✅ Fixed: was `/providers/${id}` (404). Correct route is `/shopper/provider-services/${id}`.
+  // ✅ Fixed: was `/providers/${id}` (404). Correct route is `/provider-services/${id}`.
   const handleProviderPress = (id: string, name: string) =>
     router.push(
-      `/shopper/provider-services/${id}?name=${encodeURIComponent(name)}`,
+      `/provider-services/${id}?name=${encodeURIComponent(name)}`,
     );
 
   // ─── Size functions for the masonry library ─────────────────────────

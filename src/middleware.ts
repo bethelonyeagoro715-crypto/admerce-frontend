@@ -44,13 +44,16 @@ const PUBLIC_PREFIXES = [
 
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/verify-otp'];
 
-// ✅ Static asset prefixes — middleware must NEVER intercept these.
+// ✅ Static asset path prefixes — middleware must NEVER intercept these.
 const STATIC_PREFIXES = [
   '/_next/',
   '/icons/',
   '/fonts/',
   '/images/',
   '/assets/',
+  '/videos/',
+  '/audio/',
+  '/media/',
 ];
 
 // ✅ Exact-path static files.
@@ -63,11 +66,25 @@ const STATIC_FILES = [
   '/sitemap.xml',
 ];
 
-// ✅ Static asset extensions — belt-and-suspenders for anything not caught above.
+// ✅ Static asset extensions — belt-and-suspenders.
+// NOTE: keep in sync with STATIC_PREFIXES above.
 const STATIC_EXTENSIONS = [
-  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.avif',
-  '.ico', '.woff', '.woff2', '.ttf', '.otf', '.eot',
-  '.css', '.js', '.mjs', '.map', '.json', '.webmanifest', '.xml', '.txt',
+  // Images
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.avif', '.bmp', '.tiff',
+  // Icons
+  '.ico',
+  // Fonts
+  '.woff', '.woff2', '.ttf', '.otf', '.eot',
+  // Styles & scripts
+  '.css', '.js', '.mjs', '.cjs', '.map',
+  // Data
+  '.json', '.webmanifest', '.xml', '.txt', '.csv',
+  // Video
+  '.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.ogv', '.mpg', '.mpeg',
+  // Audio
+  '.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.opus',
+  // Docs & archives (occasionally served from /public)
+  '.pdf', '.zip', '.gz',
 ];
 
 function isStaticAsset(pathname: string): boolean {
@@ -96,9 +113,9 @@ function inferIntendedRole(location: string): string {
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
-  // ✅ FIX: Never intercept static assets. This is what was breaking
-  // /_next/image (→ 307 → login), which in turn broke the landing splash
-  // logo, PWA icons, and previously the Product Sans fonts.
+  // ✅ Never intercept static assets — fixes 307s on /_next/image,
+  // /fonts/*, /icons/*, /admerce_video.mp4, and anything else with a
+  // recognised asset extension.
   if (isStaticAsset(pathname)) {
     return NextResponse.next();
   }
@@ -169,8 +186,5 @@ function getPostLoginRedirect(role: string, onboardedRoles: string[]): string {
 }
 
 export const config = {
-  // ✅ Simplified matcher — the in-function isStaticAsset() check does the
-  // heavy lifting. `_next` (no slash) excludes both /_next/static and
-  // /_next/image in a single term.
   matcher: ['/((?!api|_next|favicon).*)'],
 };
