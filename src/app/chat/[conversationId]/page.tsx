@@ -111,7 +111,6 @@ export default function ChatPage() {
   const [copyToast, setCopyToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
-  // ✅ Voice recording — tap to start, tap ✓ to send, ✕ to cancel
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [sendingVoice, setSendingVoice] = useState(false);
@@ -158,7 +157,6 @@ export default function ChatPage() {
     setTimeout(() => setCopyToast(false), 2000);
   };
 
-  /* ── Voice recording ── */
   const startRecording = async () => {
     if (!hasRecipient || isRecording) return;
     try {
@@ -240,7 +238,6 @@ export default function ChatPage() {
     setRecordSeconds(0);
   };
 
-  /* ── Send text / save edit ── */
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text || sending) return;
@@ -253,7 +250,14 @@ export default function ChatPage() {
         setMessages((prev) => prev.map((m) => m.id === editDraft.id ? { ...m, text: result.text, edited_at: result.edited_at } : m));
         setEditDraft(null); setInputText('');
         showToast('Message edited');
-      } catch (e: unknown) { showToast('Failed to edit: ' + (e instanceof Error ? e.message : '')); }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : '';
+        if (msg.includes('403') || msg.includes('window')) {
+          showToast('Edit window closed — message is too old');
+        } else {
+          showToast('Failed to edit');
+        }
+      }
       finally { setSending(false); }
       return;
     }
@@ -278,7 +282,6 @@ export default function ChatPage() {
     finally { setSending(false); }
   };
 
-  /* ── Double tap to reply ── */
   const handleDoubleTap = useCallback((msg: ChatMessage) => {
     if (msg.deleted_for_everyone) return;
     const senderName = msg.sender_id === currentUserId ? 'You' : otherUserName;
@@ -298,7 +301,6 @@ export default function ChatPage() {
     } else { lastTapRef.current = { id: msg.id!, time: now }; }
   }, [handleDoubleTap]);
 
-  /* ── Context menu ── */
   const openContextMenu = (e: React.MouseEvent | React.TouchEvent, msg: ChatMessage) => {
     e.preventDefault(); e.stopPropagation();
     let x = 0, y = 0;
@@ -307,6 +309,7 @@ export default function ChatPage() {
     else if ('clientX' in e) { x = (e as React.MouseEvent).clientX; y = (e as React.MouseEvent).clientY; }
     const isMine = msg.sender_id === currentUserId;
     const isDeleted = !!msg.deleted_for_everyone;
+    console.log('[chat] context menu opened for', msg.id, { isMine, isDeleted });
     setContextMenu({ messageId: msg.id!, isMine, hasText: Boolean(msg.text) && !isDeleted, isDeleted, x, y });
   };
 
@@ -325,7 +328,6 @@ export default function ChatPage() {
     longPressFired.current = false;
   };
 
-  /* ── Context actions ── */
   const handleReply = () => {
     if (!contextMenu) return;
     const msg = messages.find((m) => m.id === contextMenu.messageId);
@@ -360,15 +362,28 @@ export default function ChatPage() {
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
-  const requestDeleteMe = () => { if (!contextMenu) return; setConfirmDelete({ messageId: contextMenu.messageId, scope: 'me' }); setContextMenu(null); };
-  const requestDeleteAll = () => { if (!contextMenu) return; setConfirmDelete({ messageId: contextMenu.messageId, scope: 'all' }); setContextMenu(null); };
+  // ✅ debug logging added — if delete still doesn't fire, the console shows it
+  const requestDeleteMe = () => {
+    console.log('[chat] requestDeleteMe called, contextMenu=', contextMenu);
+    if (!contextMenu) return;
+    setConfirmDelete({ messageId: contextMenu.messageId, scope: 'me' });
+    setContextMenu(null);
+  };
+  const requestDeleteAll = () => {
+    console.log('[chat] requestDeleteAll called, contextMenu=', contextMenu);
+    if (!contextMenu) return;
+    setConfirmDelete({ messageId: contextMenu.messageId, scope: 'all' });
+    setContextMenu(null);
+  };
 
   const confirmDeleteAction = async () => {
     if (!confirmDelete) return;
     const { messageId, scope } = confirmDelete;
+    console.log('[chat] confirmDeleteAction called', { messageId, scope });
     setConfirmDelete(null);
     try {
       await api.deleteMessage(messageId, scope);
+      console.log('[chat] delete succeeded');
       if (scope === 'all') {
         setMessages((prev) => prev.map((m) => m.id === messageId ? { ...m, text: null, image_url: null, audio_url: null, deleted_for_everyone: true } : m));
         showToast('Deleted for everyone');
@@ -376,7 +391,10 @@ export default function ChatPage() {
         setMessages((prev) => prev.filter((m) => m.id !== messageId));
         showToast('Message deleted');
       }
-    } catch { showToast('Failed to delete'); }
+    } catch (e: unknown) {
+      console.error('[chat] delete failed', e);
+      showToast('Failed to delete');
+    }
   };
 
   const startCall = (video: boolean) => {
@@ -398,7 +416,6 @@ export default function ChatPage() {
   return (
     <main style={s.root}>
 
-      {/* ── Header ── */}
       <div style={s.header}>
         <button style={s.iconBtn} onClick={() => router.back()}><MdArrowBack size={24} color="#fff" /></button>
         <div style={s.avatarWrap}>
@@ -418,7 +435,6 @@ export default function ChatPage() {
 
       <div style={s.wallpaper} />
 
-      {/* ── Messages ── */}
       <div ref={scrollContainerRef} style={s.messages}>
         {showLoading ? (
           <div style={s.center}><div style={s.spinner} /></div>
@@ -495,7 +511,6 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* ── Reply / Edit bar ── */}
       {(replyDraft || editDraft) && (
         <div style={s.previewBar}>
           <div style={{ width: 4, borderRadius: 2, backgroundColor: BRAND.primary, alignSelf: 'stretch', marginRight: 10, flexShrink: 0 }} />
@@ -511,7 +526,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ── Recording bar (replaces input bar while recording) ── */}
       {isRecording && (
         <div style={s.recordingBar}>
           <button style={s.recordCancelBtn} onClick={cancelRecording} title="Cancel recording">
@@ -534,7 +548,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ── Input bar ── */}
       {!isRecording && (
         <div style={s.inputBar}>
           <div style={s.inputRow}>
@@ -558,7 +571,6 @@ export default function ChatPage() {
           </div>
 
           {showMicButton ? (
-            /* ✅ FIX: simple tap to start recording. No unmount race. */
             <button
               style={{ ...s.sendCircle, backgroundColor: sendingVoice ? '#aaa' : BRAND.primary }}
               onClick={startRecording}
@@ -582,7 +594,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ── Toast ── */}
       {copyToast && (
         <div style={s.toast}>
           <MdCheck size={16} color="#fff" style={{ marginRight: 6 }} />
@@ -590,33 +601,53 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ── Context menu ── */}
+      {/* ✅ Context menu — onClick only. No onTouchEnd race. */}
       {contextMenu && (
         <>
-          <div style={s.ctxBackdrop} onClick={() => setContextMenu(null)} onTouchStart={(e) => { e.preventDefault(); setContextMenu(null); }} />
+          <div style={s.ctxBackdrop} onClick={() => setContextMenu(null)} />
           <div
             style={{ ...s.ctxMenu, left: Math.max(8, Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 360) - 200)), top: Math.max(8, Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 640) - 300)) }}
             onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
           >
-            <button style={s.ctxItem} onClick={handleReply} onTouchEnd={handleReply}><MdReply size={18} color={BRAND.primary} /><span>Reply</span></button>
-            {contextMenu.hasText && <button style={s.ctxItem} onClick={handleCopy} onTouchEnd={handleCopy}><MdContentCopy size={18} color={BRAND.muted} /><span>Copy</span></button>}
-            {contextMenu.isMine && contextMenu.hasText && <button style={s.ctxItem} onClick={handleEdit} onTouchEnd={handleEdit}><MdEdit size={18} color={BRAND.muted} /><span>Edit</span></button>}
-            {contextMenu.isMine && <button style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteAll} onTouchEnd={requestDeleteAll}><MdDelete size={18} color={BRAND.danger} /><span>Delete for everyone</span></button>}
-            <button style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteMe} onTouchEnd={requestDeleteMe}><MdDelete size={18} color={BRAND.danger} /><span>Delete for me</span></button>
+            <button type="button" style={s.ctxItem} onClick={handleReply}>
+              <MdReply size={18} color={BRAND.primary} /><span>Reply</span>
+            </button>
+            {contextMenu.hasText && (
+              <button type="button" style={s.ctxItem} onClick={handleCopy}>
+                <MdContentCopy size={18} color={BRAND.muted} /><span>Copy</span>
+              </button>
+            )}
+            {contextMenu.isMine && contextMenu.hasText && (
+              <button type="button" style={s.ctxItem} onClick={handleEdit}>
+                <MdEdit size={18} color={BRAND.muted} /><span>Edit</span>
+              </button>
+            )}
+            {contextMenu.isMine && (
+              <button type="button" style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteAll}>
+                <MdDelete size={18} color={BRAND.danger} /><span>Delete for everyone</span>
+              </button>
+            )}
+            <button type="button" style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteMe}>
+              <MdDelete size={18} color={BRAND.danger} /><span>Delete for me</span>
+            </button>
           </div>
         </>
       )}
 
-      {/* ── Confirm delete ── */}
+      {/* ✅ Confirm dialog — backdrop closes, dialog itself stops propagation.
+          Delete button has explicit type="button" to prevent form-submit weirdness. */}
       {confirmDelete && (
         <div style={s.overlay} onClick={() => setConfirmDelete(null)}>
           <div style={s.dialog} onClick={(e) => e.stopPropagation()}>
             <div style={s.dialogTitle}>Delete message?</div>
-            <div style={s.dialogBody}>{confirmDelete.scope === 'all' ? 'This will delete the message for everyone. This cannot be undone.' : 'This will remove the message from your view only.'}</div>
+            <div style={s.dialogBody}>
+              {confirmDelete.scope === 'all'
+                ? 'This will delete the message for everyone. This cannot be undone.'
+                : 'This will remove the message from your view only.'}
+            </div>
             <div style={s.dialogActions}>
-              <button style={s.cancelBtn} onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button style={s.deleteBtn} onClick={confirmDeleteAction}>Delete</button>
+              <button type="button" style={s.cancelBtn} onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button type="button" style={s.deleteBtn} onClick={confirmDeleteAction}>Delete</button>
             </div>
           </div>
         </div>
@@ -627,7 +658,6 @@ export default function ChatPage() {
   );
 }
 
-/* ─── Styles ─────────────────────────────────────────────────── */
 const s: Record<string, React.CSSProperties> = {
   root: { display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: BRAND.bg, position: 'relative', overflow: 'hidden' },
   header: { display: 'flex', alignItems: 'center', padding: '8px 6px 8px 4px', backgroundColor: BRAND.primary, zIndex: 10, gap: 2 },
