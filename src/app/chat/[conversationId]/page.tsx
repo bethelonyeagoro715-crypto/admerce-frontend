@@ -69,7 +69,7 @@ interface ConfirmDeleteState {
 const BRAND = {
   primary: '#0504AA',
   primaryDark: '#03037A',
-  bubbleMine: '#0504AA',       // ✅ sender bubble = full primary brand blue
+  bubbleMine: '#0504AA',
   bubbleTheirs: '#FFFFFF',
   bg: '#EEF0FF',
   datePill: '#E4E3FF',
@@ -158,6 +158,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const longPressFired = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastTapRef = useRef<{ id: string | number; time: number } | null>(null);
 
@@ -203,18 +204,10 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  useEffect(() => {
-    if (!contextMenu) return;
-    const close = () => setContextMenu(null);
-    window.addEventListener('click', close);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('touchstart', close, true);
-    return () => {
-      window.removeEventListener('click', close);
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('touchstart', close, true);
-    };
-  }, [contextMenu]);
+  // ✅ FIX: no more window listeners. The backdrop div inside the
+  //    context-menu JSX handles dismissal. Removed the `touchstart` /
+  //    `click` window handlers that were closing the menu before the
+  //    menu item's own handlers could run.
 
   const handleDoubleTap = useCallback(
     (msg: ChatMessage) => {
@@ -228,7 +221,13 @@ export default function ChatPage() {
       setInputText('');
       setTimeout(() => inputRef.current?.focus(), 50);
     },
-    [currentUserId, otherUserName, setReplyDraft, setEditDraft, setInputText],
+    [
+      currentUserId,
+      otherUserName,
+      setReplyDraft,
+      setEditDraft,
+      setInputText,
+    ],
   );
 
   const handleBubbleTap = useCallback(
@@ -312,6 +311,8 @@ export default function ChatPage() {
     let clientX = 0, clientY = 0;
     if ('touches' in e && e.touches.length > 0) {
       clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
+    } else if ('changedTouches' in e && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX; clientY = e.changedTouches[0].clientY;
     } else if ('clientX' in e) {
       clientX = (e as React.MouseEvent).clientX; clientY = (e as React.MouseEvent).clientY;
     }
@@ -327,7 +328,12 @@ export default function ChatPage() {
 
   const handleTouchStart = (e: React.TouchEvent, msg: ChatMessage) => {
     if (msg.deleted_for_everyone) return;
-    longPressTimer.current = setTimeout(() => { openContextMenu(e, msg); }, LONG_PRESS_MS);
+    longPressFired.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      longPressTimer.current = null;
+      openContextMenu(e, msg);
+    }, LONG_PRESS_MS);
   };
 
   const handleTouchMove = () => {
@@ -338,8 +344,14 @@ export default function ChatPage() {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
+    }
+    // ✅ FIX: only treat as a tap if the long-press did NOT fire. Before this,
+    //    the tap was recorded after a long-press, leading to accidental
+    //    double-tap replies on the next tap.
+    if (!longPressFired.current) {
       handleBubbleTap(msg);
     }
+    longPressFired.current = false;
   };
 
   const handleReply = () => {
@@ -353,9 +365,14 @@ export default function ChatPage() {
   const handleCopy = async () => {
     if (!contextMenu) return;
     const msg = messages.find((m) => m.id === contextMenu.messageId);
-    if (!msg?.text) { setContextMenu(null); return; }
+    setContextMenu(null);
+    if (!msg?.text) return;
     try {
-      await navigator.clipboard.writeText(msg.text);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(msg.text);
+      } else {
+        throw new Error('clipboard api unavailable');
+      }
       setCopyToast(true);
       setTimeout(() => setCopyToast(false), 2000);
     } catch {
@@ -365,12 +382,11 @@ export default function ChatPage() {
       el.style.opacity = '0';
       document.body.appendChild(el);
       el.select();
-      document.execCommand('copy');
+      try { document.execCommand('copy'); } catch { /* ignore */ }
       document.body.removeChild(el);
       setCopyToast(true);
       setTimeout(() => setCopyToast(false), 2000);
     }
-    setContextMenu(null);
   };
 
   const handleEdit = () => {
@@ -441,7 +457,6 @@ export default function ChatPage() {
 
   return (
     <main style={s.root}>
-      {/* ── Header ─────────────────────────────────── */}
       <div style={s.header}>
         <button style={s.iconBtn} onClick={() => router.back()}>
           <MdArrowBack size={24} color="#fff" />
@@ -471,7 +486,6 @@ export default function ChatPage() {
 
       <div style={s.wallpaper} />
 
-      {/* ── Messages ───────────────────────────────── */}
       <div ref={scrollContainerRef} style={s.messages}>
         {showLoading ? (
           <div style={s.center}><div style={s.spinner} /></div>
@@ -541,12 +555,7 @@ export default function ChatPage() {
                               borderLeftColor: isMine ? '#fff' : BRAND.primary,
                             }}
                           >
-                            <div
-                              style={{
-                                ...s.replyQuoteName,
-                                color: isMine ? '#fff' : BRAND.primary,
-                              }}
-                            >
+                            <div style={{ ...s.replyQuoteName, color: isMine ? '#fff' : BRAND.primary }}>
                               {msg.reply_to_sender_name || 'Reply'}
                             </div>
                             <div
@@ -582,12 +591,7 @@ export default function ChatPage() {
                               <img src={resolveImageUrl(msg.image_url) || ''} alt="" style={{ maxWidth: 220, borderRadius: 8, marginBottom: msg.text ? 4 : 0, display: 'block' }} />
                             )}
                             {msg.text && (
-                              <div
-                                style={{
-                                  ...s.msgText,
-                                  color: isMine ? '#fff' : '#111',
-                                }}
-                              >
+                              <div style={{ ...s.msgText, color: isMine ? '#fff' : '#111' }}>
                                 {msg.text}
                               </div>
                             )}
@@ -596,21 +600,11 @@ export default function ChatPage() {
 
                         <div style={s.metaRow}>
                           {msg.edited_at && !isDeleted && (
-                            <span
-                              style={{
-                                ...s.editedLabel,
-                                color: isMine ? 'rgba(255,255,255,0.7)' : BRAND.muted,
-                              }}
-                            >
+                            <span style={{ ...s.editedLabel, color: isMine ? 'rgba(255,255,255,0.7)' : BRAND.muted }}>
                               edited
                             </span>
                           )}
-                          <span
-                            style={{
-                              ...s.timeText,
-                              color: isMine ? 'rgba(255,255,255,0.7)' : BRAND.muted,
-                            }}
-                          >
+                          <span style={{ ...s.timeText, color: isMine ? 'rgba(255,255,255,0.7)' : BRAND.muted }}>
                             {time}
                           </span>
                           {isMine && !isDeleted && (
@@ -690,37 +684,46 @@ export default function ChatPage() {
         </div>
       )}
 
+      {/* ✅ FIX: backdrop + menu. Backdrop closes on click. Menu stops propagation. */}
       {contextMenu && (
-        <div
-          style={{
-            ...s.ctxMenu,
-            left: Math.max(8, Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 360) - 200)),
-            top: Math.max(8, Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 640) - 300)),
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button style={s.ctxItem} onClick={handleReply}>
-            <MdReply size={18} color={BRAND.primary} /><span>Reply</span>
-          </button>
-          {contextMenu.hasText && (
-            <button style={s.ctxItem} onClick={handleCopy}>
-              <MdContentCopy size={18} color={BRAND.muted} /><span>Copy</span>
+        <>
+          <div
+            style={s.ctxBackdrop}
+            onClick={() => setContextMenu(null)}
+            onTouchStart={(e) => { e.preventDefault(); setContextMenu(null); }}
+          />
+          <div
+            style={{
+              ...s.ctxMenu,
+              left: Math.max(8, Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 360) - 200)),
+              top: Math.max(8, Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 640) - 300)),
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
+            <button style={s.ctxItem} onClick={handleReply} onTouchEnd={handleReply}>
+              <MdReply size={18} color={BRAND.primary} /><span>Reply</span>
             </button>
-          )}
-          {contextMenu.isMine && contextMenu.hasText && (
-            <button style={s.ctxItem} onClick={handleEdit}>
-              <MdEdit size={18} color={BRAND.muted} /><span>Edit</span>
+            {contextMenu.hasText && (
+              <button style={s.ctxItem} onClick={handleCopy} onTouchEnd={handleCopy}>
+                <MdContentCopy size={18} color={BRAND.muted} /><span>Copy</span>
+              </button>
+            )}
+            {contextMenu.isMine && contextMenu.hasText && (
+              <button style={s.ctxItem} onClick={handleEdit} onTouchEnd={handleEdit}>
+                <MdEdit size={18} color={BRAND.muted} /><span>Edit</span>
+              </button>
+            )}
+            {contextMenu.isMine && (
+              <button style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteAll} onTouchEnd={requestDeleteAll}>
+                <MdDelete size={18} color={BRAND.danger} /><span>Delete for everyone</span>
+              </button>
+            )}
+            <button style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteMe} onTouchEnd={requestDeleteMe}>
+              <MdDelete size={18} color={BRAND.danger} /><span>Delete for me</span>
             </button>
-          )}
-          {contextMenu.isMine && (
-            <button style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteAll}>
-              <MdDelete size={18} color={BRAND.danger} /><span>Delete for everyone</span>
-            </button>
-          )}
-          <button style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteMe}>
-            <MdDelete size={18} color={BRAND.danger} /><span>Delete for me</span>
-          </button>
-        </div>
+          </div>
+        </>
       )}
 
       {confirmDelete && (
@@ -889,6 +892,14 @@ const s: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
   },
 
+  /* ✅ NEW: fullscreen backdrop sits behind the menu.
+     Clicking it closes the menu. The menu itself stops propagation so
+     its own buttons work on both desktop and mobile. */
+  ctxBackdrop: {
+    position: 'fixed', inset: 0,
+    backgroundColor: 'transparent',
+    zIndex: 999,
+  },
   ctxMenu: {
     position: 'fixed', zIndex: 1000,
     backgroundColor: '#fff', borderRadius: 8,
