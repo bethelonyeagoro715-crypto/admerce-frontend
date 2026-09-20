@@ -20,9 +20,7 @@ import {
   MdCheck,
   MdAttachFile,
   MdEmojiEmotions,
-  MdDone,
   MdDoneAll,
-  MdSearch,
 } from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
@@ -67,6 +65,19 @@ interface ConfirmDeleteState {
   messageId: string | number;
   scope: 'me' | 'all';
 }
+
+// ✅ Admerce brand palette — single source of truth
+const BRAND = {
+  primary: '#0504AA',       // Admerce blue — header, buttons, accents
+  primaryDark: '#03037A',   // gradient end / pressed
+  bubbleMine: '#E4E3FF',    // light brand tint for outgoing bubbles
+  bubbleTheirs: '#FFFFFF',  // white for incoming
+  bg: '#EEF0FF',            // subtle brand-tinted chat background
+  datePill: '#E4E3FF',
+  statusText: '#C7C6F5',    // muted label on the header
+  muted: '#8696A0',
+  danger: '#DC2626',
+};
 
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -219,7 +230,7 @@ export default function ChatPage() {
       setInputText('');
       setTimeout(() => inputRef.current?.focus(), 50);
     },
-    [currentUserId, otherUserName, setReplyDraft, setEditDraft, setInputText],
+    [currentUserId, otherUserName],
   );
 
   const handleBubbleTap = useCallback(
@@ -350,7 +361,6 @@ export default function ChatPage() {
       setCopyToast(true);
       setTimeout(() => setCopyToast(false), 2000);
     } catch {
-      // fallback for older browsers
       const el = document.createElement('textarea');
       el.value = msg.text;
       el.style.position = 'fixed';
@@ -423,7 +433,7 @@ export default function ChatPage() {
 
   if (isSeaiConversation) {
     return (
-      <main style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#ECE5DD' }}>
+      <main style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: BRAND.bg }}>
         <p style={{ color: '#555' }}>Redirecting to SEAI...</p>
       </main>
     );
@@ -511,7 +521,7 @@ export default function ChatPage() {
                       <div
                         style={{
                           ...s.bubble,
-                          backgroundColor: isMine ? '#DCF8C6' : '#fff',
+                          backgroundColor: isMine ? BRAND.bubbleMine : BRAND.bubbleTheirs,
                           borderTopLeftRadius: isMine ? 16 : 4,
                           borderTopRightRadius: isMine ? 4 : 16,
                           borderBottomLeftRadius: 16,
@@ -527,10 +537,7 @@ export default function ChatPage() {
                       >
                         {/* Reply quote */}
                         {msg.reply_to_id && (
-                          <div style={{
-                            ...s.replyQuote,
-                            borderLeftColor: isMine ? '#25D366' : '#0504AA',
-                          }}>
+                          <div style={{ ...s.replyQuote, borderLeftColor: BRAND.primary }}>
                             <div style={s.replyQuoteName}>
                               {msg.reply_to_sender_name || 'Reply'}
                             </div>
@@ -564,7 +571,7 @@ export default function ChatPage() {
                           {msg.edited_at && !isDeleted && <span style={s.editedLabel}>edited</span>}
                           <span style={s.timeText}>{time}</span>
                           {isMine && !isDeleted && (
-                            <MdDoneAll size={14} color="#53bdeb" style={{ marginLeft: 2 }} />
+                            <MdDoneAll size={14} color={BRAND.primary} style={{ marginLeft: 2 }} />
                           )}
                         </div>
                       </div>
@@ -581,7 +588,7 @@ export default function ChatPage() {
       {/* ── Reply / Edit preview bar ─────────────── */}
       {(replyDraft || editDraft) && (
         <div style={s.previewBar}>
-          <div style={{ width: 4, borderRadius: 2, backgroundColor: '#25D366', alignSelf: 'stretch', marginRight: 10, flexShrink: 0 }} />
+          <div style={{ width: 4, borderRadius: 2, backgroundColor: BRAND.primary, alignSelf: 'stretch', marginRight: 10, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={s.previewLabel}>
               {editDraft ? (
@@ -603,7 +610,7 @@ export default function ChatPage() {
       {/* ── Input bar ────────────────────────────── */}
       <div style={s.inputBar}>
         <div style={s.inputRow}>
-          <button style={s.inputIcon}><MdEmojiEmotions size={24} color="#8696A0" /></button>
+          <button style={s.inputIcon}><MdEmojiEmotions size={24} color={BRAND.muted} /></button>
           <input
             ref={inputRef}
             type="text"
@@ -617,13 +624,10 @@ export default function ChatPage() {
             style={s.input}
             disabled={!hasRecipient}
           />
-          <button style={s.inputIcon}><MdAttachFile size={24} color="#8696A0" /></button>
+          <button style={s.inputIcon}><MdAttachFile size={24} color={BRAND.muted} /></button>
         </div>
         <button
-          style={{
-            ...s.sendCircle,
-            backgroundColor: '#25D366',
-          }}
+          style={{ ...s.sendCircle, backgroundColor: BRAND.primary }}
           onClick={showMicButton ? () => setIsRecording((r) => !r) : sendMessage}
           disabled={!hasRecipient}
           title={showMicButton ? 'Voice note' : (editDraft ? 'Save edit' : 'Send')}
@@ -657,25 +661,25 @@ export default function ChatPage() {
           onClick={(e) => e.stopPropagation()}
         >
           <button style={s.ctxItem} onClick={handleReply}>
-            <MdReply size={18} color="#25D366" /><span>Reply</span>
+            <MdReply size={18} color={BRAND.primary} /><span>Reply</span>
           </button>
           {contextMenu.hasText && (
             <button style={s.ctxItem} onClick={handleCopy}>
-              <MdContentCopy size={18} color="#8696A0" /><span>Copy</span>
+              <MdContentCopy size={18} color={BRAND.muted} /><span>Copy</span>
             </button>
           )}
           {contextMenu.isMine && contextMenu.hasText && (
             <button style={s.ctxItem} onClick={handleEdit}>
-              <MdEdit size={18} color="#8696A0" /><span>Edit</span>
+              <MdEdit size={18} color={BRAND.muted} /><span>Edit</span>
             </button>
           )}
           {contextMenu.isMine && (
-            <button style={{ ...s.ctxItem, color: '#DC2626' }} onClick={requestDeleteAll}>
-              <MdDelete size={18} color="#DC2626" /><span>Delete for everyone</span>
+            <button style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteAll}>
+              <MdDelete size={18} color={BRAND.danger} /><span>Delete for everyone</span>
             </button>
           )}
-          <button style={{ ...s.ctxItem, color: '#DC2626' }} onClick={requestDeleteMe}>
-            <MdDelete size={18} color="#DC2626" /><span>Delete for me</span>
+          <button style={{ ...s.ctxItem, color: BRAND.danger }} onClick={requestDeleteMe}>
+            <MdDelete size={18} color={BRAND.danger} /><span>Delete for me</span>
           </button>
         </div>
       )}
@@ -707,7 +711,7 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     height: '100dvh',
-    backgroundColor: '#ECE5DD',
+    backgroundColor: BRAND.bg,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -716,7 +720,7 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     padding: '8px 6px 8px 4px',
-    backgroundColor: '#128C7E',
+    backgroundColor: BRAND.primary,
     zIndex: 10,
     gap: 2,
   },
@@ -734,12 +738,12 @@ const s: Record<string, React.CSSProperties> = {
   avatarInitial: { fontSize: 16, fontWeight: 700, color: '#fff' },
   headerInfo: { display: 'flex', flexDirection: 'column', marginLeft: 8 },
   headerName: { fontSize: 16, fontWeight: 600, color: '#fff', lineHeight: 1.2 },
-  headerStatus: { fontSize: 12, color: '#d0f0e8' },
+  headerStatus: { fontSize: 12, color: BRAND.statusText },
 
-  /* wallpaper */
+  /* wallpaper — subtle brand-tinted dot pattern */
   wallpaper: {
     position: 'absolute', inset: 0, top: 58,
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1' fill='%23128C7E' opacity='0.07'/%3E%3C/svg%3E")`,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1' fill='%230504AA' opacity='0.06'/%3E%3C/svg%3E")`,
     pointerEvents: 'none', zIndex: 0,
   },
 
@@ -755,11 +759,11 @@ const s: Record<string, React.CSSProperties> = {
   },
   spinner: {
     width: 36, height: 36, border: '4px solid #ddd',
-    borderTopColor: '#128C7E', borderRadius: '50%',
+    borderTopColor: BRAND.primary, borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   retryBtn: {
-    padding: '8px 20px', backgroundColor: '#128C7E', color: '#fff',
+    padding: '8px 20px', backgroundColor: BRAND.primary, color: '#fff',
     border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600,
   },
 
@@ -768,17 +772,17 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex', justifyContent: 'center', margin: '12px 0 6px',
   },
   datePillText: {
-    backgroundColor: '#D1F4CC',
-    color: '#555', fontSize: 12, fontWeight: 500,
+    backgroundColor: BRAND.datePill,
+    color: '#333', fontSize: 12, fontWeight: 500,
     padding: '3px 12px', borderRadius: 12,
-    boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
   },
 
   /* bubble */
   bubble: {
     maxWidth: '100%',
     padding: '6px 10px 4px',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+    boxShadow: '0 1px 2px rgba(5,4,170,0.08)',
     cursor: 'pointer',
     userSelect: 'none',
     WebkitUserSelect: 'none',
@@ -787,10 +791,10 @@ const s: Record<string, React.CSSProperties> = {
   replyQuote: {
     borderLeftWidth: 4, borderLeftStyle: 'solid',
     paddingLeft: 8, marginBottom: 6,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(5,4,170,0.06)',
     borderRadius: 4, padding: '4px 8px',
   },
-  replyQuoteName: { fontSize: 12, fontWeight: 700, color: '#128C7E', marginBottom: 2 },
+  replyQuoteName: { fontSize: 12, fontWeight: 700, color: BRAND.primary, marginBottom: 2 },
   deletedText: {
     fontStyle: 'italic', color: '#999', fontSize: 14,
     display: 'flex', alignItems: 'center',
@@ -800,8 +804,8 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
     gap: 3, marginTop: 3,
   },
-  editedLabel: { fontSize: 10, color: '#8696A0', fontStyle: 'italic' },
-  timeText: { fontSize: 11, color: '#8696A0' },
+  editedLabel: { fontSize: 10, color: BRAND.muted, fontStyle: 'italic' },
+  timeText: { fontSize: 11, color: BRAND.muted },
 
   /* reply/edit preview bar */
   previewBar: {
@@ -812,7 +816,7 @@ const s: Record<string, React.CSSProperties> = {
     gap: 0, zIndex: 2,
   },
   previewLabel: {
-    fontSize: 12, fontWeight: 700, color: '#128C7E',
+    fontSize: 12, fontWeight: 700, color: BRAND.primary,
     marginBottom: 2, display: 'flex', alignItems: 'center',
   },
   previewText: { fontSize: 13, color: '#555', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
@@ -822,13 +826,13 @@ const s: Record<string, React.CSSProperties> = {
   inputBar: {
     display: 'flex', alignItems: 'center',
     padding: '6px 8px', gap: 8,
-    backgroundColor: '#F0F0F0', zIndex: 2,
+    backgroundColor: '#F0F0F5', zIndex: 2,
   },
   inputRow: {
     flex: 1, display: 'flex', alignItems: 'center',
     backgroundColor: '#fff', borderRadius: 24,
     padding: '4px 4px 4px 4px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    boxShadow: '0 1px 3px rgba(5,4,170,0.08)',
   },
   inputIcon: {
     background: 'none', border: 'none', cursor: 'pointer',
@@ -843,7 +847,7 @@ const s: Record<string, React.CSSProperties> = {
     width: 46, height: 46, borderRadius: '50%',
     border: 'none', display: 'flex', alignItems: 'center',
     justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-    boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+    boxShadow: '0 2px 6px rgba(5,4,170,0.3)',
   },
 
   /* copy toast */
@@ -860,7 +864,7 @@ const s: Record<string, React.CSSProperties> = {
   ctxMenu: {
     position: 'fixed', zIndex: 1000,
     backgroundColor: '#fff', borderRadius: 8,
-    boxShadow: '0 6px 24px rgba(0,0,0,0.2)',
+    boxShadow: '0 6px 24px rgba(5,4,170,0.18)',
     padding: '4px 0', minWidth: 190,
   },
   ctxItem: {
@@ -886,11 +890,11 @@ const s: Record<string, React.CSSProperties> = {
   dialogActions: { display: 'flex', gap: 10, justifyContent: 'flex-end' },
   cancelBtn: {
     padding: '10px 20px', backgroundColor: 'transparent',
-    color: '#128C7E', border: 'none', borderRadius: 8,
+    color: BRAND.primary, border: 'none', borderRadius: 8,
     cursor: 'pointer', fontWeight: 600, fontSize: 14,
   },
   deleteBtn: {
-    padding: '10px 20px', backgroundColor: '#DC2626',
+    padding: '10px 20px', backgroundColor: BRAND.danger,
     color: '#fff', border: 'none', borderRadius: 8,
     cursor: 'pointer', fontWeight: 600, fontSize: 14,
   },
