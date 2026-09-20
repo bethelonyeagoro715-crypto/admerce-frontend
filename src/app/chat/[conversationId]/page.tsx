@@ -66,15 +66,14 @@ interface ConfirmDeleteState {
   scope: 'me' | 'all';
 }
 
-// ✅ Admerce brand palette — single source of truth
 const BRAND = {
-  primary: '#0504AA',       // Admerce blue — header, buttons, accents
-  primaryDark: '#03037A',   // gradient end / pressed
-  bubbleMine: '#E4E3FF',    // light brand tint for outgoing bubbles
-  bubbleTheirs: '#FFFFFF',  // white for incoming
-  bg: '#EEF0FF',            // subtle brand-tinted chat background
+  primary: '#0504AA',
+  primaryDark: '#03037A',
+  bubbleMine: '#0504AA',       // ✅ sender bubble = full primary brand blue
+  bubbleTheirs: '#FFFFFF',
+  bg: '#EEF0FF',
   datePill: '#E4E3FF',
-  statusText: '#C7C6F5',    // muted label on the header
+  statusText: '#C7C6F5',
   muted: '#8696A0',
   danger: '#DC2626',
 };
@@ -217,7 +216,6 @@ export default function ChatPage() {
     };
   }, [contextMenu]);
 
-  // ─── Double-tap to reply ───────────────────────────────────────────────────
   const handleDoubleTap = useCallback(
     (msg: ChatMessage) => {
       if (msg.deleted_for_everyone) return;
@@ -230,7 +228,7 @@ export default function ChatPage() {
       setInputText('');
       setTimeout(() => inputRef.current?.focus(), 50);
     },
-    [currentUserId, otherUserName],
+    [currentUserId, otherUserName, setReplyDraft, setEditDraft, setInputText],
   );
 
   const handleBubbleTap = useCallback(
@@ -471,7 +469,6 @@ export default function ChatPage() {
         </button>
       </div>
 
-      {/* ── Background wallpaper strip ─────────────── */}
       <div style={s.wallpaper} />
 
       {/* ── Messages ───────────────────────────────── */}
@@ -498,7 +495,6 @@ export default function ChatPage() {
           <>
             {groupedMessages.map((group) => (
               <div key={group.date}>
-                {/* Date pill */}
                 <div style={s.datePill}><span style={s.datePillText}>{group.date}</span></div>
 
                 {group.messages.map((msg, idx) => {
@@ -517,11 +513,11 @@ export default function ChatPage() {
                         paddingRight: isMine ? 0 : 60,
                       }}
                     >
-                      {/* Bubble */}
                       <div
                         style={{
                           ...s.bubble,
                           backgroundColor: isMine ? BRAND.bubbleMine : BRAND.bubbleTheirs,
+                          color: isMine ? '#fff' : '#111',
                           borderTopLeftRadius: isMine ? 16 : 4,
                           borderTopRightRadius: isMine ? 4 : 16,
                           borderBottomLeftRadius: 16,
@@ -535,20 +531,45 @@ export default function ChatPage() {
                         onTouchEnd={(e) => handleTouchEnd(e, msg)}
                         onTouchCancel={handleTouchMove}
                       >
-                        {/* Reply quote */}
                         {msg.reply_to_id && (
-                          <div style={{ ...s.replyQuote, borderLeftColor: BRAND.primary }}>
-                            <div style={s.replyQuoteName}>
+                          <div
+                            style={{
+                              ...s.replyQuote,
+                              backgroundColor: isMine
+                                ? 'rgba(255,255,255,0.15)'
+                                : 'rgba(5,4,170,0.06)',
+                              borderLeftColor: isMine ? '#fff' : BRAND.primary,
+                            }}
+                          >
+                            <div
+                              style={{
+                                ...s.replyQuoteName,
+                                color: isMine ? '#fff' : BRAND.primary,
+                              }}
+                            >
                               {msg.reply_to_sender_name || 'Reply'}
                             </div>
-                            <div style={{ fontSize: 12, color: '#555', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: isMine ? 'rgba(255,255,255,0.85)' : '#555',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
                               {msg.reply_to_deleted ? 'This message was deleted' : (msg.reply_to_text || '').slice(0, 80)}
                             </div>
                           </div>
                         )}
 
                         {isDeleted ? (
-                          <div style={s.deletedText}>
+                          <div
+                            style={{
+                              ...s.deletedText,
+                              color: isMine ? 'rgba(255,255,255,0.7)' : '#999',
+                            }}
+                          >
                             <MdClose size={14} style={{ marginRight: 4 }} />
                             {isMine ? 'You deleted this message' : 'This message was deleted'}
                           </div>
@@ -561,17 +582,39 @@ export default function ChatPage() {
                               <img src={resolveImageUrl(msg.image_url) || ''} alt="" style={{ maxWidth: 220, borderRadius: 8, marginBottom: msg.text ? 4 : 0, display: 'block' }} />
                             )}
                             {msg.text && (
-                              <div style={s.msgText}>{msg.text}</div>
+                              <div
+                                style={{
+                                  ...s.msgText,
+                                  color: isMine ? '#fff' : '#111',
+                                }}
+                              >
+                                {msg.text}
+                              </div>
                             )}
                           </>
                         )}
 
-                        {/* Time + ticks */}
                         <div style={s.metaRow}>
-                          {msg.edited_at && !isDeleted && <span style={s.editedLabel}>edited</span>}
-                          <span style={s.timeText}>{time}</span>
+                          {msg.edited_at && !isDeleted && (
+                            <span
+                              style={{
+                                ...s.editedLabel,
+                                color: isMine ? 'rgba(255,255,255,0.7)' : BRAND.muted,
+                              }}
+                            >
+                              edited
+                            </span>
+                          )}
+                          <span
+                            style={{
+                              ...s.timeText,
+                              color: isMine ? 'rgba(255,255,255,0.7)' : BRAND.muted,
+                            }}
+                          >
+                            {time}
+                          </span>
                           {isMine && !isDeleted && (
-                            <MdDoneAll size={14} color={BRAND.primary} style={{ marginLeft: 2 }} />
+                            <MdDoneAll size={14} color="rgba(255,255,255,0.9)" style={{ marginLeft: 2 }} />
                           )}
                         </div>
                       </div>
@@ -585,7 +628,6 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* ── Reply / Edit preview bar ─────────────── */}
       {(replyDraft || editDraft) && (
         <div style={s.previewBar}>
           <div style={{ width: 4, borderRadius: 2, backgroundColor: BRAND.primary, alignSelf: 'stretch', marginRight: 10, flexShrink: 0 }} />
@@ -607,7 +649,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ── Input bar ────────────────────────────── */}
       <div style={s.inputBar}>
         <div style={s.inputRow}>
           <button style={s.inputIcon}><MdEmojiEmotions size={24} color={BRAND.muted} /></button>
@@ -642,7 +683,6 @@ export default function ChatPage() {
         </button>
       </div>
 
-      {/* ── Copy toast ───────────────────────────── */}
       {copyToast && (
         <div style={s.toast}>
           <MdCheck size={16} color="#fff" style={{ marginRight: 6 }} />
@@ -650,7 +690,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ── Context menu ─────────────────────────── */}
       {contextMenu && (
         <div
           style={{
@@ -684,7 +723,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* ── Confirm delete dialog ─────────────────── */}
       {confirmDelete && (
         <div style={s.overlay} onClick={() => setConfirmDelete(null)}>
           <div style={s.dialog} onClick={(e) => e.stopPropagation()}>
@@ -715,7 +753,6 @@ const s: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
-  /* header */
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -740,14 +777,12 @@ const s: Record<string, React.CSSProperties> = {
   headerName: { fontSize: 16, fontWeight: 600, color: '#fff', lineHeight: 1.2 },
   headerStatus: { fontSize: 12, color: BRAND.statusText },
 
-  /* wallpaper — subtle brand-tinted dot pattern */
   wallpaper: {
     position: 'absolute', inset: 0, top: 58,
     backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1' fill='%230504AA' opacity='0.06'/%3E%3C/svg%3E")`,
     pointerEvents: 'none', zIndex: 0,
   },
 
-  /* messages */
   messages: {
     flex: 1, overflowY: 'auto', padding: '8px 12px',
     position: 'relative', zIndex: 1,
@@ -767,7 +802,6 @@ const s: Record<string, React.CSSProperties> = {
     border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600,
   },
 
-  /* date pill */
   datePill: {
     display: 'flex', justifyContent: 'center', margin: '12px 0 6px',
   },
@@ -778,11 +812,10 @@ const s: Record<string, React.CSSProperties> = {
     boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
   },
 
-  /* bubble */
   bubble: {
     maxWidth: '100%',
     padding: '6px 10px 4px',
-    boxShadow: '0 1px 2px rgba(5,4,170,0.08)',
+    boxShadow: '0 1px 2px rgba(5,4,170,0.12)',
     cursor: 'pointer',
     userSelect: 'none',
     WebkitUserSelect: 'none',
@@ -791,23 +824,21 @@ const s: Record<string, React.CSSProperties> = {
   replyQuote: {
     borderLeftWidth: 4, borderLeftStyle: 'solid',
     paddingLeft: 8, marginBottom: 6,
-    backgroundColor: 'rgba(5,4,170,0.06)',
     borderRadius: 4, padding: '4px 8px',
   },
-  replyQuoteName: { fontSize: 12, fontWeight: 700, color: BRAND.primary, marginBottom: 2 },
+  replyQuoteName: { fontSize: 12, fontWeight: 700, marginBottom: 2 },
   deletedText: {
-    fontStyle: 'italic', color: '#999', fontSize: 14,
+    fontStyle: 'italic', fontSize: 14,
     display: 'flex', alignItems: 'center',
   },
-  msgText: { fontSize: 14.5, color: '#111', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4 },
+  msgText: { fontSize: 14.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4 },
   metaRow: {
     display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
     gap: 3, marginTop: 3,
   },
-  editedLabel: { fontSize: 10, color: BRAND.muted, fontStyle: 'italic' },
-  timeText: { fontSize: 11, color: BRAND.muted },
+  editedLabel: { fontSize: 10, fontStyle: 'italic' },
+  timeText: { fontSize: 11 },
 
-  /* reply/edit preview bar */
   previewBar: {
     display: 'flex', alignItems: 'center',
     padding: '8px 12px',
@@ -822,7 +853,6 @@ const s: Record<string, React.CSSProperties> = {
   previewText: { fontSize: 13, color: '#555', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   previewClose: { background: 'none', border: 'none', cursor: 'pointer', padding: 6, marginLeft: 8 },
 
-  /* input bar */
   inputBar: {
     display: 'flex', alignItems: 'center',
     padding: '6px 8px', gap: 8,
@@ -850,7 +880,6 @@ const s: Record<string, React.CSSProperties> = {
     boxShadow: '0 2px 6px rgba(5,4,170,0.3)',
   },
 
-  /* copy toast */
   toast: {
     position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
     backgroundColor: '#333', color: '#fff',
@@ -860,7 +889,6 @@ const s: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
   },
 
-  /* context menu */
   ctxMenu: {
     position: 'fixed', zIndex: 1000,
     backgroundColor: '#fff', borderRadius: 8,
@@ -874,7 +902,6 @@ const s: Record<string, React.CSSProperties> = {
     cursor: 'pointer', fontSize: 14.5, color: '#1A1A1A', textAlign: 'left',
   },
 
-  /* confirm delete */
   overlay: {
     position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
