@@ -26,11 +26,16 @@ interface Category {
   label: string;
 }
 
+// ✅ FIX: category IDs must match the backend whitelist in
+//    app/utils/category_utils.py `validate_product_category`.
+//    Two were mismatched:
+//      "health_beauty" → "health_wellness"
+//      "fashion"       → "fashion_apparel"
 const CATEGORIES: Category[] = [
   { id: 'tech_electronics', label: '🔌 Tech & Electronics' },
   { id: 'food_beverage', label: '🍏 Food, Beverage & Consumables' },
-  { id: 'health_beauty', label: '⚕️ Health, Wellness & Beauty' },
-  { id: 'fashion', label: '👗 Fashion, Apparel & Goods' },
+  { id: 'health_wellness', label: '⚕️ Health, Wellness & Beauty' },
+  { id: 'fashion_apparel', label: '👗 Fashion, Apparel & Goods' },
   { id: 'building_industrial', label: '🏗️ Building, Industrial & Hardware' },
   { id: 'home_garden', label: '🛋️ Home, Living & Garden' },
   { id: 'kids_toys', label: '🧸 Kids, Toys & Hobbies' },
@@ -92,7 +97,6 @@ export default function AddItemPage() {
     );
   };
 
-  // Load store ID and location on mount
   useEffect(() => {
     const timer = setTimeout(() => {
       loadStoreId();
@@ -241,14 +245,12 @@ export default function AddItemPage() {
 
   return (
     <main style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>Add New Item</h1>
         {isLoading && <div style={styles.spinnerSmall} />}
       </div>
 
       <div style={styles.scrollArea}>
-        {/* Image Upload */}
         <div onClick={pickImage} style={styles.imageUpload}>
           {imagePreview ? (
             <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -285,7 +287,6 @@ export default function AddItemPage() {
           onChange={handleFileChange}
         />
 
-        {/* Style Picker */}
         <h3 style={styles.sectionTitle}>Image Style</h3>
         <div style={styles.styleRow}>
           {STYLES.map((style) => (
@@ -305,7 +306,6 @@ export default function AddItemPage() {
           ))}
         </div>
 
-        {/* Preview Button */}
         <button
           onClick={previewImageStyle}
           disabled={!imageFile}
@@ -315,7 +315,6 @@ export default function AddItemPage() {
           Preview Style
         </button>
 
-        {/* Title */}
         <div style={styles.fieldRow}>
           <input
             type="text"
@@ -329,7 +328,6 @@ export default function AddItemPage() {
           </button>
         </div>
 
-        {/* Description */}
         <div style={styles.fieldRow}>
           <textarea
             placeholder="Description"
@@ -342,7 +340,6 @@ export default function AddItemPage() {
           </button>
         </div>
 
-        {/* Price */}
         <input
           type="number"
           placeholder="Price (₦)"
@@ -351,7 +348,6 @@ export default function AddItemPage() {
           style={styles.input}
         />
 
-        {/* Quantity */}
         <input
           type="number"
           placeholder="Quantity Available"
@@ -360,7 +356,6 @@ export default function AddItemPage() {
           style={styles.input}
         />
 
-        {/* Category Picker */}
         <h3 style={styles.sectionTitle}>Category</h3>
         <div style={styles.categoryGrid}>
           {CATEGORIES.map((cat) => (
@@ -379,7 +374,6 @@ export default function AddItemPage() {
           ))}
         </div>
 
-        {/* Condition Dropdown */}
         <select
           value={selectedCondition}
           onChange={(e) => setSelectedCondition(e.target.value)}
@@ -390,7 +384,6 @@ export default function AddItemPage() {
           ))}
         </select>
 
-        {/* Submit */}
         <button
           onClick={submitListing}
           disabled={isLoading}
@@ -408,7 +401,6 @@ export default function AddItemPage() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
