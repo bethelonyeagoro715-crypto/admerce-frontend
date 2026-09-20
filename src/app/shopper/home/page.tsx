@@ -100,7 +100,7 @@ interface Provider {
   serviceCount: number;
 }
 
-// ─── CSS-column masonry — no library, no measuring, works everywhere ──────
+// ─── CSS-column masonry ────────────────────────────────────────────────────
 function MasonryColumns<T>({
   items,
   columns,
@@ -116,7 +116,6 @@ function MasonryColumns<T>({
 }) {
   if (items.length === 0) return null;
 
-  // Round-robin into N columns — true masonry layout, zero measurement
   const cols: T[][] = Array.from({ length: columns }, () => []);
   items.forEach((item, i) => cols[i % columns].push(item));
 
@@ -334,7 +333,6 @@ export default function ShopperHomePage() {
   const [showFilter, setShowFilter] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Responsive column count
   const [columns, setColumns] = useState(2);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -562,7 +560,7 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ─── Touch handlers (drag-follow slider + swipe + pull-to-refresh) ───
+  // ─── Touch handlers ─────────────────────────────────────────────────
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
     dragStartX.current = t.clientX;
@@ -588,8 +586,12 @@ export default function ShopperHomePage() {
     const currentX = t.clientX;
     const currentY = t.clientY;
 
-    // ── Vertical pull-to-refresh (checked first, before axis lock)
-    if (pullStartY.current !== null && !pullTriggered.current && !isRefreshing && !isDraggingRef.current) {
+    if (
+      pullStartY.current !== null &&
+      !pullTriggered.current &&
+      !isRefreshing &&
+      !isDraggingRef.current
+    ) {
       const deltaY = currentY - pullStartY.current;
       if (deltaY > 100) {
         const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
@@ -817,7 +819,7 @@ export default function ShopperHomePage() {
         ))}
       </div>
 
-      {/* Slidable tab content — 300% track, one panel per tab */}
+      {/* Slidable tab content */}
       <div
         style={styles.tabContent}
         onTouchStart={handleTouchStart}
@@ -849,25 +851,27 @@ export default function ShopperHomePage() {
             ref={currentTab === 0 ? activePanelRef : null}
             style={styles.panel}
           >
-            {loadingItems ? (
-              <div style={styles.centeredMsg}>Loading items…</div>
-            ) : items.length === 0 ? (
-              <div style={styles.centeredMsg}>No items yet.</div>
-            ) : (
-              <MasonryColumns
-                items={items}
-                columns={columns}
-                gap={10}
-                keyFor={(item) => item.id}
-                renderItem={(item) => (
-                  <ItemCard
-                    item={item}
-                    onPress={handleItemPress}
-                    onVisualSearch={handleVisualSearch}
-                  />
-                )}
-              />
-            )}
+            <div style={styles.panelInner}>
+              {loadingItems ? (
+                <div style={styles.centeredMsg}>Loading items…</div>
+              ) : items.length === 0 ? (
+                <div style={styles.centeredMsg}>No items yet.</div>
+              ) : (
+                <MasonryColumns
+                  items={items}
+                  columns={columns}
+                  gap={10}
+                  keyFor={(item) => item.id}
+                  renderItem={(item) => (
+                    <ItemCard
+                      item={item}
+                      onPress={handleItemPress}
+                      onVisualSearch={handleVisualSearch}
+                    />
+                  )}
+                />
+              )}
+            </div>
           </div>
 
           {/* Panel 1 — SHOPNSTORE */}
@@ -875,21 +879,23 @@ export default function ShopperHomePage() {
             ref={currentTab === 1 ? activePanelRef : null}
             style={styles.panel}
           >
-            {loadingStores ? (
-              <div style={styles.centeredMsg}>Loading stores…</div>
-            ) : stores.length === 0 ? (
-              <div style={styles.centeredMsg}>No stores yet.</div>
-            ) : (
-              <MasonryColumns
-                items={stores}
-                columns={columns}
-                gap={10}
-                keyFor={(store) => store.id}
-                renderItem={(store) => (
-                  <StoreCard store={store} onPress={handleStorePress} />
-                )}
-              />
-            )}
+            <div style={styles.panelInner}>
+              {loadingStores ? (
+                <div style={styles.centeredMsg}>Loading stores…</div>
+              ) : stores.length === 0 ? (
+                <div style={styles.centeredMsg}>No stores yet.</div>
+              ) : (
+                <MasonryColumns
+                  items={stores}
+                  columns={columns}
+                  gap={10}
+                  keyFor={(store) => store.id}
+                  renderItem={(store) => (
+                    <StoreCard store={store} onPress={handleStorePress} />
+                  )}
+                />
+              )}
+            </div>
           </div>
 
           {/* Panel 2 — SERVOOKS */}
@@ -897,28 +903,30 @@ export default function ShopperHomePage() {
             ref={currentTab === 2 ? activePanelRef : null}
             style={styles.panel}
           >
-            {loadingServices ? (
-              <div style={styles.centeredMsg}>
-                Loading service providers…
-              </div>
-            ) : providers.length === 0 ? (
-              <div style={styles.centeredMsg}>
-                No service providers yet.
-              </div>
-            ) : (
-              <MasonryColumns
-                items={providers}
-                columns={columns}
-                gap={10}
-                keyFor={(provider) => provider.id}
-                renderItem={(provider) => (
-                  <ProviderCard
-                    provider={provider}
-                    onPress={handleProviderPress}
-                  />
-                )}
-              />
-            )}
+            <div style={styles.panelInner}>
+              {loadingServices ? (
+                <div style={styles.centeredMsg}>
+                  Loading service providers…
+                </div>
+              ) : providers.length === 0 ? (
+                <div style={styles.centeredMsg}>
+                  No service providers yet.
+                </div>
+              ) : (
+                <MasonryColumns
+                  items={providers}
+                  columns={columns}
+                  gap={10}
+                  keyFor={(provider) => provider.id}
+                  renderItem={(provider) => (
+                    <ProviderCard
+                      provider={provider}
+                      onPress={handleProviderPress}
+                    />
+                  )}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1045,15 +1053,24 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
+  // ✅ FIX: box-sizing border-box so padding doesn't push the panel
+  //    past its 33.3333% slot. height 100% so it fills the tab area.
   panel: {
     width: '33.3333%',
     flex: '0 0 33.3333%',
+    height: '100%',
     minHeight: 0,
-    alignSelf: 'flex-start',
+    boxSizing: 'border-box',
     overflowY: 'auto',
     overflowX: 'hidden',
-    padding: '0 16px 16px',
     WebkitOverflowScrolling: 'touch',
+  },
+  // ✅ FIX: padding goes on an inner wrapper, not the panel itself.
+  //    That keeps the panel's outer box exactly 33.3333% wide.
+  panelInner: {
+    width: '100%',
+    padding: '0 16px 16px',
+    boxSizing: 'border-box',
   },
   centeredMsg: {
     textAlign: 'center',
