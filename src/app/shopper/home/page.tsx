@@ -11,7 +11,6 @@ import {
   MdTune,
   MdImage,
   MdStorefront,
-  MdBusiness,
   MdExpandLess,
   MdExpandMore,
 } from 'react-icons/md';
@@ -288,7 +287,6 @@ export default function ShopperHomePage() {
   const router = useRouter();
 
   const [currentTab, setCurrentTab] = useState(0);
-  const [slideDir, setSlideDir] = useState<1 | -1>(1);
   const [noteworthyIndex, setNoteworthyIndex] = useState(0);
   const [isNoteworthyCollapsed, setIsNoteworthyCollapsed] = useState(false);
 
@@ -310,7 +308,6 @@ export default function ShopperHomePage() {
   const noteworthyTimer = useRef<NodeJS.Timeout | null>(null);
   const sessionItemsShown = useRef<string[]>([]);
 
-  // ✅ Simplified touch tracking — no more drag-follow
   const swipeStartX = useRef<number | null>(null);
   const swipeStartY = useRef<number | null>(null);
   const pullStartY = useRef<number | null>(null);
@@ -513,11 +510,7 @@ export default function ShopperHomePage() {
   // ─── Tab switching ───────────────────────────────────────────────────
   const switchTab = useCallback((next: number) => {
     if (next < 0 || next > 2) return;
-    setCurrentTab((prev) => {
-      if (next === prev) return prev;
-      setSlideDir(next > prev ? 1 : -1);
-      return next;
-    });
+    setCurrentTab(next);
   }, []);
 
   // ─── Touch handlers (swipe + pull-to-refresh) ────────────────────────
@@ -526,7 +519,6 @@ export default function ShopperHomePage() {
     swipeStartX.current = t.clientX;
     swipeStartY.current = t.clientY;
 
-    // Only allow pull-to-refresh if the panel is at the very top
     const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
     if (panelScrollTop <= 0) {
       pullStartY.current = t.clientY;
@@ -544,7 +536,6 @@ export default function ShopperHomePage() {
       const dx = t.clientX - swipeStartX.current;
       const dy = t.clientY - swipeStartY.current;
 
-      // Must be more horizontal than vertical, and past a minimum
       if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
         if (dx < 0 && currentTab < 2) {
           switchTab(currentTab + 1);
@@ -562,20 +553,17 @@ export default function ShopperHomePage() {
     if (pullStartY.current !== null && !pullTriggered.current && !isRefreshing) {
       const deltaY = t.clientY - pullStartY.current;
 
-      // Any upward motion = user is scrolling, cancel the pull
       if (deltaY < 0) {
         pullStartY.current = null;
         return;
       }
 
-      // Panel must still be at the top
       const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
       if (panelScrollTop > 0) {
         pullStartY.current = null;
         return;
       }
 
-      // Only fire past a real pull threshold
       if (deltaY > 100) {
         pullTriggered.current = true;
         setIsRefreshing(true);
@@ -631,14 +619,7 @@ export default function ShopperHomePage() {
     <div style={styles.container}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes slideInRight {
-          from { transform: translateX(12%); opacity: 0; }
-          to   { transform: translateX(0);   opacity: 1; }
-        }
-        @keyframes slideInLeft {
-          from { transform: translateX(-12%); opacity: 0; }
-          to   { transform: translateX(0);    opacity: 1; }
-        }
+        @keyframes panelFade { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
 
       {/* App Bar */}
@@ -775,7 +756,7 @@ export default function ShopperHomePage() {
         ))}
       </div>
 
-      {/* ✅ Tab content — ONE panel mounted at a time. No 300% track. */}
+      {/* Tab content — one panel at a time, opacity-only fade */}
       <div
         style={styles.tabContent}
         onTouchStart={handleTouchStart}
@@ -794,10 +775,7 @@ export default function ShopperHomePage() {
           ref={activePanelRef}
           style={{
             ...styles.panel,
-            animation:
-              slideDir === 1
-                ? 'slideInRight 280ms cubic-bezier(0.25, 0.8, 0.25, 1)'
-                : 'slideInLeft 280ms cubic-bezier(0.25, 0.8, 0.25, 1)',
+            animation: 'panelFade 180ms ease',
           }}
         >
           {currentTab === 0 && (
@@ -995,7 +973,8 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
-  // ✅ Full-size panel — one at a time, scrolls independently
+  // ✅ Absolute-fill panel, opacity-only entry animation.
+  //    No transform → MasonryGrid measures clientWidth correctly.
   panel: {
     position: 'absolute',
     inset: 0,
