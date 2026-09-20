@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { MasonryGrid, getImageSize } from 'react-masonry-virtualized';
 import api from '../../../services/api';
 import {
   MdSearch,
@@ -44,8 +43,6 @@ const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
   `https://picsum.photos/800/400?random=${i * 10}`
 );
 
-const REF_WIDTH = 200;
-
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -54,25 +51,6 @@ function resolveImageUrl(url: string | null | undefined): string | null {
     process.env.NEXT_PUBLIC_API_URL ||
     '';
   return `${base}${url}`;
-}
-
-async function computeImageHeight(
-  imageUrl: string | null,
-  bodyHeight: number,
-): Promise<{ width: number; height: number }> {
-  const fallbackHeight = REF_WIDTH * 1.1 + bodyHeight;
-  if (!imageUrl) return { width: REF_WIDTH, height: fallbackHeight };
-
-  try {
-    const { width, height } = await getImageSize(imageUrl);
-    if (!width || !height) return { width: REF_WIDTH, height: fallbackHeight };
-
-    const scaled = (height / width) * REF_WIDTH;
-    const clamped = Math.max(REF_WIDTH * 0.6, Math.min(scaled, REF_WIDTH * 1.75));
-    return { width: REF_WIDTH, height: clamped + bodyHeight };
-  } catch {
-    return { width: REF_WIDTH, height: fallbackHeight };
-  }
 }
 
 // ─── Typed response shapes ─────────────────────────────────────────────────
@@ -120,6 +98,57 @@ interface Provider {
   name: string;
   image: string | null;
   serviceCount: number;
+}
+
+// ─── CSS-column masonry — no library, no measuring, works everywhere ──────
+function MasonryColumns<T>({
+  items,
+  columns,
+  gap,
+  renderItem,
+  keyFor,
+}: {
+  items: T[];
+  columns: number;
+  gap: number;
+  renderItem: (item: T) => React.ReactNode;
+  keyFor: (item: T, index: number) => string;
+}) {
+  if (items.length === 0) return null;
+
+  // Round-robin into N columns — true masonry layout, zero measurement
+  const cols: T[][] = Array.from({ length: columns }, () => []);
+  items.forEach((item, i) => cols[i % columns].push(item));
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap,
+        alignItems: 'flex-start',
+        width: '100%',
+      }}
+    >
+      {cols.map((col, colIdx) => (
+        <div
+          key={colIdx}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap,
+            minWidth: 0,
+          }}
+        >
+          {col.map((item, i) => (
+            <div key={keyFor(item, i)} style={{ width: '100%' }}>
+              {renderItem(item)}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────
@@ -305,14 +334,40 @@ export default function ShopperHomePage() {
   const [showFilter, setShowFilter] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Responsive column count
+  const [columns, setColumns] = useState(2);
+
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+
   const noteworthyTimer = useRef<NodeJS.Timeout | null>(null);
   const sessionItemsShown = useRef<string[]>([]);
+
+  const dragStartX = useRef<number | null>(null);
+  const dragStartY = useRef<number | null>(null);
+  const dragOffsetRef = useRef(0);
+  const axisDecided = useRef(false);
+  const isDraggingRef = useRef(false);
 
   const swipeStartX = useRef<number | null>(null);
   const swipeStartY = useRef<number | null>(null);
   const pullStartY = useRef<number | null>(null);
   const pullTriggered = useRef(false);
   const activePanelRef = useRef<HTMLDivElement>(null);
+
+  // ─── Responsive columns ──────────────────────────────────────────────
+  useEffect(() => {
+    const update = () => {
+      const w = window.innerWidth;
+      if (w < 500) setColumns(2);
+      else if (w < 800) setColumns(3);
+      else if (w < 1200) setColumns(4);
+      else setColumns(5);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   // ─── Location ───────────────────────────────────────────────────────
   const getCurrentLocation = async (): Promise<GeolocationPosition | null> => {
@@ -507,15 +562,15 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ─── Tab switching ───────────────────────────────────────────────────
-  const switchTab = useCallback((next: number) => {
-    if (next < 0 || next > 2) return;
-    setCurrentTab(next);
-  }, []);
-
-  // ─── Touch handlers (swipe + pull-to-refresh) ────────────────────────
+  // ─── Touch handlers (drag-follow slider + swipe + pull-to-refresh) ───
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
+    dragStartX.current = t.clientX;
+    dragStartY.current = t.clientY;
+    dragOffsetRef.current = 0;
+    axisDecided.current = false;
+    isDraggingRef.current = false;
+
     swipeStartX.current = t.clientX;
     swipeStartY.current = t.clientY;
 
@@ -530,49 +585,70 @@ export default function ShopperHomePage() {
 
   const handleTouchMove = (e: React.TouchEvent) => {
     const t = e.touches[0];
+    const currentX = t.clientX;
+    const currentY = t.clientY;
 
-    // ── Horizontal swipe: switch tab
-    if (swipeStartX.current !== null && swipeStartY.current !== null) {
-      const dx = t.clientX - swipeStartX.current;
-      const dy = t.clientY - swipeStartY.current;
-
-      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-        if (dx < 0 && currentTab < 2) {
-          switchTab(currentTab + 1);
-        } else if (dx > 0 && currentTab > 0) {
-          switchTab(currentTab - 1);
-        }
-        swipeStartX.current = null;
-        swipeStartY.current = null;
-        pullStartY.current = null;
-        return;
-      }
-    }
-
-    // ── Vertical pull-to-refresh
-    if (pullStartY.current !== null && !pullTriggered.current && !isRefreshing) {
-      const deltaY = t.clientY - pullStartY.current;
-
-      if (deltaY < 0) {
-        pullStartY.current = null;
-        return;
-      }
-
-      const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
-      if (panelScrollTop > 0) {
-        pullStartY.current = null;
-        return;
-      }
-
+    // ── Vertical pull-to-refresh (checked first, before axis lock)
+    if (pullStartY.current !== null && !pullTriggered.current && !isRefreshing && !isDraggingRef.current) {
+      const deltaY = currentY - pullStartY.current;
       if (deltaY > 100) {
-        pullTriggered.current = true;
-        setIsRefreshing(true);
-        onRefresh().finally(() => setIsRefreshing(false));
+        const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
+        if (panelScrollTop <= 0) {
+          pullTriggered.current = true;
+          setIsRefreshing(true);
+          onRefresh().finally(() => setIsRefreshing(false));
+          return;
+        }
       }
     }
+
+    if (dragStartX.current === null || dragStartY.current === null) return;
+    const deltaX = currentX - dragStartX.current;
+    const deltaY = currentY - dragStartY.current;
+
+    if (!axisDecided.current) {
+      if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+        axisDecided.current = true;
+        if (Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+          isDraggingRef.current = true;
+          setIsDragging(true);
+          pullStartY.current = null;
+        }
+      }
+    }
+
+    if (!isDraggingRef.current) return;
+
+    let offset = deltaX;
+    if (
+      (currentTab === 0 && offset > 0) ||
+      (currentTab === 2 && offset < 0)
+    ) {
+      offset = offset * 0.3;
+    }
+    dragOffsetRef.current = offset;
+    setDragOffset(offset);
   };
 
   const handleTouchEnd = () => {
+    if (isDraggingRef.current) {
+      const threshold = (window.innerWidth || 375) * 0.2;
+      const offset = dragOffsetRef.current;
+
+      if (offset < -threshold && currentTab < 2) {
+        setCurrentTab(currentTab + 1);
+      } else if (offset > threshold && currentTab > 0) {
+        setCurrentTab(currentTab - 1);
+      }
+
+      setDragOffset(0);
+      dragOffsetRef.current = 0;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+    }
+    axisDecided.current = false;
+    dragStartX.current = null;
+    dragStartY.current = null;
     swipeStartX.current = null;
     swipeStartY.current = null;
     pullStartY.current = null;
@@ -600,27 +676,12 @@ export default function ShopperHomePage() {
       `/provider-services/${id}?name=${encodeURIComponent(name)}`,
     );
 
-  // ─── Size functions for the masonry library ─────────────────────────
-  const getItemCardSize = useCallback(
-    async (item: Item) => computeImageHeight(item.image, 76),
-    [],
-  );
-  const getStoreCardSize = useCallback(
-    async (store: Store) => computeImageHeight(store.image, 56),
-    [],
-  );
-  const getProviderCardSize = useCallback(
-    async (provider: Provider) => computeImageHeight(provider.image, 60),
-    [],
-  );
+  const trackTransform = `translateX(calc(-${currentTab * 33.3333}% + ${dragOffset}px))`;
 
   // ─── Render ─────────────────────────────────────────────────────────
   return (
     <div style={styles.container}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes panelFade { from { opacity: 0; } to { opacity: 1; } }
-      `}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* App Bar */}
       <div style={styles.appBar}>
@@ -734,7 +795,7 @@ export default function ShopperHomePage() {
         {['BUYTEMS', 'SHOPNSTORE', 'SERVOOKS'].map((tab, i) => (
           <button
             key={i}
-            onClick={() => switchTab(i)}
+            onClick={() => setCurrentTab(i)}
             style={{
               padding: '8px 20px',
               borderRadius: 20,
@@ -756,7 +817,7 @@ export default function ShopperHomePage() {
         ))}
       </div>
 
-      {/* Tab content — one panel at a time, opacity-only fade */}
+      {/* Slidable tab content — 300% track, one panel per tab */}
       <div
         style={styles.tabContent}
         onTouchStart={handleTouchStart}
@@ -771,83 +832,94 @@ export default function ShopperHomePage() {
         )}
 
         <div
-          key={currentTab}
-          ref={activePanelRef}
           style={{
-            ...styles.panel,
-            animation: 'panelFade 180ms ease',
+            display: 'flex',
+            width: '300%',
+            height: '100%',
+            transform: trackTransform,
+            transition: isDragging
+              ? 'none'
+              : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)',
+            willChange: 'transform',
+            touchAction: 'pan-y',
           }}
         >
-          {currentTab === 0 && (
-            <>
-              {loadingItems ? (
-                <div style={styles.centeredMsg}>Loading items…</div>
-              ) : items.length === 0 ? (
-                <div style={styles.centeredMsg}>No items yet.</div>
-              ) : (
-                <MasonryGrid
-                  items={items}
-                  renderItem={(item: Item) => (
-                    <ItemCard
-                      item={item}
-                      onPress={handleItemPress}
-                      onVisualSearch={handleVisualSearch}
-                    />
-                  )}
-                  getItemSize={getItemCardSize}
-                  gap={10}
-                  minWidth={160}
-                />
-              )}
-            </>
-          )}
+          {/* Panel 0 — BUYTEMS */}
+          <div
+            ref={currentTab === 0 ? activePanelRef : null}
+            style={styles.panel}
+          >
+            {loadingItems ? (
+              <div style={styles.centeredMsg}>Loading items…</div>
+            ) : items.length === 0 ? (
+              <div style={styles.centeredMsg}>No items yet.</div>
+            ) : (
+              <MasonryColumns
+                items={items}
+                columns={columns}
+                gap={10}
+                keyFor={(item) => item.id}
+                renderItem={(item) => (
+                  <ItemCard
+                    item={item}
+                    onPress={handleItemPress}
+                    onVisualSearch={handleVisualSearch}
+                  />
+                )}
+              />
+            )}
+          </div>
 
-          {currentTab === 1 && (
-            <>
-              {loadingStores ? (
-                <div style={styles.centeredMsg}>Loading stores…</div>
-              ) : stores.length === 0 ? (
-                <div style={styles.centeredMsg}>No stores yet.</div>
-              ) : (
-                <MasonryGrid
-                  items={stores}
-                  renderItem={(store: Store) => (
-                    <StoreCard store={store} onPress={handleStorePress} />
-                  )}
-                  getItemSize={getStoreCardSize}
-                  gap={10}
-                  minWidth={160}
-                />
-              )}
-            </>
-          )}
+          {/* Panel 1 — SHOPNSTORE */}
+          <div
+            ref={currentTab === 1 ? activePanelRef : null}
+            style={styles.panel}
+          >
+            {loadingStores ? (
+              <div style={styles.centeredMsg}>Loading stores…</div>
+            ) : stores.length === 0 ? (
+              <div style={styles.centeredMsg}>No stores yet.</div>
+            ) : (
+              <MasonryColumns
+                items={stores}
+                columns={columns}
+                gap={10}
+                keyFor={(store) => store.id}
+                renderItem={(store) => (
+                  <StoreCard store={store} onPress={handleStorePress} />
+                )}
+              />
+            )}
+          </div>
 
-          {currentTab === 2 && (
-            <>
-              {loadingServices ? (
-                <div style={styles.centeredMsg}>
-                  Loading service providers…
-                </div>
-              ) : providers.length === 0 ? (
-                <div style={styles.centeredMsg}>
-                  No service providers yet.
-                </div>
-              ) : (
-                <MasonryGrid
-                  items={providers}
-                  renderItem={(provider: Provider) => (
-                    <ProviderCard
-                      provider={provider}
-                      onPress={handleProviderPress}
-                    />
-                  )}
-                  getItemSize={getProviderCardSize}
-                  gap={10}
-                  minWidth={160}
-                />
-              )}
-            </>
-          )}
+          {/* Panel 2 — SERVOOKS */}
+          <div
+            ref={currentTab === 2 ? activePanelRef : null}
+            style={styles.panel}
+          >
+            {loadingServices ? (
+              <div style={styles.centeredMsg}>
+                Loading service providers…
+              </div>
+            ) : providers.length === 0 ? (
+              <div style={styles.centeredMsg}>
+                No service providers yet.
+              </div>
+            ) : (
+              <MasonryColumns
+                items={providers}
+                columns={columns}
+                gap={10}
+                keyFor={(provider) => provider.id}
+                renderItem={(provider) => (
+                  <ProviderCard
+                    provider={provider}
+                    onPress={handleProviderPress}
+                  />
+                )}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -973,13 +1045,14 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
-  // ✅ Absolute-fill panel, opacity-only entry animation.
-  //    No transform → MasonryGrid measures clientWidth correctly.
   panel: {
-    position: 'absolute',
-    inset: 0,
+    width: '33.3333%',
+    flex: '0 0 33.3333%',
+    minHeight: 0,
+    alignSelf: 'flex-start',
     overflowY: 'auto',
     overflowX: 'hidden',
+    padding: '0 16px 16px',
     WebkitOverflowScrolling: 'touch',
   },
   centeredMsg: {
