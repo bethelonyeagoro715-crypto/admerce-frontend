@@ -288,6 +288,7 @@ export default function ShopperHomePage() {
   const router = useRouter();
 
   const [currentTab, setCurrentTab] = useState(0);
+  const [slideDir, setSlideDir] = useState<1 | -1>(1);
   const [noteworthyIndex, setNoteworthyIndex] = useState(0);
   const [isNoteworthyCollapsed, setIsNoteworthyCollapsed] = useState(false);
 
@@ -306,18 +307,15 @@ export default function ShopperHomePage() {
   const [showFilter, setShowFilter] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState(0);
-
   const noteworthyTimer = useRef<NodeJS.Timeout | null>(null);
   const sessionItemsShown = useRef<string[]>([]);
 
-  const touchStartY = useRef<number | null>(null);
-  const dragStartX = useRef<number | null>(null);
-  const dragStartY = useRef<number | null>(null);
-  const dragOffsetRef = useRef(0);
-  const axisDecided = useRef(false);
-  const isDraggingRef = useRef(false);
+  // ✅ Simplified touch tracking — no more drag-follow
+  const swipeStartX = useRef<number | null>(null);
+  const swipeStartY = useRef<number | null>(null);
+  const pullStartY = useRef<number | null>(null);
+  const pullTriggered = useRef(false);
+  const activePanelRef = useRef<HTMLDivElement>(null);
 
   // ─── Location ───────────────────────────────────────────────────────
   const getCurrentLocation = async (): Promise<GeolocationPosition | null> => {
@@ -512,80 +510,85 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ─── Touch handlers ─────────────────────────────────────────────────
-  const handleTouchStart = (e: React.TouchEvent) => {
-    dragStartX.current = e.touches[0].clientX;
-    dragStartY.current = e.touches[0].clientY;
-    dragOffsetRef.current = 0;
-    axisDecided.current = false;
-    isDraggingRef.current = false;
+  // ─── Tab switching ───────────────────────────────────────────────────
+  const switchTab = useCallback((next: number) => {
+    if (next < 0 || next > 2) return;
+    setCurrentTab((prev) => {
+      if (next === prev) return prev;
+      setSlideDir(next > prev ? 1 : -1);
+      return next;
+    });
+  }, []);
 
-    if (window.scrollY === 0) {
-      touchStartY.current = e.touches[0].clientY;
+  // ─── Touch handlers (swipe + pull-to-refresh) ────────────────────────
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    swipeStartX.current = t.clientX;
+    swipeStartY.current = t.clientY;
+
+    // Only allow pull-to-refresh if the panel is at the very top
+    const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
+    if (panelScrollTop <= 0) {
+      pullStartY.current = t.clientY;
+    } else {
+      pullStartY.current = null;
     }
+    pullTriggered.current = false;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
+    const t = e.touches[0];
 
-    if (touchStartY.current !== null && !isDraggingRef.current) {
-      const deltaY = currentY - touchStartY.current;
-      if (deltaY > 80 && !isRefreshing) {
-        setIsRefreshing(true);
-        touchStartY.current = null;
-        onRefresh().finally(() => setIsRefreshing(false));
+    // ── Horizontal swipe: switch tab
+    if (swipeStartX.current !== null && swipeStartY.current !== null) {
+      const dx = t.clientX - swipeStartX.current;
+      const dy = t.clientY - swipeStartY.current;
+
+      // Must be more horizontal than vertical, and past a minimum
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        if (dx < 0 && currentTab < 2) {
+          switchTab(currentTab + 1);
+        } else if (dx > 0 && currentTab > 0) {
+          switchTab(currentTab - 1);
+        }
+        swipeStartX.current = null;
+        swipeStartY.current = null;
+        pullStartY.current = null;
         return;
       }
     }
 
-    if (dragStartX.current === null || dragStartY.current === null) return;
-    const deltaX = currentX - dragStartX.current;
-    const deltaY = currentY - dragStartY.current;
+    // ── Vertical pull-to-refresh
+    if (pullStartY.current !== null && !pullTriggered.current && !isRefreshing) {
+      const deltaY = t.clientY - pullStartY.current;
 
-    if (!axisDecided.current) {
-      if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
-        axisDecided.current = true;
-        if (Math.abs(deltaX) > Math.abs(deltaY)) {
-          isDraggingRef.current = true;
-          setIsDragging(true);
-        }
+      // Any upward motion = user is scrolling, cancel the pull
+      if (deltaY < 0) {
+        pullStartY.current = null;
+        return;
+      }
+
+      // Panel must still be at the top
+      const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
+      if (panelScrollTop > 0) {
+        pullStartY.current = null;
+        return;
+      }
+
+      // Only fire past a real pull threshold
+      if (deltaY > 100) {
+        pullTriggered.current = true;
+        setIsRefreshing(true);
+        onRefresh().finally(() => setIsRefreshing(false));
       }
     }
-
-    if (!isDraggingRef.current) return;
-
-    let offset = deltaX;
-    if (
-      (currentTab === 0 && offset > 0) ||
-      (currentTab === 2 && offset < 0)
-    ) {
-      offset = offset * 0.3;
-    }
-    dragOffsetRef.current = offset;
-    setDragOffset(offset);
   };
 
   const handleTouchEnd = () => {
-    if (isDraggingRef.current) {
-      const threshold = (window.innerWidth || 375) * 0.2;
-      const offset = dragOffsetRef.current;
-
-      if (offset < -threshold && currentTab < 2) {
-        setCurrentTab(currentTab + 1);
-      } else if (offset > threshold && currentTab > 0) {
-        setCurrentTab(currentTab - 1);
-      }
-
-      setDragOffset(0);
-      dragOffsetRef.current = 0;
-      isDraggingRef.current = false;
-      setIsDragging(false);
-    }
-    axisDecided.current = false;
-    dragStartX.current = null;
-    dragStartY.current = null;
-    touchStartY.current = null;
+    swipeStartX.current = null;
+    swipeStartY.current = null;
+    pullStartY.current = null;
+    pullTriggered.current = false;
   };
 
   // ─── Navigation ─────────────────────────────────────────────────────
@@ -604,7 +607,6 @@ export default function ShopperHomePage() {
     }
   };
   const handleStorePress = (id: string) => router.push(`/store-detail/${id}`);
-  // ✅ Fixed: was `/providers/${id}` (404). Actual route is `/provider-services/${id}`.
   const handleProviderPress = (id: string, name: string) =>
     router.push(
       `/provider-services/${id}?name=${encodeURIComponent(name)}`,
@@ -624,12 +626,20 @@ export default function ShopperHomePage() {
     [],
   );
 
-  const trackTransform = `translateX(calc(-${currentTab * 33.3333}% + ${dragOffset}px))`;
-
   // ─── Render ─────────────────────────────────────────────────────────
   return (
     <div style={styles.container}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes slideInRight {
+          from { transform: translateX(12%); opacity: 0; }
+          to   { transform: translateX(0);   opacity: 1; }
+        }
+        @keyframes slideInLeft {
+          from { transform: translateX(-12%); opacity: 0; }
+          to   { transform: translateX(0);    opacity: 1; }
+        }
+      `}</style>
 
       {/* App Bar */}
       <div style={styles.appBar}>
@@ -743,7 +753,7 @@ export default function ShopperHomePage() {
         {['BUYTEMS', 'SHOPNSTORE', 'SERVOOKS'].map((tab, i) => (
           <button
             key={i}
-            onClick={() => setCurrentTab(i)}
+            onClick={() => switchTab(i)}
             style={{
               padding: '8px 20px',
               borderRadius: 20,
@@ -765,7 +775,7 @@ export default function ShopperHomePage() {
         ))}
       </div>
 
-      {/* Slidable tab content */}
+      {/* ✅ Tab content — ONE panel mounted at a time. No 300% track. */}
       <div
         style={styles.tabContent}
         onTouchStart={handleTouchStart}
@@ -780,81 +790,86 @@ export default function ShopperHomePage() {
         )}
 
         <div
+          key={currentTab}
+          ref={activePanelRef}
           style={{
-            display: 'flex',
-            width: '300%',
-            height: '100%',
-            transform: trackTransform,
-            transition: isDragging
-              ? 'none'
-              : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)',
-            willChange: 'transform',
-            touchAction: 'pan-y',
+            ...styles.panel,
+            animation:
+              slideDir === 1
+                ? 'slideInRight 280ms cubic-bezier(0.25, 0.8, 0.25, 1)'
+                : 'slideInLeft 280ms cubic-bezier(0.25, 0.8, 0.25, 1)',
           }}
         >
-          {/* Panel 0 — BUYTEMS */}
-          <div style={styles.panel}>
-            {loadingItems ? (
-              <div style={styles.centeredMsg}>Loading items…</div>
-            ) : items.length === 0 ? (
-              <div style={styles.centeredMsg}>No items yet.</div>
-            ) : (
-              <MasonryGrid
-                items={items}
-                renderItem={(item: Item) => (
-                  <ItemCard
-                    item={item}
-                    onPress={handleItemPress}
-                    onVisualSearch={handleVisualSearch}
-                  />
-                )}
-                getItemSize={getItemCardSize}
-                gap={10}
-                minWidth={160}
-              />
-            )}
-          </div>
+          {currentTab === 0 && (
+            <>
+              {loadingItems ? (
+                <div style={styles.centeredMsg}>Loading items…</div>
+              ) : items.length === 0 ? (
+                <div style={styles.centeredMsg}>No items yet.</div>
+              ) : (
+                <MasonryGrid
+                  items={items}
+                  renderItem={(item: Item) => (
+                    <ItemCard
+                      item={item}
+                      onPress={handleItemPress}
+                      onVisualSearch={handleVisualSearch}
+                    />
+                  )}
+                  getItemSize={getItemCardSize}
+                  gap={10}
+                  minWidth={160}
+                />
+              )}
+            </>
+          )}
 
-          {/* Panel 1 — SHOPNSTORE */}
-          <div style={styles.panel}>
-            {loadingStores ? (
-              <div style={styles.centeredMsg}>Loading stores…</div>
-            ) : stores.length === 0 ? (
-              <div style={styles.centeredMsg}>No stores yet.</div>
-            ) : (
-              <MasonryGrid
-                items={stores}
-                renderItem={(store: Store) => (
-                  <StoreCard store={store} onPress={handleStorePress} />
-                )}
-                getItemSize={getStoreCardSize}
-                gap={10}
-                minWidth={160}
-              />
-            )}
-          </div>
+          {currentTab === 1 && (
+            <>
+              {loadingStores ? (
+                <div style={styles.centeredMsg}>Loading stores…</div>
+              ) : stores.length === 0 ? (
+                <div style={styles.centeredMsg}>No stores yet.</div>
+              ) : (
+                <MasonryGrid
+                  items={stores}
+                  renderItem={(store: Store) => (
+                    <StoreCard store={store} onPress={handleStorePress} />
+                  )}
+                  getItemSize={getStoreCardSize}
+                  gap={10}
+                  minWidth={160}
+                />
+              )}
+            </>
+          )}
 
-          {/* Panel 2 — SERVOOKS */}
-          <div style={styles.panel}>
-            {loadingServices ? (
-              <div style={styles.centeredMsg}>Loading service providers…</div>
-            ) : providers.length === 0 ? (
-              <div style={styles.centeredMsg}>No service providers yet.</div>
-            ) : (
-              <MasonryGrid
-                items={providers}
-                renderItem={(provider: Provider) => (
-                  <ProviderCard
-                    provider={provider}
-                    onPress={handleProviderPress}
-                  />
-                )}
-                getItemSize={getProviderCardSize}
-                gap={10}
-                minWidth={160}
-              />
-            )}
-          </div>
+          {currentTab === 2 && (
+            <>
+              {loadingServices ? (
+                <div style={styles.centeredMsg}>
+                  Loading service providers…
+                </div>
+              ) : providers.length === 0 ? (
+                <div style={styles.centeredMsg}>
+                  No service providers yet.
+                </div>
+              ) : (
+                <MasonryGrid
+                  items={providers}
+                  renderItem={(provider: Provider) => (
+                    <ProviderCard
+                      provider={provider}
+                      onPress={handleProviderPress}
+                    />
+                  )}
+                  getItemSize={getProviderCardSize}
+                  gap={10}
+                  minWidth={160}
+                />
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -980,11 +995,13 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
+  // ✅ Full-size panel — one at a time, scrolls independently
   panel: {
-    width: '33.3333%',
-    flex: '0 0 33.3333%',
-    minHeight: 0,
-    alignSelf: 'flex-start',
+    position: 'absolute',
+    inset: 0,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    WebkitOverflowScrolling: 'touch',
   },
   centeredMsg: {
     textAlign: 'center',
@@ -1100,8 +1117,9 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'center',
     padding: 8,
-    zIndex: 5,
+    zIndex: 10,
     background: 'rgba(248,249,250,0.9)',
+    pointerEvents: 'none',
   },
   spinner: {
     width: 24,
