@@ -55,8 +55,6 @@ function BookingConfirmedContent() {
 
   const bookingIdFromUrl = searchParams.get('booking_id') || '';
 
-  // Initial values from URL — used for the fresh-booking flow where the
-  // booking API call hasn't finished yet (or where no API call is needed).
   const [serviceName, setServiceName] = useState(
     searchParams.get('service_name') || 'Service',
   );
@@ -76,14 +74,11 @@ function BookingConfirmedContent() {
   const [enriching, setEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
+  const [justCompleted, setJustCompleted] = useState(false);
 
-  // ✅ Enrich from API when we only have a booking_id.
-  //    This is what makes "tap a booking in the saved list" work: the
-  //    saved screen only knows the booking_id, and we fill in the rest.
   useEffect(() => {
     if (!bookingIdFromUrl) return;
 
-    // If the URL already has the full payload (fresh-booking flow), skip.
     const hasFullUrl =
       !!searchParams.get('service_name') &&
       !!searchParams.get('provider_name') &&
@@ -128,6 +123,42 @@ function BookingConfirmedContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingIdFromUrl]);
 
+  // ✅ Receipt navigation helper — used by both the button and Job Done
+  const goToReceipt = useCallback(
+    (overrideStatus?: string) => {
+      if (!bookingId) {
+        alert('Booking ID missing');
+        return;
+      }
+      const qs = new URLSearchParams();
+      if (serviceName) qs.set('service_name', serviceName);
+      if (providerName) qs.set('provider_name', providerName);
+      if (customerName) qs.set('customer_name', customerName);
+      if (amount) qs.set('amount', String(amount));
+      const s = overrideStatus || status;
+      if (s) qs.set('status', s);
+      if (scheduledFor) qs.set('scheduled_for', scheduledFor);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      router.push(`/receipt/service/${bookingId}${suffix}`);
+    },
+    [
+      bookingId,
+      serviceName,
+      providerName,
+      customerName,
+      amount,
+      status,
+      scheduledFor,
+      router,
+    ],
+  );
+
+  const handleViewReceipt = useCallback(() => {
+    goToReceipt();
+  }, [goToReceipt]);
+
+  // ✅ FIX: after Job Done, auto-navigate to the receipt.
+  //    700ms delay so the user sees the green checkmark flip to "Completed".
   const handleJobDone = useCallback(async () => {
     if (!bookingId) {
       alert('Booking ID missing');
@@ -136,7 +167,8 @@ function BookingConfirmedContent() {
     setCompleting(true);
     try {
       await api.completeServiceBooking(bookingId);
-      // Refresh to reflect the new status
+
+      // Try to refresh the status so the UI reflects "completed"
       try {
         const refreshed = (await api.getServiceBookingDetail(
           bookingId,
@@ -145,6 +177,14 @@ function BookingConfirmedContent() {
       } catch {
         setStatus('completed');
       }
+
+      setJustCompleted(true);
+
+      // Brief pause so the "Booking Complete!" state registers, then
+      // navigate to the receipt with status=completed pre-filled.
+      setTimeout(() => {
+        goToReceipt('completed');
+      }, 700);
     } catch (err: unknown) {
       const error = err as {
         response?: { data?: { detail?: string } };
@@ -155,10 +195,9 @@ function BookingConfirmedContent() {
         error?.message ||
         'Failed to complete job';
       alert(detail);
-    } finally {
       setCompleting(false);
     }
-  }, [bookingId]);
+  }, [bookingId, goToReceipt]);
 
   const handleBack = () => {
     if (typeof window !== 'undefined' && window.history.length > 1) {
@@ -172,7 +211,6 @@ function BookingConfirmedContent() {
   const amountNumber = Number(amount) || 0;
   const isCompleted = status === 'completed';
 
-  // ── Loading state for the enrich call ────────────────────────
   if (enriching) {
     return (
       <main style={styles.container}>
@@ -181,7 +219,6 @@ function BookingConfirmedContent() {
     );
   }
 
-  // ── Error state when enrichment failed ───────────────────────
   if (enrichError && !bookingId) {
     return (
       <main style={styles.container}>
@@ -214,9 +251,11 @@ function BookingConfirmedContent() {
         {isCompleted ? 'Booking Complete!' : 'Booking Confirmed!'}
       </h2>
       <p style={styles.subheading}>
-        {isCompleted
-          ? 'Funds have been released to the provider.'
-          : 'Your service has been booked successfully.'}
+        {justCompleted
+          ? 'Redirecting to your receipt…'
+          : isCompleted
+            ? 'Funds have been released to the provider.'
+            : 'Your service has been booked successfully.'}
       </p>
 
       <div style={styles.card}>
@@ -268,6 +307,21 @@ function BookingConfirmedContent() {
       </div>
 
       <div style={styles.actions}>
+        {bookingId && (
+          <button
+            onClick={handleViewReceipt}
+            style={{
+              ...styles.button,
+              backgroundColor: 'transparent',
+              border: '2px solid #0504AA',
+              color: '#0504AA',
+            }}
+          >
+            <MdReceiptLong size={20} color="#0504AA" />
+            View Receipt
+          </button>
+        )}
+
         {!isCompleted && bookingId && (
           <button
             onClick={handleJobDone}
@@ -287,8 +341,6 @@ function BookingConfirmedContent() {
         {bookingId && (
           <button
             onClick={() => {
-              // Open chat with the provider/customer — requires their ID
-              // from the enriched data. Fallback: go to inbox.
               router.push('/shopper/inbox');
             }}
             style={{
