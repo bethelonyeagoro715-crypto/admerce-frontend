@@ -8,49 +8,126 @@ import {
   MdSchedule,
   MdEvent,
   MdClose,
+  MdFlashOn,
+  MdWbTwilight,
+  MdLightMode,
 } from 'react-icons/md';
+
+export type PickTimeMode = 'pickup' | 'service';
 
 interface PickTimeBottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (pickupTime: string) => void;
+  onSelect: (value: string) => void;
+  mode?: PickTimeMode;
 }
 
-const PICKUP_OPTIONS = [
-  {
-    label: 'Now - 3 hours',
-    value: '3 hours',
-    description: 'Pick up within the next 3 hours',
-    icon: <MdAccessTime size={22} />,
-    color: '#0504AA',
-  },
-  {
-    label: 'Now - 6 hours',
-    value: '6 hours',
-    description: 'Pick up within the next 6 hours',
-    icon: <MdSchedule size={22} />,
-    color: '#F59E0B',
-  },
-  {
-    label: 'Now - 9 hours',
-    value: '9 hours',
-    description: 'Pick up within the next 9 hours',
-    icon: <MdSchedule size={22} />,
-    color: '#10B981',
-  },
-  {
-    label: 'Tomorrow',
-    value: 'Tomorrow',
-    description: 'Pick up anytime tomorrow',
-    icon: <MdEvent size={22} />,
-    color: '#ad04e1',
-  },
-];
+interface PickTimeOption {
+  label: string;
+  value: string;
+  description: string;
+  icon: React.ReactNode;
+  color: string;
+}
+
+// ─── Pickup mode (item reservations) ─────────────────────────────
+function buildPickupOptions(): PickTimeOption[] {
+  return [
+    {
+      label: 'Now - 3 hours',
+      value: '3 hours',
+      description: 'Pick up within the next 3 hours',
+      icon: <MdAccessTime size={22} />,
+      color: '#0504AA',
+    },
+    {
+      label: 'Now - 6 hours',
+      value: '6 hours',
+      description: 'Pick up within the next 6 hours',
+      icon: <MdSchedule size={22} />,
+      color: '#F59E0B',
+    },
+    {
+      label: 'Now - 9 hours',
+      value: '9 hours',
+      description: 'Pick up within the next 9 hours',
+      icon: <MdSchedule size={22} />,
+      color: '#10B981',
+    },
+    {
+      label: 'Tomorrow',
+      value: 'Tomorrow',
+      description: 'Pick up anytime tomorrow',
+      icon: <MdEvent size={22} />,
+      color: '#ad04e1',
+    },
+  ];
+}
+
+// ─── Service mode (service bookings) ─────────────────────────────
+// ✅ Returns ISO datetime strings (`YYYY-MM-DDTHH:MM:SS`) — matches
+//    what the backend expects in `scheduled_for`.
+function buildServiceOptions(): PickTimeOption[] {
+  const now = new Date();
+
+  const asap = new Date(now.getTime() + 60 * 60 * 1000); // now + 1h
+
+  const laterToday = new Date(now);
+  laterToday.setHours(18, 0, 0, 0);
+  if (laterToday <= now) {
+    laterToday.setDate(laterToday.getDate() + 1);
+    laterToday.setHours(10, 0, 0, 0);
+  }
+
+  const tomorrowMorning = new Date(now);
+  tomorrowMorning.setDate(tomorrowMorning.getDate() + 1);
+  tomorrowMorning.setHours(9, 0, 0, 0);
+
+  const tomorrowAfternoon = new Date(now);
+  tomorrowAfternoon.setDate(tomorrowAfternoon.getDate() + 1);
+  tomorrowAfternoon.setHours(14, 0, 0, 0);
+
+  const iso = (d: Date) => d.toISOString().slice(0, 19);
+
+  return [
+    {
+      label: 'As soon as possible',
+      value: iso(asap),
+      description: 'Provider comes within the next hour',
+      icon: <MdFlashOn size={22} />,
+      color: '#0504AA',
+    },
+    {
+      label: 'Later today',
+      value: iso(laterToday),
+      description: laterToday.getHours() < 12
+        ? 'Tomorrow at 10:00 AM'
+        : 'Today at 6:00 PM',
+      icon: <MdWbTwilight size={22} />,
+      color: '#F59E0B',
+    },
+    {
+      label: 'Tomorrow morning',
+      value: iso(tomorrowMorning),
+      description: 'Tomorrow at 9:00 AM',
+      icon: <MdLightMode size={22} />,
+      color: '#10B981',
+    },
+    {
+      label: 'Tomorrow afternoon',
+      value: iso(tomorrowAfternoon),
+      description: 'Tomorrow at 2:00 PM',
+      icon: <MdEvent size={22} />,
+      color: '#ad04e1',
+    },
+  ];
+}
 
 export default function PickTimeBottomSheet({
   isOpen,
   onClose,
   onSelect,
+  mode = 'pickup',
 }: PickTimeBottomSheetProps) {
   // Lock body scroll when open
   useEffect(() => {
@@ -64,8 +141,16 @@ export default function PickTimeBottomSheet({
     };
   }, [isOpen]);
 
-  // Ensure we're in the browser before using createPortal
   if (typeof document === 'undefined') return null;
+
+  const options =
+    mode === 'service' ? buildServiceOptions() : buildPickupOptions();
+
+  const heading = mode === 'service' ? 'Book a Time' : 'Select Pickup Time';
+  const subtext =
+    mode === 'service'
+      ? 'Choose when you want the service'
+      : 'Choose when you\u2019ll pick up your item';
 
   return createPortal(
     <AnimatePresence>
@@ -92,7 +177,7 @@ export default function PickTimeBottomSheet({
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-label="Select pickup time"
+            aria-label={heading}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -103,6 +188,7 @@ export default function PickTimeBottomSheet({
               left: 0,
               right: 0,
               width: '91%',
+              margin: '0 auto',
               backgroundColor: '#FFFFFF',
               borderRadius: '24px 24px 0 0',
               padding: 'calc(12px + env(safe-area-inset-bottom)) 20px 32px',
@@ -140,7 +226,7 @@ export default function PickTimeBottomSheet({
                   margin: 0,
                 }}
               >
-                Select Pickup Time
+                {heading}
               </h2>
               <button
                 onClick={onClose}
@@ -153,7 +239,6 @@ export default function PickTimeBottomSheet({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  transition: 'background-color 0.2s',
                   minWidth: 48,
                   minHeight: 48,
                 }}
@@ -170,14 +255,14 @@ export default function PickTimeBottomSheet({
                 marginBottom: '16px',
               }}
             >
-              Choose when you’ll pick up your item
+              {subtext}
             </p>
 
             {/* Options */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {PICKUP_OPTIONS.map((option) => (
+              {options.map((option) => (
                 <motion.button
-                  key={option.value}
+                  key={option.label}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => onSelect(option.value)}
                   style={{
@@ -229,14 +314,7 @@ export default function PickTimeBottomSheet({
                       {option.description}
                     </div>
                   </div>
-                  <span
-                    style={{
-                      color: '#6B7280',
-                      fontSize: '20px',
-                    }}
-                  >
-                    ›
-                  </span>
+                  <span style={{ color: '#6B7280', fontSize: '20px' }}>›</span>
                 </motion.button>
               ))}
             </div>

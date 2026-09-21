@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../../services/api';
+import PickTimeBottomSheet from '../../../components/PickTimeBottomSheet';
 import {
   MdShare,
   MdFavorite,
@@ -16,7 +19,10 @@ import {
   MdClose,
 } from 'react-icons/md';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_API_BASE ||
+  'http://localhost:8000';
 
 function resolveImageUrl(url: string | null | undefined): string {
   if (!url) return '';
@@ -41,6 +47,14 @@ interface ServiceDetail {
   rating?: number;
   review_count?: number;
   [key: string]: unknown;
+}
+
+interface ActiveBooking {
+  booking_id: string;
+  service_id: string;
+  status: string;
+  amount?: number;
+  service_title?: string;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -80,15 +94,10 @@ const styles: Record<string, React.CSSProperties> = {
   descriptionSection: { marginTop: 24 },
   descriptionTitle: { fontWeight: 600, fontSize: 16, marginBottom: 8 },
   descriptionText: { color: '#555', lineHeight: 1.5 },
-  overlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  bookingModal: { backgroundColor: '#fff', padding: 20, borderRadius: 16, width: '90%', maxWidth: 400 },
-  modalTitle: { fontSize: 18, fontWeight: 700, marginBottom: 16, textAlign: 'center' },
-  modalField: { marginBottom: 12 },
-  modalLabel: { fontSize: 14, fontWeight: 600, marginBottom: 4 },
-  modalInput: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ccc', fontSize: 14 },
-  modalButton: { width: '100%', padding: '12px', backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 8, fontSize: 16, fontWeight: 600, cursor: 'pointer' },
-  modalClose: { position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', cursor: 'pointer' },
   loadingContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' },
+  // Overlay for the in-page spinner
+  overlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
+  spinner: { width: 40, height: 40, border: '4px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
 };
 
 export default function ServiceDetailPage() {
@@ -101,10 +110,14 @@ export default function ServiceDetailPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isSaveLoading, setIsSaveLoading] = useState(false);
-  const [quantity, setQuantity] = useState(1);
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedTime, setSelectedTime] = useState<string>('');
+
+  // ✅ PickTime bottom sheet for booking
+  const [showPickTime, setShowPickTime] = useState(false);
+
+  // ✅ Satisfaction modal for Job Done
+  const [showSatisfaction, setShowSatisfaction] = useState(false);
+  const [activeBooking, setActiveBooking] = useState<ActiveBooking | null>(null);
+  const [checkingBooking, setCheckingBooking] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -141,46 +154,42 @@ export default function ServiceDetailPage() {
     }
   };
 
-  const openBookingModal = () => {
-    if (!selectedDate || !selectedTime) {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const dateStr = tomorrow.toISOString().split('T')[0];
-      setSelectedDate(dateStr);
-      setSelectedTime('10:00');
-    }
-    setShowBookingModal(true);
+  // ─── Book Service: opens the PickTime sheet ─────────────────────
+  const handleBookClick = () => {
+    if (!service) return;
+    setShowPickTime(true);
   };
 
-  const handleBooking = async () => {
-    if (!selectedDate || !selectedTime) {
-      alert('Please select date and time');
-      return;
-    }
+  // ─── PickTime callback — user picked a datetime ─────────────────
+  const handlePickTime = async (scheduledFor: string) => {
     if (!service) return;
+    setShowPickTime(false);
 
     // Check wallet balance before booking
     try {
       const wallet = (await api.getWalletBalance()) as { balance: number };
       if (wallet.balance < service.price) {
-        alert(`Insufficient balance. You need ₦${service.price.toFixed(0)} but have ₦${wallet.balance.toFixed(0)}.`);
-        router.push('/wallet');
+        alert(
+          `Insufficient balance. You need ₦${service.price.toFixed(0)} but have ₦${wallet.balance.toFixed(0)}.`,
+        );
+        router.push('/shopper/wallet');
         return;
       }
     } catch (err) {
       console.error('Could not verify wallet balance:', err);
     }
 
-    const dateTime = new Date(`${selectedDate}T${selectedTime}:00`);
-    const scheduledFor = dateTime.toISOString().slice(0, 19); // "2026-09-02T10:00:00"
-
     setIsLoading(true);
     try {
-      const response = await api.bookService(serviceId, scheduledFor, '', undefined, undefined);
+      const response = await api.bookService(
+        serviceId,
+        scheduledFor,
+        '',
+        undefined,
+        undefined,
+      );
       const bookingId = (response as { booking_id?: string }).booking_id || '';
-      setShowBookingModal(false);
 
-      // Navigate to booking confirmed screen with details
       const query = new URLSearchParams({
         service_name: service.title,
         provider_name: service.business_name || 'Service Provider',
@@ -200,45 +209,55 @@ export default function ServiceDetailPage() {
     }
   };
 
-  const handleJobDone = async () => {
+  // ─── Job Done: find active booking, open satisfaction modal ─────
+  const handleJobDoneClick = async () => {
     if (!service) return;
-
-    setIsLoading(true);
+    setCheckingBooking(true);
     try {
-      // Fetch all bookings for current user (as client)
-      const bookings = (await api.getServiceBookings()) as Array<{
-        booking_id: string;
-        service_id: string;
-        status: string;
-        amount?: number;
-        service_title?: string;
-      }>;
-
-      // Find active booking for this service
-      const activeBooking = bookings.find(
-        (b) => b.service_id === serviceId && b.status.toLowerCase() === 'locked'
+      const bookings = (await api.getServiceBookings()) as ActiveBooking[];
+      // ✅ Accept either 'locked' OR 'accepted' — a provider who forgot
+      //    to tap accept can still have the job completed.
+      const active = bookings.find(
+        (b) =>
+          b.service_id === serviceId &&
+          (b.status?.toLowerCase() === 'locked' ||
+            b.status?.toLowerCase() === 'accepted'),
       );
 
-      if (!activeBooking) {
+      if (!active) {
         alert('No active booking found for this service.');
         return;
       }
 
-      if (!window.confirm('Are you satisfied with the service? This will release the payment to the provider.')) {
-        return;
-      }
+      setActiveBooking(active);
+      setShowSatisfaction(true);
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        (err instanceof Error ? err.message : 'Could not load your bookings');
+      alert(detail);
+    } finally {
+      setCheckingBooking(false);
+    }
+  };
 
-      // Complete the booking (client releases funds)
+  // ─── Confirm satisfaction → release funds → navigate to receipt ─
+  const handleConfirmSatisfaction = async () => {
+    if (!service || !activeBooking) return;
+    setShowSatisfaction(false);
+    setIsLoading(true);
+    try {
       await api.completeServiceBooking(activeBooking.booking_id);
-
-      // Navigate to receipt page for service booking
       const query = new URLSearchParams({
         service_name: service.title,
         provider_name: service.business_name || 'Service Provider',
         amount: String(service.price),
         booking_id: activeBooking.booking_id,
+        status: 'completed',
       });
-      router.push(`/receipt/service/${activeBooking.booking_id}?${query.toString()}`);
+      router.push(
+        `/receipt/service/${activeBooking.booking_id}?${query.toString()}`,
+      );
     } catch (err: unknown) {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
@@ -274,6 +293,8 @@ export default function ServiceDetailPage() {
 
   return (
     <main style={styles.container}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
       <div style={styles.appBar}>
         <button style={styles.backBtn} onClick={() => router.back()}>
           <MdClose size={24} />
@@ -289,14 +310,18 @@ export default function ServiceDetailPage() {
             disabled={isSaveLoading}
             title={isSaved ? 'Unsave' : 'Save'}
           >
-            {isSaved ? <MdFavorite size={24} color="#0504AA" /> : <MdFavoriteBorder size={24} color="#666" />}
+            {isSaved ? (
+              <MdFavorite size={24} color="#0504AA" />
+            ) : (
+              <MdFavoriteBorder size={24} color="#666" />
+            )}
           </button>
         </div>
       </div>
 
       {isLoading && (
         <div style={styles.overlay}>
-          <div className="spinner" />
+          <div style={styles.spinner} />
         </div>
       )}
 
@@ -314,11 +339,22 @@ export default function ServiceDetailPage() {
           ) : imageUrl ? (
             <img src={imageUrl} alt={service.title} style={styles.image} />
           ) : (
-            <div style={{ ...styles.image, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div
+              style={{
+                ...styles.image,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <MdImage size={64} color="#aaa" />
             </div>
           )}
-          <button style={styles.lensButton} onClick={openVisualSearch} title="Visual Search">
+          <button
+            style={styles.lensButton}
+            onClick={openVisualSearch}
+            title="Visual Search"
+          >
             <MdImage size={18} color="#0504AA" />
           </button>
         </div>
@@ -326,23 +362,29 @@ export default function ServiceDetailPage() {
         <h2 style={styles.serviceTitle}>{service.title}</h2>
         <div style={styles.priceRow}>
           <span style={styles.price}>₦{service.price.toFixed(0)}</span>
-          <div style={styles.qtyControl}>
-            <button style={styles.qtyButton} onClick={() => setQuantity(Math.max(1, quantity - 1))} disabled={quantity <= 1}>−</button>
-            <span style={styles.qtyValue}>{quantity}</span>
-            <button style={styles.qtyButton} onClick={() => setQuantity(Math.min(10, quantity + 1))} disabled={quantity >= 10}>+</button>
-          </div>
+          {/* ✅ Quantity removed — services are booked one at a time */}
         </div>
 
         <div style={styles.providerRow}>
           <div style={styles.avatar}>
             {providerImageUrl ? (
-              <img src={providerImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img
+                src={providerImageUrl}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             ) : (
-              <span style={styles.avatarText}>{providerName.charAt(0).toUpperCase()}</span>
+              <span style={styles.avatarText}>
+                {providerName.charAt(0).toUpperCase()}
+              </span>
             )}
           </div>
           <span style={styles.providerName}>By {providerName}</span>
-          <button style={styles.chatButton} onClick={() => router.push(`/chat/${providerId}`)} title="Message Provider">
+          <button
+            style={styles.chatButton}
+            onClick={() => router.push(`/chat/${providerId}`)}
+            title="Message Provider"
+          >
             <MdChatBubbleOutline size={18} color="#0504AA" />
           </button>
         </div>
@@ -353,7 +395,13 @@ export default function ServiceDetailPage() {
             <span style={styles.mapText}>Tap to view on map</span>
             <button
               style={styles.viewMapLink}
-              onClick={() => router.push(`/shopper/map?lat=${service.lat}&lng=${service.lng}&destination=${encodeURIComponent(providerName)}`)}
+              onClick={() =>
+                router.push(
+                  `/shopper/map?lat=${service.lat}&lng=${service.lng}&destination=${encodeURIComponent(
+                    providerName,
+                  )}`,
+                )
+              }
             >
               View on Map
             </button>
@@ -364,31 +412,50 @@ export default function ServiceDetailPage() {
           {(service.rating ?? 0) > 0 && (
             <>
               <MdStar size={16} style={styles.star} />
-              <span style={styles.ratingText}>{(service.rating ?? 0).toFixed(1)}</span>
-              <span style={styles.reviewText}>({service.review_count ?? 0} reviews)</span>
+              <span style={styles.ratingText}>
+                {(service.rating ?? 0).toFixed(1)}
+              </span>
+              <span style={styles.reviewText}>
+                ({service.review_count ?? 0} reviews)
+              </span>
             </>
           )}
           {(service.duration_minutes ?? 0) > 0 && (
-            <span style={styles.durationBadge}>{service.duration_minutes} min</span>
+            <span style={styles.durationBadge}>
+              {service.duration_minutes} min
+            </span>
           )}
         </div>
 
-        {/* Always visible action buttons */}
+        {/* Action buttons */}
         <div style={styles.fulfillmentSection}>
           <h3 style={styles.sectionTitle}>What would you like to do?</h3>
           <button
-            style={{ ...styles.actionButton, backgroundColor: '#0504AA', marginBottom: 10 }}
-            onClick={openBookingModal}
+            style={{
+              ...styles.actionButton,
+              backgroundColor: '#0504AA',
+              marginBottom: 10,
+              opacity: isLoading ? 0.6 : 1,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+            }}
+            onClick={handleBookClick}
+            disabled={isLoading}
           >
             <MdCalendarToday size={20} />
             Book Service
           </button>
           <button
-            style={{ ...styles.actionButton, backgroundColor: '#27AE60' }}
-            onClick={handleJobDone}
+            style={{
+              ...styles.actionButton,
+              backgroundColor: '#27AE60',
+              opacity: checkingBooking || isLoading ? 0.6 : 1,
+              cursor: checkingBooking || isLoading ? 'not-allowed' : 'pointer',
+            }}
+            onClick={handleJobDoneClick}
+            disabled={checkingBooking || isLoading}
           >
             <MdCheckCircle size={20} />
-            Job Done
+            {checkingBooking ? 'Checking…' : 'Job Done'}
           </button>
         </div>
 
@@ -400,27 +467,169 @@ export default function ServiceDetailPage() {
         )}
       </div>
 
-      {showBookingModal && (
-        <div style={styles.overlay} onClick={() => setShowBookingModal(false)}>
-          <div style={styles.bookingModal} onClick={(e) => e.stopPropagation()}>
-            <button style={styles.modalClose} onClick={() => setShowBookingModal(false)}>
-              <MdClose size={20} />
-            </button>
-            <h3 style={styles.modalTitle}>Select Date & Time</h3>
-            <div style={styles.modalField}>
-              <label style={styles.modalLabel}>Date</label>
-              <input type="date" style={styles.modalInput} value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
-            </div>
-            <div style={styles.modalField}>
-              <label style={styles.modalLabel}>Time</label>
-              <input type="time" style={styles.modalInput} value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} />
-            </div>
-            <button style={styles.modalButton} onClick={handleBooking} disabled={!selectedDate || !selectedTime || isLoading}>
-              Confirm Booking
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ✅ PickTime bottom sheet — service mode */}
+      <PickTimeBottomSheet
+        isOpen={showPickTime}
+        onClose={() => setShowPickTime(false)}
+        onSelect={handlePickTime}
+        mode="service"
+      />
+
+      {/* ✅ Satisfaction modal — replaces window.confirm */}
+      <SatisfactionModal
+        isOpen={showSatisfaction}
+        providerName={providerName}
+        amount={service.price}
+        onCancel={() => {
+          setShowSatisfaction(false);
+          setActiveBooking(null);
+        }}
+        onConfirm={handleConfirmSatisfaction}
+      />
     </main>
+  );
+}
+
+// ─── Satisfaction modal ─────────────────────────────────────────
+function SatisfactionModal({
+  isOpen,
+  providerName,
+  amount,
+  onCancel,
+  onConfirm,
+}: {
+  isOpen: boolean;
+  providerName: string;
+  amount: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (typeof document === 'undefined') return null;
+  if (!isOpen) return null;
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onCancel}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              zIndex: 1999,
+            }}
+          />
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              backgroundColor: '#fff',
+              borderRadius: 20,
+              padding: '24px 22px',
+              width: '90%',
+              maxWidth: 380,
+              zIndex: 2000,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                backgroundColor: '#DCFCE7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}
+            >
+              <MdCheckCircle size={36} color="#16A34A" />
+            </div>
+
+            <h3
+              style={{
+                fontSize: 20,
+                fontWeight: 800,
+                color: '#1A1A1A',
+                margin: '0 0 8px',
+              }}
+            >
+              Are you satisfied with the service?
+            </h3>
+
+            <p
+              style={{
+                fontSize: 14,
+                color: '#555',
+                lineHeight: 1.5,
+                margin: '0 0 20px',
+              }}
+            >
+              Confirming will release{' '}
+              <strong style={{ color: '#0504AA' }}>
+                ₦{amount.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
+              </strong>{' '}
+              to <strong>{providerName}</strong>. This cannot be undone.
+            </p>
+
+            <button
+              onClick={onConfirm}
+              style={{
+                width: '100%',
+                padding: '14px',
+                backgroundColor: '#27AE60',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 12,
+                fontSize: 16,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                marginBottom: 10,
+              }}
+            >
+              <MdCheckCircle size={20} />
+              Yes, release funds
+            </button>
+
+            <button
+              onClick={onCancel}
+              style={{
+                width: '100%',
+                padding: '14px',
+                backgroundColor: 'transparent',
+                color: '#666',
+                border: '1px solid #E5E7EB',
+                borderRadius: 12,
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Not yet
+            </button>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body,
   );
 }
