@@ -43,10 +43,10 @@ const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
   `https://picsum.photos/800/400?random=${i * 10}`
 );
 
-// ✅ Threshold — how far you must pull before refresh fires
-const PULL_THRESHOLD_PX = 150;
-// ✅ Dead zone — the first N px of downward motion are ignored
-const PULL_DEAD_ZONE_PX = 20;
+// ✅ Pull-to-refresh tuning
+const PULL_THRESHOLD_PX = 180;   // finger must travel this far DOWN
+const PULL_DEAD_ZONE_PX = 25;    // first N px are ignored
+const MAX_PULL_PX = 260;         // visual cap (unused for firing, only for feel)
 
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -352,11 +352,25 @@ export default function ShopperHomePage() {
   const axisDecided = useRef(false);
   const isDraggingRef = useRef(false);
 
-  // ✅ Pull-to-refresh refs — restructured for strictness
+  // ✅ Pull-to-refresh refs — track BOTH panel and window scroll
   const pullStartY = useRef<number | null>(null);
   const pullTriggered = useRef(false);
-  const pullPanelWasAtTop = useRef(false);
   const activePanelRef = useRef<HTMLDivElement>(null);
+
+  // ─── Helpers ────────────────────────────────────────────────────────
+  const getScrollPositions = () => {
+    const panelTop = activePanelRef.current?.scrollTop ?? 0;
+    const windowTop =
+      typeof window !== 'undefined'
+        ? window.scrollY || document.documentElement.scrollTop || 0
+        : 0;
+    return { panelTop, windowTop };
+  };
+
+  const isAtTop = () => {
+    const { panelTop, windowTop } = getScrollPositions();
+    return panelTop <= 0 && windowTop <= 0;
+  };
 
   // ─── Responsive columns ──────────────────────────────────────────────
   useEffect(() => {
@@ -574,11 +588,8 @@ export default function ShopperHomePage() {
     axisDecided.current = false;
     isDraggingRef.current = false;
 
-    // ✅ Record whether the panel is at the top right now.
-    //    Only in this case do we arm pull-to-refresh.
-    const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
-    pullPanelWasAtTop.current = panelScrollTop <= 0;
-    pullStartY.current = pullPanelWasAtTop.current ? t.clientY : null;
+    // ✅ Arm pull only if BOTH panel and window are at the top.
+    pullStartY.current = isAtTop() ? t.clientY : null;
     pullTriggered.current = false;
   };
 
@@ -587,26 +598,22 @@ export default function ShopperHomePage() {
     const currentX = t.clientX;
     const currentY = t.clientY;
 
-    // ── Pull-to-refresh — strict, cancels the moment user scrolls
+    // ── Pull-to-refresh — checks BOTH panel and window scroll
     if (
       pullStartY.current !== null &&
       !pullTriggered.current &&
       !isRefreshing &&
       !isDraggingRef.current
     ) {
-      const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
-
-      // ✅ Cancel: the panel scrolled away from the top at any point
-      if (panelScrollTop > 0) {
+      // Cancel if either the panel or the window has scrolled away from top
+      if (!isAtTop()) {
         pullStartY.current = null;
-        pullPanelWasAtTop.current = false;
       } else {
         const deltaY = currentY - pullStartY.current;
 
-        // ✅ Cancel: any upward motion = user is scrolling down, not pulling
         if (deltaY < 0) {
+          // Any upward motion cancels
           pullStartY.current = null;
-          pullPanelWasAtTop.current = false;
         } else if (deltaY > PULL_DEAD_ZONE_PX + PULL_THRESHOLD_PX) {
           pullTriggered.current = true;
           setIsRefreshing(true);
@@ -665,7 +672,6 @@ export default function ShopperHomePage() {
     dragStartX.current = null;
     dragStartY.current = null;
     pullStartY.current = null;
-    pullPanelWasAtTop.current = false;
     pullTriggered.current = false;
   };
 
