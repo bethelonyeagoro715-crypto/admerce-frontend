@@ -43,6 +43,11 @@ const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
   `https://picsum.photos/800/400?random=${i * 10}`
 );
 
+// ✅ Threshold — how far you must pull before refresh fires
+const PULL_THRESHOLD_PX = 150;
+// ✅ Dead zone — the first N px of downward motion are ignored
+const PULL_DEAD_ZONE_PX = 20;
+
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -347,10 +352,10 @@ export default function ShopperHomePage() {
   const axisDecided = useRef(false);
   const isDraggingRef = useRef(false);
 
-  const swipeStartX = useRef<number | null>(null);
-  const swipeStartY = useRef<number | null>(null);
+  // ✅ Pull-to-refresh refs — restructured for strictness
   const pullStartY = useRef<number | null>(null);
   const pullTriggered = useRef(false);
+  const pullPanelWasAtTop = useRef(false);
   const activePanelRef = useRef<HTMLDivElement>(null);
 
   // ─── Responsive columns ──────────────────────────────────────────────
@@ -569,15 +574,11 @@ export default function ShopperHomePage() {
     axisDecided.current = false;
     isDraggingRef.current = false;
 
-    swipeStartX.current = t.clientX;
-    swipeStartY.current = t.clientY;
-
+    // ✅ Record whether the panel is at the top right now.
+    //    Only in this case do we arm pull-to-refresh.
     const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
-    if (panelScrollTop <= 0) {
-      pullStartY.current = t.clientY;
-    } else {
-      pullStartY.current = null;
-    }
+    pullPanelWasAtTop.current = panelScrollTop <= 0;
+    pullStartY.current = pullPanelWasAtTop.current ? t.clientY : null;
     pullTriggered.current = false;
   };
 
@@ -586,16 +587,27 @@ export default function ShopperHomePage() {
     const currentX = t.clientX;
     const currentY = t.clientY;
 
+    // ── Pull-to-refresh — strict, cancels the moment user scrolls
     if (
       pullStartY.current !== null &&
       !pullTriggered.current &&
       !isRefreshing &&
       !isDraggingRef.current
     ) {
-      const deltaY = currentY - pullStartY.current;
-      if (deltaY > 100) {
-        const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
-        if (panelScrollTop <= 0) {
+      const panelScrollTop = activePanelRef.current?.scrollTop ?? 0;
+
+      // ✅ Cancel: the panel scrolled away from the top at any point
+      if (panelScrollTop > 0) {
+        pullStartY.current = null;
+        pullPanelWasAtTop.current = false;
+      } else {
+        const deltaY = currentY - pullStartY.current;
+
+        // ✅ Cancel: any upward motion = user is scrolling down, not pulling
+        if (deltaY < 0) {
+          pullStartY.current = null;
+          pullPanelWasAtTop.current = false;
+        } else if (deltaY > PULL_DEAD_ZONE_PX + PULL_THRESHOLD_PX) {
           pullTriggered.current = true;
           setIsRefreshing(true);
           onRefresh().finally(() => setIsRefreshing(false));
@@ -604,6 +616,7 @@ export default function ShopperHomePage() {
       }
     }
 
+    // ── Horizontal drag → tab switch
     if (dragStartX.current === null || dragStartY.current === null) return;
     const deltaX = currentX - dragStartX.current;
     const deltaY = currentY - dragStartY.current;
@@ -651,9 +664,8 @@ export default function ShopperHomePage() {
     axisDecided.current = false;
     dragStartX.current = null;
     dragStartY.current = null;
-    swipeStartX.current = null;
-    swipeStartY.current = null;
     pullStartY.current = null;
+    pullPanelWasAtTop.current = false;
     pullTriggered.current = false;
   };
 
@@ -1053,8 +1065,6 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
-  // ✅ FIX: box-sizing border-box so padding doesn't push the panel
-  //    past its 33.3333% slot. height 100% so it fills the tab area.
   panel: {
     width: '33.3333%',
     flex: '0 0 33.3333%',
@@ -1065,8 +1075,6 @@ const styles: Record<string, React.CSSProperties> = {
     overflowX: 'hidden',
     WebkitOverflowScrolling: 'touch',
   },
-  // ✅ FIX: padding goes on an inner wrapper, not the panel itself.
-  //    That keeps the panel's outer box exactly 33.3333% wide.
   panelInner: {
     width: '100%',
     padding: '0 16px 16px',
