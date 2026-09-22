@@ -15,6 +15,8 @@ import {
   MdCreditCard,
   MdArrowUpward,
   MdAccountBalanceWallet,
+  MdVisibility,
+  MdVisibilityOff,
 } from 'react-icons/md';
 
 // ─── API response shapes (no `any`) ─────────────────────────────────
@@ -178,7 +180,9 @@ export default function StorekeeperWalletPage() {
               onClick={() => setBalanceVisible(v => !v)}
               aria-label={balanceVisible ? 'Hide balance' : 'Show balance'}
             >
-              {balanceVisible ? '👁' : '🙈'}
+              {balanceVisible
+                ? <MdVisibility size={16} color="#fff" />
+                : <MdVisibilityOff size={16} color="#fff" />}
             </button>
           </div>
           <div style={css.balValue}>
@@ -309,7 +313,9 @@ const KF = `
 `;
 
 const css: Record<string, React.CSSProperties> = {
-  root:        { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F0F4FF', fontFamily: 'Inter, system-ui, sans-serif', overflowX: 'hidden' },
+  // ✅ Removed `fontFamily: 'Inter, system-ui, sans-serif'` — was overriding
+  //    the global Google Sans Flex set in globals.css. Now inherits.
+  root:        { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F0F4FF', overflowX: 'hidden' },
   loadScreen:  { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0504AA' },
   loadRing:    { width: 40, height: 40, border: '3px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
   hero:        { position: 'relative', backgroundColor: '#0504AA', backgroundImage: 'radial-gradient(ellipse at 80% 20%, #1A0FB8 0%, #0504AA 50%, #03037A 100%)', padding: '0 20px 36px', overflow: 'hidden' },
@@ -320,7 +326,7 @@ const css: Record<string, React.CSSProperties> = {
   heroTitle:   { fontSize: 16, fontWeight: 600, color: '#fff', letterSpacing: 0.3 },
   balanceBlock:{ marginBottom: 20 },
   balLabel:    { fontSize: 12, color: 'rgba(255,255,255,0.65)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 },
-  eyeBtn:      { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 },
+  eyeBtn:      { background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', lineHeight: 1 },
   balValue:    { fontSize: 42, fontWeight: 800, color: '#fff', letterSpacing: -1, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 },
   balSub:      { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 10, letterSpacing: 0.5 },
   statRow:     { display: 'flex', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: '8px 14px', gap: 4, backdropFilter: 'blur(4px)' },
