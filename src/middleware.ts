@@ -44,7 +44,6 @@ const PUBLIC_PREFIXES = [
 
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password', '/verify-otp'];
 
-// ✅ Static asset path prefixes — middleware must NEVER intercept these.
 const STATIC_PREFIXES = [
   '/_next/',
   '/icons/',
@@ -56,7 +55,6 @@ const STATIC_PREFIXES = [
   '/media/',
 ];
 
-// ✅ Exact-path static files.
 const STATIC_FILES = [
   '/favicon.ico',
   '/apple-icon.png',
@@ -66,24 +64,14 @@ const STATIC_FILES = [
   '/sitemap.xml',
 ];
 
-// ✅ Static asset extensions — belt-and-suspenders.
-// NOTE: keep in sync with STATIC_PREFIXES above.
 const STATIC_EXTENSIONS = [
-  // Images
   '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.avif', '.bmp', '.tiff',
-  // Icons
   '.ico',
-  // Fonts
   '.woff', '.woff2', '.ttf', '.otf', '.eot',
-  // Styles & scripts
   '.css', '.js', '.mjs', '.cjs', '.map',
-  // Data
   '.json', '.webmanifest', '.xml', '.txt', '.csv',
-  // Video
   '.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.ogv', '.mpg', '.mpeg',
-  // Audio
   '.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.opus',
-  // Docs & archives (occasionally served from /public)
   '.pdf', '.zip', '.gz',
 ];
 
@@ -113,9 +101,6 @@ function inferIntendedRole(location: string): string {
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
-  // ✅ Never intercept static assets — fixes 307s on /_next/image,
-  // /fonts/*, /icons/*, /admerce_video.mp4, and anything else with a
-  // recognised asset extension.
   if (isStaticAsset(pathname)) {
     return NextResponse.next();
   }
@@ -123,19 +108,23 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value;
   const userRole = request.cookies.get('user_role')?.value;
 
-  // Admin guard
-  if (pathname.startsWith('/_admin') && userRole !== 'admin') {
-    return NextResponse.redirect(new URL('/_admin', request.url));
+  // ✅ FIX: was `/_admin` (typo). Real prefix is `/admin`.
+  //    Non-admins now redirect to /shopper/home instead of looping back
+  //    to /admin.
+  if (pathname.startsWith('/admin') && userRole !== 'admin') {
+    return NextResponse.redirect(new URL('/shopper/home', request.url));
   }
 
-  // '/' matches only the literal root path.
-  // Every other entry is a prefix match.
+  // ✅ Legacy: if someone hits /_admin, send them to /admin (real route).
+  if (pathname.startsWith('/_admin')) {
+    return NextResponse.redirect(new URL('/admin', request.url));
+  }
+
   const isPublic = PUBLIC_PREFIXES.some((p) =>
     p === '/' ? pathname === '/' : pathname.startsWith(p)
   );
   const isAuthRoute = AUTH_ROUTES.some((p) => pathname.startsWith(p));
 
-  // Protected route without token → redirect to login
   if (!token && !isPublic && !isAuthRoute) {
     const intendedRole = inferIntendedRole(pathname);
     const redirect = encodeURIComponent(pathname + request.nextUrl.search);
@@ -147,7 +136,6 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  // Logged in but on an auth route → redirect to appropriate dashboard
   if (token && isAuthRoute) {
     const intendedRole =
       searchParams.get('intended_role') || userRole || 'shopper';
