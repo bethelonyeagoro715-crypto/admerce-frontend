@@ -86,14 +86,12 @@ function buildPickupOptions(): PickTimeOption[] {
 /* ─── Service mode quick-pick shortcuts ────────────────────── */
 // These just FILL the datetime input. The user can then adjust it or tap
 // Confirm. Not the only way to book — any clock time is reachable.
-function buildServiceQuickPicks(): {
+function buildServiceQuickPicks(now: Date): {
   label: string;
   date: Date;
   icon: React.ReactNode;
   color: string;
 }[] {
-  const now = new Date();
-
   const asap = new Date(now.getTime() + 60 * 60 * 1000); // now + 1h
 
   const sixPm = new Date(now);
@@ -140,25 +138,35 @@ export default function PickTimeBottomSheet({
   mode = 'pickup',
 }: PickTimeBottomSheetProps) {
   const [customDateTime, setCustomDateTime] = useState('');
+  const [openedAt, setOpenedAt] = useState<number | null>(null);
 
   // Bounds for the picker: no earlier than 1 hour from now, no later than
   // 30 days out. Recomputed each time the sheet opens.
   const { minDateTime, maxDateTime, quickPicks } = useMemo(() => {
-    const min = new Date(Date.now() + 60 * 60 * 1000);
-    const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    if (openedAt === null) {
+      return { minDateTime: '', maxDateTime: '', quickPicks: [] };
+    }
+
+    const now = new Date(openedAt);
+    const min = new Date(openedAt + 60 * 60 * 1000);
+    const max = new Date(openedAt + 30 * 24 * 60 * 60 * 1000);
     return {
       minDateTime: toLocalInputValue(min),
       maxDateTime: toLocalInputValue(max),
-      quickPicks: buildServiceQuickPicks(),
+      quickPicks: buildServiceQuickPicks(now),
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [openedAt]);
 
   // Reset the picked time each time the sheet opens
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+
+    const resetId = window.setTimeout(() => {
+      setOpenedAt(Date.now());
       setCustomDateTime('');
-    }
+    }, 0);
+
+    return () => window.clearTimeout(resetId);
   }, [isOpen]);
 
   // Lock body scroll when open
