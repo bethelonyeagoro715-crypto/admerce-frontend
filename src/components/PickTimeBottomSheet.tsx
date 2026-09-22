@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -11,6 +11,8 @@ import {
   MdFlashOn,
   MdWbTwilight,
   MdLightMode,
+  MdCalendarToday,
+  MdCheck,
 } from 'react-icons/md';
 
 export type PickTimeMode = 'pickup' | 'service';
@@ -30,7 +32,24 @@ interface PickTimeOption {
   color: string;
 }
 
-// ─── Pickup mode (item reservations) ─────────────────────────────
+/* ─── Datetime helpers ─────────────────────────────────────── */
+// Local YYYY-MM-DDTHH:MM — the format <input type="datetime-local"> uses.
+function toLocalInputValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+}
+
+// Local YYYY-MM-DDTHH:MM:SS — what the backend stores.
+// Deliberately NOT UTC — the backend uses naive datetime and the frontend
+// reads it back as local, so keeping it local avoids a timezone drift.
+function localInputToBackend(local: string): string {
+  if (!local) return '';
+  return local.length === 16 ? `${local}:00` : local;
+}
+
+/* ─── Pickup mode presets (unchanged) ──────────────────────── */
 function buildPickupOptions(): PickTimeOption[] {
   return [
     {
@@ -64,71 +83,84 @@ function buildPickupOptions(): PickTimeOption[] {
   ];
 }
 
-// ─── Service mode (service bookings) ─────────────────────────────
-// ✅ Returns ISO datetime strings (`YYYY-MM-DDTHH:MM:SS`) — matches
-//    what the backend expects in `scheduled_for`.
-function buildServiceOptions(): PickTimeOption[] {
+/* ─── Service mode quick-pick shortcuts ────────────────────── */
+// These just FILL the datetime input. The user can then adjust it or tap
+// Confirm. Not the only way to book — any clock time is reachable.
+function buildServiceQuickPicks(): {
+  label: string;
+  date: Date;
+  icon: React.ReactNode;
+  color: string;
+}[] {
   const now = new Date();
 
   const asap = new Date(now.getTime() + 60 * 60 * 1000); // now + 1h
 
-  const laterToday = new Date(now);
-  laterToday.setHours(18, 0, 0, 0);
-  if (laterToday <= now) {
-    laterToday.setDate(laterToday.getDate() + 1);
-    laterToday.setHours(10, 0, 0, 0);
-  }
+  const sixPm = new Date(now);
+  sixPm.setHours(18, 0, 0, 0);
 
   const tomorrowMorning = new Date(now);
   tomorrowMorning.setDate(tomorrowMorning.getDate() + 1);
   tomorrowMorning.setHours(9, 0, 0, 0);
 
-  const tomorrowAfternoon = new Date(now);
-  tomorrowAfternoon.setDate(tomorrowAfternoon.getDate() + 1);
-  tomorrowAfternoon.setHours(14, 0, 0, 0);
-
-  const iso = (d: Date) => d.toISOString().slice(0, 19);
-
-  return [
+  const picks = [
     {
-      label: 'As soon as possible',
-      value: iso(asap),
-      description: 'Provider comes within the next hour',
-      icon: <MdFlashOn size={22} />,
+      label: 'ASAP',
+      date: asap,
+      icon: <MdFlashOn size={16} />,
       color: '#0504AA',
     },
-    {
-      label: 'Later today',
-      value: iso(laterToday),
-      description: laterToday.getHours() < 12
-        ? 'Tomorrow at 10:00 AM'
-        : 'Today at 6:00 PM',
-      icon: <MdWbTwilight size={22} />,
-      color: '#F59E0B',
-    },
-    {
-      label: 'Tomorrow morning',
-      value: iso(tomorrowMorning),
-      description: 'Tomorrow at 9:00 AM',
-      icon: <MdLightMode size={22} />,
-      color: '#10B981',
-    },
-    {
-      label: 'Tomorrow afternoon',
-      value: iso(tomorrowAfternoon),
-      description: 'Tomorrow at 2:00 PM',
-      icon: <MdEvent size={22} />,
-      color: '#ad04e1',
-    },
   ];
+
+  // Only offer "today 6 PM" if it's still at least 2 hours away
+  if (sixPm.getTime() - now.getTime() >= 2 * 60 * 60 * 1000) {
+    picks.push({
+      label: 'Today 6 PM',
+      date: sixPm,
+      icon: <MdWbTwilight size={16} />,
+      color: '#F59E0B',
+    });
+  }
+
+  picks.push({
+    label: 'Tomorrow 9 AM',
+    date: tomorrowMorning,
+    icon: <MdLightMode size={16} />,
+    color: '#10B981',
+  });
+
+  return picks;
 }
 
+/* ─── Component ────────────────────────────────────────────── */
 export default function PickTimeBottomSheet({
   isOpen,
   onClose,
   onSelect,
   mode = 'pickup',
 }: PickTimeBottomSheetProps) {
+  const [customDateTime, setCustomDateTime] = useState('');
+
+  // Bounds for the picker: no earlier than 1 hour from now, no later than
+  // 30 days out. Recomputed each time the sheet opens.
+  const { minDateTime, maxDateTime, quickPicks } = useMemo(() => {
+    const min = new Date(Date.now() + 60 * 60 * 1000);
+    const max = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    return {
+      minDateTime: toLocalInputValue(min),
+      maxDateTime: toLocalInputValue(max),
+      quickPicks: buildServiceQuickPicks(),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // Reset the picked time each time the sheet opens
+  useEffect(() => {
+    if (isOpen) {
+      setCustomDateTime('');
+    }
+  }, [isOpen]);
+
   // Lock body scroll when open
   useEffect(() => {
     if (isOpen) {
@@ -143,20 +175,16 @@ export default function PickTimeBottomSheet({
 
   if (typeof document === 'undefined') return null;
 
-  const options =
-    mode === 'service' ? buildServiceOptions() : buildPickupOptions();
-
   const heading = mode === 'service' ? 'Book a Time' : 'Select Pickup Time';
   const subtext =
     mode === 'service'
-      ? 'Choose when you want the service'
+      ? 'Pick any date and time, up to 30 days ahead'
       : 'Choose when you\u2019ll pick up your item';
 
   return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -173,7 +201,6 @@ export default function PickTimeBottomSheet({
             }}
           />
 
-          {/* Bottom Sheet */}
           <motion.div
             role="dialog"
             aria-modal="true"
@@ -258,70 +285,231 @@ export default function PickTimeBottomSheet({
               {subtext}
             </p>
 
-            {/* Options */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {options.map((option) => (
-                <motion.button
-                  key={option.label}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => onSelect(option.value)}
+            {/* ─── PICKUP MODE — presets only (unchanged) ─────── */}
+            {mode === 'pickup' && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}
+              >
+                {buildPickupOptions().map((option) => (
+                  <motion.button
+                    key={option.label}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => onSelect(option.value)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '14px',
+                      backgroundColor: '#F9FAFB',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: '16px',
+                      cursor: 'pointer',
+                      width: '100%',
+                      textAlign: 'left',
+                      minHeight: 56,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '12px',
+                        backgroundColor: `${option.color}15`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: option.color,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {option.icon}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          fontSize: 'clamp(15px, 4vw, 17px)',
+                          fontWeight: 700,
+                          color: '#1A1A1A',
+                        }}
+                      >
+                        {option.label}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 'clamp(12px, 3vw, 14px)',
+                          color: '#6B7280',
+                          marginTop: '2px',
+                        }}
+                      >
+                        {option.description}
+                      </div>
+                    </div>
+                    <span style={{ color: '#6B7280', fontSize: '20px' }}>›</span>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+
+            {/* ─── SERVICE MODE — quick chips + real datetime picker ─── */}
+            {mode === 'service' && (
+              <>
+                {/* Quick chips — tap to prefill the input */}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    overflowX: 'auto',
+                    paddingBottom: 4,
+                    marginBottom: 16,
+                    WebkitOverflowScrolling: 'touch',
+                    scrollbarWidth: 'none',
+                  }}
+                >
+                  {quickPicks.map((pick) => (
+                    <button
+                      key={pick.label}
+                      type="button"
+                      onClick={() =>
+                        setCustomDateTime(toLocalInputValue(pick.date))
+                      }
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 14px',
+                        borderRadius: 20,
+                        border: '1px solid #E5E7EB',
+                        backgroundColor: '#F9FAFB',
+                        color: '#374151',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{ color: pick.color, display: 'flex' }}>
+                        {pick.icon}
+                      </span>
+                      {pick.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Divider */}
+                <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '12px',
-                    padding: '14px',
-                    backgroundColor: '#F9FAFB',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: '16px',
-                    cursor: 'pointer',
-                    width: '100%',
-                    textAlign: 'left',
-                    minHeight: 56,
+                    gap: 12,
+                    marginBottom: 14,
                   }}
                 >
                   <div
                     style={{
-                      width: '44px',
-                      height: '44px',
-                      borderRadius: '12px',
-                      backgroundColor: `${option.color}15`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: option.color,
-                      flexShrink: 0,
+                      flex: 1,
+                      height: 1,
+                      backgroundColor: '#E5E7EB',
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: '#9CA3AF',
+                      fontWeight: 600,
+                      letterSpacing: 0.5,
                     }}
                   >
-                    {option.icon}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        fontSize: 'clamp(15px, 4vw, 17px)',
-                        fontWeight: 700,
-                        color: '#1A1A1A',
-                      }}
-                    >
-                      {option.label}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 'clamp(12px, 3vw, 14px)',
-                        color: '#6B7280',
-                        marginTop: '2px',
-                      }}
-                    >
-                      {option.description}
-                    </div>
-                  </div>
-                  <span style={{ color: '#6B7280', fontSize: '20px' }}>›</span>
-                </motion.button>
-              ))}
-            </div>
+                    OR PICK A SPECIFIC TIME
+                  </span>
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      backgroundColor: '#E5E7EB',
+                    }}
+                  />
+                </div>
+
+                {/* Datetime input */}
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '14px 16px',
+                    borderRadius: 14,
+                    border: `1.5px solid ${
+                      customDateTime ? '#0504AA' : '#E5E7EB'
+                    }`,
+                    backgroundColor: customDateTime ? '#F5F4FF' : '#fff',
+                    marginBottom: 20,
+                    transition: 'border-color 0.2s, background-color 0.2s',
+                  }}
+                >
+                  <MdCalendarToday
+                    size={22}
+                    color={customDateTime ? '#0504AA' : '#9CA3AF'}
+                    style={{ flexShrink: 0 }}
+                  />
+                  <input
+                    type="datetime-local"
+                    value={customDateTime}
+                    min={minDateTime}
+                    max={maxDateTime}
+                    onChange={(e) => setCustomDateTime(e.target.value)}
+                    style={{
+                      flex: 1,
+                      border: 'none',
+                      outline: 'none',
+                      backgroundColor: 'transparent',
+                      fontSize: 16,
+                      fontWeight: 600,
+                      color: '#1A1A1A',
+                      fontFamily: 'inherit',
+                      minWidth: 0,
+                    }}
+                  />
+                </label>
+
+                {/* Confirm button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!customDateTime) return;
+                    onSelect(localInputToBackend(customDateTime));
+                  }}
+                  disabled={!customDateTime}
+                  style={{
+                    width: '100%',
+                    padding: '16px',
+                    borderRadius: 14,
+                    border: 'none',
+                    backgroundColor: customDateTime ? '#0504AA' : '#E5E7EB',
+                    color: customDateTime ? '#fff' : '#9CA3AF',
+                    fontSize: 16,
+                    fontWeight: 700,
+                    cursor: customDateTime ? 'pointer' : 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    transition: 'background-color 0.2s, color 0.2s',
+                  }}
+                >
+                  <MdCheck size={20} />
+                  Confirm Booking
+                </button>
+              </>
+            )}
           </motion.div>
         </>
       )}
     </AnimatePresence>,
-    document.body
+    document.body,
   );
 }
