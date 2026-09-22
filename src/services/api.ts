@@ -330,6 +330,8 @@ class ApiService {
     return res.data;
   }
 
+  // ✅ FIX: added `quantity` — previously this was never sent, so escrow.quantity
+  //    always defaulted to 1 and the storekeeper couldn't tell how many were ordered.
   public async reserveItem(
     orderId: string,
     storekeeperId: string,
@@ -337,12 +339,14 @@ class ApiService {
     listingId: string,
     courierId?: string,
     deliveryFee = 0.0,
+    quantity = 1,
   ): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/reserve', {
       order_id: orderId,
       storekeeper_id: storekeeperId,
       item_amount: itemAmount,
       listing_id: listingId,
+      quantity,
       ...(courierId ? { courier_id: courierId } : {}),
       delivery_fee: deliveryFee,
     });
@@ -374,15 +378,18 @@ class ApiService {
     return res.data;
   }
 
+  // ✅ FIX: added `quantity` — see reserveItem note above.
   public async instantPickup(
     listingId: string,
     storekeeperId: string,
     amount: number,
+    quantity = 1,
   ): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/instant-pickup', {
       listing_id: listingId,
       storekeeper_id: storekeeperId,
       amount,
+      quantity,
     });
     return res.data;
   }
@@ -1108,8 +1115,6 @@ class ApiService {
   }
 
   // ======================== CHAT ========================
-  // ✅ FIX: sendMessage now supports reply_to_id. Third parameter is a
-  //    reply target, NOT an image URL. Replies now work end-to-end.
   public async sendMessage(
     receiverId: string,
     text: string,

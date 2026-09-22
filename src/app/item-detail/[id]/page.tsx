@@ -120,28 +120,39 @@ export default function ItemDetailPage() {
     return 'Something went wrong. Please try again later.';
   };
 
+  // ✅ FIX: now uses TOTAL (price × quantity) and passes quantity so the
+  //    backend records how many items were purchased.
   const confirmInstantPickup = async () => {
     if (!listing || !store) return;
+    const total = listing.price * quantity;
     try {
       await api.instantPickup(
         listing.listing_id,
         store.owner_id,
-        listing.price,
+        total,
+        quantity,
       );
-      alert('Payment successful! Pick up your item.');
+      alert(
+        `Payment successful! ${quantity} item${quantity > 1 ? 's' : ''} · ₦${total.toFixed(0)}`,
+      );
     } catch (err: unknown) {
       alert(extractErrorMessage(err));
     }
   };
 
+  // ✅ FIX: confirm dialog shows the total, not the unit price.
   const pickUpNow = () => {
     if (!listing) return;
+    const total = listing.price * quantity;
     const confirmed = window.confirm(
-      `Are you at the store?\nPay ₦${listing.price.toFixed(0)} directly?`,
+      quantity > 1
+        ? `Are you at the store?\nPay ₦${total.toFixed(0)} for ${quantity} items?`
+        : `Are you at the store?\nPay ₦${total.toFixed(0)} directly?`,
     );
     if (confirmed) confirmInstantPickup();
   };
 
+  // ✅ FIX: passes quantity through to the API so escrow records it.
   const reserveNow = async (pickupTime: string) => {
     if (!listing || !store) return;
     try {
@@ -161,6 +172,7 @@ export default function ItemDetailPage() {
         listing.listing_id,
         undefined,
         0,
+        quantity,  // ✅ NEW — quantity now reaches the backend
       )) as { status?: string };
 
       if (response.status === 'locked') {
@@ -170,6 +182,7 @@ export default function ItemDetailPage() {
           store_name: store.name,
           order_id: orderId,
           total: String(total),
+          quantity: String(quantity),  // ✅ included for the confirmation screen
           pickup_time: pickupTime,
         });
         router.push(`/reservation-confirmed?${query.toString()}`);
@@ -183,7 +196,9 @@ export default function ItemDetailPage() {
     if (!listing) return;
     try {
       await api.addToBasket(listing.listing_id, listing.store_id, quantity);
-      alert('Added to basket!');
+      alert(
+        `Added ${quantity} item${quantity > 1 ? 's' : ''} to basket!`,
+      );
     } catch (err: unknown) {
       alert(
         'Failed to add: ' + (err instanceof Error ? err.message : ''),
@@ -205,14 +220,16 @@ export default function ItemDetailPage() {
       const userLng = pos.coords.longitude;
 
       const orderId = 'ord_' + Date.now();
+      const total = listing.price * quantity;
 
       await api.reserveItem(
         orderId,
         store.owner_id,
-        listing.price,
+        total,
         listing.listing_id,
         undefined,
         0,
+        quantity,  // ✅ quantity passed
       );
 
       const match = (await api.matchCourier(
@@ -235,7 +252,7 @@ export default function ItemDetailPage() {
       const estimatedTime = match.estimated_package_time_min ?? 0;
 
       alert(
-        `Delivery confirmed!\n\nItem: ${listing.title}\nPrice: ₦${listing.price.toFixed(0)}\nDelivery fee: ₦${deliveryFee.toFixed(0)}\nCourier: ${courierName}\nEstimated: ${estimatedTime} min`,
+        `Delivery confirmed!\n\nItem: ${listing.title}\nQuantity: ${quantity}\nSubtotal: ₦${total.toFixed(0)}\nDelivery fee: ₦${deliveryFee.toFixed(0)}\nTotal: ₦${(total + deliveryFee).toFixed(0)}\nCourier: ${courierName}\nEstimated: ${estimatedTime} min`,
       );
     } catch (err: unknown) {
       alert(extractErrorMessage(err));
@@ -276,13 +293,14 @@ export default function ItemDetailPage() {
     if (fulfillmentType === 'delivery') {
       return enableDelivery ? 'Deliver to Me' : 'Coming Soon';
     }
+    const qtySuffix = quantity > 1 ? ` (${quantity})` : '';
     switch (pickupTiming) {
       case 'now':
-        return 'Pick Up Now';
+        return `Pick Up Now${qtySuffix}`;
       case 'reserve':
-        return 'Reserve & Pick Up';
+        return `Reserve & Pick Up${qtySuffix}`;
       case 'basket':
-        return 'Add to Basket';
+        return `Add to Basket${qtySuffix}`;
     }
   };
 
@@ -397,6 +415,7 @@ export default function ItemDetailPage() {
 
   const imageUrl = resolveImageUrl(listing.image_url);
   const storeImage = store ? resolveImageUrl(store.store_image_url) : null;
+  const totalPrice = listing.price * quantity;
 
   return (
     <main style={styles.container}>
@@ -479,7 +498,20 @@ export default function ItemDetailPage() {
         {/* Title & Price */}
         <h2 style={styles.itemTitle}>{listing.title}</h2>
         <div style={styles.priceRow}>
-          <span style={styles.price}>₦{listing.price.toFixed(0)}</span>
+          <div>
+            <span style={styles.price}>₦{totalPrice.toFixed(0)}</span>
+            {quantity > 1 && (
+              <span
+                style={{
+                  fontSize: 13,
+                  color: '#888',
+                  marginLeft: 8,
+                }}
+              >
+                ({quantity} × ₦{listing.price.toFixed(0)})
+              </span>
+            )}
+          </div>
           <div style={styles.qtyControl}>
             <button
               onClick={() => quantity > 1 && setQuantity((q) => q - 1)}
