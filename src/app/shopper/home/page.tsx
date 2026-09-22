@@ -40,13 +40,16 @@ const serviceCategories = [
 ];
 
 const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
-  `https://picsum.photos/800/400?random=${i * 10}`
+  `https://picsum.photos/800/400?random=${i * 10}`,
 );
 
-// ✅ Pull-to-refresh tuning
-const PULL_THRESHOLD_PX = 180;   // finger must travel this far DOWN
-const PULL_DEAD_ZONE_PX = 25;    // first N px are ignored
-const MAX_PULL_PX = 260;         // visual cap (unused for firing, only for feel)
+const PULL_THRESHOLD_PX = 180;
+const PULL_DEAD_ZONE_PX = 25;
+
+// ✅ Client-side pagination — how many cards to reveal at a time.
+//    Feels infinite, but renders only visible ones so it stays smooth.
+const INITIAL_VISIBLE = 20;
+const BATCH_SIZE = 20;
 
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -77,15 +80,24 @@ interface StoreLocation {
   lng: number;
 }
 interface ServiceItem {
+  service_id: string;
   provider_id: string;
+  title?: string;
+  price?: number | string;
+  image_url?: string;
+  duration_minutes?: number;
+  description?: string;
   business_name?: string;
   username?: string;
   business_image_url?: string;
   avatar_url?: string;
 }
 
+type FeedKind = 'item' | 'service';
+
 interface Item {
   id: string;
+  kind: FeedKind;
   image: string | null;
   title: string;
   price: string;
@@ -208,11 +220,12 @@ function ItemCard({
   onVisualSearch,
 }: {
   item: Item;
-  onPress: (id: string) => void;
+  onPress: (item: Item) => void;
   onVisualSearch: (image: string | null) => void;
 }) {
+  const isService = item.kind === 'service';
   return (
-    <div style={styles.card} onClick={() => onPress(item.id)}>
+    <div style={styles.card} onClick={() => onPress(item)}>
       <div style={styles.imageWrap}>
         {item.image ? (
           <img src={item.image} alt="" loading="lazy" style={styles.image} />
@@ -221,6 +234,16 @@ function ItemCard({
             <MdImage size={36} color="#9e9e9e" />
           </div>
         )}
+
+        <div
+          style={{
+            ...styles.kindBadge,
+            backgroundColor: isService ? '#0504AA' : '#0F172A',
+          }}
+        >
+          {isService ? 'SERVICE' : 'ITEM'}
+        </div>
+
         <div
           style={styles.visualSearchBtn}
           onClick={(e) => {
@@ -240,7 +263,7 @@ function ItemCard({
         <div style={styles.cardPrice}>{item.price}</div>
         {item.storeName && (
           <div style={styles.cardStore} title={item.storeName}>
-            {item.storeName}
+            {isService ? `By ${item.storeName}` : item.storeName}
           </div>
         )}
       </div>
@@ -323,7 +346,9 @@ export default function ShopperHomePage() {
   const [noteworthyIndex, setNoteworthyIndex] = useState(0);
   const [isNoteworthyCollapsed, setIsNoteworthyCollapsed] = useState(false);
 
-  const [items, setItems] = useState<Item[]>([]);
+  const [listingItems, setListingItems] = useState<Item[]>([]);
+  const [serviceItems, setServiceItems] = useState<Item[]>([]);
+
   const [stores, setStores] = useState<Store[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
 
@@ -340,6 +365,9 @@ export default function ShopperHomePage() {
 
   const [columns, setColumns] = useState(2);
 
+  // ✅ Client-side pagination
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
@@ -352,10 +380,13 @@ export default function ShopperHomePage() {
   const axisDecided = useRef(false);
   const isDraggingRef = useRef(false);
 
-  // ✅ Pull-to-refresh refs — track BOTH panel and window scroll
   const pullStartY = useRef<number | null>(null);
   const pullTriggered = useRef(false);
   const activePanelRef = useRef<HTMLDivElement>(null);
+
+  // ✅ Refs for the infinite-scroll sentinel
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const totalRef = useRef(0);
 
   // ─── Helpers ────────────────────────────────────────────────────────
   const getScrollPositions = () => {
@@ -446,6 +477,8 @@ export default function ShopperHomePage() {
     if (!loadMore) {
       setLoadingItems(true);
       sessionItemsShown.current = [];
+      // ✅ Reset pagination on fresh load / refresh
+      setVisibleCount(INITIAL_VISIBLE);
     }
     try {
       const recallData = await api.recallFeed(lat, lng, 50, {
@@ -490,6 +523,7 @@ export default function ShopperHomePage() {
 
       const newItems: Item[] = feed.map((item) => ({
         id: item.listing_id?.toString() ?? '',
+        kind: 'item',
         image: resolveImageUrl(item.image_url),
         title: item.title ?? 'No Title',
         price: item.price ? `₦${Number(item.price).toFixed(0)}` : '₦0',
@@ -499,9 +533,9 @@ export default function ShopperHomePage() {
       newItems.forEach((item) => sessionItemsShown.current.push(item.id));
 
       if (loadMore) {
-        setItems((prev) => [...prev, ...newItems]);
+        setListingItems((prev) => [...prev, ...newItems]);
       } else {
-        setItems(newItems);
+        setListingItems(newItems);
         setLoadingItems(false);
       }
     } catch {
@@ -533,8 +567,23 @@ export default function ShopperHomePage() {
     try {
       const services =
         (await api.listServices()) as unknown as ServiceItem[];
-      const providerMap = new Map<string, Provider>();
 
+      const svcItems: Item[] = services
+        .filter((s) => s && s.service_id)
+        .map((s) => ({
+          id: s.service_id,
+          kind: 'service',
+          image: resolveImageUrl(s.image_url),
+          title: s.title ?? 'Service',
+          price: s.price != null
+            ? `₦${Number(s.price).toFixed(0)}`
+            : '₦0',
+          storeName:
+            s.business_name ?? s.username ?? 'Service Provider',
+        }));
+      setServiceItems(svcItems);
+
+      const providerMap = new Map<string, Provider>();
       for (const s of services) {
         if (!s.provider_id) continue;
         if (!providerMap.has(s.provider_id)) {
@@ -549,7 +598,6 @@ export default function ShopperHomePage() {
         }
         providerMap.get(s.provider_id)!.serviceCount += 1;
       }
-
       setProviders(Array.from(providerMap.values()));
     } catch {
       // ignore
@@ -579,6 +627,39 @@ export default function ShopperHomePage() {
     ]);
   };
 
+  // ─── Merged feed + total ref for the observer ────────────────────────
+  const feedItems = [...listingItems, ...serviceItems];
+  const displayedFeed = feedItems.slice(0, visibleCount);
+
+  // Keep totalRef in sync so the observer knows when to stop
+  useEffect(() => {
+    totalRef.current = feedItems.length;
+  }, [feedItems.length]);
+
+  // ✅ IntersectionObserver — increments visibleCount when the sentinel
+  //    nears the viewport. rootMargin gives a 300px head start so cards
+  //    are already rendered by the time the user reaches them.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        setVisibleCount((c) => {
+          const total = totalRef.current;
+          if (c >= total) return c;
+          return Math.min(c + BATCH_SIZE, total);
+        });
+      },
+      { rootMargin: '300px 0px' },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
   // ─── Touch handlers ─────────────────────────────────────────────────
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
@@ -588,7 +669,6 @@ export default function ShopperHomePage() {
     axisDecided.current = false;
     isDraggingRef.current = false;
 
-    // ✅ Arm pull only if BOTH panel and window are at the top.
     pullStartY.current = isAtTop() ? t.clientY : null;
     pullTriggered.current = false;
   };
@@ -598,21 +678,18 @@ export default function ShopperHomePage() {
     const currentX = t.clientX;
     const currentY = t.clientY;
 
-    // ── Pull-to-refresh — checks BOTH panel and window scroll
     if (
       pullStartY.current !== null &&
       !pullTriggered.current &&
       !isRefreshing &&
       !isDraggingRef.current
     ) {
-      // Cancel if either the panel or the window has scrolled away from top
       if (!isAtTop()) {
         pullStartY.current = null;
       } else {
         const deltaY = currentY - pullStartY.current;
 
         if (deltaY < 0) {
-          // Any upward motion cancels
           pullStartY.current = null;
         } else if (deltaY > PULL_DEAD_ZONE_PX + PULL_THRESHOLD_PX) {
           pullTriggered.current = true;
@@ -623,7 +700,6 @@ export default function ShopperHomePage() {
       }
     }
 
-    // ── Horizontal drag → tab switch
     if (dragStartX.current === null || dragStartY.current === null) return;
     const deltaX = currentX - dragStartX.current;
     const deltaY = currentY - dragStartY.current;
@@ -682,7 +758,14 @@ export default function ShopperHomePage() {
   const openFilter = () => setShowFilter(true);
   const closeFilter = () => setShowFilter(false);
 
-  const handleItemPress = (id: string) => router.push(`/item-detail/${id}`);
+  const handleItemPress = (item: Item) => {
+    if (item.kind === 'service') {
+      router.push(`/service-detail/${item.id}`);
+    } else {
+      router.push(`/item-detail/${item.id}`);
+    }
+  };
+
   const handleVisualSearch = (image: string | null) => {
     if (image) {
       router.push(`/seai-lens?image=${encodeURIComponent(image)}`);
@@ -692,18 +775,18 @@ export default function ShopperHomePage() {
   };
   const handleStorePress = (id: string) => router.push(`/store-detail/${id}`);
   const handleProviderPress = (id: string, name: string) =>
-    router.push(
-      `/provider-services/${id}?name=${encodeURIComponent(name)}`,
-    );
+    router.push(`/provider-services/${id}?name=${encodeURIComponent(name)}`);
 
   const trackTransform = `translateX(calc(-${currentTab * 33.3333}% + ${dragOffset}px))`;
+
+  const loadingFeed = loadingItems || loadingServices;
+  const hasMoreToReveal = visibleCount < feedItems.length;
 
   // ─── Render ─────────────────────────────────────────────────────────
   return (
     <div style={styles.container}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* App Bar */}
       <div style={styles.appBar}>
         <div style={{ fontWeight: 600, color: '#0504AA', fontSize: 18 }}>
           Admerce
@@ -733,7 +816,6 @@ export default function ShopperHomePage() {
         onEnableLocation={requestLocationManually}
       />
 
-      {/* New & Noteworthy */}
       <div style={{ marginBottom: 8 }}>
         {!isNoteworthyCollapsed ? (
           <>
@@ -803,7 +885,6 @@ export default function ShopperHomePage() {
         )}
       </div>
 
-      {/* Pill Tabs */}
       <div
         style={{
           display: 'flex',
@@ -837,7 +918,6 @@ export default function ShopperHomePage() {
         ))}
       </div>
 
-      {/* Slidable tab content */}
       <div
         style={styles.tabContent}
         onTouchStart={handleTouchStart}
@@ -870,24 +950,30 @@ export default function ShopperHomePage() {
             style={styles.panel}
           >
             <div style={styles.panelInner}>
-              {loadingItems ? (
-                <div style={styles.centeredMsg}>Loading items…</div>
-              ) : items.length === 0 ? (
+              {loadingFeed ? (
+                <div style={styles.centeredMsg}>Loading…</div>
+              ) : feedItems.length === 0 ? (
                 <div style={styles.centeredMsg}>No items yet.</div>
               ) : (
-                <MasonryColumns
-                  items={items}
-                  columns={columns}
-                  gap={10}
-                  keyFor={(item) => item.id}
-                  renderItem={(item) => (
-                    <ItemCard
-                      item={item}
-                      onPress={handleItemPress}
-                      onVisualSearch={handleVisualSearch}
-                    />
+                <>
+                  <MasonryColumns
+                    items={displayedFeed}
+                    columns={columns}
+                    gap={10}
+                    keyFor={(item) => `${item.kind}-${item.id}`}
+                    renderItem={(item) => (
+                      <ItemCard
+                        item={item}
+                        onPress={handleItemPress}
+                        onVisualSearch={handleVisualSearch}
+                      />
+                    )}
+                  />
+                  {/* ✅ Sentinel — observed to trigger more reveals */}
+                  {hasMoreToReveal && (
+                    <div ref={sentinelRef} style={{ height: 1 }} />
                   )}
-                />
+                </>
               )}
             </div>
           </div>
@@ -1129,6 +1215,18 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 48,
     fontWeight: 700,
     color: '#fff',
+  },
+  kindBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    padding: '3px 8px',
+    borderRadius: 8,
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 800,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   visualSearchBtn: {
     position: 'absolute',
