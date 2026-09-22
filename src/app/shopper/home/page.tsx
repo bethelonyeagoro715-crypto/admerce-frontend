@@ -46,8 +46,6 @@ const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
 const PULL_THRESHOLD_PX = 180;
 const PULL_DEAD_ZONE_PX = 25;
 
-// ✅ Client-side pagination — how many cards to reveal at a time.
-//    Feels infinite, but renders only visible ones so it stays smooth.
 const INITIAL_VISIBLE = 20;
 const BATCH_SIZE = 20;
 
@@ -364,8 +362,6 @@ export default function ShopperHomePage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [columns, setColumns] = useState(2);
-
-  // ✅ Client-side pagination
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -373,6 +369,11 @@ export default function ShopperHomePage() {
 
   const noteworthyTimer = useRef<NodeJS.Timeout | null>(null);
   const sessionItemsShown = useRef<string[]>([]);
+
+  // ✅ NEW: request sequence guards — discards stale async responses
+  const itemsReqSeq = useRef(0);
+  const storesReqSeq = useRef(0);
+  const servicesReqSeq = useRef(0);
 
   const dragStartX = useRef<number | null>(null);
   const dragStartY = useRef<number | null>(null);
@@ -384,7 +385,6 @@ export default function ShopperHomePage() {
   const pullTriggered = useRef(false);
   const activePanelRef = useRef<HTMLDivElement>(null);
 
-  // ✅ Refs for the infinite-scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
   const totalRef = useRef(0);
 
@@ -403,7 +403,6 @@ export default function ShopperHomePage() {
     return panelTop <= 0 && windowTop <= 0;
   };
 
-  // ─── Responsive columns ──────────────────────────────────────────────
   useEffect(() => {
     const update = () => {
       const w = window.innerWidth;
@@ -417,7 +416,6 @@ export default function ShopperHomePage() {
     return () => window.removeEventListener('resize', update);
   }, []);
 
-  // ─── Location ───────────────────────────────────────────────────────
   const getCurrentLocation = async (): Promise<GeolocationPosition | null> => {
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
@@ -462,7 +460,6 @@ export default function ShopperHomePage() {
     getCurrentLocation().then(setCachedPosition);
   }, []);
 
-  // ─── New & Noteworthy rotation ───────────────────────────────────────
   useEffect(() => {
     noteworthyTimer.current = setInterval(() => {
       setNoteworthyIndex((prev) => (prev + 1) % noteworthyImages.length);
@@ -472,12 +469,13 @@ export default function ShopperHomePage() {
     };
   }, []);
 
-  // ─── Feed loaders ─────────────────────────────────────────────────────
+  // ─── Feed loaders (with request-ID guards) ─────────────────────────
   const loadItems = async (lat: number, lng: number, loadMore = false) => {
+    const mySeq = ++itemsReqSeq.current;
+
     if (!loadMore) {
       setLoadingItems(true);
       sessionItemsShown.current = [];
-      // ✅ Reset pagination on fresh load / refresh
       setVisibleCount(INITIAL_VISIBLE);
     }
     try {
@@ -489,6 +487,9 @@ export default function ShopperHomePage() {
         embedding: 0.15,
         collab: 0.1,
       });
+
+      // ✅ Discard if a newer loadItems call started
+      if (mySeq !== itemsReqSeq.current) return;
 
       const candidates: RecallCandidate[] = Array.isArray(
         recallData.candidates,
@@ -507,6 +508,10 @@ export default function ShopperHomePage() {
         candidateIds,
         sessionItemsShown.current,
       );
+
+      // ✅ Discard if a newer loadItems call started during rank
+      if (mySeq !== itemsReqSeq.current) return;
+
       const feed: RankedItem[] = Array.isArray(rankData?.feed)
         ? (rankData.feed as RankedItem[])
         : [];
@@ -539,14 +544,16 @@ export default function ShopperHomePage() {
         setLoadingItems(false);
       }
     } catch {
-      if (!loadMore) setLoadingItems(false);
+      if (mySeq === itemsReqSeq.current && !loadMore) setLoadingItems(false);
     }
   };
 
   const loadStores = async (_lat: number, _lng: number) => {
+    const mySeq = ++storesReqSeq.current;
     try {
       const locations =
         (await api.getStoreLocations()) as unknown as StoreLocation[];
+      if (mySeq !== storesReqSeq.current) return;
       setStores(
         locations.map((loc) => ({
           id: loc.store_id,
@@ -559,14 +566,17 @@ export default function ShopperHomePage() {
     } catch {
       // ignore
     } finally {
-      setLoadingStores(false);
+      if (mySeq === storesReqSeq.current) setLoadingStores(false);
     }
   };
 
   const loadServices = async (_lat: number, _lng: number) => {
+    const mySeq = ++servicesReqSeq.current;
     try {
       const services =
         (await api.listServices()) as unknown as ServiceItem[];
+
+      if (mySeq !== servicesReqSeq.current) return;
 
       const svcItems: Item[] = services
         .filter((s) => s && s.service_id)
@@ -602,7 +612,7 @@ export default function ShopperHomePage() {
     } catch {
       // ignore
     } finally {
-      setLoadingServices(false);
+      if (mySeq === servicesReqSeq.current) setLoadingServices(false);
     }
   };
 
@@ -627,18 +637,13 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ─── Merged feed + total ref for the observer ────────────────────────
   const feedItems = [...listingItems, ...serviceItems];
   const displayedFeed = feedItems.slice(0, visibleCount);
 
-  // Keep totalRef in sync so the observer knows when to stop
   useEffect(() => {
     totalRef.current = feedItems.length;
   }, [feedItems.length]);
 
-  // ✅ IntersectionObserver — increments visibleCount when the sentinel
-  //    nears the viewport. rootMargin gives a 300px head start so cards
-  //    are already rendered by the time the user reaches them.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const sentinel = sentinelRef.current;
@@ -660,7 +665,6 @@ export default function ShopperHomePage() {
     return () => observer.disconnect();
   }, []);
 
-  // ─── Touch handlers ─────────────────────────────────────────────────
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
     dragStartX.current = t.clientX;
@@ -751,7 +755,6 @@ export default function ShopperHomePage() {
     pullTriggered.current = false;
   };
 
-  // ─── Navigation ─────────────────────────────────────────────────────
   const openSearch = () => router.push('/seai-search');
   const openBasket = () => router.push('/basket');
   const openNotifications = () => router.push('/notifications');
@@ -782,7 +785,6 @@ export default function ShopperHomePage() {
   const loadingFeed = loadingItems || loadingServices;
   const hasMoreToReveal = visibleCount < feedItems.length;
 
-  // ─── Render ─────────────────────────────────────────────────────────
   return (
     <div style={styles.container}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -944,7 +946,6 @@ export default function ShopperHomePage() {
             touchAction: 'pan-y',
           }}
         >
-          {/* Panel 0 — BUYTEMS */}
           <div
             ref={currentTab === 0 ? activePanelRef : null}
             style={styles.panel}
@@ -969,7 +970,6 @@ export default function ShopperHomePage() {
                       />
                     )}
                   />
-                  {/* ✅ Sentinel — observed to trigger more reveals */}
                   {hasMoreToReveal && (
                     <div ref={sentinelRef} style={{ height: 1 }} />
                   )}
@@ -978,7 +978,6 @@ export default function ShopperHomePage() {
             </div>
           </div>
 
-          {/* Panel 1 — SHOPNSTORE */}
           <div
             ref={currentTab === 1 ? activePanelRef : null}
             style={styles.panel}
@@ -1002,7 +1001,6 @@ export default function ShopperHomePage() {
             </div>
           </div>
 
-          {/* Panel 2 — SERVOOKS */}
           <div
             ref={currentTab === 2 ? activePanelRef : null}
             style={styles.panel}
@@ -1035,7 +1033,6 @@ export default function ShopperHomePage() {
         </div>
       </div>
 
-      {/* Filter Modal */}
       {showFilter && (
         <div style={styles.modalOverlay} onClick={closeFilter}>
           <div
