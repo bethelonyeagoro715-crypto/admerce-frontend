@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
 import {
@@ -46,8 +46,11 @@ const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
 const PULL_THRESHOLD_PX = 180;
 const PULL_DEAD_ZONE_PX = 25;
 
-const INITIAL_VISIBLE = 20;
-const BATCH_SIZE = 20;
+// ✅ Reveal everything up to 100 cards at once. Beyond that, infinite
+//    scroll reveals in batches. Removes the perception that items are
+//    "hidden behind scroll" for typical marketplace sizes.
+const INITIAL_VISIBLE = 100;
+const BATCH_SIZE = 40;
 
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -57,6 +60,18 @@ function resolveImageUrl(url: string | null | undefined): string | null {
     process.env.NEXT_PUBLIC_API_URL ||
     '';
   return `${base}${url}`;
+}
+
+// ✅ Round-robin merge: item, service, item, service, …
+//    When one side runs out, the rest of the other side appends.
+function interleave<T>(a: T[], b: T[]): T[] {
+  const out: T[] = [];
+  const max = Math.max(a.length, b.length);
+  for (let i = 0; i < max; i++) {
+    if (i < a.length) out.push(a[i]);
+    if (i < b.length) out.push(b[i]);
+  }
+  return out;
 }
 
 // ─── Typed response shapes ─────────────────────────────────────────────────
@@ -370,7 +385,6 @@ export default function ShopperHomePage() {
   const noteworthyTimer = useRef<NodeJS.Timeout | null>(null);
   const sessionItemsShown = useRef<string[]>([]);
 
-  // ✅ NEW: request sequence guards — discards stale async responses
   const itemsReqSeq = useRef(0);
   const storesReqSeq = useRef(0);
   const servicesReqSeq = useRef(0);
@@ -469,7 +483,6 @@ export default function ShopperHomePage() {
     };
   }, []);
 
-  // ─── Feed loaders (with request-ID guards) ─────────────────────────
   const loadItems = async (lat: number, lng: number, loadMore = false) => {
     const mySeq = ++itemsReqSeq.current;
 
@@ -488,7 +501,6 @@ export default function ShopperHomePage() {
         collab: 0.1,
       });
 
-      // ✅ Discard if a newer loadItems call started
       if (mySeq !== itemsReqSeq.current) return;
 
       const candidates: RecallCandidate[] = Array.isArray(
@@ -509,7 +521,6 @@ export default function ShopperHomePage() {
         sessionItemsShown.current,
       );
 
-      // ✅ Discard if a newer loadItems call started during rank
       if (mySeq !== itemsReqSeq.current) return;
 
       const feed: RankedItem[] = Array.isArray(rankData?.feed)
@@ -637,7 +648,12 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  const feedItems = [...listingItems, ...serviceItems];
+  // ✅ Interleaved feed — items and services mixed round-robin.
+  //    Memoized so the array identity is stable across renders.
+  const feedItems = useMemo(
+    () => interleave(listingItems, serviceItems),
+    [listingItems, serviceItems],
+  );
   const displayedFeed = feedItems.slice(0, visibleCount);
 
   useEffect(() => {
