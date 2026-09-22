@@ -1,14 +1,15 @@
 'use client';
 
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { MdArrowBack, MdBuild, MdPlayArrow, MdRefresh } from 'react-icons/md';
+import {
+  MdArrowBack,
+  MdBuild,
+  MdImageNotSupported,
+  MdPlayArrow,
+  MdRefresh,
+  MdSearch,
+} from 'react-icons/md';
 import api from '../../../services/api';
 
 const API_BASE =
@@ -42,25 +43,141 @@ function resolveMediaUrl(url: string | null | undefined): string {
   const trimmed = url.trim();
   if (!trimmed) return '';
 
-  if (/^(https?:\/\/|data:|blob:)/i.test(trimmed)) return trimmed;
+  // Accept only browser-loadable media schemes.
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^blob:/i.test(trimmed)) return trimmed;
   if (/^\/\//.test(trimmed)) return `https:${trimmed}`;
 
-  if (API_BASE) {
-    return `${API_BASE.replace(/\/+$/, '')}/${trimmed.replace(/^\/+/, '')}`;
+  const base = API_BASE.replace(/\/+$/, '');
+
+  if (trimmed.startsWith('/')) {
+    return base ? `${base}${trimmed}` : trimmed;
   }
 
-  return trimmed;
+  return base ? `${base}/${trimmed}` : trimmed;
 }
 
 function formatPrice(raw: unknown): string {
   if (raw === null || raw === undefined || raw === '') return 'Free';
 
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) return 'Free';
+  const numeric = Number(raw);
 
-  return `₦${value.toLocaleString('en-NG', {
+  if (!Number.isFinite(numeric) || numeric <= 0) return 'Free';
+
+  return `₦${numeric.toLocaleString('en-NG', {
     maximumFractionDigits: 0,
   })}`;
+}
+
+function ServiceCard({
+  service,
+  onOpen,
+}: {
+  service: Service;
+  onOpen: (serviceId: string) => void;
+}) {
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [mediaError, setMediaError] = useState(false);
+
+  const hasVideo = Boolean(service.video);
+  const mediaSrc = hasVideo ? service.video : service.image;
+
+  const handleOpen = () => {
+    onOpen(service.id);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleOpen();
+    }
+  };
+
+  return (
+    <article
+      className="psp-card"
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${service.title}`}
+      onClick={handleOpen}
+      onKeyDown={handleKeyDown}
+    >
+      <div className="psp-media">
+        {!mediaError && hasVideo && mediaSrc ? (
+          <>
+            <video
+              className="psp-mediaAsset"
+              src={mediaSrc}
+              poster={service.image || undefined}
+              controls
+              muted
+              playsInline
+              preload="metadata"
+              onPlay={() => setVideoPlaying(true)}
+              onPause={() => setVideoPlaying(false)}
+              onEnded={() => setVideoPlaying(false)}
+              onError={() => setMediaError(true)}
+              onClick={(event) => event.stopPropagation()}
+            />
+            {!videoPlaying && (
+              <span className="psp-playBadge" aria-hidden="true">
+                <MdPlayArrow size={22} />
+              </span>
+            )}
+          </>
+        ) : !mediaError && service.image ? (
+          <img
+            className="psp-mediaAsset"
+            src={service.image}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setMediaError(true)}
+          />
+        ) : (
+          <div className="psp-mediaFallback" aria-hidden="true">
+            {mediaError ? (
+              <MdImageNotSupported size={34} />
+            ) : (
+              <MdBuild size={34} />
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="psp-cardBody">
+        <div className="psp-cardTopline">
+          <h2 className="psp-serviceTitle" title={service.title}>
+            {service.title}
+          </h2>
+          <span className="psp-price">{service.price}</span>
+        </div>
+
+        {service.description ? (
+          <p className="psp-description">{service.description}</p>
+        ) : (
+          <p className="psp-description psp-descriptionMuted">
+            Tap to view service details.
+          </p>
+        )}
+
+        <span className="psp-viewHint">View details</span>
+      </div>
+    </article>
+  );
+}
+
+function ServiceSkeleton() {
+  return (
+    <div className="psp-card psp-skeletonCard" aria-hidden="true">
+      <div className="psp-skeleton psp-skeletonMedia" />
+      <div className="psp-cardBody">
+        <div className="psp-skeleton psp-skeletonTitle" />
+        <div className="psp-skeleton psp-skeletonLine" />
+        <div className="psp-skeleton psp-skeletonLine psp-skeletonLineShort" />
+      </div>
+    </div>
+  );
 }
 
 function ProviderServicesContent() {
@@ -68,101 +185,113 @@ function ProviderServicesContent() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
 
-  const providerId = useMemo(() => {
-    const rawId = params?.id;
-    return Array.isArray(rawId) ? rawId[0] || '' : rawId || '';
-  }, [params]);
-
+  const rawId = params?.id;
+  const providerId = Array.isArray(rawId) ? rawId[0] : rawId || '';
   const urlName = searchParams.get('name')?.trim() || '';
 
-  const [providerName, setProviderName] = useState(urlName || 'Service Provider');
+  const [providerName, setProviderName] = useState(
+    urlName || 'Service Provider',
+  );
   const [services, setServices] = useState<Service[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [playingIds, setPlayingIds] = useState<Set<string>>(new Set());
-  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
-
-  const loadServices = useCallback(async () => {
-    if (!providerId) {
-      setServices([]);
-      setError('Provider not found.');
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const raw = await api.getProviderServicesByUserId(providerId);
-
-      if (!Array.isArray(raw)) {
-        console.warn('Provider services response is not an array:', raw);
-        setServices([]);
-        setError('The provider returned an invalid services response.');
-        return;
-      }
-
-      const rawList = raw as ProviderServiceResponse[];
-      const firstRaw = rawList.find((service) => service?.service_id);
-
-      const list: Service[] = rawList
-        .filter(
-          (service): service is ProviderServiceResponse =>
-            Boolean(service?.service_id),
-        )
-        .map((service) => ({
-          id: String(service.service_id),
-          title: service.title?.trim() || 'Service',
-          price: formatPrice(service.price),
-          image: resolveMediaUrl(service.image_url),
-          video: service.video_url?.trim()
-            ? resolveMediaUrl(service.video_url)
-            : null,
-          description: service.description?.trim() || '',
-        }));
-
-      setServices(list);
-
-      const apiName =
-        firstRaw?.business_name?.trim() ||
-        firstRaw?.username?.trim() ||
-        '';
-
-      if (apiName) {
-        setProviderName(apiName);
-      } else if (!urlName) {
-        setProviderName('Service Provider');
-      }
-    } catch (err: unknown) {
-      console.error('Failed to load services:', err);
-
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : 'Could not load services. Please try again.';
-
-      setError(message);
-      setServices([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [providerId, urlName]);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
-    const run = async () => {
-      if (cancelled) return;
-      await loadServices();
-    };
+    async function loadServices() {
+      if (!providerId) {
+        setError('Provider not found.');
+        setServices([]);
+        setLoading(false);
+        return;
+      }
 
-    void run();
+      setLoading(true);
+      setError(null);
+
+      try {
+        const raw = await api.getProviderServicesByUserId(providerId);
+
+        if (cancelled) return;
+
+        if (!Array.isArray(raw)) {
+          console.warn('Provider services response is not an array:', raw);
+          setServices([]);
+          return;
+        }
+
+        const rawList = raw as ProviderServiceResponse[];
+        const firstRaw = rawList.find((item) => item?.service_id);
+
+        const list: Service[] = rawList
+          .filter(
+            (item): item is ProviderServiceResponse =>
+              Boolean(item?.service_id),
+          )
+          .map((item) => ({
+            id: String(item.service_id),
+            title: item.title?.trim() || 'Service',
+            price: formatPrice(item.price),
+            image: resolveMediaUrl(item.image_url),
+            video: item.video_url?.trim()
+              ? resolveMediaUrl(item.video_url)
+              : null,
+            description: item.description?.trim() || '',
+          }));
+
+        setServices(list);
+
+        const apiName =
+          firstRaw?.business_name?.trim() ||
+          firstRaw?.username?.trim() ||
+          '';
+
+        if (apiName) {
+          setProviderName(apiName);
+        } else if (!urlName) {
+          setProviderName('Service Provider');
+        }
+      } catch (err: unknown) {
+        if (cancelled) return;
+
+        console.error('Failed to load services:', err);
+
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Could not load services. Please try again.';
+
+        setError(message);
+        setServices([]);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadServices();
 
     return () => {
       cancelled = true;
     };
-  }, [loadServices]);
+  }, [providerId, retryKey, urlName]);
+
+  const filteredServices = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) return services;
+
+    return services.filter((service) => {
+      return (
+        service.title.toLowerCase().includes(query) ||
+        service.description.toLowerCase().includes(query)
+      );
+    });
+  }, [search, services]);
 
   const handleBack = useCallback(() => {
     if (typeof window !== 'undefined' && window.history.length > 1) {
@@ -175,294 +304,569 @@ function ProviderServicesContent() {
 
   const handleOpenService = useCallback(
     (serviceId: string) => {
-      router.push(`/service-detail/${serviceId}`);
+      router.push(`/service-detail/${encodeURIComponent(serviceId)}`);
     },
     [router],
   );
 
-  const handleVideoPlay = useCallback((id: string) => {
-    setPlayingIds((previous) => {
-      const next = new Set(previous);
-      next.add(id);
-      return next;
-    });
-  }, []);
+  const handleRetry = () => {
+    setRetryKey((current) => current + 1);
+  };
 
-  const handleVideoPause = useCallback((id: string) => {
-    setPlayingIds((previous) => {
-      const next = new Set(previous);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  const handleImageError = useCallback((id: string) => {
-    setFailedImages((previous) => {
-      if (previous.has(id)) return previous;
-
-      const next = new Set(previous);
-      next.add(id);
-      return next;
-    });
-  }, []);
+  const countLabel = `${services.length} ${
+    services.length === 1 ? 'service' : 'services'
+  }`;
 
   return (
-    <main className="psp-page" style={styles.container}>
+    <main className="psp-page">
       <style>{`
-        @keyframes psp-spin {
-          to { transform: rotate(360deg); }
+        .psp-page {
+          --psp-primary: #0504AA;
+          --psp-primarySoft: #EEF2FF;
+          --psp-text: #101114;
+          --psp-muted: #70747D;
+          --psp-border: #E8E9ED;
+          --psp-surface: #FFFFFF;
+          --psp-page: #F7F8FC;
+          min-height: 100dvh;
+          background: var(--psp-page);
+          color: var(--psp-text);
+          font-family: inherit;
         }
 
-        .psp-scroll {
-          scrollbar-width: thin;
-          scrollbar-color: #d9dcf3 transparent;
+        .psp-shell {
+          width: min(1180px, 100%);
+          margin: 0 auto;
+          padding: 0 18px 32px;
         }
 
-        .psp-scroll::-webkit-scrollbar {
-          width: 8px;
+        .psp-header {
+          position: sticky;
+          top: 0;
+          z-index: 20;
+          border-bottom: 1px solid rgba(232, 233, 237, 0.92);
+          background: rgba(255, 255, 255, 0.94);
+          backdrop-filter: blur(14px);
         }
 
-        .psp-scroll::-webkit-scrollbar-track {
-          background: transparent;
+        .psp-headerInner {
+          width: min(1180px, 100%);
+          margin: 0 auto;
+          min-height: 68px;
+          padding: 10px 18px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
         }
 
-        .psp-scroll::-webkit-scrollbar-thumb {
-          background: #d9dcf3;
-          border-radius: 999px;
+        .psp-backButton {
+          width: 40px;
+          height: 40px;
+          flex: 0 0 40px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid var(--psp-border);
+          border-radius: 12px;
+          background: var(--psp-surface);
+          color: var(--psp-text);
+          cursor: pointer;
+          transition: 160ms ease;
         }
 
-        .psp-back:hover {
-          background: #f1f2ff !important;
-          color: #0504AA !important;
-        }
-
-        .psp-retry:hover {
+        .psp-backButton:hover {
+          border-color: #C9CBFF;
+          color: var(--psp-primary);
           transform: translateY(-1px);
-          box-shadow: 0 8px 20px rgba(5, 4, 170, 0.18);
+        }
+
+        .psp-backButton:focus-visible,
+        .psp-search:focus-within,
+        .psp-card:focus-visible {
+          outline: 3px solid rgba(5, 4, 170, 0.18);
+          outline-offset: 2px;
+        }
+
+        .psp-heading {
+          min-width: 0;
+          flex: 1;
+        }
+
+        .psp-providerName {
+          margin: 0;
+          font-size: clamp(17px, 2.4vw, 21px);
+          line-height: 1.15;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .psp-providerMeta {
+          margin: 4px 0 0;
+          color: var(--psp-muted);
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .psp-contentHeader {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 24px 0 18px;
+        }
+
+        .psp-pageTitle {
+          margin: 0;
+          font-size: clamp(24px, 4vw, 34px);
+          line-height: 1.05;
+          letter-spacing: -0.035em;
+          font-weight: 850;
+        }
+
+        .psp-pageSubtitle {
+          margin: 8px 0 0;
+          color: var(--psp-muted);
+          font-size: 14px;
+        }
+
+        .psp-search {
+          width: min(320px, 100%);
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          padding: 0 13px;
+          border: 1px solid var(--psp-border);
+          border-radius: 14px;
+          background: var(--psp-surface);
+          transition: 160ms ease;
+        }
+
+        .psp-search svg {
+          color: #858995;
+          flex: 0 0 auto;
+        }
+
+        .psp-search input {
+          width: 100%;
+          min-width: 0;
+          border: 0;
+          outline: 0;
+          background: transparent;
+          color: var(--psp-text);
+          font: inherit;
+          font-size: 14px;
+        }
+
+        .psp-search input::placeholder {
+          color: #9A9DA6;
+        }
+
+        .psp-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 16px;
         }
 
         .psp-card {
-          transition:
-            transform 160ms ease,
-            box-shadow 160ms ease,
-            border-color 160ms ease;
+          min-width: 0;
+          overflow: hidden;
+          border: 1px solid var(--psp-border);
+          border-radius: 18px;
+          background: var(--psp-surface);
+          cursor: pointer;
+          box-shadow: 0 8px 24px rgba(16, 17, 20, 0.045);
+          transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
         }
 
         .psp-card:hover {
           transform: translateY(-3px);
-          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.10) !important;
-          border-color: #e0e3ff !important;
-        }
-
-        .psp-card:focus-visible {
-          outline: 3px solid rgba(5, 4, 170, 0.22);
-          outline-offset: 3px;
+          border-color: #D9DAFF;
+          box-shadow: 0 16px 34px rgba(16, 17, 20, 0.085);
         }
 
         .psp-media {
-          transition: transform 220ms ease;
+          position: relative;
+          aspect-ratio: 16 / 10;
+          overflow: hidden;
+          background: var(--psp-primarySoft);
         }
 
-        .psp-card:hover .psp-media {
-          transform: scale(1.025);
+        .psp-mediaAsset {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
         }
 
-        @media (max-width: 520px) {
-          .psp-header {
-            padding: 10px 12px !important;
-          }
+        .psp-playBadge {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 46px;
+          height: 46px;
+          transform: translate(-50%, -50%);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          background: rgba(12, 12, 17, 0.72);
+          color: #fff;
+          box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+          pointer-events: none;
+        }
 
-          .psp-title {
-            font-size: 18px !important;
-          }
+        .psp-mediaFallback {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #A9B1DA;
+        }
 
+        .psp-cardBody {
+          padding: 13px 14px 14px;
+        }
+
+        .psp-cardTopline {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .psp-serviceTitle {
+          min-width: 0;
+          margin: 0;
+          font-size: 15px;
+          line-height: 1.32;
+          font-weight: 750;
+          letter-spacing: -0.01em;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+        }
+
+        .psp-price {
+          flex: 0 0 auto;
+          color: var(--psp-primary);
+          font-size: 14px;
+          font-weight: 850;
+          white-space: nowrap;
+        }
+
+        .psp-description {
+          margin: 8px 0 0;
+          color: #555A65;
+          font-size: 12.5px;
+          line-height: 1.5;
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+        }
+
+        .psp-descriptionMuted {
+          color: #9A9DA6;
+        }
+
+        .psp-viewHint {
+          display: inline-block;
+          margin-top: 10px;
+          color: var(--psp-primary);
+          font-size: 12px;
+          font-weight: 750;
+        }
+
+        .psp-center {
+          min-height: 48vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 48px 16px;
+          text-align: center;
+        }
+
+        .psp-spinner {
+          width: 38px;
+          height: 38px;
+          border: 3px solid #DFE1F8;
+          border-top-color: var(--psp-primary);
+          border-radius: 50%;
+          animation: pspSpin 700ms linear infinite;
+        }
+
+        .psp-stateIcon {
+          width: 62px;
+          height: 62px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 18px;
+          background: var(--psp-primarySoft);
+          color: var(--psp-primary);
+        }
+
+        .psp-stateTitle {
+          margin: 15px 0 0;
+          font-size: 17px;
+          font-weight: 800;
+        }
+
+        .psp-stateText {
+          max-width: 380px;
+          margin: 7px 0 0;
+          color: var(--psp-muted);
+          font-size: 14px;
+          line-height: 1.5;
+        }
+
+        .psp-retry {
+          margin-top: 15px;
+          min-height: 42px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 0 15px;
+          border: 0;
+          border-radius: 12px;
+          background: var(--psp-primary);
+          color: #fff;
+          font: inherit;
+          font-size: 13px;
+          font-weight: 750;
+          cursor: pointer;
+          transition: 160ms ease;
+        }
+
+        .psp-retry:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.06);
+        }
+
+        .psp-noResults {
+          grid-column: 1 / -1;
+          padding: 52px 18px;
+          border: 1px dashed #DADCE6;
+          border-radius: 18px;
+          text-align: center;
+          background: rgba(255, 255, 255, 0.72);
+          color: var(--psp-muted);
+        }
+
+        .psp-skeletonCard {
+          cursor: default;
+          pointer-events: none;
+        }
+
+        .psp-skeleton {
+          position: relative;
+          overflow: hidden;
+          background: #ECEEF4;
+        }
+
+        .psp-skeleton::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          transform: translateX(-100%);
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.52),
+            transparent
+          );
+          animation: pspShimmer 1.25s infinite;
+        }
+
+        .psp-skeletonMedia {
+          aspect-ratio: 16 / 10;
+        }
+
+        .psp-skeletonTitle {
+          width: 72%;
+          height: 16px;
+          border-radius: 6px;
+        }
+
+        .psp-skeletonLine {
+          width: 100%;
+          height: 11px;
+          margin-top: 10px;
+          border-radius: 6px;
+        }
+
+        .psp-skeletonLineShort {
+          width: 64%;
+        }
+
+        @keyframes pspSpin {
+          to { transform: rotate(360deg); }
+        }
+
+        @keyframes pspShimmer {
+          100% { transform: translateX(100%); }
+        }
+
+        @media (max-width: 980px) {
           .psp-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            gap: 10px !important;
-            padding: 10px !important;
-          }
-
-          .psp-media-wrap {
-            height: 128px !important;
-          }
-
-          .psp-info {
-            padding: 9px 10px !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
           }
         }
 
-        @media (min-width: 900px) {
-          .psp-grid {
-            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-            max-width: 1280px;
-            margin: 0 auto;
+        @media (max-width: 720px) {
+          .psp-shell {
+            padding: 0 14px 26px;
+          }
+
+          .psp-headerInner {
+            padding: 9px 14px;
+          }
+
+          .psp-contentHeader {
+            align-items: stretch;
+            flex-direction: column;
+            padding-top: 20px;
+          }
+
+          .psp-search {
             width: 100%;
+          }
+
+          .psp-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+          }
+
+          .psp-card {
+            border-radius: 15px;
+          }
+
+          .psp-cardBody {
+            padding: 11px 12px 12px;
+          }
+
+          .psp-description {
+            font-size: 12px;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .psp-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .psp-card,
+          .psp-backButton,
+          .psp-retry {
+            transition: none;
+          }
+
+          .psp-spinner,
+          .psp-skeleton::after {
+            animation: none;
           }
         }
       `}</style>
 
-      <header className="psp-header" style={styles.appBar}>
-        <button
-          className="psp-back"
-          type="button"
-          onClick={handleBack}
-          style={styles.backBtn}
-          aria-label="Go back"
-        >
-          <MdArrowBack size={22} />
-        </button>
+      <header className="psp-header">
+        <div className="psp-headerInner">
+          <button
+            type="button"
+            className="psp-backButton"
+            onClick={handleBack}
+            aria-label="Go back"
+          >
+            <MdArrowBack size={21} />
+          </button>
 
-        <div style={styles.headerText}>
-          <h1 className="psp-title" style={styles.title}>
-            {providerName}
-          </h1>
-          {!loading && !error && services.length > 0 && (
-            <span style={styles.subtitle}>
-              {services.length} {services.length === 1 ? 'service' : 'services'}
-            </span>
-          )}
+          <div className="psp-heading">
+            <h1 className="psp-providerName">{providerName}</h1>
+            <p className="psp-providerMeta">{countLabel}</p>
+          </div>
         </div>
       </header>
 
-      <section className="psp-scroll" style={styles.content}>
+      <div className="psp-shell">
+        <section className="psp-contentHeader">
+          <div>
+            <h2 className="psp-pageTitle">Services</h2>
+            <p className="psp-pageSubtitle">
+              Explore what this provider offers.
+            </p>
+          </div>
+
+          {!loading && services.length > 0 && (
+            <label className="psp-search">
+              <MdSearch size={19} aria-hidden="true" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search services"
+                aria-label="Search services"
+                type="search"
+              />
+            </label>
+          )}
+        </section>
+
         {loading ? (
-          <div style={styles.center}>
-            <div style={styles.spinner} aria-label="Loading" />
-            <p style={styles.mutedText}>Loading services…</p>
+          <div
+            className="psp-grid"
+            aria-busy="true"
+            aria-label="Loading services"
+          >
+            {Array.from({ length: 8 }).map((_, index) => (
+              <ServiceSkeleton key={index} />
+            ))}
           </div>
         ) : error ? (
-          <div style={styles.center}>
-            <div style={styles.stateIcon}>
-              <MdBuild size={28} />
+          <div className="psp-center">
+            <div className="psp-stateIcon" aria-hidden="true">
+              <MdBuild size={32} />
             </div>
-
-            <h2 style={styles.stateTitle}>Something went wrong</h2>
-            <p style={styles.errorText}>{error}</p>
-
-            <button
-              className="psp-retry"
-              type="button"
-              onClick={() => void loadServices()}
-              style={styles.retryBtn}
-            >
-              <MdRefresh size={19} />
+            <h2 className="psp-stateTitle">We couldn&apos;t load these services</h2>
+            <p className="psp-stateText">{error}</p>
+            <button type="button" className="psp-retry" onClick={handleRetry}>
+              <MdRefresh size={18} />
               Try again
             </button>
           </div>
         ) : services.length === 0 ? (
-          <div style={styles.center}>
-            <div style={styles.stateIcon}>
-              <MdBuild size={28} />
+          <div className="psp-center">
+            <div className="psp-stateIcon" aria-hidden="true">
+              <MdBuild size={32} />
             </div>
-
-            <h2 style={styles.stateTitle}>No services yet</h2>
-            <p style={styles.emptyText}>
-              This provider has not added any services yet.
+            <h2 className="psp-stateTitle">No services yet</h2>
+            <p className="psp-stateText">
+              This provider hasn&apos;t published any services yet.
             </p>
           </div>
-        ) : (
-          <div className="psp-grid" style={styles.grid}>
-            {services.map((service) => {
-              const isPlaying = playingIds.has(service.id);
-              const imageFailed = failedImages.has(service.id);
-              const hasMedia = Boolean(service.video || service.image);
-
-              return (
-                <article
-                  key={service.id}
-                  className="psp-card"
-                  style={styles.card}
-                  onClick={() => handleOpenService(service.id)}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Open ${service.title}`}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      handleOpenService(service.id);
-                    }
-                  }}
-                >
-                  <div
-                    className="psp-media-wrap"
-                    style={styles.mediaWrap}
-                  >
-                    {service.video ? (
-                      <>
-                        <video
-                          className="psp-media"
-                          src={service.video}
-                          poster={
-                            service.image && !imageFailed
-                              ? service.image
-                              : undefined
-                          }
-                          controls
-                          muted
-                          playsInline
-                          preload="metadata"
-                          onPlay={() => handleVideoPlay(service.id)}
-                          onPause={() => handleVideoPause(service.id)}
-                          onEnded={() => handleVideoPause(service.id)}
-                          onClick={(event) => event.stopPropagation()}
-                          style={styles.media}
-                        />
-
-                        {!isPlaying && (
-                          <span
-                            style={styles.playIcon}
-                            aria-hidden="true"
-                          >
-                            <MdPlayArrow size={24} color="#fff" />
-                          </span>
-                        )}
-                      </>
-                    ) : service.image && !imageFailed ? (
-                      <img
-                        className="psp-media"
-                        src={service.image}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        onError={() => handleImageError(service.id)}
-                        style={styles.media}
-                      />
-                    ) : (
-                      <div style={styles.mediaFallback}>
-                        <MdBuild size={38} color="#9CA3DB" />
-                      </div>
-                    )}
-
-                    {hasMedia && (
-                      <div style={styles.mediaShade} aria-hidden="true" />
-                    )}
-                  </div>
-
-                  <div className="psp-info" style={styles.info}>
-                    <div
-                      style={styles.serviceTitle}
-                      title={service.title}
-                    >
-                      {service.title}
-                    </div>
-
-                    {service.description && (
-                      <div style={styles.description}>
-                        {service.description}
-                      </div>
-                    )}
-
-                    <div style={styles.bottomRow}>
-                      <span style={styles.price}>{service.price}</span>
-                      <span style={styles.viewLabel}>View</span>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+        ) : filteredServices.length === 0 ? (
+          <div className="psp-noResults">
+            No services match <strong>&quot;{search.trim()}&quot;</strong>.
           </div>
+        ) : (
+          <section className="psp-grid" aria-label={`${providerName} services`}>
+            {filteredServices.map((service) => (
+              <ServiceCard
+                key={service.id}
+                service={service}
+                onOpen={handleOpenService}
+              />
+            ))}
+          </section>
         )}
-      </section>
+      </div>
     </main>
   );
 }
@@ -471,295 +875,31 @@ export default function ProviderServicesPage() {
   return (
     <Suspense
       fallback={
-        <div style={styles.pageFallback}>
-          <div style={styles.spinner} aria-label="Loading" />
-        </div>
+        <main className="psp-page">
+          <div
+            style={{
+              minHeight: '100dvh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              aria-label="Loading"
+              style={{
+                width: 36,
+                height: 36,
+                border: '3px solid #DFE1F8',
+                borderTopColor: '#0504AA',
+                borderRadius: '50%',
+              }}
+            />
+          </div>
+        </main>
       }
     >
       <ProviderServicesContent />
     </Suspense>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    height: '100dvh',
-    display: 'flex',
-    flexDirection: 'column',
-    background: '#F8F9FC',
-    color: '#111827',
-    overflow: 'hidden',
-  },
-
-  appBar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    minHeight: 68,
-    padding: '10px 16px',
-    borderBottom: '1px solid #ECEEF5',
-    background: 'rgba(255,255,255,0.96)',
-    backdropFilter: 'blur(12px)',
-    WebkitBackdropFilter: 'blur(12px)',
-    position: 'sticky',
-    top: 0,
-    zIndex: 10,
-    flexShrink: 0,
-  },
-
-  backBtn: {
-    width: 40,
-    height: 40,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    background: 'transparent',
-    border: 'none',
-    borderRadius: 12,
-    color: '#374151',
-    cursor: 'pointer',
-    transition: 'background 150ms ease, color 150ms ease',
-  },
-
-  headerText: {
-    minWidth: 0,
-    flex: 1,
-  },
-
-  title: {
-    margin: 0,
-    fontSize: 20,
-    lineHeight: 1.2,
-    fontWeight: 750,
-    letterSpacing: '-0.02em',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-
-  subtitle: {
-    display: 'block',
-    marginTop: 3,
-    color: '#7A8094',
-    fontSize: 12,
-    fontWeight: 500,
-  },
-
-  content: {
-    flex: 1,
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    WebkitOverflowScrolling: 'touch',
-  },
-
-  center: {
-    minHeight: '100%',
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    textAlign: 'center',
-    padding: 32,
-    gap: 10,
-  },
-
-  spinner: {
-    width: 34,
-    height: 34,
-    border: '3px solid #E7E8F5',
-    borderTopColor: '#0504AA',
-    borderRadius: '50%',
-    animation: 'psp-spin 0.75s linear infinite',
-  },
-
-  mutedText: {
-    margin: 0,
-    color: '#8B90A2',
-    fontSize: 14,
-  },
-
-  stateIcon: {
-    width: 64,
-    height: 64,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-    background: '#EEF0FF',
-    color: '#0504AA',
-    marginBottom: 4,
-  },
-
-  stateTitle: {
-    margin: 0,
-    color: '#171923',
-    fontSize: 18,
-    fontWeight: 750,
-  },
-
-  errorText: {
-    maxWidth: 420,
-    margin: 0,
-    color: '#B42318',
-    fontSize: 14,
-    lineHeight: 1.55,
-  },
-
-  emptyText: {
-    maxWidth: 380,
-    margin: 0,
-    color: '#858A9D',
-    fontSize: 14,
-    lineHeight: 1.55,
-  },
-
-  retryBtn: {
-    marginTop: 6,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    padding: '10px 17px',
-    background: '#0504AA',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 11,
-    fontSize: 14,
-    fontWeight: 650,
-    cursor: 'pointer',
-    transition: 'transform 150ms ease, box-shadow 150ms ease',
-  },
-
-  grid: {
-    boxSizing: 'border-box',
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
-    gap: 14,
-    alignContent: 'start',
-    padding: 16,
-  },
-
-  card: {
-    minWidth: 0,
-    background: '#fff',
-    border: '1px solid #ECEEF5',
-    borderRadius: 18,
-    boxShadow: '0 3px 12px rgba(15, 23, 42, 0.045)',
-    overflow: 'hidden',
-    cursor: 'pointer',
-  },
-
-  mediaWrap: {
-    height: 148,
-    position: 'relative',
-    overflow: 'hidden',
-    background: '#EEF0FF',
-  },
-
-  media: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    display: 'block',
-    position: 'relative',
-    zIndex: 1,
-  },
-
-  mediaFallback: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background:
-      'linear-gradient(135deg, #EEF0FF 0%, #F7F7FC 100%)',
-  },
-
-  mediaShade: {
-    position: 'absolute',
-    inset: 0,
-    zIndex: 2,
-    pointerEvents: 'none',
-    background:
-      'linear-gradient(to bottom, rgba(0,0,0,0.02), rgba(0,0,0,0.08))',
-  },
-
-  playIcon: {
-    position: 'absolute',
-    zIndex: 4,
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: 44,
-    height: 44,
-    borderRadius: '50%',
-    background: 'rgba(8, 9, 25, 0.62)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    pointerEvents: 'none',
-    boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
-  },
-
-  info: {
-    padding: '11px 12px 12px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 5,
-  },
-
-  serviceTitle: {
-    minHeight: 36,
-    color: '#171923',
-    fontWeight: 700,
-    fontSize: 14,
-    lineHeight: 1.3,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-  },
-
-  description: {
-    color: '#7D8294',
-    fontSize: 12,
-    lineHeight: 1.4,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-  },
-
-  bottomRow: {
-    marginTop: 2,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-
-  price: {
-    color: '#0504AA',
-    fontSize: 14,
-    fontWeight: 800,
-  },
-
-  viewLabel: {
-    color: '#777C91',
-    fontSize: 11,
-    fontWeight: 650,
-  },
-
-  pageFallback: {
-    height: '100dvh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#F8F9FC',
-  },
-};
 
