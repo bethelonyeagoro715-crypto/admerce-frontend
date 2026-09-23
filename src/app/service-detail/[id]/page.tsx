@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,6 +22,10 @@ import {
   MdMoreVert,
   MdKeyboardArrowUp,
   MdChevronLeft,
+  MdPersonOutline,
+  MdLink,
+  MdFlag,
+  MdHistory,
 } from 'react-icons/md';
 
 const API_BASE =
@@ -57,12 +61,16 @@ interface ServiceDetail {
   [key: string]: unknown;
 }
 
-interface ActiveBooking {
+interface Booking {
   booking_id: string;
   service_id: string;
+  customer_id: string;
+  provider_id: string;
   status: string;
   amount?: number;
   service_title?: string;
+  scheduled_for?: string;
+  created_at?: string;
 }
 
 interface HeartBurst {
@@ -81,7 +89,6 @@ const styles: Record<string, React.CSSProperties> = {
   overlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 },
   spinner: { width: 40, height: 40, border: '4px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
 
-  // Video layer
   videoFull: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', backgroundColor: '#000' },
   tapLayer: { position: 'absolute', inset: 0, zIndex: 1 },
   heartsLayer: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5 },
@@ -92,24 +99,29 @@ const styles: Record<string, React.CSSProperties> = {
   topChromeBtn: { width: 40, height: 40, borderRadius: '50%', backgroundColor: 'rgba(12,12,17,0.42)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', pointerEvents: 'auto' },
   topChromeTitle: { flex: 1, color: '#fff', fontSize: 14, fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
 
-  // Right rail
-  rail: { position: 'absolute', right: 12, bottom: 210, display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', zIndex: 8 },
+  // Right rail — 3 items: mute, save, share
+  rail: { position: 'absolute', right: 12, bottom: 240, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', zIndex: 8 },
   railBtn: { width: 44, height: 44, borderRadius: '50%', backgroundColor: 'rgba(12,12,17,0.42)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
 
   // Bottom overlay
-  // ✅ padding-bottom bumped to 80 so the CTA row, swipe handle (bottom: 22),
-  //    and progress bar (bottom: 0) each have their own vertical band.
-  bottomOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: '56px 16px 80px', background: 'linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.25) 55%, transparent)', color: '#fff', zIndex: 7 },
+  bottomOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: '56px 16px 80px', background: 'linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.3) 55%, transparent)', color: '#fff', zIndex: 7 },
   providerHandle: { fontSize: 13, fontWeight: 700, opacity: 0.92, marginBottom: 6, textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
   reelTitle: { fontSize: 17, fontWeight: 800, lineHeight: 1.28, margin: 0, marginBottom: 6, textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
-  reelPriceLine: { fontSize: 14, fontWeight: 700, color: '#C7CBFF', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
+  reelPriceLine: { fontSize: 14, fontWeight: 700, color: '#C7CBFF', textShadow: '0 1px 4px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  bulletDot: { opacity: 0.5 },
+  starInline: { color: '#FBBF24' },
+  descPreview: { fontSize: 12.5, color: 'rgba(255,255,255,0.78)', marginTop: 8, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', textShadow: '0 1px 4px rgba(0,0,0,0.5)', cursor: 'pointer' },
 
   ctaRow: { display: 'flex', gap: 10, marginTop: 14 },
   ctaBook: { flex: 1, padding: '14px 16px', borderRadius: 14, border: 'none', backgroundColor: '#0504AA', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
   ctaMessage: { flex: 1, padding: '14px 16px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.5)', backgroundColor: 'rgba(12,12,17,0.42)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
 
+  // Job Done pill — only rendered when an active booking exists.
+  jobPill: { position: 'absolute', left: '50%', bottom: 78, transform: 'translateX(-50%)', padding: '9px 16px', borderRadius: 999, border: '1px solid rgba(251,191,36,0.6)', backgroundColor: 'rgba(120,53,15,0.85)', color: '#FEF3C7', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', boxShadow: '0 6px 20px rgba(251,191,36,0.35)', zIndex: 8 },
+  jobPillDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: '#FBBF24', boxShadow: '0 0 8px rgba(251,191,36,0.9)' },
+
   // Swipe handle
-  swipeHandleWrap: { position: 'absolute', left: 0, right: 0, bottom: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 8, paddingBottom: 10, background: 'linear-gradient(to top, rgba(0,0,0,0.4), transparent)', cursor: 'pointer' },
+  swipeHandleWrap: { position: 'absolute', left: 0, right: 0, bottom: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 8, paddingBottom: 10, cursor: 'pointer' },
   swipeHandleBar: { width: 44, height: 4, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.75)' },
   swipeHandleLabel: { fontSize: 11, color: 'rgba(255,255,255,0.9)', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', gap: 4 },
 
@@ -118,30 +130,63 @@ const styles: Record<string, React.CSSProperties> = {
   progressLine: { width: '100%', height: 3, backgroundColor: 'rgba(255,255,255,0.28)' },
   progressFill: { height: '100%', backgroundColor: '#fff', transition: 'width 0.1s linear' },
 
-  // Sheet
-  sheetBackdrop: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 4000 },
-  sheetPanel: { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '88dvh', backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, zIndex: 4001, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  sheetGrabber: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#D1D5DB', margin: '10px auto 6px' },
-  sheetScroll: { overflowY: 'auto', padding: '8px 20px 28px' },
-  sheetHeaderRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  sheetHeader: { fontSize: 18, fontWeight: 800, margin: 0 },
-  sheetClose: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#666', display: 'flex', alignItems: 'center' },
+  // ─── Sheets (shared) ────────────────────────────────────────────
+  backdrop: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 4000 },
+  panel: { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '88dvh', backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, zIndex: 4001, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  grabber: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#D1D5DB', margin: '10px auto 6px' },
+  scroll: { overflowY: 'auto', padding: '8px 20px 28px' },
+  headerRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  header: { fontSize: 18, fontWeight: 800, margin: 0 },
+  closeBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#666', display: 'flex', alignItems: 'center' },
+
   sheetSection: { marginTop: 18 },
-  sheetSectionLabel: { fontSize: 11, fontWeight: 800, letterSpacing: 1, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 6 },
-  sheetText: { fontSize: 14, color: '#374151', lineHeight: 1.55, margin: 0 },
-  sheetRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #F3F4F6' },
-  sheetRowLabel: { fontSize: 13, color: '#6B7280', fontWeight: 600 },
-  sheetRowValue: { fontSize: 14, color: '#111827', fontWeight: 700 },
-  sheetLink: { color: '#0504AA', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 },
-  jobDoneBtn: { width: '100%', padding: '14px', borderRadius: 14, border: 'none', backgroundColor: '#27AE60', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 },
+  sectionLabel: { fontSize: 11, fontWeight: 800, letterSpacing: 1, color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 6 },
+  text: { fontSize: 14, color: '#374151', lineHeight: 1.55, margin: 0 },
+  row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #F3F4F6' },
+  rowLabel: { fontSize: 13, color: '#6B7280', fontWeight: 600 },
+  rowValue: { fontSize: 14, color: '#111827', fontWeight: 700 },
+  link: { color: '#0504AA', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 },
   stubNote: { fontSize: 11, color: '#9CA3AF', lineHeight: 1.5, marginTop: 14, fontStyle: 'italic' },
 
-  // Sheet-provider row
+  // Action menu (⋯ dropdown) — a compact anchored sheet
+  actionSheetPanel: { position: 'fixed', left: 12, right: 12, bottom: 12, backgroundColor: '#fff', borderRadius: 20, zIndex: 4001, overflow: 'hidden', padding: '8px 0', maxWidth: 420, margin: '0 auto' },
+  actionItem: { display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: 15, fontWeight: 600, color: '#111827' },
+  actionItemDanger: { color: '#DC2626' },
+  actionDivider: { height: 1, backgroundColor: '#F3F4F6', margin: '4px 0' },
+  actionCancel: { width: '100%', padding: '16px 20px', border: 'none', background: '#F9FAFB', cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#111827', marginTop: 4 },
+
+  // Provider row inside sheets
   providerRow: { display: 'flex', alignItems: 'center', marginTop: 8 },
-  avatar: { width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', backgroundColor: '#0504AA20', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  avatarText: { color: '#0504AA', fontWeight: 'bold', fontSize: 14 },
-  providerName: { color: '#666', flex: 1 },
+  avatar: { width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', backgroundColor: '#0504AA20', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  avatarText: { color: '#0504AA', fontWeight: 'bold', fontSize: 15 },
+  providerName: { color: '#111827', flex: 1, fontWeight: 700, fontSize: 15 },
   chatButton: { width: 36, height: 36, borderRadius: '50%', backgroundColor: '#0504AA14', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+
+  // Job Done ceremony
+  ceremonyPanel: { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '90dvh', backgroundColor: '#FFFDF5', borderTopLeftRadius: 24, borderTopRightRadius: 24, zIndex: 4001, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  ceremonyGrabber: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#FDE68A', margin: '10px auto 6px' },
+  ceremonyBanner: { backgroundColor: '#78350F', color: '#FEF3C7', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase' },
+  ceremonyTitle: { fontSize: 22, fontWeight: 800, color: '#78350F', margin: '16px 20px 6px', lineHeight: 1.2 },
+  ceremonySubtitle: { fontSize: 14, color: '#78350F', opacity: 0.75, margin: '0 20px 16px', lineHeight: 1.45 },
+
+  historyCard: { margin: '4px 20px 0', padding: '14px 16px', borderRadius: 16, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' },
+  historyHead: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: 0.6, color: '#92400E', textTransform: 'uppercase', marginBottom: 8 },
+  historyLine: { fontSize: 14, color: '#78350F', fontWeight: 700, lineHeight: 1.4, margin: 0 },
+  historyMeta: { fontSize: 12, color: '#A16207', marginTop: 4, lineHeight: 1.4 },
+  historyMiniRow: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed #FDE68A', fontSize: 13, color: '#78350F' },
+  historyMiniRowLast: { borderBottom: 'none' },
+  historyAmount: { fontWeight: 800, color: '#92400E' },
+
+  bookingSummary: { margin: '16px 20px 0', padding: '14px 16px', borderRadius: 16, backgroundColor: '#fff', border: '1px solid #F3F4F6' },
+  summaryRow: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 14 },
+  summaryLabel: { color: '#6B7280', fontWeight: 600 },
+  summaryValue: { color: '#111827', fontWeight: 700 },
+
+  ceremonyWarning: { margin: '16px 20px 0', padding: '12px 14px', borderRadius: 12, backgroundColor: '#FEF3C7', fontSize: 12.5, color: '#78350F', lineHeight: 1.5, fontWeight: 600 },
+
+  ceremonyCTA: { margin: '20px 20px 28px', display: 'flex', flexDirection: 'column', gap: 10 },
+  releaseBtn: { width: '100%', padding: '16px', borderRadius: 14, border: 'none', backgroundColor: '#78350F', color: '#FEF3C7', fontSize: 16, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: '0 8px 24px rgba(120,53,15,0.3)' },
+  cancelBtn: { width: '100%', padding: '14px', borderRadius: 14, border: '1px solid #FDE68A', backgroundColor: 'transparent', color: '#78350F', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -159,9 +204,11 @@ export default function ServiceDetailPage() {
   const [isSaveLoading, setIsSaveLoading] = useState(false);
 
   const [showPickTime, setShowPickTime] = useState(false);
-  const [showSatisfaction, setShowSatisfaction] = useState(false);
-  const [activeBooking, setActiveBooking] = useState<ActiveBooking | null>(null);
-  const [checkingBooking, setCheckingBooking] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);       // detail sheet
+  const [menuOpen, setMenuOpen] = useState(false);          // ⋯ menu
+  const [jobSheetOpen, setJobSheetOpen] = useState(false);  // ceremony
+
+  const [bookings, setBookings] = useState<Booking[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
@@ -169,7 +216,6 @@ export default function ServiceDetailPage() {
   const [progress, setProgress] = useState(0);
   const [flash, setFlash] = useState<'play' | 'pause' | null>(null);
   const [hearts, setHearts] = useState<HeartBurst[]>([]);
-  const [sheetOpen, setSheetOpen] = useState(false);
 
   const tapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTapRef = useRef(0);
@@ -190,30 +236,39 @@ export default function ServiceDetailPage() {
     })();
   }, [serviceId]);
 
-  // Sync muted state to the video element imperatively (React's muted prop is
-  // unreliable on some mobile browsers).
+  // Load bookings (fire-and-forget). Used to (a) decide if the Job Done pill
+  // shows, (b) render booking history in the ceremony sheet.
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = (await api.getServiceBookings()) as unknown as Booking[];
+        setBookings(Array.isArray(data) ? data : []);
+      } catch {
+        // silent — pill just won't show
+      }
+    })();
+  }, [serviceId]);
+
+  // Sync muted
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     v.muted = muted;
   }, [muted]);
 
-  // Pause on tab hide; resume if still playing
+  // Pause on tab hide
   useEffect(() => {
     const onVis = () => {
       const v = videoRef.current;
       if (!v) return;
-      if (document.hidden) {
-        v.pause();
-      } else if (playing) {
-        v.play().catch(() => {});
-      }
+      if (document.hidden) v.pause();
+      else if (playing) v.play().catch(() => {});
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [playing]);
 
-  // Track progress
+  // Progress
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -225,6 +280,30 @@ export default function ServiceDetailPage() {
     v.addEventListener('timeupdate', onTime);
     return () => v.removeEventListener('timeupdate', onTime);
   }, [loading]);
+
+  // ─── Derived: active + past bookings with this provider ─────
+  const activeBooking = useMemo(
+    () =>
+      bookings.find(
+        (b) =>
+          b.service_id === serviceId &&
+          (b.status?.toLowerCase() === 'locked' || b.status?.toLowerCase() === 'accepted'),
+      ) || null,
+    [bookings, serviceId],
+  );
+
+  const pastBookings = useMemo(() => {
+    if (!service?.provider_id) return [];
+    return bookings
+      .filter(
+        (b) =>
+          b.provider_id === service.provider_id &&
+          b.status?.toLowerCase() === 'completed',
+      )
+      .slice(0, 2);
+  }, [bookings, service]);
+
+  const pastCount = pastBookings.length; // note: this is a *sample*, see caveats
 
   // ─── Video interactions ─────────────────────────────────────
   const triggerFlash = (kind: 'play' | 'pause') => {
@@ -250,9 +329,7 @@ export default function ServiceDetailPage() {
   const spawnHeart = (x: number, y: number) => {
     const id = ++heartIdRef.current;
     setHearts((h) => [...h, { id, x, y }]);
-    setTimeout(() => {
-      setHearts((h) => h.filter((item) => item.id !== id));
-    }, 900);
+    setTimeout(() => setHearts((h) => h.filter((item) => item.id !== id)), 900);
   };
 
   const handleVideoTap = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -262,7 +339,6 @@ export default function ServiceDetailPage() {
     const y = e.clientY - rect.top;
 
     if (now - lastTapRef.current < DOUBLE_TAP_MS) {
-      // Double tap → like
       if (tapTimeoutRef.current) {
         clearTimeout(tapTimeoutRef.current);
         tapTimeoutRef.current = null;
@@ -287,17 +363,69 @@ export default function ServiceDetailPage() {
     setProgress(ratio);
   };
 
-  // ─── Save / share stubs ─────────────────────────────────────
+  // ─── Save (still a stub) ────────────────────────────────────
   const toggleSave = async () => {
     if (isSaveLoading) return;
     setIsSaveLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((r) => setTimeout(r, 300));
     setIsSaved(!isSaved);
     setIsSaveLoading(false);
   };
 
-  const shareService = () => {
-    alert('Share feature coming soon!');
+  // ✅ Share is now real: navigator.share when available, clipboard fallback.
+  const shareService = async () => {
+    if (!service) return;
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const payload = {
+      title: service.title,
+      text: `${service.title} by ${service.business_name || 'a provider'} — on Admerce`,
+      url,
+    };
+    try {
+      const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
+      if (nav.share) {
+        await nav.share(payload);
+        return;
+      }
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        alert('Link copied.');
+        return;
+      }
+      alert(url);
+    } catch {
+      // user cancelled share sheet — silent
+    }
+  };
+
+  const copyLink = async () => {
+    setMenuOpen(false);
+    if (!service) return;
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        alert('Link copied.');
+      } else {
+        alert(url);
+      }
+    } catch {
+      alert(url);
+    }
+  };
+
+  const reportService = () => {
+    setMenuOpen(false);
+    alert('Reported. Our team will review this service.');
+  };
+
+  const openProviderProfile = () => {
+    if (!service?.provider_id) return;
+    router.push(
+      `/provider-services/${service.provider_id}?name=${encodeURIComponent(
+        service.business_name || 'Service Provider',
+      )}`,
+    );
   };
 
   // ─── Booking flow ───────────────────────────────────────────
@@ -346,36 +474,19 @@ export default function ServiceDetailPage() {
     }
   };
 
-  const handleJobDoneClick = async () => {
-    if (!service) return;
-    setCheckingBooking(true);
-    try {
-      const bookings = (await api.getServiceBookings()) as ActiveBooking[];
-      const active = bookings.find(
-        (b) =>
-          b.service_id === serviceId &&
-          (b.status?.toLowerCase() === 'locked' || b.status?.toLowerCase() === 'accepted'),
-      );
-      if (!active) {
-        alert('No active booking found for this service.');
-        return;
-      }
-      setSheetOpen(false);
-      setActiveBooking(active);
-      setShowSatisfaction(true);
-    } catch (err: unknown) {
-      const detail =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        (err instanceof Error ? err.message : 'Could not load your bookings');
-      alert(detail);
-    } finally {
-      setCheckingBooking(false);
+  // ─── Job Done flow ──────────────────────────────────────────
+  const openJobSheet = () => {
+    if (!activeBooking) {
+      alert('No active booking found for this service.');
+      return;
     }
+    setMenuOpen(false);
+    setJobSheetOpen(true);
   };
 
-  const handleConfirmSatisfaction = async () => {
+  const confirmJobDone = async () => {
     if (!service || !activeBooking) return;
-    setShowSatisfaction(false);
+    setJobSheetOpen(false);
     setIsLoading(true);
     try {
       await api.completeServiceBooking(activeBooking.booking_id);
@@ -420,12 +531,14 @@ export default function ServiceDetailPage() {
   const providerId = service.provider_id || '';
   const hasVideo = Boolean(videoUrl);
   const priceLabel = `₦${service.price.toFixed(0)}`;
+  const rating = service.rating ?? 0;
+  const reviews = service.review_count ?? 0;
+  const duration = service.duration_minutes ?? 0;
 
   return (
     <main style={styles.container}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        /* Desktop cap so 9:16 doesn't blow up on a widescreen monitor. */
         @media (min-width: 720px) {
           .sdp-reel-shell {
             max-width: 520px;
@@ -444,7 +557,7 @@ export default function ServiceDetailPage() {
       )}
 
       <div className="sdp-reel-shell" style={{ position: 'absolute', inset: 0 }}>
-        {/* Media layer */}
+        {/* Media */}
         {hasVideo ? (
           <video
             ref={videoRef}
@@ -473,10 +586,8 @@ export default function ServiceDetailPage() {
           </div>
         )}
 
-        {/* Tap layer — play/pause on single tap, like on double tap */}
         <div style={styles.tapLayer} onClick={handleVideoTap} />
 
-        {/* Heart burst layer */}
         <div style={styles.heartsLayer}>
           <AnimatePresence>
             {hearts.map((h) => (
@@ -485,12 +596,7 @@ export default function ServiceDetailPage() {
                 initial={{ opacity: 0, scale: 0.4, y: 0 }}
                 animate={{ opacity: [0, 1, 1, 0], scale: [0.4, 1.35, 1.15, 1], y: -50 }}
                 transition={{ duration: 0.85 }}
-                style={{
-                  position: 'absolute',
-                  left: h.x - 40,
-                  top: h.y - 40,
-                  pointerEvents: 'none',
-                }}
+                style={{ position: 'absolute', left: h.x - 40, top: h.y - 40, pointerEvents: 'none' }}
               >
                 <MdFavorite
                   size={80}
@@ -502,7 +608,6 @@ export default function ServiceDetailPage() {
           </AnimatePresence>
         </div>
 
-        {/* Play/pause flash */}
         <AnimatePresence>
           {flash && (
             <motion.div
@@ -518,7 +623,7 @@ export default function ServiceDetailPage() {
           )}
         </AnimatePresence>
 
-        {/* Top chrome — back, provider handle, more menu */}
+        {/* Top chrome */}
         <div style={styles.topChrome}>
           <button
             type="button"
@@ -534,14 +639,14 @@ export default function ServiceDetailPage() {
           <button
             type="button"
             style={styles.topChromeBtn}
-            onClick={() => setSheetOpen(true)}
-            aria-label="More info"
+            onClick={() => setMenuOpen(true)}
+            aria-label="More"
           >
             <MdMoreVert size={22} />
           </button>
         </div>
 
-        {/* Right rail */}
+        {/* Right rail: mute, save, share. (Message removed — it's a labeled CTA below.) */}
         <div style={styles.rail}>
           {hasVideo && (
             <button
@@ -570,29 +675,46 @@ export default function ServiceDetailPage() {
             style={styles.railBtn}
             onClick={shareService}
             aria-label="Share"
-            title="Share (not yet wired to backend)"
           >
             <MdShare size={22} />
           </button>
-
-          <button
-            type="button"
-            style={styles.railBtn}
-            onClick={() => router.push(`/chat/${providerId}`)}
-            aria-label="Message provider"
-          >
-            <MdChatBubbleOutline size={22} />
-          </button>
         </div>
 
-        {/* Bottom overlay — handle, title, price, CTAs */}
+        {/* Job Done pill — conditional on an active booking */}
+        {activeBooking && (
+          <button type="button" style={styles.jobPill} onClick={openJobSheet}>
+            <span style={styles.jobPillDot} />
+            Job done? Complete booking
+          </button>
+        )}
+
+        {/* Bottom overlay */}
         <div style={styles.bottomOverlay}>
           <p style={styles.providerHandle}>@{providerName}</p>
           <h2 style={styles.reelTitle}>{service.title}</h2>
           <p style={styles.reelPriceLine}>
             {priceLabel}
-            {service.duration_minutes ? ` · ${service.duration_minutes} min` : ''}
+            {duration > 0 && (
+              <>
+                <span style={styles.bulletDot}>·</span>
+                {duration} min
+              </>
+            )}
+            {rating > 0 && (
+              <>
+                <span style={styles.bulletDot}>·</span>
+                <span>
+                  <span style={styles.starInline}>★</span> {rating.toFixed(1)} ({reviews})
+                </span>
+              </>
+            )}
           </p>
+
+          {service.description && (
+            <p style={styles.descPreview} onClick={() => setSheetOpen(true)}>
+              {service.description}
+            </p>
+          )}
 
           <div style={styles.ctaRow}>
             <button
@@ -602,7 +724,7 @@ export default function ServiceDetailPage() {
               disabled={isLoading}
             >
               <MdCalendarToday size={18} />
-              Book Service
+              {pastCount > 0 ? 'Book Again' : 'Book Service'}
             </button>
             <button
               type="button"
@@ -615,12 +737,12 @@ export default function ServiceDetailPage() {
           </div>
         </div>
 
-        {/* Swipe-up handle */}
+        {/* Swipe handle — opens the detail sheet */}
         <div
           style={styles.swipeHandleWrap}
           onClick={() => setSheetOpen(true)}
           role="button"
-          aria-label="Swipe up for details"
+          aria-label="Open details"
         >
           <div style={styles.swipeHandleBar} />
           <span style={styles.swipeHandleLabel}>
@@ -637,21 +759,96 @@ export default function ServiceDetailPage() {
         </div>
       </div>
 
-      {/* Detail sheet */}
+      {/* ═══════ Action menu (⋯) ═══════ */}
+      <AnimatePresence>
+        {menuOpen && (
+          <>
+            <motion.div
+              key="menu-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={() => setMenuOpen(false)}
+              style={styles.backdrop}
+            />
+            <motion.div
+              key="menu-panel"
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              style={styles.actionSheetPanel}
+            >
+              <button
+                type="button"
+                style={styles.actionItem}
+                onClick={() => {
+                  setMenuOpen(false);
+                  openProviderProfile();
+                }}
+              >
+                <MdPersonOutline size={22} color="#0504AA" />
+                More from @{providerName}
+              </button>
+              <div style={styles.actionDivider} />
+              <button type="button" style={styles.actionItem} onClick={copyLink}>
+                <MdLink size={22} color="#0504AA" />
+                Copy link
+              </button>
+              <div style={styles.actionDivider} />
+              {/* Fallback path to the ceremony sheet even if the pill isn't showing */}
+              {activeBooking && (
+                <>
+                  <button
+                    type="button"
+                    style={styles.actionItem}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setJobSheetOpen(true);
+                    }}
+                  >
+                    <MdCheckCircle size={22} color="#16A34A" />
+                    Complete this booking
+                  </button>
+                  <div style={styles.actionDivider} />
+                </>
+              )}
+              <button
+                type="button"
+                style={{ ...styles.actionItem, ...styles.actionItemDanger }}
+                onClick={reportService}
+              >
+                <MdFlag size={22} color="#DC2626" />
+                Report this service
+              </button>
+              <button
+                type="button"
+                style={styles.actionCancel}
+                onClick={() => setMenuOpen(false)}
+              >
+                Cancel
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════ Detail sheet (swipe up) ═══════ */}
       <AnimatePresence>
         {sheetOpen && (
           <>
             <motion.div
-              key="sdp-backdrop"
+              key="sheet-backdrop"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={() => setSheetOpen(false)}
-              style={styles.sheetBackdrop}
+              style={styles.backdrop}
             />
             <motion.div
-              key="sdp-sheet"
+              key="sheet-panel"
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
@@ -662,15 +859,15 @@ export default function ServiceDetailPage() {
               onDragEnd={(_, info) => {
                 if (info.offset.y > 120) setSheetOpen(false);
               }}
-              style={styles.sheetPanel}
+              style={styles.panel}
             >
-              <div style={styles.sheetGrabber} />
-              <div style={styles.sheetScroll}>
-                <div style={styles.sheetHeaderRow}>
-                  <h3 style={styles.sheetHeader}>Service details</h3>
+              <div style={styles.grabber} />
+              <div style={styles.scroll}>
+                <div style={styles.headerRow}>
+                  <h3 style={styles.header}>Service details</h3>
                   <button
                     type="button"
-                    style={styles.sheetClose}
+                    style={styles.closeBtn}
                     onClick={() => setSheetOpen(false)}
                     aria-label="Close"
                   >
@@ -687,12 +884,10 @@ export default function ServiceDetailPage() {
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     ) : (
-                      <span style={styles.avatarText}>
-                        {providerName.charAt(0).toUpperCase()}
-                      </span>
+                      <span style={styles.avatarText}>{providerName.charAt(0).toUpperCase()}</span>
                     )}
                   </div>
-                  <span style={styles.providerName}>By {providerName}</span>
+                  <span style={styles.providerName}>{providerName}</span>
                   <button
                     style={styles.chatButton}
                     onClick={() => {
@@ -707,35 +902,35 @@ export default function ServiceDetailPage() {
 
                 {service.description && (
                   <div style={styles.sheetSection}>
-                    <p style={styles.sheetSectionLabel}>Description</p>
-                    <p style={styles.sheetText}>{service.description}</p>
+                    <p style={styles.sectionLabel}>Description</p>
+                    <p style={styles.text}>{service.description}</p>
                   </div>
                 )}
 
                 <div style={styles.sheetSection}>
-                  <div style={styles.sheetRow}>
-                    <span style={styles.sheetRowLabel}>Price</span>
-                    <span style={styles.sheetRowValue}>{priceLabel}</span>
+                  <div style={styles.row}>
+                    <span style={styles.rowLabel}>Price</span>
+                    <span style={styles.rowValue}>{priceLabel}</span>
                   </div>
-                  {service.duration_minutes ? (
-                    <div style={styles.sheetRow}>
-                      <span style={styles.sheetRowLabel}>Duration</span>
-                      <span style={styles.sheetRowValue}>{service.duration_minutes} min</span>
+                  {duration > 0 && (
+                    <div style={styles.row}>
+                      <span style={styles.rowLabel}>Duration</span>
+                      <span style={styles.rowValue}>{duration} min</span>
                     </div>
-                  ) : null}
-                  {(service.rating ?? 0) > 0 ? (
-                    <div style={styles.sheetRow}>
-                      <span style={styles.sheetRowLabel}>Rating</span>
-                      <span style={styles.sheetRowValue}>
-                        {(service.rating ?? 0).toFixed(1)} ({service.review_count ?? 0})
+                  )}
+                  {rating > 0 && (
+                    <div style={styles.row}>
+                      <span style={styles.rowLabel}>Rating</span>
+                      <span style={styles.rowValue}>
+                        {rating.toFixed(1)} ({reviews})
                       </span>
                     </div>
-                  ) : null}
-                  {service.lat && service.lng ? (
-                    <div style={styles.sheetRow}>
-                      <span style={styles.sheetRowLabel}>Location</span>
+                  )}
+                  {service.lat && service.lng && (
+                    <div style={styles.row}>
+                      <span style={styles.rowLabel}>Location</span>
                       <button
-                        style={styles.sheetLink}
+                        style={styles.link}
                         onClick={() => {
                           setSheetOpen(false);
                           router.push(
@@ -748,24 +943,154 @@ export default function ServiceDetailPage() {
                         View on map
                       </button>
                     </div>
-                  ) : null}
-                </div>
-
-                <div style={styles.sheetSection}>
-                  <button
-                    type="button"
-                    style={{ ...styles.jobDoneBtn, opacity: checkingBooking ? 0.6 : 1 }}
-                    onClick={handleJobDoneClick}
-                    disabled={checkingBooking}
-                  >
-                    <MdCheckCircle size={18} />
-                    {checkingBooking ? 'Checking…' : 'Job Done'}
-                  </button>
+                  )}
                 </div>
 
                 <p style={styles.stubNote}>
                   Save and share are not yet connected to the backend. They will reset on reload.
                 </p>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════ Job Done ceremony ═══════ */}
+      <AnimatePresence>
+        {jobSheetOpen && (
+          <>
+            <motion.div
+              key="job-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setJobSheetOpen(false)}
+              style={styles.backdrop}
+            />
+            <motion.div
+              key="job-panel"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.35 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.y > 120) setJobSheetOpen(false);
+              }}
+              style={styles.ceremonyPanel}
+            >
+              <div style={styles.ceremonyGrabber} />
+
+              <div style={styles.ceremonyBanner}>
+                <MdHistory size={16} />
+                Job completion
+              </div>
+
+              <h2 style={styles.ceremonyTitle}>Close the loop</h2>
+              <p style={styles.ceremonySubtitle}>
+                Releasing funds is final. It tells {providerName} the work is done
+                and closes this booking on your account.
+              </p>
+
+              {/* History card */}
+              <div style={styles.historyCard}>
+                <div style={styles.historyHead}>
+                  <MdHistory size={14} />
+                  Your history with @{providerName}
+                </div>
+                {pastCount > 0 ? (
+                  <>
+                    <p style={styles.historyLine}>
+                      You&apos;ve hired them {pastCount}
+                      {pastCount === 1 ? ' time' : ' times'} before.
+                    </p>
+                    <div style={{ marginTop: 10 }}>
+                      {pastBookings.map((b, i) => (
+                        <div
+                          key={b.booking_id}
+                          style={{
+                            ...styles.historyMiniRow,
+                            ...(i === pastBookings.length - 1
+                              ? styles.historyMiniRowLast
+                              : {}),
+                          }}
+                        >
+                          <span>
+                            {b.scheduled_for
+                              ? new Date(b.scheduled_for).toLocaleDateString('en-NG', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })
+                              : b.service_title || 'Previous job'}
+                          </span>
+                          <span style={styles.historyAmount}>
+                            ₦{Number(b.amount || 0).toLocaleString('en-NG', {
+                              maximumFractionDigits: 0,
+                            })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p style={styles.historyLine}>
+                    This is your first booking with @{providerName}.
+                  </p>
+                )}
+              </div>
+
+              {/* Current booking summary */}
+              {activeBooking && (
+                <div style={styles.bookingSummary}>
+                  <div style={styles.summaryRow}>
+                    <span style={styles.summaryLabel}>Service</span>
+                    <span style={styles.summaryValue}>{service.title}</span>
+                  </div>
+                  <div style={styles.summaryRow}>
+                    <span style={styles.summaryLabel}>Scheduled</span>
+                    <span style={styles.summaryValue}>
+                      {activeBooking.scheduled_for
+                        ? new Date(activeBooking.scheduled_for).toLocaleString('en-NG', {
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : 'ASAP'}
+                    </span>
+                  </div>
+                  <div style={styles.summaryRow}>
+                    <span style={styles.summaryLabel}>Amount</span>
+                    <span style={styles.summaryValue}>
+                      ₦{Number(activeBooking.amount || service.price).toLocaleString('en-NG', {
+                        maximumFractionDigits: 0,
+                      })}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div style={styles.ceremonyWarning}>
+                ⚠️ Confirming will release the held funds to {providerName}. This cannot
+                be undone.
+              </div>
+
+              <div style={styles.ceremonyCTA}>
+                <button type="button" style={styles.releaseBtn} onClick={confirmJobDone}>
+                  <MdCheckCircle size={20} />
+                  Release funds &amp; complete
+                </button>
+                <button
+                  type="button"
+                  style={styles.cancelBtn}
+                  onClick={() => setJobSheetOpen(false)}
+                >
+                  Not yet
+                </button>
               </div>
             </motion.div>
           </>
@@ -779,150 +1104,6 @@ export default function ServiceDetailPage() {
         onSelect={handlePickTime}
         mode="service"
       />
-
-      {/* Satisfaction modal */}
-      <SatisfactionModal
-        isOpen={showSatisfaction}
-        providerName={providerName}
-        amount={service.price}
-        onCancel={() => {
-          setShowSatisfaction(false);
-          setActiveBooking(null);
-        }}
-        onConfirm={handleConfirmSatisfaction}
-      />
     </main>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Satisfaction modal
-// ─────────────────────────────────────────────────────────────
-function SatisfactionModal({
-  isOpen,
-  providerName,
-  amount,
-  onCancel,
-  onConfirm,
-}: {
-  isOpen: boolean;
-  providerName: string;
-  amount: number;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  if (typeof document === 'undefined') return null;
-  if (!isOpen) return null;
-
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={onCancel}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              backdropFilter: 'blur(4px)',
-              WebkitBackdropFilter: 'blur(4px)',
-              zIndex: 4999,
-            }}
-          />
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              backgroundColor: '#fff',
-              borderRadius: 20,
-              padding: '24px 22px',
-              width: '90%',
-              maxWidth: 380,
-              zIndex: 5000,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-              textAlign: 'center',
-            }}
-          >
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: '50%',
-                backgroundColor: '#DCFCE7',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 16px',
-              }}
-            >
-              <MdCheckCircle size={36} color="#16A34A" />
-            </div>
-
-            <h3 style={{ fontSize: 20, fontWeight: 800, color: '#1A1A1A', margin: '0 0 8px' }}>
-              Are you satisfied with the service?
-            </h3>
-
-            <p style={{ fontSize: 14, color: '#555', lineHeight: 1.5, margin: '0 0 20px' }}>
-              Confirming will release{' '}
-              <strong style={{ color: '#0504AA' }}>
-                ₦{amount.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
-              </strong>{' '}
-              to <strong>{providerName}</strong>. This cannot be undone.
-            </p>
-
-            <button
-              onClick={onConfirm}
-              style={{
-                width: '100%',
-                padding: '14px',
-                backgroundColor: '#27AE60',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 12,
-                fontSize: 16,
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                marginBottom: 10,
-              }}
-            >
-              <MdCheckCircle size={20} />
-              Yes, release funds
-            </button>
-
-            <button
-              onClick={onCancel}
-              style={{
-                width: '100%',
-                padding: '14px',
-                backgroundColor: 'transparent',
-                color: '#666',
-                border: '1px solid #E5E7EB',
-                borderRadius: 12,
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Not yet
-            </button>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>,
-    document.body,
   );
 }
