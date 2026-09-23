@@ -63,7 +63,13 @@ class ApiService {
           err.code === 'ECONNABORTED' ||
           (typeof err.message === 'string' && err.message.toLowerCase().includes('timeout'));
 
-        if (isTimeout && config && !config.__retried) {
+        // ✅ Never auto-retry uploads. Re-sending a multi-MB FormData after a
+        //    timeout doubles the wait, wastes mobile data, and risks creating
+        //    duplicate Cloudinary assets if the first attempt partially landed.
+        const isUpload =
+          typeof FormData !== 'undefined' && config?.data instanceof FormData;
+
+        if (isTimeout && config && !config.__retried && !isUpload) {
           config.__retried = true;
           await new Promise((r) => setTimeout(r, 1500));
           return this.axios.request(config);
@@ -330,8 +336,6 @@ class ApiService {
     return res.data;
   }
 
-  // ✅ FIX: added `quantity` — previously this was never sent, so escrow.quantity
-  //    always defaulted to 1 and the storekeeper couldn't tell how many were ordered.
   public async reserveItem(
     orderId: string,
     storekeeperId: string,
@@ -378,7 +382,6 @@ class ApiService {
     return res.data;
   }
 
-  // ✅ FIX: added `quantity` — see reserveItem note above.
   public async instantPickup(
     listingId: string,
     storekeeperId: string,
@@ -946,10 +949,24 @@ class ApiService {
     return this.uploadServiceImage(serviceId, file);
   }
 
-  public async uploadServiceVideo(serviceId: string, videoFile: File): Promise<void> {
+  // ✅ Video uploads get their own 10-minute timeout (default 60s was
+  //    aborting mid-upload on mobile networks), plus an optional progress
+  //    callback so the UI can show a real progress bar instead of a spinner.
+  public async uploadServiceVideo(
+    serviceId: string,
+    videoFile: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<void> {
     const form = new FormData();
     form.append('video', videoFile, videoFile.name || 'service.mp4');
-    await this.axios.post(`/services/${serviceId}/video`, form);
+    await this.axios.post(`/services/${serviceId}/video`, form, {
+      timeout: 600_000,
+      onUploadProgress: (e) => {
+        if (onProgress && typeof e.total === 'number' && e.total > 0) {
+          onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+        }
+      },
+    });
   }
 
   public async uploadServiceVideoBytes(serviceId: string, videoBytes: Uint8Array): Promise<void> {
@@ -1528,7 +1545,6 @@ class ApiService {
     return res.data;
   }
 
-  // ✅ Wanted alerts
   public async getWantedAlerts(): Promise<JsonArray> {
     const res = await this.axios.get('/shopper/wanted');
     return res.data;
