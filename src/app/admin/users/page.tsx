@@ -166,7 +166,6 @@ export default function AdminUsersPage() {
           query.trim() || undefined,
           limit,
           offset,
-          role && role !== 'All' ? role : undefined,
         );
         dispatch({ type: 'FETCH_SUCCESS', users: extractUsers(data) });
       } catch (err) {
