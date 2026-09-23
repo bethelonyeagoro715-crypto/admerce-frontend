@@ -87,6 +87,7 @@ function inferIntendedRole(location: string): string {
   if (location.startsWith('/courier')) return 'courier';
   if (location.startsWith('/flipper')) return 'flipper';
   if (location.startsWith('/service-provider')) return 'service-provider';
+  if (location.startsWith('/admin')) return 'admin';
   if (
     location.startsWith('/shopper') ||
     location.startsWith('/wallet') ||
@@ -108,14 +109,12 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value;
   const userRole = request.cookies.get('user_role')?.value;
 
-  // ✅ FIX: was `/_admin` (typo). Real prefix is `/admin`.
-  //    Non-admins now redirect to /shopper/home instead of looping back
-  //    to /admin.
+  // ✅ `/admin` guard (was `/_admin`, typo). Non-admins go home.
   if (pathname.startsWith('/admin') && userRole !== 'admin') {
     return NextResponse.redirect(new URL('/shopper/home', request.url));
   }
 
-  // ✅ Legacy: if someone hits /_admin, send them to /admin (real route).
+  // ✅ Legacy: `/ _admin` → `/admin`
   if (pathname.startsWith('/_admin')) {
     return NextResponse.redirect(new URL('/admin', request.url));
   }
@@ -136,38 +135,37 @@ export function middleware(request: NextRequest) {
     );
   }
 
+  // ✅ Authed user hitting an auth route → send them to their role's home.
+  //    Middleware no longer tries to infer onboarding state from a cookie
+  //    that is never set (`onboarded_roles`). That check was causing
+  //    onboarded users to be bounced back into the onboarding flow every
+  //    time they touched /login, /signup, etc.
+  //
+  //    Onboarding state is now a page-level concern — the role's home page
+  //    decides whether to show onboarding UI or a normal dashboard.
   if (token && isAuthRoute) {
     const intendedRole =
       searchParams.get('intended_role') || userRole || 'shopper';
-    const onboardedRoles =
-      request.cookies.get('onboarded_roles')?.value?.split(',') ?? [];
-    const destination = getPostLoginRedirect(intendedRole, onboardedRoles);
+    const destination = homeForRole(intendedRole);
     return NextResponse.redirect(new URL(destination, request.url));
   }
 
   return NextResponse.next();
 }
 
-function getPostLoginRedirect(role: string, onboardedRoles: string[]): string {
+function homeForRole(role: string): string {
   switch (role) {
-    case 'shopper':
-      return '/shopper/home';
     case 'storekeeper':
-      return onboardedRoles.includes('storekeeper')
-        ? '/storekeeper/home'
-        : '/storekeeper/onboarding/personal-info';
+      return '/storekeeper/home';
     case 'courier':
-      return onboardedRoles.includes('courier')
-        ? '/courier/home'
-        : '/courier/onboarding';
+      return '/courier/home';
     case 'flipper':
-      return onboardedRoles.includes('flipper')
-        ? '/flipper/home'
-        : '/flipper/onboarding';
+      return '/flipper/home';
     case 'service-provider':
-      return onboardedRoles.includes('service-provider')
-        ? '/service-provider/home'
-        : '/service-provider/onboarding';
+      return '/service-provider/home';
+    case 'admin':
+      return '/admin';
+    case 'shopper':
     default:
       return '/shopper/home';
   }
