@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,6 +17,8 @@ import {
   MdCalendarToday,
   MdCheckCircle,
   MdClose,
+  MdVolumeOff,
+  MdVolumeUp,
 } from 'react-icons/md';
 
 const API_BASE =
@@ -66,15 +68,17 @@ const styles: Record<string, React.CSSProperties> = {
   iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' },
   scrollArea: { flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 32 },
   imageSection: { position: 'relative', marginBottom: 16 },
-  image: { width: '100%', height: 280, objectFit: 'cover', borderRadius: 20, backgroundColor: '#f0f0f0' },
-  video: { width: '100%', height: 280, objectFit: 'cover', borderRadius: 20, backgroundColor: '#000' },
+  // ✅ Hero fallback (no video): 9:16 reel shape, not a 280px landscape embed.
+  image: { width: '100%', aspectRatio: '9 / 16', objectFit: 'cover', borderRadius: 20, backgroundColor: '#f0f0f0' },
+  // ✅ Reel hero: same 9:16, autoplay muted loop. objectFit: cover so vertical
+  //    footage fills without letterboxing. Capped on desktop via CSS below.
+  video: { width: '100%', aspectRatio: '9 / 16', objectFit: 'cover', borderRadius: 20, backgroundColor: '#000', display: 'block' },
   lensButton: { position: 'absolute', bottom: 12, right: 12, width: 36, height: 36, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.95)', border: 'none', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  // ✅ Mute toggle overlays the reel — same corner treatment as ServiceReelCard.
+  muteButton: { position: 'absolute', top: 12, right: 12, width: 36, height: 36, borderRadius: '50%', backgroundColor: 'rgba(12,12,17,0.55)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', zIndex: 2 },
   serviceTitle: { fontSize: 22, fontWeight: 700, marginBottom: 8, lineHeight: 1.3 },
   priceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   price: { fontSize: 24, fontWeight: 700, color: '#0504AA' },
-  qtyControl: { display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden' },
-  qtyButton: { background: 'none', border: 'none', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: '#333' },
-  qtyValue: { width: 28, textAlign: 'center', fontWeight: 600 },
   providerRow: { display: 'flex', alignItems: 'center', marginTop: 8 },
   avatar: { width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', backgroundColor: '#0504AA20', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   avatarText: { color: '#0504AA', fontWeight: 'bold', fontSize: 14 },
@@ -95,7 +99,6 @@ const styles: Record<string, React.CSSProperties> = {
   descriptionTitle: { fontWeight: 600, fontSize: 16, marginBottom: 8 },
   descriptionText: { color: '#555', lineHeight: 1.5 },
   loadingContainer: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' },
-  // Overlay for the in-page spinner
   overlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
   spinner: { width: 40, height: 40, border: '4px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
 };
@@ -111,13 +114,15 @@ export default function ServiceDetailPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [isSaveLoading, setIsSaveLoading] = useState(false);
 
-  // ✅ PickTime bottom sheet for booking
   const [showPickTime, setShowPickTime] = useState(false);
 
-  // ✅ Satisfaction modal for Job Done
   const [showSatisfaction, setShowSatisfaction] = useState(false);
   const [activeBooking, setActiveBooking] = useState<ActiveBooking | null>(null);
   const [checkingBooking, setCheckingBooking] = useState(false);
+
+  // ✅ Reel hero state — video autoplays muted, tap the button to unmute.
+  const heroVideoRef = useRef<HTMLVideoElement>(null);
+  const [heroMuted, setHeroMuted] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -131,6 +136,30 @@ export default function ServiceDetailPage() {
       }
     })();
   }, [serviceId]);
+
+  // ✅ Keep the video element's muted property in sync with React state.
+  //    React's muted attribute is unreliable on some mobile browsers.
+  useEffect(() => {
+    const v = heroVideoRef.current;
+    if (!v) return;
+    v.muted = heroMuted;
+  }, [heroMuted]);
+
+  // ✅ Pause the reel when the tab is hidden so it doesn't keep playing audio
+  //    (even muted) in a background tab.
+  useEffect(() => {
+    const onVis = () => {
+      const v = heroVideoRef.current;
+      if (!v) return;
+      if (document.hidden) {
+        v.pause();
+      } else {
+        v.play().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   const toggleSave = async () => {
     if (isSaveLoading) return;
@@ -154,18 +183,15 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // ─── Book Service: opens the PickTime sheet ─────────────────────
   const handleBookClick = () => {
     if (!service) return;
     setShowPickTime(true);
   };
 
-  // ─── PickTime callback — user picked a datetime ─────────────────
   const handlePickTime = async (scheduledFor: string) => {
     if (!service) return;
     setShowPickTime(false);
 
-    // Check wallet balance before booking
     try {
       const wallet = (await api.getWalletBalance()) as { balance: number };
       if (wallet.balance < service.price) {
@@ -209,14 +235,11 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // ─── Job Done: find active booking, open satisfaction modal ─────
   const handleJobDoneClick = async () => {
     if (!service) return;
     setCheckingBooking(true);
     try {
       const bookings = (await api.getServiceBookings()) as ActiveBooking[];
-      // ✅ Accept either 'locked' OR 'accepted' — a provider who forgot
-      //    to tap accept can still have the job completed.
       const active = bookings.find(
         (b) =>
           b.service_id === serviceId &&
@@ -241,7 +264,6 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // ─── Confirm satisfaction → release funds → navigate to receipt ─
   const handleConfirmSatisfaction = async () => {
     if (!service || !activeBooking) return;
     setShowSatisfaction(false);
@@ -290,10 +312,22 @@ export default function ServiceDetailPage() {
   const providerImageUrl = resolveImageUrl(service.business_image_url);
   const providerName = service.business_name || 'Service Provider';
   const providerId = service.provider_id || '';
+  const hasVideo = Boolean(videoUrl);
 
   return (
     <main style={styles.container}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        /* ✅ Cap the reel width on desktop so a 9:16 video doesn't blow up
+              on a 1440px monitor. Full-bleed on phones, ~480px on desktop. */
+        @media (min-width: 700px) {
+          .sdp-hero {
+            max-width: 480px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+        }
+      `}</style>
 
       <div style={styles.appBar}>
         <button style={styles.backBtn} onClick={() => router.back()}>
@@ -326,18 +360,48 @@ export default function ServiceDetailPage() {
       )}
 
       <div style={styles.scrollArea}>
-        <div style={styles.imageSection}>
-          {videoUrl ? (
-            <video
-              src={videoUrl}
-              poster={imageUrl || undefined}
-              controls
-              muted
-              playsInline
-              style={styles.video}
-            />
+        <div style={styles.imageSection} className="sdp-hero">
+          {hasVideo ? (
+            // ✅ Reel hero: autoplay, muted, looped, no controls.
+            //    Tap-to-unmute via the button in the top-right corner.
+            <>
+              <video
+                ref={heroVideoRef}
+                src={videoUrl}
+                poster={imageUrl || undefined}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                style={styles.video}
+              />
+              <button
+                type="button"
+                style={styles.muteButton}
+                onClick={() => setHeroMuted((m) => !m)}
+                aria-label={heroMuted ? 'Unmute' : 'Mute'}
+              >
+                {heroMuted ? (
+                  <MdVolumeOff size={18} />
+                ) : (
+                  <MdVolumeUp size={18} />
+                )}
+              </button>
+            </>
           ) : imageUrl ? (
-            <img src={imageUrl} alt={service.title} style={styles.image} />
+            // ✅ Legacy image-only service: keep the 9:16 shape, keep the
+            //    visual-search button (a still image is worth scanning).
+            <>
+              <img src={imageUrl} alt={service.title} style={styles.image} />
+              <button
+                style={styles.lensButton}
+                onClick={openVisualSearch}
+                title="Visual Search"
+              >
+                <MdImage size={18} color="#0504AA" />
+              </button>
+            </>
           ) : (
             <div
               style={{
@@ -350,19 +414,11 @@ export default function ServiceDetailPage() {
               <MdImage size={64} color="#aaa" />
             </div>
           )}
-          <button
-            style={styles.lensButton}
-            onClick={openVisualSearch}
-            title="Visual Search"
-          >
-            <MdImage size={18} color="#0504AA" />
-          </button>
         </div>
 
         <h2 style={styles.serviceTitle}>{service.title}</h2>
         <div style={styles.priceRow}>
           <span style={styles.price}>₦{service.price.toFixed(0)}</span>
-          {/* ✅ Quantity removed — services are booked one at a time */}
         </div>
 
         <div style={styles.providerRow}>
@@ -427,7 +483,6 @@ export default function ServiceDetailPage() {
           )}
         </div>
 
-        {/* Action buttons */}
         <div style={styles.fulfillmentSection}>
           <h3 style={styles.sectionTitle}>What would you like to do?</h3>
           <button
@@ -467,7 +522,6 @@ export default function ServiceDetailPage() {
         )}
       </div>
 
-      {/* ✅ PickTime bottom sheet — service mode */}
       <PickTimeBottomSheet
         isOpen={showPickTime}
         onClose={() => setShowPickTime(false)}
@@ -475,7 +529,6 @@ export default function ServiceDetailPage() {
         mode="service"
       />
 
-      {/* ✅ Satisfaction modal — replaces window.confirm */}
       <SatisfactionModal
         isOpen={showSatisfaction}
         providerName={providerName}
