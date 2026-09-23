@@ -160,12 +160,16 @@ function ProviderServicesContent() {
           background: var(--psp-page);
           color: var(--psp-text);
           font-family: inherit;
+          /* ✅ Never allow horizontal scroll on the page */
+          overflow-x: hidden;
         }
 
         .psp-shell {
           width: min(1180px, 100%);
           margin: 0 auto;
           padding: 0 18px 32px;
+          /* ✅ Padding never widens the shell past the viewport */
+          box-sizing: border-box;
         }
 
         .psp-header {
@@ -175,6 +179,7 @@ function ProviderServicesContent() {
           border-bottom: 1px solid rgba(232, 233, 237, 0.92);
           background: rgba(255, 255, 255, 0.94);
           backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
         }
 
         .psp-headerInner {
@@ -185,6 +190,8 @@ function ProviderServicesContent() {
           display: flex;
           align-items: center;
           gap: 12px;
+          /* ✅ Belt-and-suspenders */
+          box-sizing: border-box;
         }
 
         .psp-backButton {
@@ -212,7 +219,10 @@ function ProviderServicesContent() {
           outline-offset: 2px;
         }
 
-        .psp-heading { min-width: 0; flex: 1; }
+        .psp-heading {
+          min-width: 0;
+          flex: 1;
+        }
 
         .psp-providerName {
           margin: 0;
@@ -238,6 +248,9 @@ function ProviderServicesContent() {
           justify-content: space-between;
           gap: 16px;
           padding: 24px 0 18px;
+          /* ✅ */
+          box-sizing: border-box;
+          min-width: 0;
         }
 
         .psp-pageTitle {
@@ -265,6 +278,8 @@ function ProviderServicesContent() {
           border-radius: 14px;
           background: var(--psp-surface);
           transition: 160ms ease;
+          /* ✅ */
+          box-sizing: border-box;
         }
         .psp-search svg { color: #858995; flex: 0 0 auto; }
         .psp-search input {
@@ -284,6 +299,9 @@ function ProviderServicesContent() {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 16px;
+          /* ✅ minmax(0,1fr) above + min-width here = no column ever
+             grows past its slot, so the row can't overflow */
+          min-width: 0;
         }
 
         /* ✅ Skeleton sized to match the reel card. */
@@ -351,6 +369,8 @@ function ProviderServicesContent() {
           color: var(--psp-muted);
           font-size: 14px;
           line-height: 1.5;
+          /* ✅ Long error text wraps, doesn't push width */
+          word-break: break-word;
         }
 
         .psp-retry {
@@ -384,6 +404,8 @@ function ProviderServicesContent() {
           text-align: center;
           background: rgba(255, 255, 255, 0.72);
           color: var(--psp-muted);
+          /* ✅ */
+          word-break: break-word;
         }
 
         @keyframes pspSpin {
