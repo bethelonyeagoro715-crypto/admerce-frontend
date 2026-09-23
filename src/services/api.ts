@@ -16,6 +16,25 @@ interface Card {
   cardholder_name?: string;
 }
 
+// ─── Store verification types ───────────────────────────────────────
+export interface StoreVerificationRequest {
+  legal_name: string;
+  business_type: string;
+  cac_number?: string;
+  business_address: string;
+  contact_phone: string;
+  evidence?: string[];
+}
+
+export interface StoreVerificationStatus {
+  store_id: string;
+  verification_status: 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended';
+  verified: boolean;
+  verified_at: string | null;
+  latest_request: JsonObject | null;
+  events: JsonArray;
+}
+
 // ─── Error helper (module-level, can be used by callers too) ────────
 export function extractErrorDetail(err: unknown, fallback = 'Something went wrong.'): string {
   if (err instanceof Error && err.message) {
@@ -63,9 +82,6 @@ class ApiService {
           err.code === 'ECONNABORTED' ||
           (typeof err.message === 'string' && err.message.toLowerCase().includes('timeout'));
 
-        // ✅ Never auto-retry uploads. Re-sending a multi-MB FormData after a
-        //    timeout doubles the wait, wastes mobile data, and risks creating
-        //    duplicate Cloudinary assets if the first attempt partially landed.
         const isUpload =
           typeof FormData !== 'undefined' && config?.data instanceof FormData;
 
@@ -508,6 +524,34 @@ class ApiService {
     return res.data;
   }
 
+  // ── Store verification (storekeeper side) ─────────────────────────
+  // Submit a verification request. Only the store owner can call this.
+  // Throws 409 if a pending request already exists.
+  public async submitStoreVerification(
+    storeId: string,
+    payload: StoreVerificationRequest,
+  ): Promise<JsonObject> {
+    const res = await this.axios.post(
+      `/storekeeper/${storeId}/verification/request`,
+      payload,
+    );
+    return res.data;
+  }
+
+  // Read the store's verification status + latest request + event history.
+  public async getStoreVerificationStatus(
+    storeId: string,
+  ): Promise<StoreVerificationStatus> {
+    const res = await this.axios.get(`/storekeeper/${storeId}/verification`);
+    return res.data as StoreVerificationStatus;
+  }
+
+  // Cancel a pending verification request. Reverts the store to unverified.
+  public async cancelStoreVerification(storeId: string): Promise<JsonObject> {
+    const res = await this.axios.delete(`/storekeeper/${storeId}/verification/request`);
+    return res.data;
+  }
+
   public async createListing(
     storeId: string,
     title: string,
@@ -845,6 +889,26 @@ class ApiService {
     return res.data;
   }
 
+  // ✅ NEW — partial update for the edit-service page
+  public async updateService(
+    serviceId: string,
+    patch: {
+      title?: string;
+      category?: string;
+      description?: string;
+      price?: number;
+      duration_minutes?: number;
+    },
+  ): Promise<JsonObject> {
+    const res = await this.axios.patch(`/services/${serviceId}`, patch);
+    return res.data;
+  }
+
+  // ✅ NEW — removes only the video_url on the row
+  public async deleteServiceVideo(serviceId: string): Promise<void> {
+    await this.axios.delete(`/services/${serviceId}/video`);
+  }
+
   public async bookService(
     serviceId: string,
     scheduledFor?: string,
@@ -881,7 +945,7 @@ class ApiService {
     return res.data;
   }
 
-   public async instantServicePay(
+  public async instantServicePay(
     serviceId: string,
     providerId: string,
     reference: string,
@@ -949,9 +1013,6 @@ class ApiService {
     return this.uploadServiceImage(serviceId, file);
   }
 
-  // ✅ Video uploads get their own 10-minute timeout (default 60s was
-  //    aborting mid-upload on mobile networks), plus an optional progress
-  //    callback so the UI can show a real progress bar instead of a spinner.
   public async uploadServiceVideo(
     serviceId: string,
     videoFile: File,
@@ -1269,9 +1330,15 @@ class ApiService {
   }
 
   // ======================== ADMIN ========================
-  public async adminGetUsers(search?: string, limit = 50, offset = 0): Promise<JsonArray> {
+  public async adminGetUsers(
+    search?: string,
+    limit = 50,
+    offset = 0,
+    role?: string,
+  ): Promise<JsonArray> {
     const params: Record<string, string | number> = { limit, offset };
     if (search) params.search = search;
+    if (role && role !== 'All') params.role = role;
     const res = await this.axios.get('/admin/users', { params });
     return res.data;
   }
@@ -1320,12 +1387,90 @@ class ApiService {
     await this.axios.delete(`/admin/stores/${storeId}`);
   }
 
-  public async adminVerifyStore(storeId: string): Promise<void> {
-    await this.axios.post(`/admin/stores/${storeId}/verify`);
+  // ── Store verification (admin side) ───────────────────────────────
+  // Queue of pending verification requests. Pass `status='all'` to see history.
+  public async adminGetPendingVerifications(
+    status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'all' = 'pending',
+    limit = 50,
+    offset = 0,
+  ): Promise<JsonArray> {
+    const res = await this.axios.get('/admin/verifications', {
+      params: { status, limit, offset },
+    });
+    return res.data;
   }
 
+  // Full verification state for one store: current request + event history.
+  public async adminGetStoreVerification(storeId: string): Promise<JsonObject> {
+    const res = await this.axios.get(`/admin/stores/${storeId}/verification`);
+    return res.data;
+  }
+
+  // Approve a pending request. `reference` must match the pending request's
+  // reference_code. Idempotent — a retry on an already-verified store succeeds.
+  public async adminApproveStoreVerification(
+    storeId: string,
+    reference: string,
+    note?: string,
+  ): Promise<JsonObject> {
+    const res = await this.axios.post(
+      `/admin/stores/${storeId}/verification/approve`,
+      { reference, note },
+    );
+    return res.data;
+  }
+
+  // Reject a pending request. `reason` is required by the backend.
+  public async adminRejectStoreVerification(
+    storeId: string,
+    reference: string,
+    reason: string,
+  ): Promise<JsonObject> {
+    const res = await this.axios.post(
+      `/admin/stores/${storeId}/verification/reject`,
+      { reference, reason },
+    );
+    return res.data;
+  }
+
+  // ✅ Supersedes adminSuspendStore. The reason is required.
+  public async adminSuspendStoreWithReason(
+    storeId: string,
+    reason: string,
+  ): Promise<JsonObject> {
+    const res = await this.axios.post(`/admin/stores/${storeId}/suspend`, { reason });
+    return res.data;
+  }
+
+  // Reinstate a suspended store to unverified (owner must re-apply).
+  public async adminReinstateStore(storeId: string, note?: string): Promise<JsonObject> {
+    const res = await this.axios.post(`/admin/stores/${storeId}/reinstate`, { note });
+    return res.data;
+  }
+
+  // ── Deprecated aliases ────────────────────────────────────────────
+  // Kept so old callers don't break. Prefer the *WithReason variants.
+  // @deprecated Use adminApproveStoreVerification (which requires a reference)
+  //   — this alias will be removed once the stores UI is fully migrated.
+  public async adminVerifyStore(storeId: string): Promise<void> {
+    // Old signature was: POST /admin/stores/{id}/verify (no reference).
+    // The new backend no longer has that route — it's replaced by the
+    // approval endpoint. We can't call it without a reference, so we
+    // fetch the pending request first.
+    const info = (await this.adminGetStoreVerification(storeId)) as {
+      request?: { reference_code?: string } | null;
+    };
+    const ref = info?.request?.reference_code;
+    if (!ref) {
+      throw new Error('No pending verification request to approve for this store');
+    }
+    await this.adminApproveStoreVerification(storeId, ref);
+  }
+
+  // @deprecated Use adminSuspendStoreWithReason — this alias submits a
+  //   generic reason so old callers keep working.
   public async adminSuspendStore(storeId: string): Promise<void> {
-    await this.axios.post(`/admin/stores/${storeId}/suspend`);
+    await this.adminSuspendStoreWithReason(storeId, 'Suspended by admin (no reason recorded)');
   }
 
   public async adminGetOrders(
