@@ -881,15 +881,15 @@ class ApiService {
     return res.data;
   }
 
-  public async instantServicePay(
+   public async instantServicePay(
     serviceId: string,
     providerId: string,
-    amount: number,
+    reference: string,
   ): Promise<JsonObject> {
     const res = await this.axios.post('/services/instant-pay', {
       service_id: serviceId,
       provider_id: providerId,
-      amount,
+      reference,
     });
     return res.data;
   }

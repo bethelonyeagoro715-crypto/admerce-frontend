@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../../services/api';
@@ -24,6 +24,7 @@ import {
   MdLink,
   MdFlag,
   MdStorefront,
+  MdCheckCircle,
 } from 'react-icons/md';
 
 const API_BASE =
@@ -39,6 +40,15 @@ function resolveImageUrl(url: string | null | undefined): string {
   if (url.startsWith('http')) return url;
   if (url.startsWith('/')) return `${API_BASE}${url}`;
   return `${API_BASE}/${url}`;
+}
+
+function makeReference(): string {
+  // crypto.randomUUID is available in all modern browsers on secure origins.
+  // Fallback for older/insecure contexts.
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `svcpay_${crypto.randomUUID()}`;
+  }
+  return `svcpay_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 interface ServiceDetail {
@@ -59,18 +69,6 @@ interface ServiceDetail {
   [key: string]: unknown;
 }
 
-interface Booking {
-  booking_id: string;
-  service_id: string;
-  customer_id: string;
-  provider_id: string;
-  status: string;
-  amount?: number;
-  service_title?: string;
-  scheduled_for?: string;
-  created_at?: string;
-}
-
 interface HeartBurst {
   id: number;
   x: number;
@@ -89,15 +87,12 @@ const styles: Record<string, React.CSSProperties> = {
   heartsLayer: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5 },
   flashIcon: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'rgba(255,255,255,0.85)', zIndex: 6, pointerEvents: 'none', filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.4))' },
 
-  // Top chrome — back and ⋯ only, space-between
   topChrome: { position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '16px 16px 24px', background: 'linear-gradient(to bottom, rgba(0,0,0,0.55), transparent)', zIndex: 7, pointerEvents: 'none' },
   topChromeBtn: { width: 40, height: 40, borderRadius: '50%', backgroundColor: 'rgba(12,12,17,0.42)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', pointerEvents: 'auto' },
 
-  // Right rail — 4 items
   rail: { position: 'absolute', right: 12, bottom: 240, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', zIndex: 8 },
   railBtn: { width: 44, height: 44, borderRadius: '50%', backgroundColor: 'rgba(12,12,17,0.42)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
 
-  // Bottom overlay
   bottomOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: '56px 16px 80px', background: 'linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.3) 55%, transparent)', color: '#fff', zIndex: 7 },
   providerHandle: { fontSize: 13, fontWeight: 700, opacity: 0.92, marginBottom: 6, textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
   reelTitle: { fontSize: 17, fontWeight: 800, lineHeight: 1.28, margin: 0, marginBottom: 6, textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
@@ -108,22 +103,19 @@ const styles: Record<string, React.CSSProperties> = {
 
   ctaRow: { display: 'flex', gap: 10, marginTop: 14 },
   ctaBook: { flex: 1, padding: '14px 16px', borderRadius: 14, border: 'none', backgroundColor: '#0504AA', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  ctaMessage: { flex: 1, padding: '14px 16px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.5)', backgroundColor: 'rgba(12,12,17,0.42)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
-  ctaAtStore: { flex: 1, padding: '14px 16px', borderRadius: 14, border: 'none', backgroundColor: '#16A34A', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 6px 20px rgba(22,163,74,0.35)' },
-  // ✅ Disabled state while the complete call is in flight.
-  ctaAtStoreBusy: { opacity: 0.7, cursor: 'not-allowed' },
+  // ✅ Pay Now — direct wallet-to-wallet transfer, always available.
+  ctaPayNow: { flex: 1, padding: '14px 16px', borderRadius: 14, border: 'none', backgroundColor: '#16A34A', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 6px 20px rgba(22,163,74,0.35)' },
+  ctaPayNowBusy: { opacity: 0.7, cursor: 'not-allowed' },
+  ctaPayNowPaid: { backgroundColor: '#065F46', boxShadow: 'none', cursor: 'default' },
 
-  // Swipe handle
   swipeHandleWrap: { position: 'absolute', left: 0, right: 0, bottom: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 8, paddingBottom: 10, cursor: 'pointer' },
   swipeHandleBar: { width: 44, height: 4, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.75)' },
   swipeHandleLabel: { fontSize: 11, color: 'rgba(255,255,255,0.9)', fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', gap: 4 },
 
-  // Progress bar
   progressTrack: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 22, display: 'flex', alignItems: 'flex-end', zIndex: 9, cursor: 'pointer' },
   progressLine: { width: '100%', height: 3, backgroundColor: 'rgba(255,255,255,0.28)' },
   progressFill: { height: '100%', backgroundColor: '#fff', transition: 'width 0.1s linear' },
 
-  // Sheets
   backdrop: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 4000 },
   panel: { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '88dvh', backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, zIndex: 4001, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   grabber: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#D1D5DB', margin: '10px auto 6px' },
@@ -141,19 +133,25 @@ const styles: Record<string, React.CSSProperties> = {
   link: { color: '#0504AA', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 },
   stubNote: { fontSize: 11, color: '#9CA3AF', lineHeight: 1.5, marginTop: 14, fontStyle: 'italic' },
 
-  // ⋯ menu
   actionSheetPanel: { position: 'fixed', left: 12, right: 12, bottom: 12, backgroundColor: '#fff', borderRadius: 20, zIndex: 4001, overflow: 'hidden', padding: '8px 0', maxWidth: 420, margin: '0 auto' },
   actionItem: { display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: 15, fontWeight: 600, color: '#111827' },
   actionItemDanger: { color: '#DC2626' },
   actionDivider: { height: 1, backgroundColor: '#F3F4F6', margin: '4px 0' },
   actionCancel: { width: '100%', padding: '16px 20px', border: 'none', background: '#F9FAFB', cursor: 'pointer', fontSize: 15, fontWeight: 700, color: '#111827', marginTop: 4 },
 
-  // Provider row inside sheets
   providerRow: { display: 'flex', alignItems: 'center', marginTop: 8 },
   avatar: { width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', backgroundColor: '#0504AA20', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   avatarText: { color: '#0504AA', fontWeight: 'bold', fontSize: 15 },
   providerName: { color: '#111827', flex: 1, fontWeight: 700, fontSize: 15 },
   chatButton: { width: 36, height: 36, borderRadius: '50%', backgroundColor: '#0504AA14', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+
+  // Success modal
+  successCard: { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: '#fff', borderRadius: 20, padding: '28px 24px', width: '88%', maxWidth: 360, zIndex: 5000, boxShadow: '0 20px 60px rgba(0,0,0,0.3)', textAlign: 'center' },
+  successIcon: { width: 64, height: 64, borderRadius: '50%', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' },
+  successTitle: { fontSize: 20, fontWeight: 800, color: '#065F46', margin: '0 0 6px' },
+  successSub: { fontSize: 14, color: '#555', lineHeight: 1.5, margin: '0 0 20px' },
+  successBtn: { width: '100%', padding: '14px', borderRadius: 12, border: 'none', backgroundColor: '#0504AA', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
+  successBtnGhost: { width: '100%', padding: '14px', borderRadius: 12, border: '1px solid #E5E7EB', backgroundColor: 'transparent', color: '#666', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 8 },
 };
 
 export default function ServiceDetailPage() {
@@ -166,20 +164,20 @@ export default function ServiceDetailPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isSaveLoading, setIsSaveLoading] = useState(false);
-  // ✅ Separate from `isLoading` — only spins the "Are you at store?" button.
-  const [isCompleting, setIsCompleting] = useState(false);
+  // ✅ Direct-pay state
+  const [isPaying, setIsPaying] = useState(false);
+  const [paidInfo, setPaidInfo] = useState<{ amount: number } | null>(null);
 
   const [showPickTime, setShowPickTime] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-
-  const [bookings, setBookings] = useState<Booking[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
   const [flash, setFlash] = useState<'play' | 'pause' | null>(null);
+  const [flashId, setFlashId] = useState(0);
   const [hearts, setHearts] = useState<HeartBurst[]>([]);
 
   const tapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -196,17 +194,6 @@ export default function ServiceDetailPage() {
         console.error('Failed to load service:', error);
       } finally {
         setLoading(false);
-      }
-    })();
-  }, [serviceId]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = (await api.getServiceBookings()) as unknown as Booking[];
-        setBookings(Array.isArray(data) ? data : []);
-      } catch {
-        // silent
       }
     })();
   }, [serviceId]);
@@ -240,27 +227,9 @@ export default function ServiceDetailPage() {
     return () => v.removeEventListener('timeupdate', onTime);
   }, [loading]);
 
-  const activeBooking = useMemo(
-    () =>
-      bookings.find(
-        (b) =>
-          b.service_id === serviceId &&
-          (b.status?.toLowerCase() === 'locked' || b.status?.toLowerCase() === 'accepted'),
-      ) || null,
-    [bookings, serviceId],
-  );
-
-  const pastCount = useMemo(() => {
-    if (!service?.provider_id) return 0;
-    return bookings.filter(
-      (b) =>
-        b.provider_id === service.provider_id &&
-        b.status?.toLowerCase() === 'completed',
-    ).length;
-  }, [bookings, service?.provider_id]);
-
   const triggerFlash = (kind: 'play' | 'pause') => {
     setFlash(kind);
+    setFlashId((id) => id + 1);
     if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
     flashTimeoutRef.current = setTimeout(() => setFlash(null), FLASH_MS);
   };
@@ -423,28 +392,34 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // ✅ "Are you at store?" — one tap completes the booking and navigates to
-  //    the receipt. Same shape as instantPickup: no ceremony, no confirmation.
-  const handleAtStoreClick = async () => {
-    if (!service || !activeBooking || isCompleting) return;
-    setIsCompleting(true);
+  // ✅ Pay Now — direct wallet-to-wallet. One tap, no confirmation.
+  //    Client generates a UUID reference for idempotency; the backend
+  //    uses the DB price (not the client's amount) and rejects replay.
+  const handlePayNowClick = async () => {
+    if (!service || isPaying || paidInfo) return;
+    if (!service.provider_id) {
+      alert('This service has no provider attached.');
+      return;
+    }
+
+    setIsPaying(true);
     try {
-      await api.completeServiceBooking(activeBooking.booking_id);
-      const query = new URLSearchParams({
-        service_name: service.title,
-        provider_name: service.business_name || 'Service Provider',
-        amount: String(service.price),
-        booking_id: activeBooking.booking_id,
-        status: 'completed',
-      });
-      router.push(`/receipt/service/${activeBooking.booking_id}?${query.toString()}`);
+      const reference = makeReference();
+      const response = (await api.instantServicePay(
+        service.service_id,
+        service.provider_id,
+        reference,
+      )) as { amount?: number };
+
+      const paidAmount = Number(response?.amount ?? service.price);
+      setPaidInfo({ amount: paidAmount });
     } catch (err: unknown) {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        (err instanceof Error ? err.message : 'Failed to complete job');
+        (err instanceof Error ? err.message : 'Payment failed');
       alert(detail);
     } finally {
-      setIsCompleting(false);
+      setIsPaying(false);
     }
   };
 
@@ -549,7 +524,7 @@ export default function ServiceDetailPage() {
         <AnimatePresence>
           {flash && (
             <motion.div
-              key={flash}
+              key={`${flash}-${flashId}`}
               initial={{ opacity: 0, scale: 0.7 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.15 }}
@@ -561,7 +536,6 @@ export default function ServiceDetailPage() {
           )}
         </AnimatePresence>
 
-        {/* Top chrome */}
         <div style={styles.topChrome}>
           <button
             type="button"
@@ -581,7 +555,6 @@ export default function ServiceDetailPage() {
           </button>
         </div>
 
-        {/* Right rail */}
         <div style={styles.rail}>
           {hasVideo && (
             <button
@@ -624,7 +597,6 @@ export default function ServiceDetailPage() {
           </button>
         </div>
 
-        {/* Bottom overlay */}
         <div style={styles.bottomOverlay}>
           <p style={styles.providerHandle}>@{providerName}</p>
           <h2 style={styles.reelTitle}>{service.title}</h2>
@@ -652,6 +624,7 @@ export default function ServiceDetailPage() {
             </p>
           )}
 
+          {/* ✅ CTA row: Book + Pay Now. Pay Now is always visible. */}
           <div style={styles.ctaRow}>
             <button
               type="button"
@@ -660,36 +633,35 @@ export default function ServiceDetailPage() {
               disabled={isLoading}
             >
               <MdCalendarToday size={18} />
-              {pastCount > 0 ? 'Book Again' : 'Book Service'}
+              Book Service
             </button>
 
-            {activeBooking ? (
+            {paidInfo ? (
               <button
                 type="button"
-                style={{
-                  ...styles.ctaAtStore,
-                  ...(isCompleting ? styles.ctaAtStoreBusy : {}),
-                }}
-                onClick={handleAtStoreClick}
-                disabled={isCompleting}
+                style={{ ...styles.ctaPayNow, ...styles.ctaPayNowPaid }}
+                disabled
               >
-                <MdStorefront size={18} />
-                {isCompleting ? 'Completing…' : 'Are you at store?'}
+                <MdCheckCircle size={18} />
+                Paid
               </button>
             ) : (
               <button
                 type="button"
-                style={styles.ctaMessage}
-                onClick={() => router.push(`/chat/${providerId}`)}
+                style={{
+                  ...styles.ctaPayNow,
+                  ...(isPaying ? styles.ctaPayNowBusy : {}),
+                }}
+                onClick={handlePayNowClick}
+                disabled={isPaying}
               >
-                <MdChatBubbleOutline size={18} />
-                Message
+                <MdStorefront size={18} />
+                {isPaying ? 'Paying…' : `Pay Now · ${priceLabel}`}
               </button>
             )}
           </div>
         </div>
 
-        {/* Swipe handle */}
         <div
           style={styles.swipeHandleWrap}
           onClick={() => setSheetOpen(true)}
@@ -703,7 +675,6 @@ export default function ServiceDetailPage() {
           </span>
         </div>
 
-        {/* Progress bar */}
         <div style={styles.progressTrack} onClick={handleScrub}>
           <div style={styles.progressLine}>
             <div style={{ ...styles.progressFill, width: `${progress * 100}%` }} />
@@ -711,7 +682,6 @@ export default function ServiceDetailPage() {
         </div>
       </div>
 
-      {/* Action menu (⋯) */}
       <AnimatePresence>
         {menuOpen && (
           <>
@@ -769,7 +739,6 @@ export default function ServiceDetailPage() {
         )}
       </AnimatePresence>
 
-      {/* Detail sheet */}
       <AnimatePresence>
         {sheetOpen && (
           <>
@@ -885,6 +854,58 @@ export default function ServiceDetailPage() {
                   Save and share are not yet connected to the backend. They will reset on reload.
                 </p>
               </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ✅ Success modal after a successful Pay Now */}
+      <AnimatePresence>
+        {paidInfo && (
+          <>
+            <motion.div
+              key="paid-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={styles.backdrop}
+              onClick={() => setPaidInfo(null)}
+            />
+            <motion.div
+              key="paid-card"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              style={styles.successCard}
+            >
+              <div style={styles.successIcon}>
+                <MdCheckCircle size={36} color="#16A34A" />
+              </div>
+              <h3 style={styles.successTitle}>Payment sent</h3>
+              <p style={styles.successSub}>
+                <strong>₦{paidInfo.amount.toLocaleString('en-NG', { maximumFractionDigits: 0 })}</strong>{' '}
+                went directly to <strong>{providerName}</strong>. No booking was
+                created — this was a one-tap direct payment.
+              </p>
+              <button
+                type="button"
+                style={styles.successBtn}
+                onClick={() => {
+                  setPaidInfo(null);
+                  router.push('/shopper/wallet');
+                }}
+              >
+                View wallet
+              </button>
+              <button
+                type="button"
+                style={styles.successBtnGhost}
+                onClick={() => setPaidInfo(null)}
+              >
+                Stay here
+              </button>
             </motion.div>
           </>
         )}
