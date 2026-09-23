@@ -42,6 +42,14 @@ function resolveImageUrl(url: string | null | undefined): string {
   return `${API_BASE}/${url}`;
 }
 
+// ✅ NEW — same 'Free' guard as the home feed. 0/null/NaN renders as 'Free'.
+function formatPrice(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === '') return 'Free';
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 'Free';
+  return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
+}
+
 function makeReference(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `svcpay_${crypto.randomUUID()}`;
@@ -49,8 +57,6 @@ function makeReference(): string {
   return `svcpay_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-// ✅ NEW — build the /chat/{id} URL with the query params the chat page
-//    needs. Without `otherUserId`, the chat page shows "Missing recipient".
 function buildChatUrl(
   providerId: string,
   providerName: string,
@@ -357,8 +363,6 @@ export default function ServiceDetailPage() {
     );
   };
 
-  // ✅ Centralised: builds the chat URL with all query params the chat page
-  //    expects. Reading `service` here ensures we don't navigate without it.
   const openChat = () => {
     if (!service?.provider_id) {
       alert('This service has no provider attached.');
@@ -464,7 +468,7 @@ export default function ServiceDetailPage() {
   const providerName = service.business_name || 'Service Provider';
   const providerId = service.provider_id || '';
   const hasVideo = Boolean(videoUrl);
-  const priceLabel = `₦${service.price.toFixed(0)}`;
+  const priceLabel = formatPrice(service.price);   // ✅ guard: 0 → 'Free'
   const rating = service.rating ?? 0;
   const reviews = service.review_count ?? 0;
   const duration = service.duration_minutes ?? 0;
@@ -607,7 +611,6 @@ export default function ServiceDetailPage() {
             <MdShare size={22} />
           </button>
 
-          {/* ✅ now uses openChat() which builds the query string */}
           <button
             type="button"
             style={styles.railBtn}
@@ -812,7 +815,6 @@ export default function ServiceDetailPage() {
                     )}
                   </div>
                   <span style={styles.providerName}>{providerName}</span>
-                  {/* ✅ also uses openChat() */}
                   <button
                     style={styles.chatButton}
                     onClick={() => {

@@ -50,8 +50,6 @@ const PULL_DEAD_ZONE_PX = 25;
 const INITIAL_VISIBLE = 100;
 const BATCH_SIZE = 40;
 
-// ✅ Reel height / item height ratio. 16/9 ≈ 1.78. Used by the masonry
-//    height-balancer so reels don't cause one column to tower over another.
 const REEL_WEIGHT = 1.78;
 const ITEM_WEIGHT = 1;
 
@@ -65,7 +63,15 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   return `${base}${url}`;
 }
 
-// ✅ Round-robin merge: item, service, item, service, …
+// ✅ NEW — single source of truth for price rendering. Returns 'Free' for
+//    null/undefined/0/NaN, and a formatted ₦ string otherwise.
+function formatPrice(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === '') return 'Free';
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 'Free';
+  return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
+}
+
 function interleave<T>(a: T[], b: T[]): T[] {
   const out: T[] = [];
   const max = Math.max(a.length, b.length);
@@ -100,7 +106,7 @@ interface ServiceItem {
   title?: string;
   price?: number | string;
   image_url?: string;
-  video_url?: string | null;   // ✅ added — backend returns this on every services read
+  video_url?: string | null;
   duration_minutes?: number;
   description?: string;
   business_name?: string;
@@ -115,7 +121,7 @@ interface Item {
   id: string;
   kind: FeedKind;
   image: string | null;
-  video: string | null;        // ✅ added — null for items, populated for services
+  video: string | null;
   title: string;
   price: string;
   storeName: string;
@@ -135,10 +141,6 @@ interface Provider {
 }
 
 // ─── Height-balanced masonry ───────────────────────────────────────────────
-// ✅ Was index-modulo (cols[i % columns]), which put all items in one column
-//    and all services in another. Reels being ~1.78× the height of an item
-//    would make that split visually catastrophic. Now we place each item in
-//    the shortest column, using weightOf to estimate future height.
 function MasonryColumns<T>({
   items,
   columns,
@@ -246,8 +248,6 @@ function LocationBanner({
   );
 }
 
-// ✅ ItemCard now dispatches: services render as reels, items render as picture
-//    cards. Callers don't need to change — the branch is internal.
 function ItemCard({
   item,
   onPress,
@@ -438,7 +438,6 @@ export default function ShopperHomePage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const totalRef = useRef(0);
 
-  // ─── Helpers ────────────────────────────────────────────────────────
   const getScrollPositions = () => {
     const panelTop = activePanelRef.current?.scrollTop ?? 0;
     const windowTop =
@@ -577,9 +576,9 @@ export default function ShopperHomePage() {
         id: item.listing_id?.toString() ?? '',
         kind: 'item',
         image: resolveImageUrl(item.image_url),
-        video: null,                        // ✅ items never have video
+        video: null,
         title: item.title ?? 'No Title',
-        price: item.price ? `₦${Number(item.price).toFixed(0)}` : '₦0',
+        price: formatPrice(item.price),   // ✅ guard: 0/null → 'Free'
         storeName: item.store_name ?? 'Unknown',
       }));
 
@@ -632,11 +631,9 @@ export default function ShopperHomePage() {
           id: s.service_id,
           kind: 'service',
           image: resolveImageUrl(s.image_url),
-          video: resolveImageUrl(s.video_url ?? null),  // ✅ carry video through
+          video: resolveImageUrl(s.video_url ?? null),
           title: s.title ?? 'Service',
-          price: s.price != null
-            ? `₦${Number(s.price).toFixed(0)}`
-            : '₦0',
+          price: formatPrice(s.price),   // ✅ guard: 0/null → 'Free'
           storeName:
             s.business_name ?? s.username ?? 'Service Provider',
         }));
