@@ -2,29 +2,9 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import {
-  MdArrowBack,
-  MdBuild,
-  MdImageNotSupported,
-  MdPlayArrow,
-  MdRefresh,
-  MdSearch,
-} from 'react-icons/md';
+import { MdArrowBack, MdBuild, MdRefresh, MdSearch } from 'react-icons/md';
 import api from '../../../services/api';
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.NEXT_PUBLIC_API_BASE ||
-  '';
-
-interface Service {
-  id: string;
-  title: string;
-  price: string;
-  image: string;
-  video: string | null;
-  description: string;
-}
+import ServiceReelCard, { ServiceReel } from '../../../components/ServiceReelCard';
 
 interface ProviderServiceResponse {
   service_id?: string | null;
@@ -37,147 +17,15 @@ interface ProviderServiceResponse {
   username?: string | null;
 }
 
-function resolveMediaUrl(url: string | null | undefined): string {
-  if (!url) return '';
-
-  const trimmed = url.trim();
-  if (!trimmed) return '';
-
-  // Accept only browser-loadable media schemes.
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  if (/^blob:/i.test(trimmed)) return trimmed;
-  if (/^\/\//.test(trimmed)) return `https:${trimmed}`;
-
-  const base = API_BASE.replace(/\/+$/, '');
-
-  if (trimmed.startsWith('/')) {
-    return base ? `${base}${trimmed}` : trimmed;
-  }
-
-  return base ? `${base}/${trimmed}` : trimmed;
-}
-
 function formatPrice(raw: unknown): string {
   if (raw === null || raw === undefined || raw === '') return 'Free';
-
   const numeric = Number(raw);
-
   if (!Number.isFinite(numeric) || numeric <= 0) return 'Free';
-
-  return `₦${numeric.toLocaleString('en-NG', {
-    maximumFractionDigits: 0,
-  })}`;
-}
-
-function ServiceCard({
-  service,
-  onOpen,
-}: {
-  service: Service;
-  onOpen: (serviceId: string) => void;
-}) {
-  const [videoPlaying, setVideoPlaying] = useState(false);
-  const [mediaError, setMediaError] = useState(false);
-
-  const hasVideo = Boolean(service.video);
-  const mediaSrc = hasVideo ? service.video : service.image;
-
-  const handleOpen = () => {
-    onOpen(service.id);
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      handleOpen();
-    }
-  };
-
-  return (
-    <article
-      className="psp-card"
-      role="button"
-      tabIndex={0}
-      aria-label={`Open ${service.title}`}
-      onClick={handleOpen}
-      onKeyDown={handleKeyDown}
-    >
-      <div className="psp-media">
-        {!mediaError && hasVideo && mediaSrc ? (
-          <>
-            <video
-              className="psp-mediaAsset"
-              src={mediaSrc}
-              poster={service.image || undefined}
-              controls
-              muted
-              playsInline
-              preload="metadata"
-              onPlay={() => setVideoPlaying(true)}
-              onPause={() => setVideoPlaying(false)}
-              onEnded={() => setVideoPlaying(false)}
-              onError={() => setMediaError(true)}
-              onClick={(event) => event.stopPropagation()}
-            />
-            {!videoPlaying && (
-              <span className="psp-playBadge" aria-hidden="true">
-                <MdPlayArrow size={22} />
-              </span>
-            )}
-          </>
-        ) : !mediaError && service.image ? (
-          <img
-            className="psp-mediaAsset"
-            src={service.image}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            onError={() => setMediaError(true)}
-          />
-        ) : (
-          <div className="psp-mediaFallback" aria-hidden="true">
-            {mediaError ? (
-              <MdImageNotSupported size={34} />
-            ) : (
-              <MdBuild size={34} />
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="psp-cardBody">
-        <div className="psp-cardTopline">
-          <h2 className="psp-serviceTitle" title={service.title}>
-            {service.title}
-          </h2>
-          <span className="psp-price">{service.price}</span>
-        </div>
-
-        {service.description ? (
-          <p className="psp-description">{service.description}</p>
-        ) : (
-          <p className="psp-description psp-descriptionMuted">
-            Tap to view service details.
-          </p>
-        )}
-
-        <span className="psp-viewHint">View details</span>
-      </div>
-    </article>
-  );
+  return `₦${numeric.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
 }
 
 function ServiceSkeleton() {
-  return (
-    <div className="psp-card psp-skeletonCard" aria-hidden="true">
-      <div className="psp-skeleton psp-skeletonMedia" />
-      <div className="psp-cardBody">
-        <div className="psp-skeleton psp-skeletonTitle" />
-        <div className="psp-skeleton psp-skeletonLine" />
-        <div className="psp-skeleton psp-skeletonLine psp-skeletonLineShort" />
-      </div>
-    </div>
-  );
+  return <div className="psp-skeletonCard" aria-hidden="true" />;
 }
 
 function ProviderServicesContent() {
@@ -189,10 +37,8 @@ function ProviderServicesContent() {
   const providerId = Array.isArray(rawId) ? rawId[0] : rawId || '';
   const urlName = searchParams.get('name')?.trim() || '';
 
-  const [providerName, setProviderName] = useState(
-    urlName || 'Service Provider',
-  );
-  const [services, setServices] = useState<Service[]>([]);
+  const [providerName, setProviderName] = useState(urlName || 'Service Provider');
+  const [services, setServices] = useState<ServiceReel[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +60,6 @@ function ProviderServicesContent() {
 
       try {
         const raw = await api.getProviderServicesByUserId(providerId);
-
         if (cancelled) return;
 
         if (!Array.isArray(raw)) {
@@ -225,29 +70,23 @@ function ProviderServicesContent() {
 
         const rawList = raw as ProviderServiceResponse[];
         const firstRaw = rawList.find((item) => item?.service_id);
+        const apiName =
+          firstRaw?.business_name?.trim() || firstRaw?.username?.trim() || '';
 
-        const list: Service[] = rawList
+        const list: ServiceReel[] = rawList
           .filter(
-            (item): item is ProviderServiceResponse =>
-              Boolean(item?.service_id),
+            (item): item is ProviderServiceResponse => Boolean(item?.service_id),
           )
           .map((item) => ({
             id: String(item.service_id),
             title: item.title?.trim() || 'Service',
             price: formatPrice(item.price),
-            image: resolveMediaUrl(item.image_url),
-            video: item.video_url?.trim()
-              ? resolveMediaUrl(item.video_url)
-              : null,
-            description: item.description?.trim() || '',
+            videoUrl: item.video_url?.trim() ? item.video_url : null,
+            imageUrl: item.image_url?.trim() ? item.image_url : null,
+            providerName: apiName || undefined,
           }));
 
         setServices(list);
-
-        const apiName =
-          firstRaw?.business_name?.trim() ||
-          firstRaw?.username?.trim() ||
-          '';
 
         if (apiName) {
           setProviderName(apiName);
@@ -256,20 +95,15 @@ function ProviderServicesContent() {
         }
       } catch (err: unknown) {
         if (cancelled) return;
-
         console.error('Failed to load services:', err);
-
         const message =
           err instanceof Error
             ? err.message
             : 'Could not load services. Please try again.';
-
         setError(message);
         setServices([]);
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -281,16 +115,13 @@ function ProviderServicesContent() {
   }, [providerId, retryKey, urlName]);
 
   const filteredServices = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    if (!query) return services;
-
-    return services.filter((service) => {
-      return (
-        service.title.toLowerCase().includes(query) ||
-        service.description.toLowerCase().includes(query)
-      );
-    });
+    const q = search.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter(
+      (s) =>
+        s.title.toLowerCase().includes(q) ||
+        (s.providerName ?? '').toLowerCase().includes(q),
+    );
   }, [search, services]);
 
   const handleBack = useCallback(() => {
@@ -298,7 +129,6 @@ function ProviderServicesContent() {
       router.back();
       return;
     }
-
     router.push('/shopper/home');
   }, [router]);
 
@@ -309,9 +139,7 @@ function ProviderServicesContent() {
     [router],
   );
 
-  const handleRetry = () => {
-    setRetryKey((current) => current + 1);
-  };
+  const handleRetry = () => setRetryKey((n) => n + 1);
 
   const countLabel = `${services.length} ${
     services.length === 1 ? 'service' : 'services'
@@ -373,24 +201,18 @@ function ProviderServicesContent() {
           cursor: pointer;
           transition: 160ms ease;
         }
-
         .psp-backButton:hover {
           border-color: #C9CBFF;
           color: var(--psp-primary);
           transform: translateY(-1px);
         }
-
         .psp-backButton:focus-visible,
-        .psp-search:focus-within,
-        .psp-card:focus-visible {
+        .psp-search:focus-within {
           outline: 3px solid rgba(5, 4, 170, 0.18);
           outline-offset: 2px;
         }
 
-        .psp-heading {
-          min-width: 0;
-          flex: 1;
-        }
+        .psp-heading { min-width: 0; flex: 1; }
 
         .psp-providerName {
           margin: 0;
@@ -444,12 +266,7 @@ function ProviderServicesContent() {
           background: var(--psp-surface);
           transition: 160ms ease;
         }
-
-        .psp-search svg {
-          color: #858995;
-          flex: 0 0 auto;
-        }
-
+        .psp-search svg { color: #858995; flex: 0 0 auto; }
         .psp-search input {
           width: 100%;
           min-width: 0;
@@ -460,127 +277,36 @@ function ProviderServicesContent() {
           font: inherit;
           font-size: 14px;
         }
+        .psp-search input::placeholder { color: #9A9DA6; }
 
-        .psp-search input::placeholder {
-          color: #9A9DA6;
-        }
-
+        /* ✅ Reels grid — narrower columns because cards are tall 9:16. */
         .psp-grid {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 16px;
         }
 
-        .psp-card {
-          min-width: 0;
-          overflow: hidden;
-          border: 1px solid var(--psp-border);
-          border-radius: 18px;
-          background: var(--psp-surface);
-          cursor: pointer;
-          box-shadow: 0 8px 24px rgba(16, 17, 20, 0.045);
-          transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
-        }
-
-        .psp-card:hover {
-          transform: translateY(-3px);
-          border-color: #D9DAFF;
-          box-shadow: 0 16px 34px rgba(16, 17, 20, 0.085);
-        }
-
-        .psp-media {
+        /* ✅ Skeleton sized to match the reel card. */
+        .psp-skeletonCard {
           position: relative;
-          aspect-ratio: 16 / 10;
-          overflow: hidden;
-          background: var(--psp-primarySoft);
-        }
-
-        .psp-mediaAsset {
-          display: block;
           width: 100%;
-          height: 100%;
-          object-fit: cover;
+          aspect-ratio: 9 / 16;
+          border-radius: 16px;
+          background: #ECEEF4;
+          overflow: hidden;
         }
-
-        .psp-playBadge {
+        .psp-skeletonCard::after {
+          content: "";
           position: absolute;
-          left: 50%;
-          top: 50%;
-          width: 46px;
-          height: 46px;
-          transform: translate(-50%, -50%);
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 999px;
-          background: rgba(12, 12, 17, 0.72);
-          color: #fff;
-          box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
-          pointer-events: none;
-        }
-
-        .psp-mediaFallback {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #A9B1DA;
-        }
-
-        .psp-cardBody {
-          padding: 13px 14px 14px;
-        }
-
-        .psp-cardTopline {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 10px;
-        }
-
-        .psp-serviceTitle {
-          min-width: 0;
-          margin: 0;
-          font-size: 15px;
-          line-height: 1.32;
-          font-weight: 750;
-          letter-spacing: -0.01em;
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          overflow: hidden;
-        }
-
-        .psp-price {
-          flex: 0 0 auto;
-          color: var(--psp-primary);
-          font-size: 14px;
-          font-weight: 850;
-          white-space: nowrap;
-        }
-
-        .psp-description {
-          margin: 8px 0 0;
-          color: #555A65;
-          font-size: 12.5px;
-          line-height: 1.5;
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          overflow: hidden;
-        }
-
-        .psp-descriptionMuted {
-          color: #9A9DA6;
-        }
-
-        .psp-viewHint {
-          display: inline-block;
-          margin-top: 10px;
-          color: var(--psp-primary);
-          font-size: 12px;
-          font-weight: 750;
+          inset: 0;
+          transform: translateX(-100%);
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.52),
+            transparent
+          );
+          animation: pspShimmer 1.25s infinite;
         }
 
         .psp-center {
@@ -645,7 +371,6 @@ function ProviderServicesContent() {
           cursor: pointer;
           transition: 160ms ease;
         }
-
         .psp-retry:hover {
           transform: translateY(-1px);
           filter: brightness(1.06);
@@ -661,120 +386,36 @@ function ProviderServicesContent() {
           color: var(--psp-muted);
         }
 
-        .psp-skeletonCard {
-          cursor: default;
-          pointer-events: none;
-        }
-
-        .psp-skeleton {
-          position: relative;
-          overflow: hidden;
-          background: #ECEEF4;
-        }
-
-        .psp-skeleton::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          transform: translateX(-100%);
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(255, 255, 255, 0.52),
-            transparent
-          );
-          animation: pspShimmer 1.25s infinite;
-        }
-
-        .psp-skeletonMedia {
-          aspect-ratio: 16 / 10;
-        }
-
-        .psp-skeletonTitle {
-          width: 72%;
-          height: 16px;
-          border-radius: 6px;
-        }
-
-        .psp-skeletonLine {
-          width: 100%;
-          height: 11px;
-          margin-top: 10px;
-          border-radius: 6px;
-        }
-
-        .psp-skeletonLineShort {
-          width: 64%;
-        }
-
         @keyframes pspSpin {
           to { transform: rotate(360deg); }
         }
-
         @keyframes pspShimmer {
           100% { transform: translateX(100%); }
         }
 
         @media (max-width: 980px) {
-          .psp-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
+          .psp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
         }
 
         @media (max-width: 720px) {
-          .psp-shell {
-            padding: 0 14px 26px;
-          }
-
-          .psp-headerInner {
-            padding: 9px 14px;
-          }
-
+          .psp-shell { padding: 0 14px 26px; }
+          .psp-headerInner { padding: 9px 14px; }
           .psp-contentHeader {
             align-items: stretch;
             flex-direction: column;
             padding-top: 20px;
           }
-
-          .psp-search {
-            width: 100%;
-          }
-
+          .psp-search { width: 100%; }
+          /* ✅ Two columns on mobile — matches IG/TikTok grid feel. */
           .psp-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-          }
-
-          .psp-card {
-            border-radius: 15px;
-          }
-
-          .psp-cardBody {
-            padding: 11px 12px 12px;
-          }
-
-          .psp-description {
-            font-size: 12px;
-          }
-        }
-
-        @media (max-width: 420px) {
-          .psp-grid {
-            grid-template-columns: 1fr;
+            gap: 10px;
           }
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .psp-card,
-          .psp-backButton,
-          .psp-retry {
-            transition: none;
-          }
-
-          .psp-spinner,
-          .psp-skeleton::after {
-            animation: none;
-          }
+          .psp-backButton, .psp-retry { transition: none; }
+          .psp-spinner, .psp-skeletonCard::after { animation: none; }
         }
       `}</style>
 
@@ -801,7 +442,7 @@ function ProviderServicesContent() {
           <div>
             <h2 className="psp-pageTitle">Services</h2>
             <p className="psp-pageSubtitle">
-              Explore what this provider offers.
+              Tap any reel to book this provider.
             </p>
           </div>
 
@@ -810,7 +451,7 @@ function ProviderServicesContent() {
               <MdSearch size={19} aria-hidden="true" />
               <input
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search services"
                 aria-label="Search services"
                 type="search"
@@ -820,13 +461,9 @@ function ProviderServicesContent() {
         </section>
 
         {loading ? (
-          <div
-            className="psp-grid"
-            aria-busy="true"
-            aria-label="Loading services"
-          >
-            {Array.from({ length: 8 }).map((_, index) => (
-              <ServiceSkeleton key={index} />
+          <div className="psp-grid" aria-busy="true" aria-label="Loading services">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <ServiceSkeleton key={i} />
             ))}
           </div>
         ) : error ? (
@@ -858,7 +495,7 @@ function ProviderServicesContent() {
         ) : (
           <section className="psp-grid" aria-label={`${providerName} services`}>
             {filteredServices.map((service) => (
-              <ServiceCard
+              <ServiceReelCard
                 key={service.id}
                 service={service}
                 onOpen={handleOpenService}

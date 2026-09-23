@@ -2,22 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '../../../services/api';
+import api, { extractErrorDetail } from '../../../services/api';
 import {
-  MdAddPhotoAlternate,
-  MdImage,
   MdVideocam,
   MdDeleteOutline,
-  MdEdit,
-  MdTextFields,
-  MdDescription,
-  MdAttachMoney,
-  MdTimer,
-  MdLocationOn,
   MdClose,
+  MdLocationOn,
+  MdPlayCircleOutline,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface ServiceCategory {
   id: string;
   label: string;
@@ -44,9 +37,7 @@ export default function CreateServicePage() {
   const [duration, setDuration] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(null);
 
-  // Media
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  // ✅ Media is video-only now. No image state.
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
 
@@ -55,10 +46,8 @@ export default function CreateServicePage() {
   const [lng, setLng] = useState(7.0265);
   const [locationReady, setLocationReady] = useState(false);
 
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
-  // Get location
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!navigator.geolocation) {
@@ -71,23 +60,12 @@ export default function CreateServicePage() {
           setLng(pos.coords.longitude);
           setLocationReady(true);
         },
-        () => {
-          setLocationReady(false);
-        },
-        { timeout: 10000 }
+        () => setLocationReady(false),
+        { timeout: 10000 },
       );
     }, 0);
     return () => clearTimeout(timer);
   }, []);
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFile(file);
-    const reader = new FileReader();
-    reader.onload = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(file);
-  };
 
   const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -98,34 +76,17 @@ export default function CreateServicePage() {
     reader.readAsDataURL(file);
   };
 
-  const removeMedia = () => {
-    setImageFile(null);
-    setImagePreview(null);
+  const removeVideo = () => {
     setVideoFile(null);
     setVideoPreview(null);
-    if (imageInputRef.current) imageInputRef.current.value = '';
     if (videoInputRef.current) videoInputRef.current.value = '';
   };
 
-  const hasMedia = imageFile || videoFile;
-
   const submitService = async () => {
-    if (!title.trim()) {
-      alert('Please enter a service title.');
-      return;
-    }
-    if (!selectedCategory) {
-      alert('Please select a category.');
-      return;
-    }
-    if (!price.trim()) {
-      alert('Please enter a price.');
-      return;
-    }
-    if (!duration.trim()) {
-      alert('Please enter the duration in minutes.');
-      return;
-    }
+    if (!title.trim()) return alert('Please enter a service title.');
+    if (!selectedCategory) return alert('Please select a category.');
+    if (!price.trim()) return alert('Please enter a price.');
+    if (!duration.trim()) return alert('Please enter the duration in minutes.');
 
     setIsSubmitting(true);
     try {
@@ -139,33 +100,30 @@ export default function CreateServicePage() {
         priceNum,
         durationNum,
         lat,
-        lng
+        lng,
       )) as { service_id?: string };
 
       const serviceId = result.service_id;
       if (!serviceId) throw new Error('Service created but no ID returned');
 
-      if (imageFile) {
-        try {
-          await api.uploadServiceImage(serviceId, imageFile);
-        } catch {
-          alert('Service created, but image upload failed.');
-        }
-      }
-
+      // ✅ Video-only upload. Image upload removed.
       if (videoFile) {
         try {
           await api.uploadServiceVideo(serviceId, videoFile);
-        } catch {
-          alert('Service created, but video upload failed.');
+        } catch (err) {
+          alert(
+            `Service created, but video upload failed: ${extractErrorDetail(
+              err,
+              'Unknown error',
+            )}`,
+          );
         }
       }
 
       alert('Service created successfully!');
       setTimeout(() => router.replace('/service-provider/home'), 500);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create service';
-      alert(msg);
+    } catch (err) {
+      alert(extractErrorDetail(err, 'Failed to create service'));
     } finally {
       setIsSubmitting(false);
     }
@@ -173,52 +131,47 @@ export default function CreateServicePage() {
 
   return (
     <main style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>Add New Service</h1>
         {isSubmitting && <div style={styles.spinnerSmall} />}
       </div>
 
       <div style={styles.scrollArea}>
-        {/* Media Upload */}
+        {/* ✅ Reel preview — 9:16, matches how shoppers see it in the feed. */}
         <div style={styles.mediaUpload}>
-          {hasMedia ? (
+          {videoPreview ? (
             <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-              {imagePreview ? (
-                <img src={imagePreview} alt="Service" style={styles.mediaImage} />
-              ) : videoPreview ? (
-                <video src={videoPreview} style={styles.mediaImage} controls />
-              ) : null}
+              <video
+                src={videoPreview}
+                style={styles.mediaVideo}
+                controls
+                muted
+                playsInline
+              />
               <button
-                onClick={removeMedia}
+                onClick={removeVideo}
                 style={styles.removeBtn}
-                title="Remove media"
+                title="Remove video"
               >
                 <MdClose size={18} color="#fff" />
               </button>
-              <button
-                onClick={() => imageInputRef.current?.click()}
-                style={styles.editBtn}
-                title="Change image/video"
-              >
-                <MdEdit size={18} color="#fff" />
-              </button>
             </div>
           ) : (
-            <div style={styles.mediaPlaceholder} onClick={() => imageInputRef.current?.click()}>
-              <MdAddPhotoAlternate size={48} color="#888" />
-              <p>Tap to add image or video</p>
-              <p style={{ fontSize: 12 }}>Tap edit to change</p>
+            <div
+              style={styles.mediaPlaceholder}
+              onClick={() => videoInputRef.current?.click()}
+            >
+              <MdPlayCircleOutline size={56} color="#888" />
+              <p style={{ margin: '8px 0 0', fontWeight: 600 }}>
+                Add a vertical video
+              </p>
+              <p style={{ fontSize: 12, margin: '4px 0 0', color: '#9A9DA6' }}>
+                This is what shoppers see in the feed.
+              </p>
             </div>
           )}
         </div>
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: 'none' }}
-          onChange={handleImageChange}
-        />
+
         <input
           ref={videoInputRef}
           type="file"
@@ -227,34 +180,22 @@ export default function CreateServicePage() {
           onChange={handleVideoChange}
         />
 
-        {/* Media Buttons */}
         <div style={styles.mediaButtons}>
-          <button
-            onClick={() => imageInputRef.current?.click()}
-            style={styles.mediaButton}
-          >
-            <MdImage size={18} color="#690096" />
-            Add Image
-          </button>
           <button
             onClick={() => videoInputRef.current?.click()}
             style={styles.mediaButton}
           >
             <MdVideocam size={18} color="#690096" />
-            Add Video
+            {videoFile ? 'Change Video' : 'Add Video'}
           </button>
-          {hasMedia && (
-            <button
-              onClick={removeMedia}
-              style={styles.mediaButton}
-            >
+          {videoFile && (
+            <button onClick={removeVideo} style={styles.mediaButton}>
               <MdDeleteOutline size={18} color="#FF0000" />
               Remove
             </button>
           )}
         </div>
 
-        {/* Title */}
         <input
           type="text"
           placeholder="Service Title *"
@@ -263,7 +204,6 @@ export default function CreateServicePage() {
           style={styles.input}
         />
 
-        {/* Description */}
         <textarea
           placeholder="Description (optional)"
           value={description}
@@ -271,7 +211,6 @@ export default function CreateServicePage() {
           style={{ ...styles.input, minHeight: 80, resize: 'vertical' }}
         />
 
-        {/* Price */}
         <input
           type="number"
           placeholder="Price (₦) *"
@@ -280,7 +219,6 @@ export default function CreateServicePage() {
           style={styles.input}
         />
 
-        {/* Duration */}
         <input
           type="number"
           placeholder="Duration (minutes) *"
@@ -289,7 +227,6 @@ export default function CreateServicePage() {
           style={styles.input}
         />
 
-        {/* Category Picker */}
         <h3 style={styles.sectionTitle}>Category</h3>
         <div style={styles.categoryGrid}>
           {SERVICE_CATEGORIES.map((cat) => (
@@ -298,9 +235,11 @@ export default function CreateServicePage() {
               onClick={() => setSelectedCategory(cat)}
               style={{
                 ...styles.categoryButton,
-                backgroundColor: selectedCategory?.id === cat.id ? '#690096' : '#f0f0f0',
+                backgroundColor:
+                  selectedCategory?.id === cat.id ? '#690096' : '#f0f0f0',
                 color: selectedCategory?.id === cat.id ? '#fff' : '#333',
-                borderColor: selectedCategory?.id === cat.id ? '#690096' : '#ccc',
+                borderColor:
+                  selectedCategory?.id === cat.id ? '#690096' : '#ccc',
               }}
             >
               {cat.label}
@@ -308,19 +247,14 @@ export default function CreateServicePage() {
           ))}
         </div>
 
-        {/* Submit */}
         <button
           onClick={submitService}
           disabled={isSubmitting}
-          style={{
-            ...styles.submitBtn,
-            opacity: isSubmitting ? 0.7 : 1,
-          }}
+          style={{ ...styles.submitBtn, opacity: isSubmitting ? 0.7 : 1 }}
         >
           {isSubmitting ? 'Publishing...' : 'Publish Service'}
         </button>
 
-        {/* Location info */}
         <div style={styles.locationInfo}>
           <MdLocationOn size={20} color="#888" />
           <span style={{ fontSize: 13, color: '#666', flex: 1, marginLeft: 8 }}>
@@ -336,7 +270,6 @@ export default function CreateServicePage() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -351,12 +284,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '12px 16px',
     borderBottom: '1px solid #eee',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 600,
-    color: '#1A1A1A',
-    margin: 0,
-  },
+  headerTitle: { fontSize: 18, fontWeight: 600, color: '#1A1A1A', margin: 0 },
   spinnerSmall: {
     width: 20,
     height: 20,
@@ -365,33 +293,29 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
-  scrollArea: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '16px',
-  },
+  scrollArea: { flex: 1, overflowY: 'auto', padding: '16px' },
   mediaUpload: {
+    // ✅ Was 180px fixed. Now 9:16, capped so desktop isn't absurd.
     width: '100%',
-    height: 180,
+    maxWidth: 280,
+    aspectRatio: '9 / 16',
+    margin: '0 auto 12px',
     borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#0d0d10',
     border: '1px solid #ccc',
     cursor: 'pointer',
     overflow: 'hidden',
-    marginBottom: 8,
   },
-  mediaImage: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
+  mediaVideo: { width: '100%', height: '100%', objectFit: 'cover' },
   mediaPlaceholder: {
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#888',
+    color: '#aaa',
+    padding: 16,
+    textAlign: 'center',
   },
   removeBtn: {
     position: 'absolute',
@@ -407,23 +331,10 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     cursor: 'pointer',
   },
-  editBtn: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    width: 36,
-    height: 36,
-    borderRadius: '50%',
-    backgroundColor: '#690096',
-    border: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-  },
   mediaButtons: {
     display: 'flex',
     flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 8,
     marginBottom: 16,
   },
