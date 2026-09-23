@@ -82,7 +82,7 @@ function normalizeCategories(raw: unknown): string[] {
         return parsed.map((c) => String(c).trim()).filter(Boolean);
       }
     } catch {
-      // not JSON — fall through
+      // not JSON — fall through to comma split
     }
     return raw
       .split(',')
@@ -132,21 +132,35 @@ function ItemCard({
         ) : (
           <div className="sdp-mediaFallback" aria-hidden="true">
             {mediaError ? (
-              <MdImageNotSupported size={28} />
+              <MdImageNotSupported size={34} />
             ) : (
-              <MdImage size={28} />
+              <MdImage size={34} />
             )}
           </div>
         )}
 
-        {!item.inStock && <span className="sdp-outBadge">Out</span>}
+        {!item.inStock && (
+          <span className="sdp-outBadge">Out of stock</span>
+        )}
       </div>
 
       <div className="sdp-cardBody">
-        <h2 className="sdp-itemTitle" title={item.title}>
-          {item.title}
-        </h2>
-        <span className="sdp-price">{item.price}</span>
+        <div className="sdp-cardTopline">
+          <h2 className="sdp-itemTitle" title={item.title}>
+            {item.title}
+          </h2>
+          <span className="sdp-price">{item.price}</span>
+        </div>
+
+        {item.category ? (
+          <div className="sdp-itemMetaRow">
+            <span className="sdp-chip">{item.category}</span>
+          </div>
+        ) : (
+          <p className="sdp-itemMetaMuted">Tap to view details.</p>
+        )}
+
+        <span className="sdp-viewHint">View item</span>
       </div>
     </article>
   );
@@ -158,7 +172,8 @@ function ItemSkeleton() {
       <div className="sdp-skeleton sdp-skeletonMedia" />
       <div className="sdp-cardBody">
         <div className="sdp-skeleton sdp-skeletonTitle" />
-        <div className="sdp-skeleton sdp-skeletonPrice" />
+        <div className="sdp-skeleton sdp-skeletonLine" />
+        <div className="sdp-skeleton sdp-skeletonLine sdp-skeletonLineShort" />
       </div>
     </div>
   );
@@ -214,7 +229,9 @@ export default function StoreDetailPage() {
         }
 
         const list: Item[] = itemsData
-          .filter((raw): raw is RawItem => Boolean(raw && raw.listing_id))
+          .filter(
+            (raw): raw is RawItem => Boolean(raw && raw.listing_id),
+          )
           .map((raw) => {
             const id = String(raw.listing_id);
             const title = (raw.title || '').trim() || 'Item';
@@ -337,9 +354,7 @@ export default function StoreDetailPage() {
   }`;
 
   const showInfoStrip =
-    !loading &&
-    !!store &&
-    (!!storeImage || !!store.address || categories.length > 0);
+    !loading && !!store && (!!storeImage || !!store.address || categories.length > 0);
 
   return (
     <main className="sdp-page">
@@ -357,50 +372,58 @@ export default function StoreDetailPage() {
           background: var(--sdp-page);
           color: var(--sdp-text);
           font-family: inherit;
-          -webkit-tap-highlight-color: transparent;
+          /* ✅ Never allow horizontal scroll on the page */
+          overflow-x: hidden;
         }
 
-        /* ═══ Header — compact, app-like ═══ */
         .sdp-header {
           position: sticky;
           top: 0;
           z-index: 20;
-          background: rgba(255, 255, 255, 0.96);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border-bottom: 1px solid var(--sdp-border);
-          padding-top: env(safe-area-inset-top, 0);
+          border-bottom: 1px solid rgba(232, 233, 237, 0.92);
+          background: rgba(255, 255, 255, 0.94);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
         }
 
         .sdp-headerInner {
-          width: 100%;
+          width: min(1180px, 100%);
           margin: 0 auto;
-          min-height: 52px;
-          padding: 8px 12px;
+          min-height: 68px;
+          padding: 10px 18px;
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
+          /* ✅ Belt-and-suspenders: no child can push this wider than the viewport */
+          box-sizing: border-box;
         }
 
         .sdp-backButton,
         .sdp-iconButton {
-          width: 38px;
-          height: 38px;
-          flex: 0 0 38px;
+          width: 40px;
+          height: 40px;
+          flex: 0 0 40px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          border: 0;
-          border-radius: 50%;
-          background: transparent;
+          border: 1px solid var(--sdp-border);
+          border-radius: 12px;
+          background: var(--sdp-surface);
           color: var(--sdp-text);
           cursor: pointer;
-          transition: background-color 120ms ease, color 120ms ease;
+          transition: 160ms ease;
         }
 
-        .sdp-backButton:active,
-        .sdp-iconButton:active {
-          background: #F1F2F8;
+        .sdp-backButton:hover,
+        .sdp-iconButton:hover {
+          border-color: #C9CBFF;
+          color: var(--sdp-primary);
+          transform: translateY(-1px);
+        }
+
+        .sdp-iconButton.is-active {
+          color: var(--sdp-amber);
+          border-color: #FFE0B2;
         }
 
         .sdp-backButton:focus-visible,
@@ -411,72 +434,61 @@ export default function StoreDetailPage() {
           outline-offset: 2px;
         }
 
-        .sdp-iconButton.is-active {
-          color: var(--sdp-amber);
-        }
-
-        .sdp-iconButton:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-
         .sdp-heading {
           min-width: 0;
           flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 1px;
         }
 
         .sdp-storeName {
           margin: 0;
-          font-size: 15px;
-          line-height: 1.2;
-          font-weight: 700;
-          letter-spacing: -0.01em;
+          font-size: clamp(17px, 2.4vw, 21px);
+          line-height: 1.15;
+          font-weight: 800;
+          letter-spacing: -0.02em;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
         .sdp-storeMeta {
-          margin: 0;
+          margin: 4px 0 0;
           color: var(--sdp-muted);
-          font-size: 11.5px;
-          font-weight: 500;
+          font-size: 12px;
+          font-weight: 600;
         }
 
         .sdp-actions {
           display: flex;
           align-items: center;
-          gap: 2px;
-          flex-shrink: 0;
+          gap: 8px;
         }
 
-        /* ═══ Shell ═══ */
         .sdp-shell {
-          width: 100%;
+          width: min(1180px, 100%);
           margin: 0 auto;
-          padding: 12px 12px calc(24px + env(safe-area-inset-bottom, 0));
+          padding: 0 18px 32px;
+          box-sizing: border-box;
         }
 
-        /* ═══ Info strip — compact, horizontal ═══ */
+        /* ─── Info strip ──────────────────────────────────── */
         .sdp-infoStrip {
           display: flex;
           align-items: center;
-          gap: 10px;
-          padding: 10px;
+          gap: 14px;
+          margin: 18px 0 0;
+          padding: 14px 16px;
           border: 1px solid var(--sdp-border);
-          border-radius: 14px;
+          border-radius: 18px;
           background: var(--sdp-surface);
-          margin-bottom: 14px;
+          box-shadow: 0 6px 20px rgba(16, 17, 20, 0.04);
+          box-sizing: border-box;
         }
 
         .sdp-infoAvatar {
-          width: 44px;
-          height: 44px;
-          flex: 0 0 44px;
-          border-radius: 12px;
+          width: 56px;
+          height: 56px;
+          flex: 0 0 56px;
+          border-radius: 14px;
           overflow: hidden;
           background: var(--sdp-primarySoft);
           display: flex;
@@ -497,85 +509,85 @@ export default function StoreDetailPage() {
           flex: 1;
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 6px;
         }
 
         .sdp-infoAddress {
           margin: 0;
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 5px;
           color: var(--sdp-muted);
-          font-size: 12px;
-          line-height: 1.3;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          font-size: 13px;
+          line-height: 1.4;
+          /* ✅ Long addresses wrap instead of pushing width */
+          word-break: break-word;
+          overflow-wrap: anywhere;
         }
 
         .sdp-infoAddress svg {
           flex: 0 0 auto;
         }
 
+        /* ✅ Chips wrap onto multiple lines — never a horizontal scroller */
         .sdp-chips {
           display: flex;
-          flex-wrap: nowrap;
-          gap: 5px;
-          overflow-x: auto;
-          scrollbar-width: none;
-          -webkit-overflow-scrolling: touch;
-        }
-
-        .sdp-chips::-webkit-scrollbar {
-          display: none;
+          flex-wrap: wrap;
+          gap: 6px;
+          min-width: 0;
         }
 
         .sdp-chip {
           display: inline-block;
-          flex-shrink: 0;
-          padding: 2px 8px;
+          padding: 3px 9px;
           border-radius: 999px;
           background: var(--sdp-primarySoft);
           color: var(--sdp-primary);
-          font-size: 10.5px;
+          font-size: 11px;
           font-weight: 700;
           letter-spacing: 0.01em;
+          max-width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
           white-space: nowrap;
         }
 
-        /* ═══ Content header ═══ */
+        /* ─── Content header ─────────────────────────────── */
         .sdp-contentHeader {
           display: flex;
-          flex-direction: column;
-          gap: 10px;
-          padding: 4px 2px 12px;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 24px 0 18px;
+          box-sizing: border-box;
         }
 
         .sdp-pageTitle {
           margin: 0;
-          font-size: 22px;
-          line-height: 1.1;
-          letter-spacing: -0.03em;
-          font-weight: 800;
+          font-size: clamp(24px, 4vw, 34px);
+          line-height: 1.05;
+          letter-spacing: -0.035em;
+          font-weight: 850;
         }
 
         .sdp-pageSubtitle {
-          margin: 3px 0 0;
+          margin: 8px 0 0;
           color: var(--sdp-muted);
-          font-size: 12.5px;
+          font-size: 14px;
         }
 
         .sdp-search {
-          width: 100%;
-          min-height: 38px;
+          width: min(320px, 100%);
+          min-height: 44px;
           display: flex;
           align-items: center;
-          gap: 8px;
-          padding: 0 12px;
+          gap: 9px;
+          padding: 0 13px;
           border: 1px solid var(--sdp-border);
-          border-radius: 10px;
+          border-radius: 14px;
           background: var(--sdp-surface);
-          transition: border-color 140ms ease;
+          transition: 160ms ease;
+          box-sizing: border-box;
         }
 
         .sdp-search svg {
@@ -591,40 +603,44 @@ export default function StoreDetailPage() {
           background: transparent;
           color: var(--sdp-text);
           font: inherit;
-          font-size: 13.5px;
+          font-size: 14px;
         }
 
         .sdp-search input::placeholder {
           color: #9A9DA6;
         }
 
-        /* ═══ Grid — 2 cols mobile base ═══ */
+        /* ─── Grid + cards ──────────────────────────────── */
         .sdp-grid {
           display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 16px;
+          /* ✅ minmax(0,1fr) above + min-width here = no grid column ever
+             grows past its slot, so the whole row can't overflow */
+          min-width: 0;
         }
 
-        /* ═══ Card ═══ */
         .sdp-card {
           min-width: 0;
           overflow: hidden;
           border: 1px solid var(--sdp-border);
-          border-radius: 14px;
+          border-radius: 18px;
           background: var(--sdp-surface);
           cursor: pointer;
-          transition: transform 140ms ease, border-color 140ms ease;
-          -webkit-tap-highlight-color: transparent;
+          box-shadow: 0 8px 24px rgba(16, 17, 20, 0.045);
+          transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+          box-sizing: border-box;
         }
 
-        .sdp-card:active {
-          transform: scale(0.985);
-          border-color: #C9CBFF;
+        .sdp-card:hover {
+          transform: translateY(-3px);
+          border-color: #D9DAFF;
+          box-shadow: 0 16px 34px rgba(16, 17, 20, 0.085);
         }
 
         .sdp-media {
           position: relative;
-          aspect-ratio: 4 / 3;
+          aspect-ratio: 1 / 1;
           overflow: hidden;
           background: var(--sdp-primarySoft);
         }
@@ -647,115 +663,148 @@ export default function StoreDetailPage() {
 
         .sdp-outBadge {
           position: absolute;
-          top: 7px;
-          left: 7px;
-          padding: 2px 7px;
-          border-radius: 6px;
+          top: 10px;
+          left: 10px;
+          padding: 4px 9px;
+          border-radius: 8px;
           background: rgba(12, 12, 17, 0.78);
           color: #fff;
-          font-size: 9.5px;
+          font-size: 11px;
           font-weight: 800;
-          letter-spacing: 0.04em;
+          letter-spacing: 0.02em;
           text-transform: uppercase;
         }
 
         .sdp-cardBody {
-          padding: 9px 10px 11px;
+          padding: 13px 14px 14px;
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .sdp-cardTopline {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+          min-width: 0;
         }
 
         .sdp-itemTitle {
+          min-width: 0;
           margin: 0;
-          font-size: 13px;
-          line-height: 1.28;
-          font-weight: 600;
-          letter-spacing: -0.005em;
+          font-size: 15px;
+          line-height: 1.32;
+          font-weight: 750;
+          letter-spacing: -0.01em;
           display: -webkit-box;
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 2;
           overflow: hidden;
-          min-height: calc(13px * 1.28 * 2);
+          word-break: break-word;
         }
 
         .sdp-price {
+          flex: 0 0 auto;
           color: var(--sdp-primary);
-          font-size: 13px;
-          font-weight: 800;
-          letter-spacing: -0.01em;
+          font-size: 14px;
+          font-weight: 850;
+          white-space: nowrap;
         }
 
-        /* ═══ States ═══ */
+        .sdp-itemMetaRow {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          min-width: 0;
+        }
+
+        .sdp-itemMetaMuted {
+          margin: 0;
+          color: #9A9DA6;
+          font-size: 12.5px;
+          line-height: 1.5;
+        }
+
+        .sdp-viewHint {
+          display: inline-block;
+          color: var(--sdp-primary);
+          font-size: 12px;
+          font-weight: 750;
+        }
+
+        /* ─── States ─────────────────────────────────────── */
         .sdp-center {
-          min-height: 50vh;
+          min-height: 48vh;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 40px 20px;
+          padding: 48px 16px;
           text-align: center;
         }
 
         .sdp-stateIcon {
-          width: 56px;
-          height: 56px;
+          width: 62px;
+          height: 62px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          border-radius: 16px;
+          border-radius: 18px;
           background: var(--sdp-primarySoft);
           color: var(--sdp-primary);
         }
 
         .sdp-stateTitle {
-          margin: 13px 0 0;
-          font-size: 15.5px;
-          font-weight: 750;
+          margin: 15px 0 0;
+          font-size: 17px;
+          font-weight: 800;
         }
 
         .sdp-stateText {
-          max-width: 320px;
-          margin: 6px 0 0;
+          max-width: 380px;
+          margin: 7px 0 0;
           color: var(--sdp-muted);
-          font-size: 13px;
+          font-size: 14px;
           line-height: 1.5;
         }
 
         .sdp-retry {
-          margin-top: 14px;
-          min-height: 40px;
+          margin-top: 15px;
+          min-height: 42px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 7px;
-          padding: 0 16px;
+          gap: 8px;
+          padding: 0 15px;
           border: 0;
-          border-radius: 11px;
+          border-radius: 12px;
           background: var(--sdp-primary);
           color: #fff;
           font: inherit;
-          font-size: 13.5px;
-          font-weight: 700;
+          font-size: 13px;
+          font-weight: 750;
           cursor: pointer;
+          transition: 160ms ease;
         }
 
-        .sdp-retry:active {
-          filter: brightness(0.94);
+        .sdp-retry:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.06);
         }
 
         .sdp-noResults {
           grid-column: 1 / -1;
-          padding: 40px 16px;
+          padding: 52px 18px;
           border: 1px dashed #DADCE6;
-          border-radius: 14px;
+          border-radius: 18px;
           text-align: center;
           background: rgba(255, 255, 255, 0.72);
           color: var(--sdp-muted);
-          font-size: 13px;
         }
 
-        /* ═══ Skeletons ═══ */
+        /* ─── Skeletons ─────────────────────────────────── */
         .sdp-skeletonCard {
           cursor: default;
           pointer-events: none;
@@ -765,7 +814,6 @@ export default function StoreDetailPage() {
           position: relative;
           overflow: hidden;
           background: #ECEEF4;
-          border-radius: 6px;
         }
 
         .sdp-skeleton::after {
@@ -776,168 +824,100 @@ export default function StoreDetailPage() {
           background: linear-gradient(
             90deg,
             transparent,
-            rgba(255, 255, 255, 0.55),
+            rgba(255, 255, 255, 0.52),
             transparent
           );
-          animation: sdpShimmer 1.3s infinite;
+          animation: sdpShimmer 1.25s infinite;
         }
 
         .sdp-skeletonMedia {
-          aspect-ratio: 4 / 3;
-          border-radius: 0;
+          aspect-ratio: 1 / 1;
         }
 
         .sdp-skeletonTitle {
-          width: 84%;
-          height: 12px;
+          width: 72%;
+          height: 16px;
+          border-radius: 6px;
         }
 
-        .sdp-skeletonPrice {
-          width: 46%;
-          height: 12px;
-          margin-top: 4px;
+        .sdp-skeletonLine {
+          width: 100%;
+          height: 11px;
+          border-radius: 6px;
+        }
+
+        .sdp-skeletonLineShort {
+          width: 64%;
+        }
+
+        @keyframes sdpSpin {
+          to { transform: rotate(360deg); }
         }
 
         @keyframes sdpShimmer {
           100% { transform: translateX(100%); }
         }
 
-        /* ═══ Wider screens ═══ */
-        @media (min-width: 640px) {
-          .sdp-headerInner {
-            padding: 10px 18px;
-            min-height: 60px;
-            gap: 12px;
-          }
-
-          .sdp-backButton,
-          .sdp-iconButton {
-            width: 40px;
-            height: 40px;
-            flex: 0 0 40px;
-          }
-
-          .sdp-storeName {
-            font-size: 17px;
-          }
-
-          .sdp-storeMeta {
-            font-size: 12px;
-          }
-
-          .sdp-shell {
-            max-width: 720px;
-            padding: 16px 18px calc(28px + env(safe-area-inset-bottom, 0));
-          }
-
-          .sdp-infoAvatar {
-            width: 52px;
-            height: 52px;
-            flex: 0 0 52px;
-            border-radius: 14px;
-          }
-
-          .sdp-infoAddress {
-            font-size: 13px;
-          }
-
-          .sdp-chip {
-            font-size: 11px;
-            padding: 3px 9px;
-          }
-
-          .sdp-contentHeader {
-            flex-direction: row;
-            align-items: flex-end;
-            justify-content: space-between;
-            padding: 12px 0 16px;
-          }
-
-          .sdp-pageTitle {
-            font-size: 28px;
-          }
-
-          .sdp-pageSubtitle {
-            font-size: 13.5px;
-            margin-top: 5px;
-          }
-
-          .sdp-search {
-            width: min(300px, 100%);
-            min-height: 42px;
-            border-radius: 12px;
-          }
-
-          .sdp-search input {
-            font-size: 14px;
-          }
-
+        /* ─── Responsive ─────────────────────────────────── */
+        @media (max-width: 980px) {
           .sdp-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
-          }
-
-          .sdp-card {
-            border-radius: 16px;
-          }
-
-          .sdp-cardBody {
-            padding: 11px 12px 13px;
-            gap: 5px;
-          }
-
-          .sdp-itemTitle {
-            font-size: 14px;
-            min-height: calc(14px * 1.28 * 2);
-          }
-
-          .sdp-price {
-            font-size: 14px;
           }
         }
 
-        @media (min-width: 1024px) {
+        @media (max-width: 720px) {
           .sdp-shell {
-            max-width: 1180px;
-            padding: 20px 18px 32px;
+            padding: 0 14px 26px;
+          }
+
+          .sdp-headerInner {
+            padding: 9px 14px;
           }
 
           .sdp-contentHeader {
-            padding: 20px 0 18px;
+            align-items: stretch;
+            flex-direction: column;
+            padding-top: 20px;
           }
 
-          .sdp-pageTitle {
-            font-size: 32px;
+          .sdp-search {
+            width: 100%;
           }
 
           .sdp-grid {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
           }
 
           .sdp-card {
-            border-radius: 18px;
+            border-radius: 15px;
           }
 
-          .sdp-card:hover {
-            transform: translateY(-2px);
-            border-color: #D9DAFF;
-            box-shadow: 0 12px 28px rgba(16, 17, 20, 0.08);
+          .sdp-cardBody {
+            padding: 11px 12px 12px;
           }
 
           .sdp-infoStrip {
-            padding: 14px 16px;
-            gap: 14px;
+            flex-direction: column;
+            align-items: flex-start;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .sdp-grid {
+            grid-template-columns: 1fr;
           }
         }
 
         @media (prefers-reduced-motion: reduce) {
           .sdp-card,
           .sdp-backButton,
-          .sdp-iconButton {
+          .sdp-iconButton,
+          .sdp-retry {
             transition: none;
           }
 
+          .sdp-spinner,
           .sdp-skeleton::after {
             animation: none;
           }
@@ -952,7 +932,7 @@ export default function StoreDetailPage() {
             onClick={handleBack}
             aria-label="Go back"
           >
-            <MdArrowBack size={20} />
+            <MdArrowBack size={21} />
           </button>
 
           <div className="sdp-heading">
@@ -969,8 +949,9 @@ export default function StoreDetailPage() {
               onClick={toggleFollow}
               disabled={followLoading || loading || !store}
               aria-label={isFollowing ? 'Unfollow store' : 'Follow store'}
+              title={isFollowing ? 'Unfollow' : 'Follow'}
             >
-              {isFollowing ? <MdStar size={20} /> : <MdStarBorder size={20} />}
+              {isFollowing ? <MdStar size={21} /> : <MdStarBorder size={21} />}
             </button>
 
             <button
@@ -979,8 +960,9 @@ export default function StoreDetailPage() {
               onClick={shareStore}
               disabled={loading || !store}
               aria-label="Share store"
+              title="Share"
             >
-              <MdShare size={19} />
+              <MdShare size={20} />
             </button>
           </div>
         </div>
@@ -993,14 +975,14 @@ export default function StoreDetailPage() {
               {storeImage ? (
                 <img src={storeImage} alt="" />
               ) : (
-                <MdStorefront size={22} />
+                <MdStorefront size={26} />
               )}
             </div>
 
             <div className="sdp-infoText">
               {store?.address && (
                 <p className="sdp-infoAddress">
-                  <MdLocationOn size={14} />
+                  <MdLocationOn size={15} />
                   {store.address}
                 </p>
               )}
@@ -1022,13 +1004,13 @@ export default function StoreDetailPage() {
           <div>
             <h2 className="sdp-pageTitle">Items</h2>
             <p className="sdp-pageSubtitle">
-              {itemCountLabel} available
+              Explore what this store sells.
             </p>
           </div>
 
           {!loading && items.length > 0 && (
             <label className="sdp-search">
-              <MdSearch size={17} aria-hidden="true" />
+              <MdSearch size={19} aria-hidden="true" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -1046,14 +1028,14 @@ export default function StoreDetailPage() {
             aria-busy="true"
             aria-label="Loading items"
           >
-            {Array.from({ length: 6 }).map((_, i) => (
+            {Array.from({ length: 8 }).map((_, i) => (
               <ItemSkeleton key={i} />
             ))}
           </div>
         ) : error ? (
           <div className="sdp-center">
             <div className="sdp-stateIcon" aria-hidden="true">
-              <MdStorefront size={26} />
+              <MdStorefront size={32} />
             </div>
             <h2 className="sdp-stateTitle">
               We couldn&apos;t load this store
@@ -1064,14 +1046,14 @@ export default function StoreDetailPage() {
               className="sdp-retry"
               onClick={handleRetry}
             >
-              <MdRefresh size={17} />
+              <MdRefresh size={18} />
               Try again
             </button>
           </div>
         ) : items.length === 0 ? (
           <div className="sdp-center">
             <div className="sdp-stateIcon" aria-hidden="true">
-              <MdStorefront size={26} />
+              <MdStorefront size={32} />
             </div>
             <h2 className="sdp-stateTitle">No items yet</h2>
             <p className="sdp-stateText">
