@@ -26,6 +26,7 @@ import {
   MdLink,
   MdFlag,
   MdHistory,
+  MdStorefront,
 } from 'react-icons/md';
 
 const API_BASE =
@@ -79,9 +80,6 @@ interface HeartBurst {
   y: number;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: { position: 'fixed', inset: 0, backgroundColor: '#000', overflow: 'hidden', height: '100dvh', width: '100vw' },
 
@@ -99,7 +97,7 @@ const styles: Record<string, React.CSSProperties> = {
   topChromeBtn: { width: 40, height: 40, borderRadius: '50%', backgroundColor: 'rgba(12,12,17,0.42)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', pointerEvents: 'auto' },
   topChromeTitle: { flex: 1, color: '#fff', fontSize: 14, fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
 
-  // Right rail — 3 items: mute, save, share
+  // Right rail — 4 items now (mute, save, share, message)
   rail: { position: 'absolute', right: 12, bottom: 240, display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', zIndex: 8 },
   railBtn: { width: 44, height: 44, borderRadius: '50%', backgroundColor: 'rgba(12,12,17,0.42)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
 
@@ -115,10 +113,8 @@ const styles: Record<string, React.CSSProperties> = {
   ctaRow: { display: 'flex', gap: 10, marginTop: 14 },
   ctaBook: { flex: 1, padding: '14px 16px', borderRadius: 14, border: 'none', backgroundColor: '#0504AA', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
   ctaMessage: { flex: 1, padding: '14px 16px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.5)', backgroundColor: 'rgba(12,12,17,0.42)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
-
-  // Job Done pill — only rendered when an active booking exists.
-  jobPill: { position: 'absolute', left: '50%', bottom: 78, transform: 'translateX(-50%)', padding: '9px 16px', borderRadius: 999, border: '1px solid rgba(251,191,36,0.6)', backgroundColor: 'rgba(120,53,15,0.85)', color: '#FEF3C7', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', boxShadow: '0 6px 20px rgba(251,191,36,0.35)', zIndex: 8 },
-  jobPillDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: '#FBBF24', boxShadow: '0 0 8px rgba(251,191,36,0.9)' },
+  // ✅ Emerald "Are you at store?" — replaces Message when there's an active booking.
+  ctaAtStore: { flex: 1, padding: '14px 16px', borderRadius: 14, border: 'none', backgroundColor: '#16A34A', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 6px 20px rgba(22,163,74,0.35)' },
 
   // Swipe handle
   swipeHandleWrap: { position: 'absolute', left: 0, right: 0, bottom: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 8, paddingBottom: 10, cursor: 'pointer' },
@@ -130,7 +126,7 @@ const styles: Record<string, React.CSSProperties> = {
   progressLine: { width: '100%', height: 3, backgroundColor: 'rgba(255,255,255,0.28)' },
   progressFill: { height: '100%', backgroundColor: '#fff', transition: 'width 0.1s linear' },
 
-  // ─── Sheets (shared) ────────────────────────────────────────────
+  // Sheets (shared)
   backdrop: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 4000 },
   panel: { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '88dvh', backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, zIndex: 4001, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   grabber: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#D1D5DB', margin: '10px auto 6px' },
@@ -148,7 +144,7 @@ const styles: Record<string, React.CSSProperties> = {
   link: { color: '#0504AA', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 },
   stubNote: { fontSize: 11, color: '#9CA3AF', lineHeight: 1.5, marginTop: 14, fontStyle: 'italic' },
 
-  // Action menu (⋯ dropdown) — a compact anchored sheet
+  // ⋯ action menu
   actionSheetPanel: { position: 'fixed', left: 12, right: 12, bottom: 12, backgroundColor: '#fff', borderRadius: 20, zIndex: 4001, overflow: 'hidden', padding: '8px 0', maxWidth: 420, margin: '0 auto' },
   actionItem: { display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', border: 'none', background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: 15, fontWeight: 600, color: '#111827' },
   actionItemDanger: { color: '#DC2626' },
@@ -162,22 +158,22 @@ const styles: Record<string, React.CSSProperties> = {
   providerName: { color: '#111827', flex: 1, fontWeight: 700, fontSize: 15 },
   chatButton: { width: 36, height: 36, borderRadius: '50%', backgroundColor: '#0504AA14', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
-  // Job Done ceremony
-  ceremonyPanel: { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '90dvh', backgroundColor: '#FFFDF5', borderTopLeftRadius: 24, borderTopRightRadius: 24, zIndex: 4001, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  ceremonyGrabber: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#FDE68A', margin: '10px auto 6px' },
-  ceremonyBanner: { backgroundColor: '#78350F', color: '#FEF3C7', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase' },
-  ceremonyTitle: { fontSize: 22, fontWeight: 800, color: '#78350F', margin: '16px 20px 6px', lineHeight: 1.2 },
-  ceremonySubtitle: { fontSize: 14, color: '#78350F', opacity: 0.75, margin: '0 20px 16px', lineHeight: 1.45 },
+  // ✅ Job Done / "At store" ceremony — emerald theme now, matching the CTA.
+  ceremonyPanel: { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '92dvh', backgroundColor: '#F0FDF4', borderTopLeftRadius: 24, borderTopRightRadius: 24, zIndex: 4001, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  ceremonyGrabber: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#86EFAC', margin: '10px auto 6px' },
+  ceremonyBanner: { backgroundColor: '#065F46', color: '#D1FAE5', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase' },
+  ceremonyTitle: { fontSize: 22, fontWeight: 800, color: '#065F46', margin: '16px 20px 6px', lineHeight: 1.2 },
+  ceremonySubtitle: { fontSize: 14, color: '#065F46', opacity: 0.8, margin: '0 20px 16px', lineHeight: 1.45 },
 
-  historyCard: { margin: '4px 20px 0', padding: '14px 16px', borderRadius: 16, backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' },
-  historyHead: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: 0.6, color: '#92400E', textTransform: 'uppercase', marginBottom: 8 },
-  historyLine: { fontSize: 14, color: '#78350F', fontWeight: 700, lineHeight: 1.4, margin: 0 },
-  historyMeta: { fontSize: 12, color: '#A16207', marginTop: 4, lineHeight: 1.4 },
-  historyMiniRow: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed #FDE68A', fontSize: 13, color: '#78350F' },
+  historyCard: { margin: '4px 20px 0', padding: '14px 16px', borderRadius: 16, backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0' },
+  historyHead: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, letterSpacing: 0.6, color: '#047857', textTransform: 'uppercase', marginBottom: 8 },
+  historyLine: { fontSize: 14, color: '#065F46', fontWeight: 700, lineHeight: 1.4, margin: 0 },
+  historyMeta: { fontSize: 12, color: '#047857', marginTop: 4, lineHeight: 1.4 },
+  historyMiniRow: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed #A7F3D0', fontSize: 13, color: '#065F46' },
   historyMiniRowLast: { borderBottom: 'none' },
-  historyAmount: { fontWeight: 800, color: '#92400E' },
+  historyAmount: { fontWeight: 800, color: '#047857' },
 
-  bookingSummary: { margin: '16px 20px 0', padding: '14px 16px', borderRadius: 16, backgroundColor: '#fff', border: '1px solid #F3F4F6' },
+  bookingSummary: { margin: '16px 20px 0', padding: '14px 16px', borderRadius: 16, backgroundColor: '#fff', border: '1px solid #D1FAE5' },
   summaryRow: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 14 },
   summaryLabel: { color: '#6B7280', fontWeight: 600 },
   summaryValue: { color: '#111827', fontWeight: 700 },
@@ -185,13 +181,10 @@ const styles: Record<string, React.CSSProperties> = {
   ceremonyWarning: { margin: '16px 20px 0', padding: '12px 14px', borderRadius: 12, backgroundColor: '#FEF3C7', fontSize: 12.5, color: '#78350F', lineHeight: 1.5, fontWeight: 600 },
 
   ceremonyCTA: { margin: '20px 20px 28px', display: 'flex', flexDirection: 'column', gap: 10 },
-  releaseBtn: { width: '100%', padding: '16px', borderRadius: 14, border: 'none', backgroundColor: '#78350F', color: '#FEF3C7', fontSize: 16, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: '0 8px 24px rgba(120,53,15,0.3)' },
-  cancelBtn: { width: '100%', padding: '14px', borderRadius: 14, border: '1px solid #FDE68A', backgroundColor: 'transparent', color: '#78350F', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
+  releaseBtn: { width: '100%', padding: '16px', borderRadius: 14, border: 'none', backgroundColor: '#16A34A', color: '#fff', fontSize: 16, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: '0 8px 24px rgba(22,163,74,0.3)' },
+  cancelBtn: { width: '100%', padding: '14px', borderRadius: 14, border: '1px solid #86EFAC', backgroundColor: 'transparent', color: '#065F46', fontSize: 15, fontWeight: 700, cursor: 'pointer' },
 };
 
-// ─────────────────────────────────────────────────────────────
-// Main page
-// ─────────────────────────────────────────────────────────────
 export default function ServiceDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -204,9 +197,9 @@ export default function ServiceDetailPage() {
   const [isSaveLoading, setIsSaveLoading] = useState(false);
 
   const [showPickTime, setShowPickTime] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);       // detail sheet
-  const [menuOpen, setMenuOpen] = useState(false);          // ⋯ menu
-  const [jobSheetOpen, setJobSheetOpen] = useState(false);  // ceremony
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [jobSheetOpen, setJobSheetOpen] = useState(false);
 
   const [bookings, setBookings] = useState<Booking[]>([]);
 
@@ -222,7 +215,6 @@ export default function ServiceDetailPage() {
   const flashTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const heartIdRef = useRef(0);
 
-  // Load service
   useEffect(() => {
     (async () => {
       try {
@@ -236,27 +228,23 @@ export default function ServiceDetailPage() {
     })();
   }, [serviceId]);
 
-  // Load bookings (fire-and-forget). Used to (a) decide if the Job Done pill
-  // shows, (b) render booking history in the ceremony sheet.
   useEffect(() => {
     (async () => {
       try {
         const data = (await api.getServiceBookings()) as unknown as Booking[];
         setBookings(Array.isArray(data) ? data : []);
       } catch {
-        // silent — pill just won't show
+        // silent
       }
     })();
   }, [serviceId]);
 
-  // Sync muted
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     v.muted = muted;
   }, [muted]);
 
-  // Pause on tab hide
   useEffect(() => {
     const onVis = () => {
       const v = videoRef.current;
@@ -268,7 +256,6 @@ export default function ServiceDetailPage() {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [playing]);
 
-  // Progress
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -281,7 +268,6 @@ export default function ServiceDetailPage() {
     return () => v.removeEventListener('timeupdate', onTime);
   }, [loading]);
 
-  // ─── Derived: active + past bookings with this provider ─────
   const activeBooking = useMemo(
     () =>
       bookings.find(
@@ -292,20 +278,20 @@ export default function ServiceDetailPage() {
     [bookings, serviceId],
   );
 
+  const providerId = service?.provider_id;
   const pastBookings = useMemo(() => {
-    if (!service?.provider_id) return [];
+    if (!providerId) return [];
     return bookings
       .filter(
         (b) =>
-          b.provider_id === service.provider_id &&
+          b.provider_id === providerId &&
           b.status?.toLowerCase() === 'completed',
       )
       .slice(0, 2);
-  }, [bookings, service]);
+  }, [bookings, providerId]);
 
-  const pastCount = pastBookings.length; // note: this is a *sample*, see caveats
+  const pastCount = pastBookings.length;
 
-  // ─── Video interactions ─────────────────────────────────────
   const triggerFlash = (kind: 'play' | 'pause') => {
     setFlash(kind);
     if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
@@ -363,7 +349,6 @@ export default function ServiceDetailPage() {
     setProgress(ratio);
   };
 
-  // ─── Save (still a stub) ────────────────────────────────────
   const toggleSave = async () => {
     if (isSaveLoading) return;
     setIsSaveLoading(true);
@@ -372,7 +357,6 @@ export default function ServiceDetailPage() {
     setIsSaveLoading(false);
   };
 
-  // ✅ Share is now real: navigator.share when available, clipboard fallback.
   const shareService = async () => {
     if (!service) return;
     const url = typeof window !== 'undefined' ? window.location.href : '';
@@ -394,13 +378,12 @@ export default function ServiceDetailPage() {
       }
       alert(url);
     } catch {
-      // user cancelled share sheet — silent
+      // user cancelled — silent
     }
   };
 
   const copyLink = async () => {
     setMenuOpen(false);
-    if (!service) return;
     const url = typeof window !== 'undefined' ? window.location.href : '';
     try {
       if (navigator.clipboard) {
@@ -428,7 +411,6 @@ export default function ServiceDetailPage() {
     );
   };
 
-  // ─── Booking flow ───────────────────────────────────────────
   const handleBookClick = () => {
     if (!service) return;
     setShowPickTime(true);
@@ -474,13 +456,12 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // ─── Job Done flow ──────────────────────────────────────────
-  const openJobSheet = () => {
+  // ✅ "Are you at store?" → open ceremony sheet
+  const handleAtStoreClick = () => {
     if (!activeBooking) {
       alert('No active booking found for this service.');
       return;
     }
-    setMenuOpen(false);
     setJobSheetOpen(true);
   };
 
@@ -508,7 +489,6 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // ─── Render gates ───────────────────────────────────────────
   if (loading) {
     return (
       <main style={styles.loadingContainer}>
@@ -528,7 +508,7 @@ export default function ServiceDetailPage() {
   const videoUrl = resolveImageUrl(service.video_url);
   const providerImageUrl = resolveImageUrl(service.business_image_url);
   const providerName = service.business_name || 'Service Provider';
-  const providerId = service.provider_id || '';
+  const providerProfileId = service.provider_id || '';
   const hasVideo = Boolean(videoUrl);
   const priceLabel = `₦${service.price.toFixed(0)}`;
   const rating = service.rating ?? 0;
@@ -557,7 +537,6 @@ export default function ServiceDetailPage() {
       )}
 
       <div className="sdp-reel-shell" style={{ position: 'absolute', inset: 0 }}>
-        {/* Media */}
         {hasVideo ? (
           <video
             ref={videoRef}
@@ -633,9 +612,7 @@ export default function ServiceDetailPage() {
           >
             <MdChevronLeft size={26} />
           </button>
-
           <span style={styles.topChromeTitle}>@{providerName}</span>
-
           <button
             type="button"
             style={styles.topChromeBtn}
@@ -646,7 +623,7 @@ export default function ServiceDetailPage() {
           </button>
         </div>
 
-        {/* Right rail: mute, save, share. (Message removed — it's a labeled CTA below.) */}
+        {/* ✅ Right rail — message icon is BACK, 4 items total. */}
         <div style={styles.rail}>
           {hasVideo && (
             <button
@@ -678,15 +655,16 @@ export default function ServiceDetailPage() {
           >
             <MdShare size={22} />
           </button>
-        </div>
 
-        {/* Job Done pill — conditional on an active booking */}
-        {activeBooking && (
-          <button type="button" style={styles.jobPill} onClick={openJobSheet}>
-            <span style={styles.jobPillDot} />
-            Job done? Complete booking
+          <button
+            type="button"
+            style={styles.railBtn}
+            onClick={() => router.push(`/chat/${providerProfileId}`)}
+            aria-label="Message provider"
+          >
+            <MdChatBubbleOutline size={22} />
           </button>
-        )}
+        </div>
 
         {/* Bottom overlay */}
         <div style={styles.bottomOverlay}>
@@ -716,6 +694,7 @@ export default function ServiceDetailPage() {
             </p>
           )}
 
+          {/* ✅ CTA row: Book Service + (Message OR "Are you at store?") */}
           <div style={styles.ctaRow}>
             <button
               type="button"
@@ -726,18 +705,30 @@ export default function ServiceDetailPage() {
               <MdCalendarToday size={18} />
               {pastCount > 0 ? 'Book Again' : 'Book Service'}
             </button>
-            <button
-              type="button"
-              style={styles.ctaMessage}
-              onClick={() => router.push(`/chat/${providerId}`)}
-            >
-              <MdChatBubbleOutline size={18} />
-              Message
-            </button>
+
+            {activeBooking ? (
+              <button
+                type="button"
+                style={styles.ctaAtStore}
+                onClick={handleAtStoreClick}
+              >
+                <MdStorefront size={18} />
+                Are you at store?
+              </button>
+            ) : (
+              <button
+                type="button"
+                style={styles.ctaMessage}
+                onClick={() => router.push(`/chat/${providerProfileId}`)}
+              >
+                <MdChatBubbleOutline size={18} />
+                Message
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Swipe handle — opens the detail sheet */}
+        {/* Swipe handle */}
         <div
           style={styles.swipeHandleWrap}
           onClick={() => setSheetOpen(true)}
@@ -797,23 +788,6 @@ export default function ServiceDetailPage() {
                 Copy link
               </button>
               <div style={styles.actionDivider} />
-              {/* Fallback path to the ceremony sheet even if the pill isn't showing */}
-              {activeBooking && (
-                <>
-                  <button
-                    type="button"
-                    style={styles.actionItem}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setJobSheetOpen(true);
-                    }}
-                  >
-                    <MdCheckCircle size={22} color="#16A34A" />
-                    Complete this booking
-                  </button>
-                  <div style={styles.actionDivider} />
-                </>
-              )}
               <button
                 type="button"
                 style={{ ...styles.actionItem, ...styles.actionItemDanger }}
@@ -834,7 +808,7 @@ export default function ServiceDetailPage() {
         )}
       </AnimatePresence>
 
-      {/* ═══════ Detail sheet (swipe up) ═══════ */}
+      {/* ═══════ Detail sheet ═══════ */}
       <AnimatePresence>
         {sheetOpen && (
           <>
@@ -892,7 +866,7 @@ export default function ServiceDetailPage() {
                     style={styles.chatButton}
                     onClick={() => {
                       setSheetOpen(false);
-                      router.push(`/chat/${providerId}`);
+                      router.push(`/chat/${providerProfileId}`);
                     }}
                     title="Message Provider"
                   >
@@ -955,7 +929,7 @@ export default function ServiceDetailPage() {
         )}
       </AnimatePresence>
 
-      {/* ═══════ Job Done ceremony ═══════ */}
+      {/* ═══════ "Are you at store?" ceremony ═══════ */}
       <AnimatePresence>
         {jobSheetOpen && (
           <>
@@ -985,17 +959,17 @@ export default function ServiceDetailPage() {
               <div style={styles.ceremonyGrabber} />
 
               <div style={styles.ceremonyBanner}>
-                <MdHistory size={16} />
+                <MdStorefront size={16} />
                 Job completion
               </div>
 
-              <h2 style={styles.ceremonyTitle}>Close the loop</h2>
+              <h2 style={styles.ceremonyTitle}>Confirm the job is done</h2>
               <p style={styles.ceremonySubtitle}>
-                Releasing funds is final. It tells {providerName} the work is done
-                and closes this booking on your account.
+                You&apos;re at @{providerName}. Once the work is finished, tap below
+                to release the held funds and close this booking.
               </p>
 
-              {/* History card */}
+              {/* Your history with this provider */}
               <div style={styles.historyCard}>
                 <div style={styles.historyHead}>
                   <MdHistory size={14} />
@@ -1043,7 +1017,7 @@ export default function ServiceDetailPage() {
                 )}
               </div>
 
-              {/* Current booking summary */}
+              {/* Current booking */}
               {activeBooking && (
                 <div style={styles.bookingSummary}>
                   <div style={styles.summaryRow}>
@@ -1064,7 +1038,7 @@ export default function ServiceDetailPage() {
                     </span>
                   </div>
                   <div style={styles.summaryRow}>
-                    <span style={styles.summaryLabel}>Amount</span>
+                    <span style={styles.summaryLabel}>Amount held</span>
                     <span style={styles.summaryValue}>
                       ₦{Number(activeBooking.amount || service.price).toLocaleString('en-NG', {
                         maximumFractionDigits: 0,
@@ -1082,7 +1056,7 @@ export default function ServiceDetailPage() {
               <div style={styles.ceremonyCTA}>
                 <button type="button" style={styles.releaseBtn} onClick={confirmJobDone}>
                   <MdCheckCircle size={20} />
-                  Release funds &amp; complete
+                  Yes, the job is done
                 </button>
                 <button
                   type="button"
