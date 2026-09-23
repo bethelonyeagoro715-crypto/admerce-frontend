@@ -49,6 +49,20 @@ function makeReference(): string {
   return `svcpay_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+// ✅ NEW — build the /chat/{id} URL with the query params the chat page
+//    needs. Without `otherUserId`, the chat page shows "Missing recipient".
+function buildChatUrl(
+  providerId: string,
+  providerName: string,
+  providerAvatarRaw: string | null | undefined,
+): string {
+  const q = new URLSearchParams();
+  q.set('otherUserId', providerId);
+  q.set('otherUserName', providerName);
+  if (providerAvatarRaw) q.set('otherUserAvatar', providerAvatarRaw);
+  return `/chat/${providerId}?${q.toString()}`;
+}
+
 interface ServiceDetail {
   service_id: string;
   title: string;
@@ -142,9 +156,6 @@ const styles: Record<string, React.CSSProperties> = {
   providerName: { color: '#111827', flex: 1, fontWeight: 700, fontSize: 15 },
   chatButton: { width: 36, height: 36, borderRadius: '50%', backgroundColor: '#0504AA14', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
-  // ✅ Success modal — backdrop is a flex centering container. The card has
-  //    NO position/transform of its own, so Framer Motion can safely animate
-  //    `scale` without clobbering the centering math.
   successBackdrop: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5000, padding: 20 },
   successCard: { backgroundColor: '#fff', borderRadius: 20, padding: '28px 24px', width: '100%', maxWidth: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.3)', textAlign: 'center' },
   successIcon: { width: 64, height: 64, borderRadius: '50%', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' },
@@ -176,6 +187,7 @@ export default function ServiceDetailPage() {
   const [playing, setPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
   const [flash, setFlash] = useState<'play' | 'pause' | null>(null);
+  const [flashId, setFlashId] = useState(0);
   const [hearts, setHearts] = useState<HeartBurst[]>([]);
 
   const tapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -226,6 +238,7 @@ export default function ServiceDetailPage() {
   }, [loading]);
 
   const triggerFlash = (kind: 'play' | 'pause') => {
+    setFlashId((id) => id + 1);
     setFlash(kind);
     if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
     flashTimeoutRef.current = setTimeout(() => setFlash(null), FLASH_MS);
@@ -341,6 +354,19 @@ export default function ServiceDetailPage() {
       `/provider-services/${service.provider_id}?name=${encodeURIComponent(
         service.business_name || 'Service Provider',
       )}`,
+    );
+  };
+
+  // ✅ Centralised: builds the chat URL with all query params the chat page
+  //    expects. Reading `service` here ensures we don't navigate without it.
+  const openChat = () => {
+    if (!service?.provider_id) {
+      alert('This service has no provider attached.');
+      return;
+    }
+    const providerName = service.business_name || 'Service Provider';
+    router.push(
+      buildChatUrl(service.provider_id, providerName, service.business_image_url ?? null),
     );
   };
 
@@ -518,7 +544,7 @@ export default function ServiceDetailPage() {
         <AnimatePresence>
           {flash && (
             <motion.div
-              key={flash}
+              key={`${flash}-${flashId}`}
               initial={{ opacity: 0, scale: 0.7 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.15 }}
@@ -581,10 +607,11 @@ export default function ServiceDetailPage() {
             <MdShare size={22} />
           </button>
 
+          {/* ✅ now uses openChat() which builds the query string */}
           <button
             type="button"
             style={styles.railBtn}
-            onClick={() => router.push(`/chat/${providerId}`)}
+            onClick={openChat}
             aria-label="Message provider"
           >
             <MdChatBubbleOutline size={22} />
@@ -785,11 +812,12 @@ export default function ServiceDetailPage() {
                     )}
                   </div>
                   <span style={styles.providerName}>{providerName}</span>
+                  {/* ✅ also uses openChat() */}
                   <button
                     style={styles.chatButton}
                     onClick={() => {
                       setSheetOpen(false);
-                      router.push(`/chat/${providerId}`);
+                      openChat();
                     }}
                     title="Message Provider"
                   >
@@ -852,7 +880,6 @@ export default function ServiceDetailPage() {
         )}
       </AnimatePresence>
 
-      {/* ✅ Success modal — flex-centered wrapper, no transform on the card */}
       <AnimatePresence>
         {paidInfo && (
           <motion.div
