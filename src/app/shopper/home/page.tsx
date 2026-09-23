@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
+import ServiceReelCard from '../../../components/ServiceReelCard';
 import {
   MdSearch,
   MdShoppingBasket,
@@ -46,11 +47,13 @@ const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
 const PULL_THRESHOLD_PX = 180;
 const PULL_DEAD_ZONE_PX = 25;
 
-// ✅ Reveal everything up to 100 cards at once. Beyond that, infinite
-//    scroll reveals in batches. Removes the perception that items are
-//    "hidden behind scroll" for typical marketplace sizes.
 const INITIAL_VISIBLE = 100;
 const BATCH_SIZE = 40;
+
+// ✅ Reel height / item height ratio. 16/9 ≈ 1.78. Used by the masonry
+//    height-balancer so reels don't cause one column to tower over another.
+const REEL_WEIGHT = 1.78;
+const ITEM_WEIGHT = 1;
 
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -63,7 +66,6 @@ function resolveImageUrl(url: string | null | undefined): string | null {
 }
 
 // ✅ Round-robin merge: item, service, item, service, …
-//    When one side runs out, the rest of the other side appends.
 function interleave<T>(a: T[], b: T[]): T[] {
   const out: T[] = [];
   const max = Math.max(a.length, b.length);
@@ -98,6 +100,7 @@ interface ServiceItem {
   title?: string;
   price?: number | string;
   image_url?: string;
+  video_url?: string | null;   // ✅ added — backend returns this on every services read
   duration_minutes?: number;
   description?: string;
   business_name?: string;
@@ -112,6 +115,7 @@ interface Item {
   id: string;
   kind: FeedKind;
   image: string | null;
+  video: string | null;        // ✅ added — null for items, populated for services
   title: string;
   price: string;
   storeName: string;
@@ -130,24 +134,39 @@ interface Provider {
   serviceCount: number;
 }
 
-// ─── CSS-column masonry ────────────────────────────────────────────────────
+// ─── Height-balanced masonry ───────────────────────────────────────────────
+// ✅ Was index-modulo (cols[i % columns]), which put all items in one column
+//    and all services in another. Reels being ~1.78× the height of an item
+//    would make that split visually catastrophic. Now we place each item in
+//    the shortest column, using weightOf to estimate future height.
 function MasonryColumns<T>({
   items,
   columns,
   gap,
   renderItem,
   keyFor,
+  weightOf,
 }: {
   items: T[];
   columns: number;
   gap: number;
   renderItem: (item: T) => React.ReactNode;
   keyFor: (item: T, index: number) => string;
+  weightOf: (item: T) => number;
 }) {
   if (items.length === 0) return null;
 
   const cols: T[][] = Array.from({ length: columns }, () => []);
-  items.forEach((item, i) => cols[i % columns].push(item));
+  const heights = new Array(columns).fill(0);
+
+  for (const item of items) {
+    let target = 0;
+    for (let c = 1; c < columns; c++) {
+      if (heights[c] < heights[target]) target = c;
+    }
+    cols[target].push(item);
+    heights[target] += weightOf(item) + gap;
+  }
 
   return (
     <div
@@ -227,6 +246,8 @@ function LocationBanner({
   );
 }
 
+// ✅ ItemCard now dispatches: services render as reels, items render as picture
+//    cards. Callers don't need to change — the branch is internal.
 function ItemCard({
   item,
   onPress,
@@ -236,7 +257,22 @@ function ItemCard({
   onPress: (item: Item) => void;
   onVisualSearch: (image: string | null) => void;
 }) {
-  const isService = item.kind === 'service';
+  if (item.kind === 'service') {
+    return (
+      <ServiceReelCard
+        service={{
+          id: item.id,
+          title: item.title,
+          price: item.price,
+          videoUrl: item.video,
+          imageUrl: item.image,
+          providerName: item.storeName,
+        }}
+        onOpen={() => onPress(item)}
+      />
+    );
+  }
+
   return (
     <div style={styles.card} onClick={() => onPress(item)}>
       <div style={styles.imageWrap}>
@@ -251,10 +287,10 @@ function ItemCard({
         <div
           style={{
             ...styles.kindBadge,
-            backgroundColor: isService ? '#0504AA' : '#0F172A',
+            backgroundColor: '#0F172A',
           }}
         >
-          {isService ? 'SERVICE' : 'ITEM'}
+          ITEM
         </div>
 
         <div
@@ -276,7 +312,7 @@ function ItemCard({
         <div style={styles.cardPrice}>{item.price}</div>
         {item.storeName && (
           <div style={styles.cardStore} title={item.storeName}>
-            {isService ? `By ${item.storeName}` : item.storeName}
+            {item.storeName}
           </div>
         )}
       </div>
@@ -541,6 +577,7 @@ export default function ShopperHomePage() {
         id: item.listing_id?.toString() ?? '',
         kind: 'item',
         image: resolveImageUrl(item.image_url),
+        video: null,                        // ✅ items never have video
         title: item.title ?? 'No Title',
         price: item.price ? `₦${Number(item.price).toFixed(0)}` : '₦0',
         storeName: item.store_name ?? 'Unknown',
@@ -595,6 +632,7 @@ export default function ShopperHomePage() {
           id: s.service_id,
           kind: 'service',
           image: resolveImageUrl(s.image_url),
+          video: resolveImageUrl(s.video_url ?? null),  // ✅ carry video through
           title: s.title ?? 'Service',
           price: s.price != null
             ? `₦${Number(s.price).toFixed(0)}`
@@ -648,8 +686,6 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ✅ Interleaved feed — items and services mixed round-robin.
-  //    Memoized so the array identity is stable across renders.
   const feedItems = useMemo(
     () => interleave(listingItems, serviceItems),
     [listingItems, serviceItems],
@@ -978,6 +1014,9 @@ export default function ShopperHomePage() {
                     columns={columns}
                     gap={10}
                     keyFor={(item) => `${item.kind}-${item.id}`}
+                    weightOf={(item) =>
+                      item.kind === 'service' ? REEL_WEIGHT : ITEM_WEIGHT
+                    }
                     renderItem={(item) => (
                       <ItemCard
                         item={item}
@@ -1009,6 +1048,7 @@ export default function ShopperHomePage() {
                   columns={columns}
                   gap={10}
                   keyFor={(store) => store.id}
+                  weightOf={() => ITEM_WEIGHT}
                   renderItem={(store) => (
                     <StoreCard store={store} onPress={handleStorePress} />
                   )}
@@ -1036,6 +1076,7 @@ export default function ShopperHomePage() {
                   columns={columns}
                   gap={10}
                   keyFor={(provider) => provider.id}
+                  weightOf={() => ITEM_WEIGHT}
                   renderItem={(provider) => (
                     <ProviderCard
                       provider={provider}
