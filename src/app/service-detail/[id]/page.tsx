@@ -43,8 +43,6 @@ function resolveImageUrl(url: string | null | undefined): string {
 }
 
 function makeReference(): string {
-  // crypto.randomUUID is available in all modern browsers on secure origins.
-  // Fallback for older/insecure contexts.
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `svcpay_${crypto.randomUUID()}`;
   }
@@ -103,7 +101,6 @@ const styles: Record<string, React.CSSProperties> = {
 
   ctaRow: { display: 'flex', gap: 10, marginTop: 14 },
   ctaBook: { flex: 1, padding: '14px 16px', borderRadius: 14, border: 'none', backgroundColor: '#0504AA', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  // ✅ Pay Now — direct wallet-to-wallet transfer, always available.
   ctaPayNow: { flex: 1, padding: '14px 16px', borderRadius: 14, border: 'none', backgroundColor: '#16A34A', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 6px 20px rgba(22,163,74,0.35)' },
   ctaPayNowBusy: { opacity: 0.7, cursor: 'not-allowed' },
   ctaPayNowPaid: { backgroundColor: '#065F46', boxShadow: 'none', cursor: 'default' },
@@ -145,8 +142,11 @@ const styles: Record<string, React.CSSProperties> = {
   providerName: { color: '#111827', flex: 1, fontWeight: 700, fontSize: 15 },
   chatButton: { width: 36, height: 36, borderRadius: '50%', backgroundColor: '#0504AA14', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
-  // Success modal
-  successCard: { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: '#fff', borderRadius: 20, padding: '28px 24px', width: '88%', maxWidth: 360, zIndex: 5000, boxShadow: '0 20px 60px rgba(0,0,0,0.3)', textAlign: 'center' },
+  // ✅ Success modal — backdrop is a flex centering container. The card has
+  //    NO position/transform of its own, so Framer Motion can safely animate
+  //    `scale` without clobbering the centering math.
+  successBackdrop: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5000, padding: 20 },
+  successCard: { backgroundColor: '#fff', borderRadius: 20, padding: '28px 24px', width: '100%', maxWidth: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.3)', textAlign: 'center' },
   successIcon: { width: 64, height: 64, borderRadius: '50%', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' },
   successTitle: { fontSize: 20, fontWeight: 800, color: '#065F46', margin: '0 0 6px' },
   successSub: { fontSize: 14, color: '#555', lineHeight: 1.5, margin: '0 0 20px' },
@@ -164,7 +164,6 @@ export default function ServiceDetailPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isSaveLoading, setIsSaveLoading] = useState(false);
-  // ✅ Direct-pay state
   const [isPaying, setIsPaying] = useState(false);
   const [paidInfo, setPaidInfo] = useState<{ amount: number } | null>(null);
 
@@ -177,7 +176,6 @@ export default function ServiceDetailPage() {
   const [playing, setPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
   const [flash, setFlash] = useState<'play' | 'pause' | null>(null);
-  const [flashId, setFlashId] = useState(0);
   const [hearts, setHearts] = useState<HeartBurst[]>([]);
 
   const tapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -229,7 +227,6 @@ export default function ServiceDetailPage() {
 
   const triggerFlash = (kind: 'play' | 'pause') => {
     setFlash(kind);
-    setFlashId((id) => id + 1);
     if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
     flashTimeoutRef.current = setTimeout(() => setFlash(null), FLASH_MS);
   };
@@ -392,9 +389,6 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // ✅ Pay Now — direct wallet-to-wallet. One tap, no confirmation.
-  //    Client generates a UUID reference for idempotency; the backend
-  //    uses the DB price (not the client's amount) and rejects replay.
   const handlePayNowClick = async () => {
     if (!service || isPaying || paidInfo) return;
     if (!service.provider_id) {
@@ -524,7 +518,7 @@ export default function ServiceDetailPage() {
         <AnimatePresence>
           {flash && (
             <motion.div
-              key={`${flash}-${flashId}`}
+              key={flash}
               initial={{ opacity: 0, scale: 0.7 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.15 }}
@@ -624,7 +618,6 @@ export default function ServiceDetailPage() {
             </p>
           )}
 
-          {/* ✅ CTA row: Book + Pay Now. Pay Now is always visible. */}
           <div style={styles.ctaRow}>
             <button
               type="button"
@@ -859,25 +852,25 @@ export default function ServiceDetailPage() {
         )}
       </AnimatePresence>
 
-      {/* ✅ Success modal after a successful Pay Now */}
+      {/* ✅ Success modal — flex-centered wrapper, no transform on the card */}
       <AnimatePresence>
         {paidInfo && (
-          <>
-            <motion.div
-              key="paid-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              style={styles.backdrop}
-              onClick={() => setPaidInfo(null)}
-            />
+          <motion.div
+            key="paid-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setPaidInfo(null)}
+            style={styles.successBackdrop}
+          >
             <motion.div
               key="paid-card"
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
               style={styles.successCard}
             >
               <div style={styles.successIcon}>
@@ -907,7 +900,7 @@ export default function ServiceDetailPage() {
                 Stay here
               </button>
             </motion.div>
-          </>
+          </motion.div>
         )}
       </AnimatePresence>
 
