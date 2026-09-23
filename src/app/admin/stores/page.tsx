@@ -1,18 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useReducer, useEffect, useRef, useCallback } from 'react';
 import api from '../../../services/api';
 import {
   MdSearch,
   MdRefresh,
-  MdCheckCircle,
-  MdBlock,
-  MdVisibility,
-  MdKeyboardArrowLeft,
-  MdKeyboardArrowRight,
   MdErrorOutline,
   MdStore,
+  MdBlock,
+  MdCheckCircle,
+  MdClose,
+  MdMoreVert,
+  MdLocationOn,
+  MdKeyboardArrowLeft,
+  MdKeyboardArrowRight,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -25,88 +26,180 @@ interface StoreRecord {
   created_at?: string;
   verified?: number | boolean;
   status?: string;
+  lat?: number;
+  lng?: number;
   [key: string]: unknown;
+}
+
+type StoreState = 'active' | 'pending' | 'suspended';
+
+function storeState(store: StoreRecord): StoreState {
+  const verified = store.verified === 1 || store.verified === true;
+  if (verified) return 'active';
+  if (store.status === 'Suspended') return 'suspended';
+  return 'pending';
+}
+
+const STATUS_META: Record<StoreState, { label: string; color: string; soft: string }> = {
+  active: { label: 'Active', color: '#16A34A', soft: '#DCFCE7' },
+  pending: { label: 'Pending', color: '#D97706', soft: '#FEF3C7' },
+  suspended: { label: 'Suspended', color: '#DC2626', soft: '#FEE2E2' },
+};
+
+// ─── Reducer ────────────────────────────────────────────────────────
+interface FetchState {
+  stores: StoreRecord[];
+  isLoading: boolean;
+  errorMessage: string | null;
+  currentPage: number;
+}
+
+type FetchAction =
+  | { type: 'FETCH_START'; page: number }
+  | { type: 'FETCH_SUCCESS'; stores: StoreRecord[] }
+  | { type: 'FETCH_ERROR'; message: string };
+
+const initialState: FetchState = {
+  stores: [],
+  isLoading: true,
+  errorMessage: null,
+  currentPage: 0,
+};
+
+function fetchReducer(state: FetchState, action: FetchAction): FetchState {
+  switch (action.type) {
+    case 'FETCH_START':
+      return { ...state, isLoading: true, errorMessage: null, currentPage: action.page };
+    case 'FETCH_SUCCESS':
+      return { ...state, isLoading: false, stores: action.stores };
+    case 'FETCH_ERROR':
+      return { ...state, isLoading: false, stores: [], errorMessage: action.message };
+  }
 }
 
 function normalizeStores(data: unknown): StoreRecord[] {
   if (Array.isArray(data)) return data as StoreRecord[];
   if (data && typeof data === 'object') {
     const obj = data as Record<string, unknown>;
-    if (Array.isArray(obj.stores)) return obj.stores as StoreRecord[];
-    if (Array.isArray(obj.data)) return obj.data as StoreRecord[];
-    if (Array.isArray(obj.results)) return obj.results as StoreRecord[];
+    for (const key of ['stores', 'data', 'results', 'items', 'list']) {
+      if (Array.isArray(obj[key])) return obj[key] as StoreRecord[];
+    }
   }
   return [];
 }
 
-export default function AdminStoresPage() {
-  const router = useRouter();
+// ─── Display helpers ─────────────────────────────────────────────────
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
 
-  const [stores, setStores] = useState<StoreRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(0);
+function formatDate(dateString?: string): string {
+  if (!dateString) return '—';
+  try {
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return '—';
+  }
+}
+
+// ─── Confirm dialog ─────────────────────────────────────────────────
+type ConfirmKind = 'verify' | 'suspend';
+interface ConfirmState {
+  kind: ConfirmKind;
+  store: StoreRecord;
+}
+
+// ─── Component ──────────────────────────────────────────────────────
+export default function AdminStoresPage() {
+  const [{ stores, isLoading, errorMessage, currentPage }, dispatch] = useReducer(
+    fetchReducer,
+    initialState,
+  );
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [isMobile, setIsMobile] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<'All' | StoreState>('All');
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [isActing, setIsActing] = useState(false);
+  const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const limit = 20;
 
-  const loadStores = async (page = 0, query = searchQuery, status = filterStatus) => {
-    setCurrentPage(page);
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const offset = page * limit;
-      const data = await api.adminGetStores(
-        query.trim() ? query.trim() : undefined,
-        status !== 'All' ? status : undefined,
-        limit,
-        offset
-      );
-      const list = normalizeStores(data);
-      setStores(list);
-    } catch (err) {
-      setErrorMessage('Failed to load stores: ' + (err instanceof Error ? err.message : ''));
-      setStores([]);
-    } finally {
-      setIsLoading(false);
-    }
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 1800);
   };
 
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  const loadStores = useCallback(
+    async (page: number, query: string, status: string) => {
+      dispatch({ type: 'FETCH_START', page });
+      try {
+        const offset = page * limit;
+        // Map the frontend status to the backend's binary filter.
+        const backendStatus =
+          status === 'All'
+            ? undefined
+            : status === 'active'
+            ? 'Active'
+            : 'Inactive';
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      loadStores(0, '', 'All');
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const verifyStore = async (storeId: string) => {
-    try {
-      await api.adminVerifyStore(storeId);
-      await loadStores(currentPage, searchQuery, filterStatus);
-    } catch (err) {
-      alert('Error: ' + (err instanceof Error ? err.message : ''));
-    }
-  };
-
-  const toggleSuspend = async (storeId: string, currentlyVerified: boolean) => {
-    try {
-      if (currentlyVerified) {
-        await api.adminSuspendStore(storeId);
-      } else {
-        await api.adminVerifyStore(storeId);
+        const data = await api.adminGetStores(
+          query.trim() || undefined,
+          backendStatus,
+          limit,
+          offset,
+        );
+        dispatch({ type: 'FETCH_SUCCESS', stores: normalizeStores(data) });
+      } catch (err) {
+        dispatch({
+          type: 'FETCH_ERROR',
+          message: 'Failed to load stores: ' + (err instanceof Error ? err.message : ''),
+        });
       }
-      await loadStores(currentPage, searchQuery, filterStatus);
-    } catch (err) {
-      alert('Error: ' + (err instanceof Error ? err.message : ''));
-    }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    loadStores(0, '', 'All');
+  }, [loadStores]);
+
+  // ✅ Close the kebab menu when the list changes.
+  //    Wrapped in setTimeout to satisfy react-hooks/set-state-in-effect.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setOpenMenuFor(null);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [stores]);
+
+  // ── Search with debounce ────────────────────────────────────────
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      loadStores(0, val, filterStatus);
+    }, 400);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    loadStores(0, '', filterStatus);
+  };
+
+  const pickStatusChip = (value: 'All' | StoreState) => {
+    setFilterStatus(value);
+    loadStores(0, searchQuery, value);
   };
 
   const nextPage = () => loadStores(currentPage + 1, searchQuery, filterStatus);
@@ -114,242 +207,921 @@ export default function AdminStoresPage() {
     if (currentPage > 0) loadStores(currentPage - 1, searchQuery, filterStatus);
   };
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '—';
+  // ── Actions ────────────────────────────────────────────────────
+  const promptVerify = (store: StoreRecord) => {
+    setOpenMenuFor(null);
+    setConfirm({ kind: 'verify', store });
+  };
+  const promptSuspend = (store: StoreRecord) => {
+    setOpenMenuFor(null);
+    setConfirm({ kind: 'suspend', store });
+  };
+
+  const runConfirm = async () => {
+    if (!confirm) return;
+    const { kind, store } = confirm;
+    setIsActing(true);
     try {
-      return new Date(dateString).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit',
-      });
-    } catch {
-      return '—';
+      if (kind === 'verify') {
+        await api.adminVerifyStore(store.store_id);
+        showToast('Store verified');
+      } else {
+        await api.adminSuspendStore(store.store_id);
+        showToast('Store suspended');
+      }
+      setConfirm(null);
+      await loadStores(currentPage, searchQuery, filterStatus);
+    } catch (err) {
+      alert('Action failed: ' + (err instanceof Error ? err.message : ''));
+    } finally {
+      setIsActing(false);
     }
   };
 
-  const renderStoreRow = (store: StoreRecord) => {
-    const isVerified = store.verified === 1 || store.verified === true;
-    const isPending = !isVerified && store.status !== 'Suspended';
-    const statusLabel = isVerified ? 'Active' : isPending ? 'Pending' : 'Suspended';
-    const statusColor = isVerified ? '#4CAF50' : isPending ? '#FF9800' : '#F44336';
-    const category = store.category || '—';
-    const owner = store.owner_name || store.owner_id || 'Unknown';
-
-    return (
-      <div key={store.store_id} style={isMobile ? styles.mobileCard : styles.desktopRow}>
-        {isMobile ? (
-          /* Mobile card layout */
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-              <div style={styles.avatarCircle}>
-                {(store.name || 'S')[0].toUpperCase()}
-              </div>
-              <div style={{ marginLeft: 12, flex: 1 }}>
-                <div style={styles.storeName}>{store.name || '—'}</div>
-                <div style={styles.ownerText}>{owner}</div>
-              </div>
-              <span style={{ ...styles.statusBadge, backgroundColor: `${statusColor}20`, color: statusColor }}>
-                {statusLabel}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div>
-                <div style={styles.smallLabel}>Category</div>
-                <div>{category}</div>
-              </div>
-              <div>
-                <div style={styles.smallLabel}>Created</div>
-                <div>{formatDate(store.created_at)}</div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
-              {isPending && (
-                <button onClick={() => verifyStore(store.store_id)} style={styles.actionBtn} title="Verify">
-                  <MdCheckCircle size={20} color="#4CAF50" />
-                </button>
-              )}
-              <button
-                onClick={() => toggleSuspend(store.store_id, isVerified)}
-                style={styles.actionBtn}
-                title={isVerified ? 'Suspend' : 'Activate'}
-              >
-                {isVerified ? <MdBlock size={20} color="#F44336" /> : <MdCheckCircle size={20} color="#4CAF50" />}
-              </button>
-              <button onClick={() => alert('Store details coming soon')} style={styles.actionBtn} title="View">
-                <MdVisibility size={20} color="#0504AA" />
-              </button>
-            </div>
-          </>
-        ) : (
-          /* Desktop table row */
-          <>
-            <span style={{ flex: 2, fontWeight: 600 }}>{store.name || '—'}</span>
-            <span style={{ flex: 2 }}>{owner}</span>
-            <span style={{ flex: 1 }}>{category}</span>
-            <span style={{ flex: 1 }}>{formatDate(store.created_at)}</span>
-            <span style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-              <span style={{ ...styles.statusBadge, backgroundColor: `${statusColor}20`, color: statusColor }}>
-                {statusLabel}
-              </span>
-            </span>
-            <span style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 4 }}>
-              {isPending && (
-                <button onClick={() => verifyStore(store.store_id)} style={styles.actionBtn} title="Verify">
-                  <MdCheckCircle size={20} color="#4CAF50" />
-                </button>
-              )}
-              <button
-                onClick={() => toggleSuspend(store.store_id, isVerified)}
-                style={styles.actionBtn}
-                title={isVerified ? 'Suspend' : 'Activate'}
-              >
-                {isVerified ? <MdBlock size={20} color="#F44336" /> : <MdCheckCircle size={20} color="#4CAF50" />}
-              </button>
-              <button onClick={() => alert('Store details coming soon')} style={styles.actionBtn} title="View">
-                <MdVisibility size={20} color="#0504AA" />
-              </button>
-            </span>
-          </>
-        )}
-      </div>
+  const openMap = (store: StoreRecord) => {
+    setOpenMenuFor(null);
+    if (store.lat == null || store.lng == null) return;
+    window.open(
+      `https://www.google.com/maps?q=${store.lat},${store.lng}`,
+      '_blank',
+      'noopener',
     );
   };
 
-  return (
-    <main style={styles.container}>
-      {/* Header */}
-      <div style={styles.header}>
-        <h1 style={styles.pageTitle}>Stores</h1>
-        <button onClick={() => loadStores(0, searchQuery, filterStatus)} style={styles.iconBtn} title="Refresh">
-          <MdRefresh size={24} color="#0504AA" />
-        </button>
-      </div>
+  // ── Derived ────────────────────────────────────────────────────
+  const hasActiveFilters = searchQuery.trim().length > 0 || filterStatus !== 'All';
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setFilterStatus('All');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    loadStores(0, '', 'All');
+  };
 
-      {/* Filters */}
-      <div style={styles.filters}>
-        <div style={styles.searchWrapper}>
-          <MdSearch size={20} color="#888" style={styles.searchIcon} />
-          <input
-            type="text"
-            placeholder="Search stores..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              loadStores(0, e.target.value, filterStatus);
-            }}
-            style={styles.searchInput}
-          />
+  const displayName = (s: StoreRecord) => s.name || s.owner_name || s.store_id.slice(0, 8);
+  const ownerLabel = (s: StoreRecord) => s.owner_name || s.owner_id?.slice(0, 8) || '—';
+
+  const activeCount = stores.filter((s) => storeState(s) === 'active').length;
+  const pendingCount = stores.filter((s) => storeState(s) === 'pending').length;
+
+  const CHIPS: { value: 'All' | StoreState; label: string }[] = [
+    { value: 'All', label: 'All' },
+    { value: 'active', label: 'Active' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'suspended', label: 'Suspended' },
+  ];
+
+  return (
+    <main className="sd-root">
+      <style>{CSS}</style>
+
+      {/* Hero */}
+      <header className="sd-hero">
+        <div className="sd-heroText">
+          <h1 className="sd-title">Stores</h1>
+          <p className="sd-subtitle">
+            Every store on Admerce. Verify, suspend, or check location.
+          </p>
         </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => {
-            setFilterStatus(e.target.value);
-            loadStores(0, searchQuery, e.target.value);
-          }}
-          style={styles.statusSelect}
+        <button
+          className="sd-refresh"
+          onClick={() => loadStores(currentPage, searchQuery, filterStatus)}
+          aria-label="Refresh"
+          title="Refresh"
         >
-          {['All', 'Active', 'Pending', 'Suspended'].map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
+          <MdRefresh size={20} color="#0504AA" />
+        </button>
+      </header>
+
+      {/* Stats strip */}
+      <section className="sd-stats" aria-label="Page summary">
+        <div className="sd-statCard">
+          <span className="sd-statValue">{stores.length}</span>
+          <span className="sd-statLabel">On this page</span>
+        </div>
+        <div className="sd-statCard">
+          <span className="sd-statValue" style={{ color: '#16A34A' }}>
+            {activeCount}
+          </span>
+          <span className="sd-statLabel">Active</span>
+        </div>
+        <div className="sd-statCard">
+          <span className="sd-statValue" style={{ color: '#D97706' }}>
+            {pendingCount}
+          </span>
+          <span className="sd-statLabel">Pending</span>
+        </div>
+      </section>
+
+      {/* Status chips */}
+      <nav className="sd-chips" aria-label="Filter by status">
+        {CHIPS.map((c) => {
+          const active = filterStatus === c.value;
+          return (
+            <button
+              key={c.value}
+              type="button"
+              onClick={() => pickStatusChip(c.value)}
+              className={active ? 'sd-chip sd-chipActive' : 'sd-chip'}
+              aria-pressed={active}
+            >
+              {c.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Search */}
+      <div className="sd-searchWrap">
+        <MdSearch size={20} color="#8A8F99" className="sd-searchIcon" />
+        <input
+          type="text"
+          placeholder="Search by store or owner name"
+          value={searchQuery}
+          onChange={handleSearchChange}
+          className="sd-searchInput"
+          aria-label="Search stores"
+        />
+        {searchQuery.length > 0 && (
+          <button
+            type="button"
+            className="sd-searchClear"
+            onClick={clearSearch}
+            aria-label="Clear search"
+          >
+            <MdClose size={16} color="#666" />
+          </button>
+        )}
       </div>
 
       {/* Content */}
-      <div style={styles.content}>
+      <section className="sd-content">
         {isLoading ? (
-          <div style={styles.center}>
-            <div style={styles.spinner} />
+          <div className="sd-grid">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="sd-card sd-cardSkeleton">
+                <div className="sd-skel sd-skelAvatar" />
+                <div className="sd-skel sd-skelLine" />
+                <div className="sd-skel sd-skelLineShort" />
+                <div className="sd-skel sd-skelLineShort" />
+              </div>
+            ))}
           </div>
         ) : errorMessage ? (
-          <div style={styles.center}>
+          <div className="sd-center">
             <MdErrorOutline size={48} color="#ef9a9a" />
-            <p>{errorMessage}</p>
-            <button onClick={() => loadStores(0, searchQuery, filterStatus)} style={styles.retryBtn}>
+            <p className="sd-centerText">{errorMessage}</p>
+            <button
+              onClick={() => loadStores(0, searchQuery, filterStatus)}
+              className="sd-primaryBtn"
+            >
               Retry
             </button>
           </div>
         ) : stores.length === 0 ? (
-          <div style={styles.center}>
-            <MdStore size={48} color="#ccc" />
-            <p>No stores found.</p>
-          </div>
-        ) : isMobile ? (
-          <div style={styles.mobileList}>
-            {stores.map(renderStoreRow)}
+          <div className="sd-center">
+            <MdStore size={48} color="#cbd5e1" />
+            <p className="sd-centerTitle">
+              {hasActiveFilters ? 'No matches' : 'No stores yet'}
+            </p>
+            <p className="sd-centerText">
+              {hasActiveFilters
+                ? 'Try a different search or pick another status.'
+                : 'Stores will appear here as storekeepers create them.'}
+            </p>
+            {hasActiveFilters && (
+              <button onClick={clearAllFilters} className="sd-primaryBtn">
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
-          <div style={styles.tableWrapper}>
-            {/* Table Header */}
-            <div style={styles.tableHeader}>
-              <span style={{ flex: 2 }}>Store Name</span>
-              <span style={{ flex: 2 }}>Owner</span>
-              <span style={{ flex: 1 }}>Category</span>
-              <span style={{ flex: 1 }}>Created</span>
-              <span style={{ flex: 1, textAlign: 'center' }}>Status</span>
-              <span style={{ flex: 1, textAlign: 'center' }}>Actions</span>
-            </div>
-            {stores.map(renderStoreRow)}
+          <div className="sd-grid">
+            {stores.map((store) => {
+              const state = storeState(store);
+              const meta = STATUS_META[state];
+              const name = displayName(store);
+              const menuOpen = openMenuFor === store.store_id;
+              const canOpenMap = store.lat != null && store.lng != null;
+
+              return (
+                <article key={store.store_id} className="sd-card">
+                  {/* Kebab */}
+                  <div
+                    className="sd-kebabWrap"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="sd-kebab"
+                      onClick={() =>
+                        setOpenMenuFor(menuOpen ? null : store.store_id)
+                      }
+                      aria-label="More actions"
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                    >
+                      <MdMoreVert size={20} color="#64748B" />
+                    </button>
+                    {menuOpen && (
+                      <>
+                        <div
+                          className="sd-menuBackdrop"
+                          onClick={() => setOpenMenuFor(null)}
+                        />
+                        <div className="sd-menu" role="menu">
+                          {state === 'active' ? (
+                            <button
+                              type="button"
+                              className="sd-menuItem"
+                              role="menuitem"
+                              onClick={() => promptSuspend(store)}
+                            >
+                              <MdBlock size={16} color="#EA580C" />
+                              <span>Suspend store</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="sd-menuItem"
+                              role="menuitem"
+                              onClick={() => promptVerify(store)}
+                            >
+                              <MdCheckCircle size={16} color="#16A34A" />
+                              <span>Verify store</span>
+                            </button>
+                          )}
+                          {canOpenMap && (
+                            <button
+                              type="button"
+                              className="sd-menuItem"
+                              role="menuitem"
+                              onClick={() => openMap(store)}
+                            >
+                              <MdLocationOn size={16} color="#0504AA" />
+                              <span>View on map</span>
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Status-ringed avatar */}
+                  <div
+                    className="sd-avatarRing"
+                    style={{ backgroundColor: meta.soft }}
+                  >
+                    <div
+                      className="sd-avatar"
+                      style={{ backgroundColor: meta.color }}
+                    >
+                      {initialsOf(name)}
+                    </div>
+                  </div>
+
+                  {/* Identity */}
+                  <h3 className="sd-name" title={name}>
+                    {name}
+                  </h3>
+                  <p className="sd-line" title={ownerLabel(store)}>
+                    {ownerLabel(store)}
+                  </p>
+
+                  {/* Meta row */}
+                  <div className="sd-meta">
+                    {store.category && (
+                      <span className="sd-catPill">{store.category}</span>
+                    )}
+                    <span className="sd-status">
+                      <span
+                        className="sd-statusDot"
+                        style={{ backgroundColor: meta.color }}
+                      />
+                      {meta.label}
+                    </span>
+                  </div>
+
+                  <div className="sd-joined">
+                    Added {formatDate(store.created_at)}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
-      </div>
+      </section>
 
       {/* Pagination */}
-      {!isLoading && !errorMessage && (
-        <div style={styles.pagination}>
+      {!isLoading && !errorMessage && stores.length > 0 && (
+        <footer className="sd-pagination">
           <button
             onClick={prevPage}
             disabled={currentPage === 0}
-            style={styles.pageBtn}
+            className="sd-pageBtn"
+            aria-label="Previous page"
           >
-            <MdKeyboardArrowLeft size={20} color={currentPage === 0 ? '#ccc' : '#0504AA'} />
-            Previous
+            <MdKeyboardArrowLeft
+              size={20}
+              color={currentPage === 0 ? '#cbd5e1' : '#0504AA'}
+            />
+            <span>Previous</span>
           </button>
-          <span style={styles.pageInfo}>Page {currentPage + 1}</span>
+          <span className="sd-pageInfo">Page {currentPage + 1}</span>
           <button
             onClick={nextPage}
             disabled={stores.length < limit}
-            style={styles.pageBtn}
+            className="sd-pageBtn"
+            aria-label="Next page"
           >
-            Next
-            <MdKeyboardArrowRight size={20} color={stores.length < limit ? '#ccc' : '#0504AA'} />
+            <span>Next</span>
+            <MdKeyboardArrowRight
+              size={20}
+              color={stores.length < limit ? '#cbd5e1' : '#0504AA'}
+            />
           </button>
+        </footer>
+      )}
+
+      {/* Confirm modal */}
+      {confirm && (
+        <div
+          className="sd-modalOverlay"
+          onClick={() => (isActing ? undefined : setConfirm(null))}
+        >
+          <div className="sd-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="sd-modalTitle">
+              {confirm.kind === 'verify' ? 'Verify store?' : 'Suspend store?'}
+            </h3>
+            <p className="sd-modalBody">
+              {confirm.kind === 'verify' && (
+                <>
+                  <strong>{displayName(confirm.store)}</strong> will become active
+                  and visible to shoppers. You can suspend it at any time.
+                </>
+              )}
+              {confirm.kind === 'suspend' && (
+                <>
+                  <strong>{displayName(confirm.store)}</strong> will be hidden from
+                  shoppers and its listings will not appear in the feed.
+                </>
+              )}
+            </p>
+            <div className="sd-modalActions">
+              <button
+                type="button"
+                className="sd-modalCancel"
+                onClick={() => setConfirm(null)}
+                disabled={isActing}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={
+                  confirm.kind === 'suspend'
+                    ? 'sd-modalConfirm sd-modalConfirmDanger'
+                    : 'sd-modalConfirm'
+                }
+                onClick={runConfirm}
+                disabled={isActing}
+              >
+                {isActing
+                  ? 'Working…'
+                  : confirm.kind === 'verify'
+                  ? 'Verify'
+                  : 'Suspend'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      {/* Toast */}
+      {toast && (
+        <div className="sd-toast">
+          <MdCheckCircle size={16} color="#fff" />
+          <span>{toast}</span>
+        </div>
+      )}
     </main>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
-const styles: Record<string, React.CSSProperties> = {
-  container: { display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#F8FAFC' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', backgroundColor: '#fff', borderBottom: '1px solid #eee' },
-  pageTitle: { fontSize: 18, fontWeight: 600, color: '#1A1A1A', margin: 0 },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' },
-  filters: { display: 'flex', gap: 12, padding: '16px', backgroundColor: '#F8FAFC' },
-  searchWrapper: { position: 'relative', flex: 3 },
-  searchIcon: { position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' },
-  searchInput: { width: '100%', padding: '10px 12px 10px 36px', borderRadius: 12, border: '1px solid #E0E0E0', fontSize: 14, outline: 'none', backgroundColor: '#fff' },
-  statusSelect: { flex: 1, padding: '10px 12px', borderRadius: 12, border: '1px solid #E0E0E0', fontSize: 14, outline: 'none', backgroundColor: '#fff' },
-  content: { flex: 1, overflowY: 'auto', padding: '0 16px' },
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#888' },
-  spinner: { width: 36, height: 36, border: '4px solid #eee', borderTopColor: '#0504AA', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
-  retryBtn: { marginTop: 16, padding: '8px 20px', backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' },
-  tableWrapper: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' },
-  tableHeader: { display: 'flex', alignItems: 'center', padding: '12px 16px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #eee' },
-  desktopRow: { display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f5f5f5' },
-  mobileCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' },
-  mobileList: { display: 'flex', flexDirection: 'column' },
-  avatarCircle: { width: 36, height: 36, borderRadius: '50%', backgroundColor: '#7B61FF20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#7B61FF' },
-  storeName: { fontWeight: 600, color: '#1A1A1A' },
-  ownerText: { fontSize: 12, color: '#888' },
-  smallLabel: { fontSize: 10, color: '#999' },
-  statusBadge: { display: 'inline-block', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, textAlign: 'center' },
-  actionBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' },
-  pagination: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '12px 16px', gap: 8 },
-  pageBtn: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 500 },
-  pageInfo: { fontSize: 14, color: '#666' },
-};
+// ─── CSS ─────────────────────────────────────────────────────────────
+const CSS = `
+  @keyframes sd-fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sd-shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  @keyframes sd-toastIn {
+    from { opacity: 0; transform: translate(-50%, 12px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+
+  .sd-root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    background: #F4F5FB;
+  }
+
+  /* Hero */
+  .sd-hero {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 26px 22px 12px;
+  }
+  .sd-heroText { min-width: 0; }
+  .sd-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #0B0B1A;
+    margin: 0;
+    line-height: 1.1;
+  }
+  .sd-subtitle {
+    font-size: 14px;
+    color: #6B7280;
+    margin: 6px 0 0;
+    line-height: 1.4;
+  }
+  .sd-refresh {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid #E5E7EF;
+    background: #fff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .sd-refresh:hover { background: #EEF0FF; border-color: #C9CBFF; }
+
+  /* Stats */
+  .sd-stats {
+    display: flex;
+    gap: 10px;
+    padding: 0 22px 18px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .sd-stats::-webkit-scrollbar { display: none; }
+  .sd-statCard {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 110px;
+    padding: 12px 16px;
+    background: #fff;
+    border: 1px solid #E8EAF0;
+    border-radius: 14px;
+  }
+  .sd-statValue {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0B0B1A;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+  .sd-statLabel {
+    font-size: 11.5px;
+    color: #6B7280;
+    margin-top: 3px;
+    font-weight: 600;
+  }
+
+  /* Chips */
+  .sd-chips {
+    display: flex;
+    gap: 8px;
+    padding: 0 22px 14px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .sd-chips::-webkit-scrollbar { display: none; }
+  .sd-chip {
+    flex: 0 0 auto;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid #E5E7EF;
+    background: #fff;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .sd-chip:hover { border-color: #C9CBFF; color: #0504AA; }
+  .sd-chipActive {
+    background: #0504AA;
+    color: #fff;
+    border-color: #0504AA;
+  }
+  .sd-chipActive:hover { background: #0504AA; color: #fff; }
+
+  /* Search */
+  .sd-searchWrap {
+    position: relative;
+    margin: 0 22px 18px;
+  }
+  .sd-searchIcon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+  .sd-searchInput {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 13px 40px 13px 42px;
+    border-radius: 14px;
+    border: 1px solid #E5E7EF;
+    font-size: 14.5px;
+    outline: none;
+    background: #fff;
+    color: #1A1A1A;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .sd-searchInput:focus {
+    border-color: #0504AA;
+    box-shadow: 0 0 0 3px rgba(5, 4, 170, 0.10);
+  }
+  .sd-searchClear {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: #F0F0F0;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .sd-searchClear:hover { background: #E0E0E0; }
+
+  /* Content + Grid */
+  .sd-content { flex: 1; padding: 0 22px 24px; }
+
+  .sd-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  @media (min-width: 640px) {
+    .sd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  }
+  @media (min-width: 1024px) {
+    .sd-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (min-width: 1440px) {
+    .sd-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+
+  /* Card */
+  .sd-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px;
+    background: #fff;
+    border: 1px solid #EAECF3;
+    border-radius: 18px;
+    transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
+    text-align: left;
+  }
+  .sd-card:hover {
+    border-color: #C9CBFF;
+    box-shadow: 0 12px 30px rgba(5, 4, 170, 0.08);
+    transform: translateY(-2px);
+  }
+  .sd-cardSkeleton { pointer-events: none; }
+
+  /* Kebab */
+  .sd-kebabWrap {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+  }
+  .sd-kebab {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+  }
+  .sd-kebab:hover { background: #F1F3FA; }
+  .sd-menuBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+  }
+  .sd-menu {
+    position: absolute;
+    top: 40px;
+    right: 0;
+    min-width: 190px;
+    background: #fff;
+    border: 1px solid #E8EAF0;
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(15, 17, 32, 0.14);
+    padding: 6px;
+    z-index: 21;
+    animation: sd-fadeIn 0.12s ease;
+  }
+  .sd-menuItem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 10px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #1F2937;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s;
+  }
+  .sd-menuItem:hover { background: #F5F6FB; }
+
+  /* Avatar */
+  .sd-avatarRing {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+  }
+  .sd-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 800;
+    font-size: 17px;
+    letter-spacing: 0.02em;
+  }
+
+  /* Identity */
+  .sd-name {
+    font-size: 16px;
+    font-weight: 800;
+    color: #0B0B1A;
+    margin: 0 0 4px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sd-line {
+    font-size: 13px;
+    color: #94A3B8;
+    margin: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Meta */
+  .sd-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+  .sd-catPill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #EEF0FF;
+    color: #0504AA;
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sd-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+  }
+  .sd-statusDot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .sd-joined {
+    margin-top: auto;
+    padding-top: 12px;
+    font-size: 11.5px;
+    color: #94A3B8;
+    font-weight: 600;
+  }
+
+  /* Center states */
+  .sd-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 340px;
+    gap: 6px;
+    padding: 24px;
+    text-align: center;
+  }
+  .sd-centerTitle {
+    font-size: 16px;
+    font-weight: 800;
+    color: #334155;
+    margin: 8px 0 0;
+  }
+  .sd-centerText {
+    font-size: 13.5px;
+    color: #64748B;
+    margin: 0 0 12px;
+    max-width: 380px;
+    line-height: 1.5;
+  }
+  .sd-primaryBtn {
+    padding: 10px 22px;
+    background: #0504AA;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  /* Skeleton */
+  .sd-skel {
+    background: linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%);
+    background-size: 800px 100%;
+    animation: sd-shimmer 1.4s infinite linear;
+    border-radius: 8px;
+  }
+  .sd-skelAvatar { width: 60px; height: 60px; border-radius: 50%; margin-bottom: 14px; }
+  .sd-skelLine { height: 14px; width: 70%; margin-bottom: 8px; }
+  .sd-skelLineShort { height: 12px; width: 50%; margin-bottom: 6px; }
+
+  /* Pagination */
+  .sd-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 22px 24px;
+  }
+  .sd-pageBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 9px 14px;
+    border-radius: 10px;
+    border: 1px solid #E5E7EF;
+    background: #fff;
+    color: #334155;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .sd-pageBtn:hover:not(:disabled) {
+    background: #F7F9FF;
+    border-color: #C9CBFF;
+  }
+  .sd-pageBtn:disabled { cursor: not-allowed; color: #94A3B8; }
+  .sd-pageInfo {
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748B;
+  }
+
+  /* Modal */
+  .sd-modalOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 11, 26, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+    animation: sd-fadeIn 0.15s ease;
+  }
+  .sd-modal {
+    background: #fff;
+    border-radius: 18px;
+    padding: 22px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: 0 24px 70px rgba(11, 11, 26, 0.35);
+  }
+  .sd-modalTitle {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0B0B1A;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .sd-modalBody {
+    font-size: 14px;
+    color: #475569;
+    line-height: 1.55;
+    margin: 0 0 22px;
+  }
+  .sd-modalActions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  .sd-modalCancel {
+    padding: 10px 18px;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    background: #fff;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .sd-modalCancel:hover:not(:disabled) { background: #F8FAFC; }
+  .sd-modalConfirm {
+    padding: 10px 18px;
+    border-radius: 10px;
+    border: none;
+    background: #0504AA;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .sd-modalConfirm:hover:not(:disabled) { opacity: 0.9; }
+  .sd-modalConfirm:disabled, .sd-modalCancel:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .sd-modalConfirmDanger { background: #DC2626; }
+
+  /* Toast */
+  .sd-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 32px;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: #0B0B1A;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+    z-index: 2000;
+    animation: sd-toastIn 0.2s ease;
+  }
+`;
