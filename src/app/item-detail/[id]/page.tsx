@@ -36,7 +36,7 @@ interface Listing {
   image_url: string;
   description?: string;
   store_id: string;
-  quantity_available?: number;
+  quantity_available?: number | null;
   [key: string]: unknown;
 }
 
@@ -61,10 +61,18 @@ interface ToastMessage {
 
 type ConfirmKind = 'pickup-now' | null;
 
+// ✅ Cap for unknown stock. The backend rejects over-orders — this is
+//    just a UI sanity bound so users can't tap "+" 500 times.
+const UNKNOWN_STOCK_MAX = 99;
+
 // ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string {
   if (!url) return '';
-  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) {
+  if (
+    url.startsWith('http') ||
+    url.startsWith('blob:') ||
+    url.startsWith('data:')
+  ) {
     return url;
   }
   const base =
@@ -83,6 +91,25 @@ function formatNaira(n: number): string {
 function buildConversationId(myUserId: string, otherUserId: string): string {
   const pair = [myUserId || 'me', otherUserId].sort();
   return `${pair[0]}_${pair[1]}`;
+}
+
+// ✅ NEW — centralized stock presentation. Four honest states.
+//    `known` distinguishes "0 units" from "backend didn't tell us".
+function deriveStock(
+  raw: number | null | undefined,
+): { known: boolean; count: number; label: string; tone: 'ok' | 'low' | 'out' | 'unknown' } {
+  const isKnown = typeof raw === 'number' && Number.isFinite(raw);
+  if (!isKnown) {
+    return { known: false, count: UNKNOWN_STOCK_MAX, label: 'In stock', tone: 'unknown' };
+  }
+  const n = Math.max(0, Math.floor(raw as number));
+  if (n === 0) {
+    return { known: true, count: 0, label: 'Out of stock', tone: 'out' };
+  }
+  if (n <= 5) {
+    return { known: true, count: n, label: `Only ${n} left`, tone: 'low' };
+  }
+  return { known: true, count: n, label: `${n} in stock`, tone: 'ok' };
 }
 
 // ─── Toast ──────────────────────────────────────────────────────────
@@ -123,13 +150,63 @@ function Toast({
         animation: 'idToastIn 0.2s ease',
       }}
     >
-      {toast.kind === 'success' && (
-        <MdCheckCircle size={18} color={color.icon} />
-      )}
-      {toast.kind === 'error' && (
-        <MdErrorOutline size={18} color={color.icon} />
-      )}
+      {toast.kind === 'success' && <MdCheckCircle size={18} color={color.icon} />}
+      {toast.kind === 'error' && <MdErrorOutline size={18} color={color.icon} />}
       <span style={{ flex: 1 }}>{toast.text}</span>
+    </div>
+  );
+}
+
+// ─── Fullscreen image viewer ────────────────────────────────────────
+// ✅ NEW — tap the hero image to open it. Tap anywhere (or the X) to close.
+//    Body scroll is locked while open. Escape also closes on desktop.
+function FullscreenViewer({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="idt-viewerOverlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Image viewer"
+    >
+      <button
+        type="button"
+        className="idt-viewerClose"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        aria-label="Close viewer"
+      >
+        <MdClose size={22} color="#fff" />
+      </button>
+      <img
+        src={src}
+        alt={alt}
+        className="idt-viewerImg"
+        onClick={(e) => e.stopPropagation()}
+      />
     </div>
   );
 }
@@ -191,25 +268,27 @@ export default function ItemDetailPage() {
   const [isSaveLoading, setIsSaveLoading] = useState(false);
 
   const [quantity, setQuantity] = useState(1);
-  const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('pickup');
+  const [fulfillmentType, setFulfillmentType] =
+    useState<FulfillmentType>('pickup');
   const [pickupTiming, setPickupTiming] = useState<PickupTiming>('now');
 
-  const [stockAvailable, setStockAvailable] = useState(0);
+  const [rawStock, setRawStock] = useState<number | null | undefined>(undefined);
   const [rating, setRating] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
 
   const [isPickTimeOpen, setIsPickTimeOpen] = useState(false);
   const [confirmKind, setConfirmKind] = useState<ConfirmKind>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [retryKey, setRetryKey] = useState(0);
 
   // ── Toast helpers ───────────────────────────────────────────────
   const showToast = useCallback(
     (kind: ToastMessage['kind'], text: string) => {
-      const id = Date.now() + Math.random();
-      setToasts((prev) => [...prev, { id, kind, text }]);
+      const toastId = Date.now() + Math.random();
+      setToasts((prev) => [...prev, { id: toastId, kind, text }]);
       setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
+        setToasts((prev) => prev.filter((t) => t.id !== toastId));
       }, 3600);
     },
     [],
@@ -246,11 +325,11 @@ export default function ItemDetailPage() {
 
       setListing(listingData);
       setStore(storeData);
-      setStockAvailable(listingData.quantity_available ?? 0);
+      // ✅ Preserve raw value so we can distinguish "0" from "missing"
+      setRawStock(listingData.quantity_available);
       setRating(storeData?.rating ?? 0);
       setReviewCount(storeData?.reviews_count ?? 0);
 
-      // Save status is best-effort — auth required
       if (getToken()) {
         const saveStatus = await api
           .getSaveStatus(listingData.listing_id)
@@ -280,6 +359,11 @@ export default function ItemDetailPage() {
     })();
   }, []);
 
+  // ✅ Derived stock info
+  const stock = useMemo(() => deriveStock(rawStock), [rawStock]);
+  const outOfStock = stock.known && stock.count === 0;
+  const maxQty = stock.known ? stock.count : UNKNOWN_STOCK_MAX;
+
   // ── Actions ─────────────────────────────────────────────────────
   const confirmInstantPickup = useCallback(async () => {
     if (!listing || !store) return;
@@ -294,7 +378,9 @@ export default function ItemDetailPage() {
       );
       showToast(
         'success',
-        `Paid ${formatNaira(total)} · ${quantity} item${quantity > 1 ? 's' : ''}`,
+        `Paid ${formatNaira(total)} · ${quantity} item${
+          quantity > 1 ? 's' : ''
+        }`,
       );
     } catch (err) {
       showToast('error', extractErrorDetail(err, 'Payment failed'));
@@ -409,7 +495,9 @@ export default function ItemDetailPage() {
 
       showToast(
         'success',
-        `Delivery confirmed · ${courierName} · ETA ${estimatedTime} min · Total ${formatNaira(total + deliveryFee)}`,
+        `Delivery confirmed · ${courierName} · ETA ${estimatedTime} min · Total ${formatNaira(
+          total + deliveryFee,
+        )}`,
       );
     } catch (err) {
       showToast('error', extractErrorDetail(err, 'Delivery failed'));
@@ -445,6 +533,12 @@ export default function ItemDetailPage() {
       showToast('error', 'Could not open chat');
     }
   }, [store, router, requireAuth, showToast]);
+
+  // ✅ NEW — tap the store image or name → store detail
+  const openStore = useCallback(() => {
+    if (!store?.store_id) return;
+    router.push(`/store-detail/${store.store_id}`);
+  }, [store, router]);
 
   const toggleSave = useCallback(async () => {
     if (!listing || isSaveLoading) return;
@@ -495,6 +589,10 @@ export default function ItemDetailPage() {
   }, [listing, showToast]);
 
   const handleCTAClick = useCallback(() => {
+    if (outOfStock) {
+      showToast('info', 'This item is out of stock');
+      return;
+    }
     if (!requireAuth()) return;
     if (!listing || !store) return;
 
@@ -519,6 +617,7 @@ export default function ItemDetailPage() {
         break;
     }
   }, [
+    outOfStock,
     requireAuth,
     listing,
     store,
@@ -537,6 +636,7 @@ export default function ItemDetailPage() {
   );
 
   const ctaLabel = useMemo(() => {
+    if (outOfStock) return 'Out of stock';
     if (fulfillmentType === 'delivery') {
       return enableDelivery ? 'Deliver to Me' : 'Coming Soon';
     }
@@ -549,7 +649,7 @@ export default function ItemDetailPage() {
       case 'basket':
         return `Add to Basket${qtySuffix}`;
     }
-  }, [fulfillmentType, enableDelivery, pickupTiming, quantity]);
+  }, [outOfStock, fulfillmentType, enableDelivery, pickupTiming, quantity]);
 
   // ── Render gates ────────────────────────────────────────────────
   if (loading) {
@@ -615,27 +715,30 @@ export default function ItemDetailPage() {
 
   const imageUrl = resolveImageUrl(listing.image_url);
   const storeImage = store ? resolveImageUrl(store.store_image_url) : null;
-  const hasStock = stockAvailable > 0;
   const deliveryDisabled = fulfillmentType === 'delivery' && !enableDelivery;
+  const ctaDisabled = isLoading || deliveryDisabled || outOfStock;
 
   return (
     <main className="idt-root">
       <style>{CSS}</style>
 
-      {/* Toast stack */}
       {toasts.length > 0 && (
         <div className="idt-toastStack">
           {toasts.map((t) => (
-            <Toast
-              key={t.id}
-              toast={t}
-              onDismiss={() => dismissToast(t.id)}
-            />
+            <Toast key={t.id} toast={t} onDismiss={() => dismissToast(t.id)} />
           ))}
         </div>
       )}
 
-      {/* Header */}
+      {/* Fullscreen viewer */}
+      {viewerOpen && imageUrl && (
+        <FullscreenViewer
+          src={imageUrl}
+          alt={listing.title}
+          onClose={() => setViewerOpen(false)}
+        />
+      )}
+
       <header className="idt-header">
         <button
           className="idt-iconBtn"
@@ -671,8 +774,16 @@ export default function ItemDetailPage() {
       </header>
 
       <div className="idt-scroll">
-        {/* Hero */}
-        <div className="idt-hero">
+        {/* ✅ Hero image — tappable → fullscreen viewer */}
+        <button
+          type="button"
+          className="idt-hero idt-heroButton"
+          onClick={() => {
+            if (imageUrl) setViewerOpen(true);
+          }}
+          aria-label={imageUrl ? 'View full image' : 'No image available'}
+          disabled={!imageUrl}
+        >
           {imageUrl ? (
             <img src={imageUrl} alt={listing.title} className="idt-heroImg" />
           ) : (
@@ -680,27 +791,36 @@ export default function ItemDetailPage() {
               <MdImage size={48} color="#94a3b8" />
             </div>
           )}
-          <button
-            type="button"
-            className="idt-lensBtn"
-            onClick={() => {
-              if (imageUrl) {
-                router.push(`/seai-lens?image=${encodeURIComponent(imageUrl)}`);
-              } else {
-                showToast('info', 'No image for visual search');
-              }
-            }}
-            aria-label="Visual search"
-            title="Visual search"
-          >
-            <MdSearch size={20} color="#0504AA" />
-          </button>
-          {hasStock && stockAvailable <= 5 && (
-            <span className="idt-stockBadge">Only {stockAvailable} left</span>
-          )}
-        </div>
 
-        {/* Title + price */}
+          {/* Lens button — stops propagation so tapping it doesn't open viewer */}
+          {imageUrl && (
+            <div
+              className="idt-lensBtn"
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push(
+                  `/seai-lens?image=${encodeURIComponent(imageUrl)}`,
+                );
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  router.push(
+                    `/seai-lens?image=${encodeURIComponent(imageUrl)}`,
+                  );
+                }
+              }}
+              aria-label="Visual search"
+              title="Visual search"
+            >
+              <MdSearch size={20} color="#0504AA" />
+            </div>
+          )}
+        </button>
+
         <h2 className="idt-itemTitle">{listing.title}</h2>
         <div className="idt-priceBlock">
           <div className="idt-priceValue">{formatNaira(totalPrice)}</div>
@@ -711,33 +831,41 @@ export default function ItemDetailPage() {
           )}
         </div>
 
-        {/* Store row */}
+        {/* ✅ Store row — image AND name both tappable → store detail */}
         <div className="idt-storeRow">
-          <div className="idt-avatarWrap">
-            {storeImage ? (
-              <img src={storeImage} alt="" className="idt-avatarImg" />
-            ) : (
-              <span className="idt-avatarText">
-                {store?.name?.charAt(0) ?? '?'}
-              </span>
-            )}
-          </div>
-          <div className="idt-storeMeta">
-            <div className="idt-storeName" title={store?.name}>
-              {store?.name ?? 'Unknown Store'}
-            </div>
-            <div className="idt-storeRating">
-              {rating > 0 ? (
-                <>
-                  <MdStar size={13} color="#FFA000" />
-                  <span>{rating.toFixed(1)}</span>
-                  <span className="idt-storeReviews">({reviewCount})</span>
-                </>
+          <button
+            type="button"
+            className="idt-storeTapArea"
+            onClick={openStore}
+            aria-label={`Open ${store?.name ?? 'store'}`}
+          >
+            <div className="idt-avatarWrap">
+              {storeImage ? (
+                <img src={storeImage} alt="" className="idt-avatarImg" />
               ) : (
-                <span className="idt-storeReviews">New seller</span>
+                <span className="idt-avatarText">
+                  {store?.name?.charAt(0) ?? '?'}
+                </span>
               )}
             </div>
-          </div>
+            <div className="idt-storeMeta">
+              <div className="idt-storeName" title={store?.name}>
+                {store?.name ?? 'Unknown Store'}
+              </div>
+              <div className="idt-storeRating">
+                {rating > 0 ? (
+                  <>
+                    <MdStar size={13} color="#FFA000" />
+                    <span>{rating.toFixed(1)}</span>
+                    <span className="idt-storeReviews">({reviewCount})</span>
+                  </>
+                ) : (
+                  <span className="idt-storeReviews">New seller</span>
+                )}
+              </div>
+            </div>
+          </button>
+
           <button
             type="button"
             className="idt-iconBtn idt-iconBtnFilled"
@@ -749,7 +877,6 @@ export default function ItemDetailPage() {
           </button>
         </div>
 
-        {/* Address */}
         {store?.address && (
           <div className="idt-addressRow">
             <MdLocationOn size={16} color="#64748B" />
@@ -772,32 +899,51 @@ export default function ItemDetailPage() {
           </div>
         )}
 
-        {/* Quantity */}
+        {/* ✅ Qty section with inline stock label — Option B */}
         <section className="idt-qtySection">
-          <span className="idt-sectionLabel">Quantity</span>
+          <div className="idt-qtyText">
+            <span className="idt-qtyLabel">Quantity</span>
+            <span
+              className={
+                stock.tone === 'out'
+                  ? 'idt-stockLine idt-stockOut'
+                  : stock.tone === 'low'
+                  ? 'idt-stockLine idt-stockLow'
+                  : 'idt-stockLine'
+              }
+            >
+              {stock.label}
+            </span>
+          </div>
+
           <div className="idt-qtyControl">
             <button
               type="button"
               className="idt-qtyBtn"
               onClick={() => quantity > 1 && setQuantity((q) => q - 1)}
-              disabled={quantity <= 1}
+              disabled={quantity <= 1 || outOfStock}
               aria-label="Decrease quantity"
             >
-              <MdRemove size={18} color={quantity <= 1 ? '#cbd5e1' : '#0B0B1A'} />
+              <MdRemove
+                size={18}
+                color={quantity <= 1 || outOfStock ? '#cbd5e1' : '#0B0B1A'}
+              />
             </button>
             <span className="idt-qtyValue">{quantity}</span>
             <button
               type="button"
               className="idt-qtyBtn"
               onClick={() =>
-                quantity < stockAvailable && setQuantity((q) => q + 1)
+                quantity < maxQty && setQuantity((q) => q + 1)
               }
-              disabled={quantity >= stockAvailable}
+              disabled={quantity >= maxQty || outOfStock}
               aria-label="Increase quantity"
             >
               <MdAdd
                 size={18}
-                color={quantity >= stockAvailable ? '#cbd5e1' : '#0B0B1A'}
+                color={
+                  quantity >= maxQty || outOfStock ? '#cbd5e1' : '#0B0B1A'
+                }
               />
             </button>
           </div>
@@ -816,6 +962,7 @@ export default function ItemDetailPage() {
                   : 'idt-segBtn'
               }
               onClick={() => setFulfillmentType('pickup')}
+              disabled={outOfStock}
             >
               <MdStorefront size={18} />
               Pickup
@@ -828,7 +975,7 @@ export default function ItemDetailPage() {
                   : 'idt-segBtn'
               }
               onClick={() => setFulfillmentType('delivery')}
-              disabled={!enableDelivery}
+              disabled={!enableDelivery || outOfStock}
             >
               <MdLocalShipping size={18} />
               Delivery
@@ -847,6 +994,7 @@ export default function ItemDetailPage() {
                       : 'idt-chip'
                   }
                   onClick={() => setPickupTiming(t)}
+                  disabled={outOfStock}
                 >
                   {t === 'now'
                     ? 'Get it now'
@@ -858,7 +1006,7 @@ export default function ItemDetailPage() {
             </div>
           )}
 
-          {deliveryDisabled && (
+          {deliveryDisabled && !outOfStock && (
             <p className="idt-hint idt-hintWarn">
               Delivery is temporarily unavailable. Pickup works as normal.
             </p>
@@ -871,7 +1019,7 @@ export default function ItemDetailPage() {
             <span className="idt-summaryLabel">Subtotal</span>
             <span className="idt-summaryValue">{formatNaira(totalPrice)}</span>
           </div>
-          {fulfillmentType === 'delivery' && enableDelivery && (
+          {fulfillmentType === 'delivery' && enableDelivery && !outOfStock && (
             <div className="idt-summaryRow">
               <span className="idt-summaryLabel">Delivery</span>
               <span className="idt-summaryValue">Calculated on confirm</span>
@@ -885,7 +1033,6 @@ export default function ItemDetailPage() {
           </div>
         </section>
 
-        {/* Description */}
         {listing.description && (
           <section className="idt-section">
             <span className="idt-sectionLabel">Description</span>
@@ -893,7 +1040,6 @@ export default function ItemDetailPage() {
           </section>
         )}
 
-        {/* Bottom spacer so the sticky CTA never covers the last line of content */}
         <div style={{ height: 120 }} />
       </div>
 
@@ -901,13 +1047,9 @@ export default function ItemDetailPage() {
       <div className="idt-ctaWrap">
         <button
           type="button"
-          className={
-            isLoading || deliveryDisabled
-              ? 'idt-ctaBtn idt-ctaBtnDisabled'
-              : 'idt-ctaBtn'
-          }
+          className={ctaDisabled ? 'idt-ctaBtn idt-ctaBtnDisabled' : 'idt-ctaBtn'}
           onClick={handleCTAClick}
-          disabled={isLoading || deliveryDisabled}
+          disabled={ctaDisabled}
         >
           {isLoading ? (
             <span className="idt-ctaSpinner" aria-hidden="true" />
@@ -917,7 +1059,7 @@ export default function ItemDetailPage() {
         </button>
       </div>
 
-      {/* Confirm modal — replaces window.confirm for Pick Up Now */}
+      {/* Pick Up Now confirm modal */}
       {confirmKind === 'pickup-now' && (
         <div
           className="idt-modalOverlay"
@@ -966,7 +1108,6 @@ export default function ItemDetailPage() {
         </div>
       )}
 
-      {/* Pick time sheet */}
       <PickTimeBottomSheet
         isOpen={isPickTimeOpen}
         onClose={() => setIsPickTimeOpen(false)}
@@ -999,7 +1140,6 @@ const CSS = `
     position: relative;
   }
 
-  /* Toast stack */
   .idt-toastStack {
     position: fixed;
     top: 12px;
@@ -1012,7 +1152,6 @@ const CSS = `
   }
   .idt-toastStack > * { pointer-events: auto; }
 
-  /* Header */
   .idt-header {
     display: flex;
     align-items: center;
@@ -1052,7 +1191,6 @@ const CSS = `
   .idt-iconBtnFilled { background: #EEF0FF; }
   .idt-iconBtnFilled:hover { background: #DDE2FF; }
 
-  /* Scroll body */
   .idt-scroll {
     flex: 1;
     overflow-y: auto;
@@ -1060,7 +1198,7 @@ const CSS = `
     WebkitOverflowScrolling: touch;
   }
 
-  /* Hero */
+  /* ✅ Hero — now a <button> for tap-to-view. Reset button defaults. */
   .idt-hero {
     position: relative;
     width: 100%;
@@ -1069,7 +1207,19 @@ const CSS = `
     overflow: hidden;
     background: #E8EAF0;
     margin-bottom: 18px;
+    display: block;
   }
+  .idt-heroButton {
+    border: none;
+    padding: 0;
+    cursor: zoom-in;
+    font-family: inherit;
+    text-align: left;
+    transition: transform 0.15s;
+  }
+  .idt-heroButton:hover:not(:disabled) { transform: scale(1.005); }
+  .idt-heroButton:active:not(:disabled) { transform: scale(0.995); }
+  .idt-heroButton:disabled { cursor: default; }
   .idt-heroImg {
     width: 100%;
     height: 100%;
@@ -1100,20 +1250,50 @@ const CSS = `
     justify-content: center;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+    z-index: 2;
   }
-  .idt-stockBadge {
+  .idt-lensBtn:focus-visible {
+    outline: 3px solid #0504AA;
+    outline-offset: 3px;
+  }
+
+  /* ✅ Fullscreen viewer */
+  .idt-viewerOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(11, 11, 26, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    cursor: zoom-out;
+    animation: idToastIn 0.18s ease;
+  }
+  .idt-viewerImg {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .idt-viewerClose {
     position: absolute;
-    top: 12px;
-    left: 12px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    background: rgba(220, 38, 38, 0.92);
-    color: #fff;
-    font-size: 11.5px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    top: 16px;
+    right: 16px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 
   /* Title + price */
@@ -1143,17 +1323,33 @@ const CSS = `
     font-weight: 600;
   }
 
-  /* Store row */
+  /* ✅ Store row — main cell is now a full tap area to store detail */
   .idt-storeRow {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px;
+    padding: 8px 12px 8px 8px;
     background: #fff;
     border: 1px solid #EAECF3;
     border-radius: 14px;
     margin-bottom: 10px;
   }
+  .idt-storeTapArea {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    border-radius: 10px;
+    transition: background 0.15s;
+  }
+  .idt-storeTapArea:hover { background: #F7F9FF; }
   .idt-avatarWrap {
     width: 44px;
     height: 44px;
@@ -1224,18 +1420,41 @@ const CSS = `
     font-family: inherit;
   }
 
-  /* Section */
-  .idt-section { margin-bottom: 20px; }
+  /* ✅ Qty section — label + stock line on the left, control on the right */
   .idt-qtySection {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     padding: 14px;
     background: #fff;
     border: 1px solid #EAECF3;
     border-radius: 14px;
     margin-bottom: 20px;
   }
+  .idt-qtyText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .idt-qtyLabel {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #94A3B8;
+    text-transform: uppercase;
+  }
+  .idt-stockLine {
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
+    line-height: 1.35;
+  }
+  .idt-stockLow { color: #B45309; }
+  .idt-stockOut { color: #DC2626; }
+
+  .idt-section { margin-bottom: 20px; }
   .idt-sectionLabel {
     display: block;
     font-size: 11px;
@@ -1245,7 +1464,6 @@ const CSS = `
     text-transform: uppercase;
     margin-bottom: 10px;
   }
-  .idt-qtySection .idt-sectionLabel { margin-bottom: 0; }
 
   /* Qty control */
   .idt-qtyControl {
@@ -1256,6 +1474,7 @@ const CSS = `
     border: 1px solid #E2E8F0;
     border-radius: 12px;
     background: #F8FAFC;
+    flex: 0 0 auto;
   }
   .idt-qtyBtn {
     width: 34px;
@@ -1330,14 +1549,14 @@ const CSS = `
     font-family: inherit;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
-  .idt-chip:hover { border-color: #C9CBFF; }
+  .idt-chip:hover:not(:disabled) { border-color: #C9CBFF; }
+  .idt-chip:disabled { opacity: 0.5; cursor: not-allowed; }
   .idt-chipActive {
     background: #0504AA;
     border-color: #0504AA;
     color: #fff;
   }
 
-  /* Hint */
   .idt-hint {
     margin: 8px 0 0;
     font-size: 12.5px;
