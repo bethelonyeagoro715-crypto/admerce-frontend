@@ -26,9 +26,12 @@ import {
   MdClose,
   MdCheck,
   MdDoneAll,
-  MdKeyboardArrowDown as MdChevronDown,
+  MdExpandMore as MdChevronDown,
   MdLink,
   MdRefresh,
+  MdChevronRight,
+  MdPlayArrow,
+  MdPause,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -74,6 +77,15 @@ interface ToastMessage {
   kind: 'success' | 'error' | 'info';
   text: string;
 }
+interface PresenceInfo {
+  user_id: string;
+  name: string;
+  avatar_url: string | null;
+  role: string;
+  online: boolean;
+  last_seen: string | null;
+  public_url: string | null;
+}
 
 // ─── Brand ──────────────────────────────────────────────────────────
 const BRAND = {
@@ -85,17 +97,24 @@ const BRAND = {
   statusText: 'rgba(255,255,255,0.62)',
   muted: '#8696A0',
   danger: '#DC2626',
+  online: '#22C55E',
 };
 
 const DOUBLE_TAP_MS = 300;
 const LONG_PRESS_MS = 500;
 const AT_BOTTOM_THRESHOLD_PX = 80;
 const MAX_TOASTS = 3;
+const PRESENCE_POLL_MS = 30_000;
+const HEARTBEAT_INTERVAL_MS = 60_000;
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) {
+  if (
+    url.startsWith('http') ||
+    url.startsWith('blob:') ||
+    url.startsWith('data:')
+  ) {
     return url;
   }
   const base =
@@ -119,8 +138,9 @@ function formatTime(iso: string): string {
 }
 
 function formatDuration(sec: number): string {
+  if (!isFinite(sec) || sec < 0) return '0:00';
   const m = Math.floor(sec / 60);
-  const s = sec % 60;
+  const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
@@ -139,6 +159,34 @@ function formatDate(iso: string): string {
     });
   } catch {
     return '';
+  }
+}
+
+function formatLastSeen(iso: string | null): string {
+  if (!iso) return 'Offline';
+  let d: Date;
+  try {
+    d = new Date(iso);
+    if (isNaN(d.getTime())) return 'Offline';
+  } catch {
+    return 'Offline';
+  }
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 60) return 'Last seen just now';
+  const mins = Math.floor(diffSec / 60);
+  if (mins < 60) return `Last seen ${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Last seen ${hours} hr ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Last seen yesterday';
+  if (days < 7) return `Last seen ${days} days ago`;
+  try {
+    return `Last seen ${d.toLocaleDateString([], {
+      day: 'numeric',
+      month: 'short',
+    })}`;
+  } catch {
+    return 'Offline';
   }
 }
 
@@ -179,6 +227,424 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ─── Voice player ───────────────────────────────────────────────────
+// Module-level: only one voice note plays across the whole app at a time.
+let _currentlyPlayingAudio: HTMLAudioElement | null = null;
+
+// Stylized wave heights — max 24 to fit in a 30px box with padding.
+const VOICE_WAVE = [
+  6, 10, 14, 20, 24, 16, 10, 18, 22, 14, 8, 12, 20, 24, 18, 10, 6, 14, 22, 18,
+  12, 8,
+];
+const VOICE_BAR_W = 3;
+const VOICE_BAR_GAP = 3;
+const VOICE_SVG_W =
+  VOICE_WAVE.length * VOICE_BAR_W + (VOICE_WAVE.length - 1) * VOICE_BAR_GAP;
+const VOICE_SVG_H = 30;
+
+function VoiceBubblePlayer({
+  src,
+  isMine,
+}: {
+  src: string;
+  isMine: boolean;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+  const [state, setState] = useState<
+    'idle' | 'loading' | 'playing' | 'paused' | 'error'
+  >('idle');
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  // Colors — invert based on which side the bubble is on
+  const accent = isMine ? '#FFFFFF' : '#0504AA';
+  const accentSoft = isMine ? 'rgba(255,255,255,0.32)' : 'rgba(5,4,170,0.15)';
+  const onAccent = isMine ? '#0504AA' : '#FFFFFF';
+  const timeColor = isMine ? 'rgba(255,255,255,0.85)' : '#64748B';
+  const dangerColor = isMine ? '#FECACA' : '#DC2626';
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      const a = audioRef.current;
+      if (a) {
+        try {
+          a.pause();
+        } catch {
+          /* ignore */
+        }
+        if (_currentlyPlayingAudio === a) _currentlyPlayingAudio = null;
+      }
+      if (blobUrlRef.current) {
+        try {
+          URL.revokeObjectURL(blobUrlRef.current);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+  }, []);
+
+  const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
+
+  const ensureAudio = useCallback(async (): Promise<HTMLAudioElement | null> => {
+    if (audioRef.current) return audioRef.current;
+
+    setState('loading');
+    let playableUrl = src;
+
+    // Blob fetch first — bypasses browser cache/range quirks and gives us
+    // a real error if the resource is gone.
+    try {
+      const res = await fetch(src);
+      if (res.ok) {
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlRef.current = blobUrl;
+        playableUrl = blobUrl;
+      } else if (
+        res.status === 401 ||
+        res.status === 403 ||
+        res.status === 404
+      ) {
+        // Definitely gone or forbidden — fail fast.
+        setState('error');
+        return null;
+      }
+      // For 5xx / other errors, fall through to the raw src — the audio
+      // element may still succeed via range requests.
+    } catch {
+      // CORS or network — fall through to the raw src
+    }
+
+    const audio = new Audio(playableUrl);
+    audio.preload = 'auto';
+
+    audio.onloadedmetadata = () => {
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+    };
+    audio.ontimeupdate = () => setCurrentTime(audio.currentTime);
+    audio.onplay = () => {
+      if (_currentlyPlayingAudio && _currentlyPlayingAudio !== audio) {
+        try {
+          _currentlyPlayingAudio.pause();
+        } catch {
+          /* ignore */
+        }
+      }
+      _currentlyPlayingAudio = audio;
+      setState('playing');
+    };
+    audio.onpause = () => {
+      if (!audio.ended) setState('paused');
+    };
+    audio.onended = () => {
+      setState('idle');
+      setCurrentTime(0);
+      if (_currentlyPlayingAudio === audio) _currentlyPlayingAudio = null;
+    };
+    audio.onerror = () => setState('error');
+
+    audioRef.current = audio;
+    return audio;
+  }, [src]);
+
+  const togglePlay = useCallback(async () => {
+    let audio = audioRef.current;
+    if (!audio) {
+      audio = await ensureAudio();
+      if (!audio) return;
+    }
+    if (audio.paused || audio.ended) {
+      try {
+        if (audio.ended) audio.load();
+        await audio.play();
+      } catch {
+        setState('error');
+      }
+    } else {
+      audio.pause();
+    }
+  }, [ensureAudio]);
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const target = ratio * duration;
+    try {
+      audio.currentTime = target;
+      setCurrentTime(target);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const retry = useCallback(async () => {
+    if (blobUrlRef.current) {
+      try {
+        URL.revokeObjectURL(blobUrlRef.current);
+      } catch {
+        /* ignore */
+      }
+      blobUrlRef.current = null;
+    }
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+      } catch {
+        /* ignore */
+      }
+      audioRef.current = null;
+    }
+    setCurrentTime(0);
+    setDuration(0);
+    setState('idle');
+    const audio = await ensureAudio();
+    if (audio) {
+      try {
+        await audio.play();
+      } catch {
+        setState('error');
+      }
+    }
+  }, [ensureAudio]);
+
+  // ── Error state ────────────────────────────────────────────────
+  if (state === 'error') {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '4px 2px',
+          minWidth: 200,
+        }}
+      >
+        <div
+          style={{
+            width: 38,
+            height: 38,
+            flexShrink: 0,
+            borderRadius: '50%',
+            background: isMine
+              ? 'rgba(255,255,255,0.15)'
+              : 'rgba(220,38,38,0.10)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <MdErrorOutline size={20} color={dangerColor} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: isMine ? 'rgba(255,255,255,0.9)' : '#475569',
+            }}
+          >
+            Voice note unavailable
+          </div>
+          <button
+            type="button"
+            onClick={retry}
+            style={{
+              marginTop: 2,
+              padding: 0,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 11.5,
+              fontWeight: 800,
+              color: isMine ? '#FECACA' : '#0504AA',
+              textDecoration: 'underline',
+              textUnderlineOffset: 2,
+            }}
+          >
+            Tap to retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const isLoading = state === 'loading';
+  const isPlaying = state === 'playing';
+  const timeLabel =
+    isPlaying || state === 'paused'
+      ? formatDuration(currentTime)
+      : formatDuration(duration);
+
+  const RING_SIZE = 40;
+  const RING_STROKE = 2;
+  const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
+  const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '2px 0',
+        minWidth: 200,
+      }}
+    >
+      {/* Play button with progress ring */}
+      <div
+        style={{
+          position: 'relative',
+          width: RING_SIZE,
+          height: RING_SIZE,
+          flexShrink: 0,
+        }}
+      >
+        <svg
+          width={RING_SIZE}
+          height={RING_SIZE}
+          viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            transform: 'rotate(-90deg)',
+            pointerEvents: 'none',
+          }}
+          aria-hidden="true"
+        >
+          <circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            fill="none"
+            stroke={accentSoft}
+            strokeWidth={RING_STROKE}
+          />
+          {progress > 0 && (
+            <circle
+              cx={RING_SIZE / 2}
+              cy={RING_SIZE / 2}
+              r={RING_RADIUS}
+              fill="none"
+              stroke={accent}
+              strokeWidth={RING_STROKE}
+              strokeDasharray={RING_CIRCUMFERENCE}
+              strokeDashoffset={RING_CIRCUMFERENCE * (1 - progress)}
+              strokeLinecap="round"
+              style={{ transition: 'stroke-dashoffset 0.15s linear' }}
+            />
+          )}
+        </svg>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void togglePlay();
+          }}
+          aria-label={isPlaying ? 'Pause voice note' : 'Play voice note'}
+          style={{
+            position: 'absolute',
+            top: RING_STROKE + 2,
+            right: RING_STROKE + 2,
+            bottom: RING_STROKE + 2,
+            left: RING_STROKE + 2,
+            borderRadius: '50%',
+            border: 'none',
+            cursor: 'pointer',
+            background: accent,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            transition: 'transform 0.1s',
+          }}
+        >
+          {isLoading ? (
+            <div
+              style={{
+                width: 14,
+                height: 14,
+                border: `2px solid ${accentSoft}`,
+                borderTopColor: onAccent,
+                borderRadius: '50%',
+                animation: 'chatSpin 0.7s linear infinite',
+              }}
+            />
+          ) : isPlaying ? (
+            <MdPause size={14} color={onAccent} />
+          ) : (
+            <MdPlayArrow size={16} color={onAccent} style={{ marginLeft: 1 }} />
+          )}
+        </button>
+      </div>
+
+      {/* Waveform */}
+      <div
+        onClick={handleSeek}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          cursor: duration > 0 ? 'pointer' : 'default',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+        }}
+        aria-hidden="true"
+      >
+        <svg
+          width="100%"
+          height={VOICE_SVG_H}
+          viewBox={`0 0 ${VOICE_SVG_W} ${VOICE_SVG_H}`}
+          preserveAspectRatio="none"
+          style={{ display: 'block' }}
+        >
+          {VOICE_WAVE.map((h, i) => {
+            const x = i * (VOICE_BAR_W + VOICE_BAR_GAP);
+            const y = (VOICE_SVG_H - h) / 2;
+            const isPast = (i + 0.5) / VOICE_WAVE.length <= progress;
+            return (
+              <rect
+                key={i}
+                x={x}
+                y={y}
+                width={VOICE_BAR_W}
+                height={h}
+                rx={1.5}
+                fill={isPast ? accent : accentSoft}
+                style={{ transition: 'fill 0.12s linear' }}
+              />
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Time */}
+      <div
+        style={{
+          flexShrink: 0,
+          minWidth: 34,
+          textAlign: 'right',
+          fontSize: 11,
+          fontWeight: 800,
+          color: timeColor,
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: 0.02,
+        }}
+      >
+        {timeLabel}
+      </div>
+    </div>
+  );
 }
 
 // ─── Toast ──────────────────────────────────────────────────────────
@@ -300,8 +766,14 @@ function ChatContent() {
 
   const conversationId = params.conversationId;
   const otherUserId = searchParams.get('otherUserId') || '';
-  const otherUserName = searchParams.get('otherUserName') || 'User';
-  const otherUserAvatar = searchParams.get('otherUserAvatar') || '';
+  const urlName = searchParams.get('otherUserName') || 'User';
+  const urlAvatar = searchParams.get('otherUserAvatar') || '';
+  const otherUserIdRef = useRef(otherUserId);
+  useEffect(() => {
+    otherUserIdRef.current = otherUserId;
+  }, [otherUserId]);
+
+  const [presence, setPresence] = useState<PresenceInfo | null>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -329,10 +801,6 @@ function ChatContent() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const otherUserIdRef = useRef(otherUserId);
-  useEffect(() => {
-    otherUserIdRef.current = otherUserId;
-  }, [otherUserId]);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -350,7 +818,17 @@ function ChatContent() {
     : error;
   const showLoading = hasRecipient && isLoading;
 
-  // ── Toasts ──────────────────────────────────────────────────────
+  const displayName = presence?.name || urlName;
+  const displayAvatarRaw = presence?.avatar_url || urlAvatar;
+  const displayAvatar = resolveImageUrl(displayAvatarRaw);
+  const publicUrl = presence?.public_url || null;
+  const isOnline = presence?.online === true;
+  const statusLabel = isOnline
+    ? 'Online'
+    : presence?.last_seen
+    ? formatLastSeen(presence.last_seen)
+    : 'Offline';
+
   const showToast = useCallback(
     (kind: ToastMessage['kind'], text: string) => {
       const id = Date.now() + Math.random();
@@ -369,9 +847,7 @@ function ChatContent() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // ── Fetch messages ──────────────────────────────────────────────
-  const loadMessages = useCallback(async () => {
-    const recipientId = otherUserIdRef.current;
+  const loadMessages = useCallback(async (recipientId: string) => {
     if (!recipientId) return;
     setIsLoading(true);
     setError(null);
@@ -384,6 +860,32 @@ function ChatContent() {
       setError(extractErrorDetail(e, 'Failed to load messages'));
     } finally {
       setIsLoading(false);
+    }
+  }, []);
+
+  const fetchPresence = useCallback(async () => {
+    const recipientId = otherUserIdRef.current;
+    if (
+      !recipientId ||
+      recipientId.toLowerCase() === 'seai' ||
+      conversationId.includes('_seai')
+    )
+      return;
+    try {
+      const data = (await api.getPresence(
+        recipientId,
+      )) as unknown as PresenceInfo;
+      setPresence(data);
+    } catch {
+      // silent — we fall back to URL params
+    }
+  }, [conversationId]);
+
+  const sendHeartbeat = useCallback(async () => {
+    try {
+      await api.presenceHeartbeat();
+    } catch {
+      // silent
     }
   }, []);
 
@@ -401,15 +903,53 @@ function ChatContent() {
       } catch {
         /* ignore */
       }
-      if (!cancelled) await loadMessages();
+      if (!cancelled) {
+        await Promise.all([loadMessages(otherUserId), fetchPresence()]);
+      }
+      if (!cancelled) void sendHeartbeat();
     }, 0);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [conversationId, otherUserId, isSeaiConversation, hasRecipient, router, loadMessages]);
+  }, [
+    conversationId,
+    otherUserId,
+    isSeaiConversation,
+    hasRecipient,
+    router,
+    loadMessages,
+    fetchPresence,
+    sendHeartbeat,
+  ]);
 
-  // ── Auto-scroll when at bottom; jump pill otherwise ─────────────
+  useEffect(() => {
+    if (!hasRecipient || isSeaiConversation) return;
+
+    const presenceTimer = setInterval(() => {
+      if (document.hidden) return;
+      void fetchPresence();
+    }, PRESENCE_POLL_MS);
+
+    const heartbeatTimer = setInterval(() => {
+      if (document.hidden) return;
+      void sendHeartbeat();
+    }, HEARTBEAT_INTERVAL_MS);
+
+    const onVisible = () => {
+      if (document.hidden) return;
+      void fetchPresence();
+      void sendHeartbeat();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(presenceTimer);
+      clearInterval(heartbeatTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [hasRecipient, isSeaiConversation, fetchPresence, sendHeartbeat]);
+
   useEffect(() => {
     const count = messages.length;
     const prevCount = prevMessageCountRef.current;
@@ -441,7 +981,6 @@ function ChatContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // ── Voice recording ─────────────────────────────────────────────
   const startRecording = async () => {
     if (!hasRecipient || isRecording) return;
     try {
@@ -530,15 +1069,12 @@ function ChatContent() {
       setReplyDraft(null);
       showToast('success', 'Voice note sent');
     } catch (e) {
-      showToast(
-        'error',
-        extractErrorDetail(e, 'Failed to send voice note'),
-      );
+      showToast('error', extractErrorDetail(e, 'Failed to send voice note'));
     } finally {
       setSendingVoice(false);
       setRecordSeconds(0);
     }
-  }, [currentUserId, otherUserId, replyDraft, setReplyDraft, showToast]);
+  }, [currentUserId, otherUserId, replyDraft, showToast]);
 
   const cancelRecording = () => {
     const mr = mediaRecorderRef.current;
@@ -560,7 +1096,6 @@ function ChatContent() {
     setRecordSeconds(0);
   };
 
-  // ── Send / edit ─────────────────────────────────────────────────
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text || sending) return;
@@ -635,11 +1170,10 @@ function ChatContent() {
     }
   };
 
-  // ── Reply / edit drafts ────────────────────────────────────────
   const handleDoubleTap = useCallback(
     (msg: ChatMessage) => {
       if (msg.deleted_for_everyone) return;
-      const senderName = msg.sender_id === currentUserId ? 'You' : otherUserName;
+      const senderName = msg.sender_id === currentUserId ? 'You' : displayName;
       let previewText = msg.text || '';
       if (!previewText && msg.audio_url) previewText = '🎤 Voice note';
       if (!previewText && msg.image_url) previewText = '📷 Photo';
@@ -648,7 +1182,7 @@ function ChatContent() {
       setInputText('');
       setTimeout(() => inputRef.current?.focus(), 50);
     },
-    [currentUserId, otherUserName, setReplyDraft, setEditDraft, setInputText],
+    [currentUserId, displayName],
   );
 
   const handleBubbleTap = useCallback(
@@ -669,7 +1203,6 @@ function ChatContent() {
     [handleDoubleTap],
   );
 
-  // ── Context menu ────────────────────────────────────────────────
   const openContextMenu = (
     e: React.MouseEvent | React.TouchEvent,
     msg: ChatMessage,
@@ -724,7 +1257,6 @@ function ChatContent() {
     longPressFired.current = false;
   };
 
-  // ── Context menu actions ────────────────────────────────────────
   const handleReply = () => {
     if (!contextMenu) return;
     const msg = messages.find((m) => m.id === contextMenu.messageId);
@@ -793,12 +1325,9 @@ function ChatContent() {
     }
   };
 
-  // ── Header actions ──────────────────────────────────────────────
   const startCall = (video: boolean) => {
     if (!hasRecipient) return;
-    // ✅ Honest stub — the call page doesn't exist yet. Route kept in
-    //    a comment so the eventual wiring is obvious.
-    // router.push(`/chat/${conversationId}/call?video=${video ? '1' : '0'}&name=${encodeURIComponent(otherUserName)}`);
+    // router.push(`/chat/${conversationId}/call?video=${video ? '1' : '0'}&name=${encodeURIComponent(displayName)}`);
     showToast('info', `${video ? 'Video' : 'Voice'} calls coming soon`);
   };
 
@@ -811,7 +1340,14 @@ function ChatContent() {
     );
   };
 
-  // ── Render ──────────────────────────────────────────────────────
+  const openProfile = () => {
+    if (!publicUrl) {
+      showToast('info', 'No public profile for this user');
+      return;
+    }
+    router.push(publicUrl);
+  };
+
   const groupedMessages = useMemo(() => groupByDate(messages), [messages]);
   const showMicButton = !inputText.trim() && !editDraft;
 
@@ -833,7 +1369,6 @@ function ChatContent() {
 
   return (
     <main style={s.root}>
-      {/* Toast stack */}
       {toasts.length > 0 && (
         <div style={s.toastStack}>
           {toasts.map((t) => (
@@ -842,7 +1377,6 @@ function ChatContent() {
         </div>
       )}
 
-      {/* Header */}
       <div style={s.header}>
         <button
           style={s.iconBtn}
@@ -852,26 +1386,51 @@ function ChatContent() {
           <MdArrowBack size={22} color="#fff" />
         </button>
 
-        <div style={s.avatarWrap}>
-          {otherUserAvatar ? (
-            <img
-              src={resolveImageUrl(otherUserAvatar) || ''}
-              alt=""
-              style={s.avatarImg}
-            />
-          ) : (
-            <span style={s.avatarInitial}>
-              {otherUserName.charAt(0).toUpperCase()}
-            </span>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={openProfile}
+          disabled={!publicUrl}
+          aria-label={publicUrl ? `Open ${displayName}'s profile` : displayName}
+          style={{
+            ...s.headerTapArea,
+            cursor: publicUrl ? 'pointer' : 'default',
+          }}
+        >
+          <div style={s.avatarWrap}>
+            {displayAvatar ? (
+              <img src={displayAvatar} alt="" style={s.avatarImg} />
+            ) : (
+              <span style={s.avatarInitial}>
+                {displayName.charAt(0).toUpperCase()}
+              </span>
+            )}
+            {isOnline && <span style={s.presenceDot} aria-hidden="true" />}
+          </div>
 
-        <div style={s.headerInfo}>
-          <span style={s.headerName} title={otherUserName}>
-            {otherUserName}
-          </span>
-          <span style={s.headerStatus}>Admerce</span>
-        </div>
+          <div style={s.headerInfo}>
+            <span style={s.headerName} title={displayName}>
+              {displayName}
+            </span>
+            <span
+              style={{
+                ...s.headerStatus,
+                color: isOnline ? '#DCFCE7' : BRAND.statusText,
+                fontWeight: isOnline ? 700 : 600,
+              }}
+            >
+              {statusLabel}
+            </span>
+          </div>
+
+          {publicUrl && (
+            <MdChevronRight
+              size={18}
+              color="rgba(255,255,255,0.55)"
+              aria-hidden="true"
+              style={{ flexShrink: 0 }}
+            />
+          )}
+        </button>
 
         <div style={{ flex: 1 }} />
 
@@ -900,7 +1459,6 @@ function ChatContent() {
 
       <div style={s.wallpaper} />
 
-      {/* Messages */}
       <div
         ref={scrollContainerRef}
         style={s.messages}
@@ -918,7 +1476,7 @@ function ChatContent() {
             <p style={s.stateTitle}>Could not load chat</p>
             <p style={s.stateBody}>{displayError}</p>
             <button
-              onClick={loadMessages}
+              onClick={() => loadMessages(otherUserId)}
               style={s.retryBtn}
               type="button"
             >
@@ -931,7 +1489,7 @@ function ChatContent() {
             <div style={s.stateIconInfo} aria-hidden="true">
               <MdChatBubbleOutline size={32} color={BRAND.primary} />
             </div>
-            <p style={s.stateTitle}>Say hi to {otherUserName}</p>
+            <p style={s.stateTitle}>Say hi to {displayName}</p>
             <p style={s.stateBody}>
               Double-tap any bubble to reply. Long-press for more options.
             </p>
@@ -972,7 +1530,9 @@ function ChatContent() {
                         }}
                         onClick={() => handleBubbleTap(msg)}
                         onDoubleClick={() => handleDoubleTap(msg)}
-                        onContextMenu={(e) => !isDeleted && openContextMenu(e, msg)}
+                        onContextMenu={(e) =>
+                          !isDeleted && openContextMenu(e, msg)
+                        }
                         onTouchStart={(e) => handleTouchStart(e, msg)}
                         onTouchMove={handleTouchMove}
                         onTouchEnd={(e) => handleTouchEnd(e, msg)}
@@ -1031,16 +1591,9 @@ function ChatContent() {
                         ) : (
                           <>
                             {msg.audio_url && (
-                              <audio
-                                controls
-                                src={
-                                  resolveImageUrl(msg.audio_url) || undefined
-                                }
-                                style={{
-                                  width: 220,
-                                  marginBottom: msg.text ? 4 : 0,
-                                  display: 'block',
-                                }}
+                              <VoiceBubblePlayer
+                                src={resolveImageUrl(msg.audio_url) || ''}
+                                isMine={isMine}
                               />
                             )}
                             {msg.image_url && (
@@ -1110,7 +1663,6 @@ function ChatContent() {
         )}
       </div>
 
-      {/* Jump-to-latest pill */}
       {hasNewWhileScrolled && (
         <button
           type="button"
@@ -1123,7 +1675,6 @@ function ChatContent() {
         </button>
       )}
 
-      {/* Reply / Edit preview bar */}
       {(replyDraft || editDraft) && (
         <div style={s.previewBar}>
           <div style={s.previewAccent} />
@@ -1159,7 +1710,6 @@ function ChatContent() {
         </div>
       )}
 
-      {/* Recording bar */}
       {isRecording && (
         <div style={s.recordingBar}>
           <button
@@ -1193,7 +1743,6 @@ function ChatContent() {
         </div>
       )}
 
-      {/* Input bar */}
       {!isRecording && (
         <div style={s.inputBar}>
           <div style={s.inputRow}>
@@ -1237,9 +1786,7 @@ function ChatContent() {
             <button
               style={{
                 ...s.sendCircle,
-                backgroundColor: inputText.trim()
-                  ? BRAND.primary
-                  : '#cbd5e1',
+                backgroundColor: inputText.trim() ? BRAND.primary : '#cbd5e1',
               }}
               onClick={sendMessage}
               disabled={!inputText.trim() || sending || !hasRecipient}
@@ -1258,13 +1805,9 @@ function ChatContent() {
         </div>
       )}
 
-      {/* Context menu */}
       {contextMenu && (
         <>
-          <div
-            style={s.ctxBackdrop}
-            onClick={() => setContextMenu(null)}
-          />
+          <div style={s.ctxBackdrop} onClick={() => setContextMenu(null)} />
           <div
             style={{
               ...s.ctxMenu,
@@ -1288,30 +1831,18 @@ function ChatContent() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              style={s.ctxItem}
-              onClick={handleReply}
-            >
+            <button type="button" style={s.ctxItem} onClick={handleReply}>
               <MdReply size={18} color={BRAND.primary} />
               <span>Reply</span>
             </button>
             {contextMenu.hasText && (
-              <button
-                type="button"
-                style={s.ctxItem}
-                onClick={handleCopy}
-              >
+              <button type="button" style={s.ctxItem} onClick={handleCopy}>
                 <MdContentCopy size={18} color={BRAND.muted} />
                 <span>Copy</span>
               </button>
             )}
             {contextMenu.isMine && contextMenu.hasText && (
-              <button
-                type="button"
-                style={s.ctxItem}
-                onClick={handleEdit}
-              >
+              <button type="button" style={s.ctxItem} onClick={handleEdit}>
                 <MdEdit size={18} color={BRAND.muted} />
                 <span>Edit</span>
               </button>
@@ -1338,13 +1869,9 @@ function ChatContent() {
         </>
       )}
 
-      {/* Chat actions menu (top-right ⋯) */}
       {menuOpen && (
         <>
-          <div
-            style={s.ctxBackdrop}
-            onClick={() => setMenuOpen(false)}
-          />
+          <div style={s.ctxBackdrop} onClick={() => setMenuOpen(false)} />
           <div
             style={{
               ...s.ctxMenu,
@@ -1355,11 +1882,7 @@ function ChatContent() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              style={s.ctxItem}
-              onClick={copyChatId}
-            >
+            <button type="button" style={s.ctxItem} onClick={copyChatId}>
               <MdLink size={18} color={BRAND.muted} />
               <span>Copy chat ID</span>
             </button>
@@ -1367,7 +1890,6 @@ function ChatContent() {
         </>
       )}
 
-      {/* Delete confirm modal */}
       {confirmDelete && (
         <div
           style={s.overlay}
@@ -1410,7 +1932,6 @@ function ChatContent() {
   );
 }
 
-// ─── Suspense wrapper ───────────────────────────────────────────────
 export default function ChatPage() {
   return (
     <Suspense fallback={<ChatSkeleton />}>
@@ -1447,8 +1968,24 @@ const s: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     borderRadius: '50%',
     transition: 'background 0.15s',
+    flexShrink: 0,
+  },
+  headerTapArea: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+    background: 'transparent',
+    border: 'none',
+    padding: '4px 6px',
+    borderRadius: 12,
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    transition: 'background 0.15s',
   },
   avatarWrap: {
+    position: 'relative',
     width: 38,
     height: 38,
     borderRadius: '50%',
@@ -1456,17 +1993,33 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    marginLeft: 4,
+    overflow: 'visible',
     flexShrink: 0,
   },
-  avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  avatarImg: {
+    width: 38,
+    height: 38,
+    borderRadius: '50%',
+    objectFit: 'cover',
+    display: 'block',
+  },
   avatarInitial: { fontSize: 16, fontWeight: 700, color: '#fff' },
+  presenceDot: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 12,
+    height: 12,
+    borderRadius: '50%',
+    backgroundColor: BRAND.online,
+    border: '2px solid ' + BRAND.primary,
+    boxSizing: 'border-box',
+  },
   headerInfo: {
     display: 'flex',
     flexDirection: 'column',
-    marginLeft: 10,
     minWidth: 0,
+    flex: 1,
   },
   headerName: {
     fontSize: 15.5,
@@ -1476,13 +2029,15 @@ const s: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    maxWidth: 180,
   },
   headerStatus: {
     fontSize: 11.5,
-    color: BRAND.statusText,
     fontWeight: 600,
     letterSpacing: 0.02,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    marginTop: 1,
   },
   wallpaper: {
     position: 'absolute',
@@ -1842,9 +2397,8 @@ const s: Record<string, React.CSSProperties> = {
   dialogTitle: {
     fontSize: 18,
     fontWeight: 800,
-    marginBottom: 8,
-    color: '#0B0B1A',
-    letterSpacing: '-0.01em',
+    color: '#1A1A1A',
+    margin: '0 0 8px',
   },
   dialogBody: {
     fontSize: 14,
