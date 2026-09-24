@@ -1715,6 +1715,19 @@ class ApiService {
     const res = await this.axios.patch(`/shopper/wanted/${alertId}/toggle`);
     return res.data;
   }
+    // ✅ NEW — presence
+  public async getPresence(userId: string): Promise<JsonObject> {
+    const res = await this.axios.get(`/presence/${userId}`);
+    return res.data;
+  }
+
+  public async presenceHeartbeat(): Promise<void> {
+    try {
+      await this.axios.post('/presence/heartbeat');
+    } catch {
+      // fire-and-forget
+    }
+  }
 }
 
 export default ApiService.getInstance();
