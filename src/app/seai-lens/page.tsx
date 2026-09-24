@@ -202,7 +202,6 @@ function SeaiLensContent() {
   useEffect(() => {
     if (manualFile) return; // manual upload path owns the state
     if (!resolvedSource) {
-      setState({ status: 'idle' });
       return;
     }
 
