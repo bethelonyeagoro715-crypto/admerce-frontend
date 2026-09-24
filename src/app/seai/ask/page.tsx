@@ -43,6 +43,7 @@ const Brand = {
 type Role = 'user' | 'seai';
 
 interface Message {
+  clientId: string;
   role: Role;
   text: string;
   isThinking: boolean;
@@ -80,6 +81,12 @@ interface Conversation {
   title: string;
 }
 
+interface Toast {
+  id: number;
+  kind: 'success' | 'error';
+  text: string;
+}
+
 const suggestions = [
   { emoji: '🛍️', text: 'Find items near me' },
   { emoji: '🏪', text: 'Show stores in my area' },
@@ -87,10 +94,20 @@ const suggestions = [
   { emoji: '📦', text: 'Track my recent order' },
 ];
 
+let _msgSeq = 0;
+function nextClientId(): string {
+  _msgSeq += 1;
+  return `m_${Date.now().toString(36)}_${_msgSeq.toString(36)}`;
+}
+
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
-  return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    '';
+  return `${base}${url}`;
 }
 
 function typeBadgeColor(type: string | undefined): string {
@@ -227,6 +244,7 @@ function SeaiAskContent() {
   const [isLoadingRecents, setIsLoadingRecents] = useState(false);
   const [inputHasText, setInputHasText] = useState(false);
   const [isCortexMode, setIsCortexMode] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
   const [editing, setEditing] = useState<{
     index: number;
@@ -236,8 +254,43 @@ function SeaiAskContent() {
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = useCallback(() => {
+  const messagesRef = useRef<Message[]>([]);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(true);
+  const atBottomRef = useRef(true);
+
+  // ── Mirror `messages` into a ref so async callbacks see the latest value ──
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // ── Unmount cleanup: cancel any in-flight stream ──
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      streamAbortRef.current?.abort();
+    };
+  }, []);
+
+  // ── Toasts ──
+  const pushToast = useCallback((kind: Toast['kind'], text: string) => {
+    const id = Date.now() + Math.random();
+    setToasts((t) => [...t, { id, kind, text }].slice(-3));
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
+  }, []);
+
+  // ── Scroll: only auto-scroll if user is already near the bottom ──
+  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    atBottomRef.current = distance < 120;
+  }, []);
+
+  const scrollToBottom = useCallback((force = false) => {
+    if (!force && !atBottomRef.current) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
@@ -245,21 +298,23 @@ function SeaiAskContent() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  // ── Load recents ──
   useEffect(() => {
     const loadConversations = async () => {
       setIsLoadingRecents(true);
       try {
         const data = (await api.getRecentConversations()) as unknown as Conversation[];
-        setConversations(data);
+        if (isMountedRef.current) setConversations(data);
       } catch {
         // ignore
       } finally {
-        setIsLoadingRecents(false);
+        if (isMountedRef.current) setIsLoadingRecents(false);
       }
     };
     loadConversations();
   }, []);
 
+  // ── Initial query from URL ──
   useEffect(() => {
     if (initialQuery) {
       sendMessage(initialQuery);
@@ -272,9 +327,11 @@ function SeaiAskContent() {
   };
 
   const clearConversation = () => {
+    streamAbortRef.current?.abort();
     setMessages([]);
     setIsStreaming(false);
     setEditing(null);
+    atBottomRef.current = true;
     if (inputRef.current) inputRef.current.focus();
   };
 
@@ -284,23 +341,34 @@ function SeaiAskContent() {
         messages: { sender_id: string; text: string }[];
       };
       const loaded: Message[] = data.messages.map((m) => ({
+        clientId: nextClientId(),
         role: m.sender_id === 'seai' ? 'seai' : 'user',
         text: m.text,
         isThinking: false,
         isStreaming: false,
         timestamp: new Date(),
       }));
+      if (!isMountedRef.current) return;
       setMessages(loaded);
       setDrawerOpen(false);
-      scrollToBottom();
+      atBottomRef.current = true;
+      setTimeout(() => scrollToBottom(true), 0);
     } catch {
       // ignore
     }
   };
 
-  const copyText = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
+  const copyText = useCallback(
+    async (text: string) => {
+      try {
+        await navigator.clipboard.writeText(text);
+        pushToast('success', 'Copied');
+      } catch {
+        pushToast('error', 'Could not copy');
+      }
+    },
+    [pushToast],
+  );
 
   const retryMessage = (index: number) => {
     if (index > 0 && messages[index - 1].role === 'user') {
@@ -322,12 +390,8 @@ function SeaiAskContent() {
     if (!editing) return;
     const { index, text, role } = editing;
 
+    // AI messages are not editable in this revision — flip the guard if that changes.
     if (role === 'seai') {
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[index] = { ...updated[index], text };
-        return updated;
-      });
       setEditing(null);
       return;
     }
@@ -350,9 +414,16 @@ function SeaiAskContent() {
       inputRef.current.blur();
     }
 
-    const baseMessages = overrideHistory ?? messages;
+    // Read from ref when no explicit override — avoids stale closure on `messages`.
+    const baseMessages = overrideHistory ?? messagesRef.current;
+
+    // Cancel any in-flight stream before starting a new one.
+    streamAbortRef.current?.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
 
     const userMsg: Message = {
+      clientId: nextClientId(),
       role: 'user',
       text,
       isThinking: false,
@@ -360,6 +431,7 @@ function SeaiAskContent() {
       timestamp: new Date(),
     };
     const thinkingMsg: Message = {
+      clientId: nextClientId(),
       role: 'seai',
       text: '',
       isThinking: true,
@@ -369,7 +441,8 @@ function SeaiAskContent() {
 
     setMessages([...baseMessages, userMsg, thinkingMsg]);
     setIsStreaming(true);
-    scrollToBottom();
+    atBottomRef.current = true;
+    scrollToBottom(true);
 
     const history: { role: string; content: string }[] = [];
     for (const m of [...baseMessages, userMsg]) {
@@ -389,7 +462,8 @@ function SeaiAskContent() {
         userLng,
         10,
         history,
-        isCortexMode ? 'agent' : 'gpt'
+        isCortexMode ? 'agent' : 'gpt',
+        controller.signal,
       );
 
       setMessages((prev) => {
@@ -408,6 +482,8 @@ function SeaiAskContent() {
       let cardsReceived: ResultCard[] | null = null;
 
       for await (const event of stream) {
+        if (!isMountedRef.current || controller.signal.aborted) return;
+
         for (const line of event.split('\n')) {
           if (!line.startsWith('data:')) continue;
           const payload = line.substring(5).trim();
@@ -422,11 +498,13 @@ function SeaiAskContent() {
               full += json.text as string;
               setMessages((prev) => {
                 const updated = [...prev];
-                updated[idx] = {
-                  ...updated[idx],
-                  text: full,
-                  isStreaming: true,
-                };
+                if (idx < updated.length) {
+                  updated[idx] = {
+                    ...updated[idx],
+                    text: full,
+                    isStreaming: true,
+                  };
+                }
                 return updated;
               });
               scrollToBottom();
@@ -447,12 +525,14 @@ function SeaiAskContent() {
                 cardsReceived = (data.results as ResultCard[]) || [];
                 setMessages((prev) => {
                   const updated = [...prev];
-                  updated[idx] = {
-                    ...updated[idx],
-                    text: full,
-                    isStreaming: false,
-                    cards: cardsReceived || [],
-                  };
+                  if (idx < updated.length) {
+                    updated[idx] = {
+                      ...updated[idx],
+                      text: full,
+                      isStreaming: false,
+                      cards: cardsReceived || [],
+                    };
+                  }
                   return updated;
                 });
                 scrollToBottom();
@@ -479,27 +559,41 @@ function SeaiAskContent() {
         if (done) break;
       }
 
-      try {
-        await api.saveSeaiExchange(text, full);
-        const recents = (await api.getRecentConversations()) as unknown as Conversation[];
-        setConversations(recents);
-      } catch {
-        // ignore
+      if (!isMountedRef.current) return;
+
+      // Persist only non-empty exchanges. Partial responses from a stream error
+      // never reach here (the outer catch handles them).
+      if (full.trim().length > 0) {
+        try {
+          await api.saveSeaiExchange(text, full);
+          const recents = (await api.getRecentConversations()) as unknown as Conversation[];
+          if (isMountedRef.current) setConversations(recents);
+        } catch {
+          // ignore — persistence is best-effort
+        }
       }
+
+      if (!isMountedRef.current) return;
 
       setMessages((prev) => {
         const updated = [...prev];
-        updated[idx] = {
-          ...updated[idx],
-          text: full,
-          isStreaming: false,
-          cards: cardsReceived ?? updated[idx].cards,
-        };
+        if (idx < updated.length) {
+          updated[idx] = {
+            ...updated[idx],
+            text: full,
+            isStreaming: false,
+            cards: cardsReceived ?? updated[idx].cards,
+          };
+        }
         return updated;
       });
       setIsStreaming(false);
       scrollToBottom();
     } catch (err) {
+      if (!isMountedRef.current) return;
+      // AbortError is expected when the user navigates or cancels — don't surface it.
+      if ((err as { name?: string })?.name === 'AbortError') return;
+
       setMessages((prev) => {
         const updated = [...prev];
         const lastIdx = updated.length - 1;
@@ -518,6 +612,7 @@ function SeaiAskContent() {
         return updated;
       });
       setIsStreaming(false);
+      pushToast('error', 'Response failed. Tap retry.');
     }
   };
 
@@ -590,7 +685,7 @@ function SeaiAskContent() {
         const isEditing = editing?.index === i;
 
         return (
-          <div key={i} className="seai-msg-row" style={styles.msgRow}>
+          <div key={msg.clientId} className="seai-msg-row" style={styles.msgRow}>
             {msg.role === 'user' ? (
               <div className="seai-user-wrap" style={styles.userWrap}>
                 {isEditing ? (
@@ -624,21 +719,25 @@ function SeaiAskContent() {
                 <div style={styles.aiAvatar}>
                   <MdAutoAwesome size={14} color="#FFFFFF" />
                 </div>
-                <div style={styles.aiBubble}>
+                <div style={styles.aiBubble} aria-live="polite">
                   {msg.isThinking ? (
                     <div style={styles.thinkingDots}>
                       <span className="dot" />
                       <span className="dot" />
                       <span className="dot" />
                     </div>
-                  ) : isEditing ? (
-                    renderEditable(msg)
                   ) : msg.text ? (
                     <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
                       {msg.text}
                       {msg.isStreaming && <SeaiCursor />}
                     </div>
                   ) : null}
+
+                  {msg.error && !msg.isStreaming && (
+                    <div style={styles.errorLine}>
+                      {msg.error}
+                    </div>
+                  )}
 
                   {msg.cards && msg.cards.length > 0 && (
                     <div className="seai-card-stack" style={styles.cardStack}>
@@ -660,13 +759,6 @@ function SeaiAskContent() {
                         title="Copy"
                       >
                         <MdContentCopy size={15} color="#666" />
-                      </button>
-                      <button
-                        onClick={() => startEdit(i)}
-                        style={styles.actionBtn}
-                        title="Edit"
-                      >
-                        <MdEdit size={15} color="#666" />
                       </button>
                       <button
                         onClick={() => retryMessage(i)}
@@ -774,7 +866,9 @@ function SeaiAskContent() {
         <div style={styles.recentLabel}>Recent</div>
         <div style={styles.conversationList}>
           {isLoadingRecents ? (
-            <div style={{ textAlign: 'center', padding: 16 }}>Loading...</div>
+            <div style={{ textAlign: 'center', padding: 16, color: Brand.textMuted, fontSize: 13 }}>
+              Loading…
+            </div>
           ) : conversations.length === 0 ? (
             <div style={{ color: Brand.textMuted, fontSize: 13, padding: 16 }}>
               No conversations yet
@@ -797,6 +891,22 @@ function SeaiAskContent() {
 
   return (
     <main className="seai-container" style={styles.container}>
+      {/* Toasts */}
+      <div style={styles.toastStack}>
+        {toasts.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+            style={{
+              ...styles.toast,
+              ...(t.kind === 'success' ? styles.toastSuccess : styles.toastError),
+            }}
+          >
+            {t.text}
+          </button>
+        ))}
+      </div>
+
       {renderSidebar()}
 
       <div className="seai-main" style={styles.main}>
@@ -841,7 +951,12 @@ function SeaiAskContent() {
           )}
         </div>
 
-        <div className="seai-body" style={styles.body}>
+        <div
+          className="seai-body"
+          style={styles.body}
+          onScroll={onScroll}
+          ref={scrollContainerRef}
+        >
           {inChat ? renderChat() : renderWelcome()}
         </div>
 
@@ -1125,6 +1240,16 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     height: 24,
   },
+  errorLine: {
+    marginTop: 8,
+    padding: '8px 10px',
+    backgroundColor: '#FEF2F2',
+    border: '1px solid #FECACA',
+    borderRadius: 8,
+    color: '#991B1B',
+    fontSize: 12,
+    fontWeight: 500,
+  },
   editWrap: {
     display: 'flex',
     flexDirection: 'column',
@@ -1376,6 +1501,33 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     marginTop: 8,
   },
+
+  // ── Toasts
+  toastStack: {
+    position: 'fixed',
+    top: 12,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    zIndex: 300,
+    pointerEvents: 'none',
+  },
+  toast: {
+    pointerEvents: 'auto',
+    padding: '10px 16px',
+    borderRadius: 14,
+    fontSize: 13,
+    fontWeight: 600,
+    border: '1px solid transparent',
+    boxShadow: '0 6px 18px rgba(15,23,42,0.08)',
+    cursor: 'pointer',
+    maxWidth: 320,
+    animation: 'seaiToastIn 220ms ease-out both',
+  },
+  toastSuccess: { backgroundColor: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0' },
+  toastError: { backgroundColor: '#FEF2F2', color: '#991B1B', borderColor: '#FECACA' },
 };
 
 // ─── Global keyframes + responsive rules ─────────────────────────
@@ -1424,7 +1576,11 @@ const GLOBAL_CSS = `
   .dot:nth-child(2) { animation-delay: 0.2s; }
   .dot:nth-child(3) { animation-delay: 0.4s; }
 
-  @keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: 0 } }
+  /* Toast entrance */
+  @keyframes seaiToastIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: none; }
+  }
 
   /* ─── Mobile responsiveness ─────────────────────────────── */
   @media (max-width: 640px) {
@@ -1432,7 +1588,6 @@ const GLOBAL_CSS = `
       padding: 12px !important;
     }
 
-    /* Full-width cards on mobile — one per row */
     .seai-card-stack {
       grid-template-columns: 1fr !important;
       gap: 12px !important;
