@@ -18,6 +18,11 @@ import {
   MdPhotoLibrary,
   MdCameraAlt,
   MdClose,
+  MdVerified,
+  MdHourglassEmpty,
+  MdErrorOutline,
+  MdInfoOutline,
+  MdChevronRight,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -25,6 +30,11 @@ interface Store {
   name?: string;
   store_image_url?: string;
   store_id?: string;
+  // ✅ NEW — comes from `SELECT * FROM stores`; the main.py migration
+  //    added these columns.
+  verification_status?: string;
+  verified?: boolean;
+  verified_at?: string | null;
 }
 
 interface Profile {
@@ -40,11 +50,70 @@ interface StoreStats {
   revenue?: number;
 }
 
+type VerificationStatus =
+  | 'unverified'
+  | 'pending'
+  | 'verified'
+  | 'rejected'
+  | 'suspended';
+
 function resolveImageUrl(url: string | null | undefined): string {
   if (!url) return '';
   if (url.startsWith('http')) return url;
   return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
 }
+
+// ✅ NEW — normalise whatever the backend sends into one of five states.
+//    Falls back to `verified` boolean if the new column isn't present.
+function safeVerificationStatus(store: Store | null): VerificationStatus {
+  const vs = (store?.verification_status || '').toLowerCase();
+  if (
+    vs === 'unverified' ||
+    vs === 'pending' ||
+    vs === 'verified' ||
+    vs === 'rejected' ||
+    vs === 'suspended'
+  ) {
+    return vs as VerificationStatus;
+  }
+  return store?.verified ? 'verified' : 'unverified';
+}
+
+const VERIFICATION_META: Record<
+  VerificationStatus,
+  { label: string; hint: string; color: string; soft: string }
+> = {
+  unverified: {
+    label: 'Not verified yet',
+    hint: 'Submit a request to get a verified badge',
+    color: '#64748B',
+    soft: '#F1F5F9',
+  },
+  pending: {
+    label: 'Under review',
+    hint: 'We received your submission',
+    color: '#D97706',
+    soft: '#FEF3C7',
+  },
+  verified: {
+    label: 'Verified',
+    hint: 'Your store shows the verified badge',
+    color: '#16A34A',
+    soft: '#DCFCE7',
+  },
+  rejected: {
+    label: 'Not approved',
+    hint: 'Review the reason and resubmit',
+    color: '#DC2626',
+    soft: '#FEE2E2',
+  },
+  suspended: {
+    label: 'Suspended',
+    hint: 'Contact support for details',
+    color: '#DC2626',
+    soft: '#FEE2E2',
+  },
+};
 
 export default function StorekeeperDashboardPage() {
   const router = useRouter();
@@ -163,6 +232,9 @@ export default function StorekeeperDashboardPage() {
   const avatarUrl = avatarPreview || resolveImageUrl(profile?.avatar_url);
   const userName = profile?.nickname || profile?.username || 'Storekeeper';
 
+  const verificationStatus = safeVerificationStatus(store);
+  const verificationMeta = VERIFICATION_META[verificationStatus];
+
   if (isLoading) {
     return (
       <main style={styles.center}>
@@ -229,6 +301,46 @@ export default function StorekeeperDashboardPage() {
             <MdEdit size={22} color="#0504AA" />
           </button>
         </div>
+
+        {/* ✅ NEW — verification status row */}
+        <button
+          type="button"
+          onClick={() => router.push('/storekeeper/verification')}
+          style={styles.verificationRow}
+        >
+          <span
+            style={{
+              ...styles.verificationIcon,
+              backgroundColor: verificationMeta.soft,
+            }}
+          >
+            {verificationStatus === 'verified' && (
+              <MdVerified size={22} color={verificationMeta.color} />
+            )}
+            {verificationStatus === 'pending' && (
+              <MdHourglassEmpty size={22} color={verificationMeta.color} />
+            )}
+            {(verificationStatus === 'rejected' ||
+              verificationStatus === 'suspended') && (
+              <MdErrorOutline size={22} color={verificationMeta.color} />
+            )}
+            {verificationStatus === 'unverified' && (
+              <MdInfoOutline size={22} color={verificationMeta.color} />
+            )}
+          </span>
+          <span style={styles.verificationText}>
+            <span
+              style={{
+                ...styles.verificationTitle,
+                color: verificationMeta.color,
+              }}
+            >
+              {verificationMeta.label}
+            </span>
+            <span style={styles.verificationHint}>{verificationMeta.hint}</span>
+          </span>
+          <MdChevronRight size={22} color="#94A3B8" />
+        </button>
 
         {/* Metrics */}
         <div style={styles.metricsRow}>
@@ -492,7 +604,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 16,
     border: '1px solid #eee',
     marginTop: 20,
-    marginBottom: 24,
+    marginBottom: 12,
   },
   avatarWrapper: {
     width: 50,
@@ -532,6 +644,49 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     padding: 4,
+  },
+  // ✅ NEW — verification row styles
+  verificationRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    padding: '14px 16px',
+    backgroundColor: '#fff',
+    border: '1px solid #eee',
+    borderRadius: 16,
+    marginBottom: 24,
+    cursor: 'pointer',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+  },
+  verificationIcon: {
+    width: 42,
+    height: 42,
+    flex: '0 0 42px',
+    borderRadius: 12,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verificationText: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  verificationTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    letterSpacing: '-0.01em',
+  },
+  verificationHint: {
+    fontSize: 12.5,
+    color: '#64748B',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   metricsRow: {
     display: 'flex',
