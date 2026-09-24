@@ -37,6 +37,31 @@ const FILTER_OPTIONS: { value: FeedFilter; label: string; hint: string }[] = [
   { value: 'services', label: 'Services only', hint: 'Hide item cards' },
 ];
 
+// ✅ RESTORED — category lists with real DB values as ids.
+//    Item categories come from `validate_product_category` in storekeeper.py.
+//    Service categories match `SERVICE_CATEGORIES` in add-service/page.tsx.
+const PRODUCT_CATEGORIES: { id: string; label: string; emoji: string }[] = [
+  { id: 'tech_electronics', label: 'Tech', emoji: '🔌' },
+  { id: 'food_beverage', label: 'Food', emoji: '🍏' },
+  { id: 'health_wellness', label: 'Health', emoji: '⚕️' },
+  { id: 'fashion_apparel', label: 'Fashion', emoji: '👗' },
+  { id: 'building_industrial', label: 'Building', emoji: '🏗️' },
+  { id: 'home_garden', label: 'Home', emoji: '🛋️' },
+  { id: 'kids_toys', label: 'Kids', emoji: '🧸' },
+  { id: 'sports_outdoors', label: 'Sports', emoji: '⚽' },
+  { id: 'automotive', label: 'Automotive', emoji: '🚗' },
+  { id: 'media_office', label: 'Media', emoji: '📚' },
+];
+
+const SERVICE_CATEGORIES: { id: string; label: string; emoji: string }[] = [
+  { id: 'grooming_beauty', label: 'Grooming', emoji: '💈' },
+  { id: 'repair_maintenance', label: 'Repair', emoji: '🔧' },
+  { id: 'cleaning_care', label: 'Cleaning', emoji: '🧹' },
+  { id: 'education', label: 'Education', emoji: '👨‍🏫' },
+  { id: 'event_entertainment', label: 'Events', emoji: '📸' },
+  { id: 'digital_creative', label: 'Digital', emoji: '🎨' },
+];
+
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -76,6 +101,7 @@ interface RankedItem {
   title?: string;
   price?: number;
   store_name?: string;
+  category?: string | null;
 }
 interface StoreLocation {
   store_id: string;
@@ -91,6 +117,7 @@ interface ServiceItem {
   price?: number | string;
   image_url?: string;
   video_url?: string | null;
+  category?: string | null;
   duration_minutes?: number;
   description?: string;
   business_name?: string;
@@ -109,6 +136,7 @@ interface Item {
   title: string;
   price: string;
   storeName: string;
+  category: string | null;
 }
 interface Store {
   id: string;
@@ -227,8 +255,6 @@ function LocationBanner({
 }
 
 // ─── StoreSpotlight ────────────────────────────────────────────────────────
-// ✅ Replaces the fake picsum.photos carousel. Uses real store data — only
-//    renders when there's at least one store with an image.
 function StoreSpotlight({
   stores,
   collapsed,
@@ -367,9 +393,7 @@ function StoreSpotlight({
                         height: 4,
                         borderRadius: 2,
                         background:
-                          i === index
-                            ? '#fff'
-                            : 'rgba(255,255,255,0.45)',
+                          i === index ? '#fff' : 'rgba(255,255,255,0.45)',
                         transition: 'width 0.25s, background 0.25s',
                       }}
                     />
@@ -564,10 +588,12 @@ function FeedEmpty({
   icon,
   title,
   body,
+  onClear,
 }: {
   icon: React.ReactNode;
   title: string;
   body: string;
+  onClear?: () => void;
 }) {
   return (
     <div style={styles.emptyState}>
@@ -576,6 +602,15 @@ function FeedEmpty({
       </div>
       <div style={styles.emptyTitle}>{title}</div>
       <div style={styles.emptyBody}>{body}</div>
+      {onClear && (
+        <button
+          type="button"
+          onClick={onClear}
+          style={styles.clearFiltersBtn}
+        >
+          Clear filters
+        </button>
+      )}
     </div>
   );
 }
@@ -636,6 +671,8 @@ export default function ShopperHomePage() {
 
   const [showFilter, setShowFilter] = useState(false);
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('mixed');
+  // ✅ RESTORED — selected category id from the chip list, or null for All
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [columns, setColumns] = useState(2);
@@ -797,6 +834,8 @@ export default function ShopperHomePage() {
           title: item.title ?? 'No Title',
           price: formatPrice(item.price),
           storeName: item.store_name ?? 'Unknown',
+          // ✅ NEW — carry category through
+          category: item.category ?? null,
         }));
 
         newItems.forEach((item) => sessionItemsShown.current.push(item.id));
@@ -853,6 +892,8 @@ export default function ShopperHomePage() {
           title: s.title ?? 'Service',
           price: formatPrice(s.price),
           storeName: s.business_name ?? s.username ?? 'Service Provider',
+          // ✅ NEW — carry category through
+          category: s.category ?? null,
         }));
       setServiceItems(svcItems);
 
@@ -900,16 +941,18 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ✅ Applied filter before interleave
+  // ✅ Applied filters: kind AND category, before interleave
   const filteredListingItems = useMemo(() => {
     if (feedFilter === 'services') return [];
-    return listingItems;
-  }, [feedFilter, listingItems]);
+    if (!selectedCategory) return listingItems;
+    return listingItems.filter((it) => it.category === selectedCategory);
+  }, [feedFilter, selectedCategory, listingItems]);
 
   const filteredServiceItems = useMemo(() => {
     if (feedFilter === 'items') return [];
-    return serviceItems;
-  }, [feedFilter, serviceItems]);
+    if (!selectedCategory) return serviceItems;
+    return serviceItems.filter((it) => it.category === selectedCategory);
+  }, [feedFilter, selectedCategory, serviceItems]);
 
   const feedItems = useMemo(
     () => interleave(filteredListingItems, filteredServiceItems),
@@ -921,9 +964,6 @@ export default function ShopperHomePage() {
     totalRef.current = feedItems.length;
   }, [feedItems.length]);
 
-  // ✅ FIXED — observer rebinds when tab, loading state, or feed length changes.
-  //    Previous version had `[]` deps so the sentinel that appears after
-  //    first render was never observed.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (currentTab !== 0) return;
@@ -1063,12 +1103,26 @@ export default function ShopperHomePage() {
   const handleProviderPress = (id: string, name: string) =>
     router.push(`/provider-services/${id}?name=${encodeURIComponent(name)}`);
 
+  const clearAllFilters = () => {
+    setFeedFilter('mixed');
+    setSelectedCategory(null);
+    setVisibleCount(INITIAL_VISIBLE);
+  };
+
+  const hasActiveFilters = feedFilter !== 'mixed' || selectedCategory !== null;
+
   const trackTransform = `translateX(calc(-${currentTab * 33.3333}% + ${dragOffset}px))`;
 
   const loadingFeed = loadingItems || loadingServices;
   const hasMoreToReveal = visibleCount < feedItems.length;
 
   const TAB_LABELS = ['BUYTEMS', 'SHOPNSTORE', 'SERVOOKS'];
+
+  const activeCategoryLabel = selectedCategory
+    ? PRODUCT_CATEGORIES.find((c) => c.id === selectedCategory)?.label ||
+      SERVICE_CATEGORIES.find((c) => c.id === selectedCategory)?.label ||
+      selectedCategory
+    : null;
 
   return (
     <div style={styles.container}>
@@ -1103,7 +1157,11 @@ export default function ShopperHomePage() {
             <MdNotificationsNone size={22} color="#0504AA" />
           </button>
           <button
-            style={styles.iconBtn}
+            style={{
+              ...styles.iconBtn,
+              // ✅ Highlight the tune icon when a filter is active
+              backgroundColor: hasActiveFilters ? '#EEF0FF' : 'transparent',
+            }}
             onClick={openFilter}
             aria-label="Feed options"
             title="Feed options"
@@ -1118,14 +1176,11 @@ export default function ShopperHomePage() {
         onEnableLocation={requestLocationManually}
       />
 
-      {/* Real featured stores — replaces the fake picsum carousel */}
       {!loadingStores && (
         <StoreSpotlight
           stores={stores}
           collapsed={isSpotlightCollapsed}
-          onToggleCollapsed={() =>
-            setIsSpotlightCollapsed((c) => !c)
-          }
+          onToggleCollapsed={() => setIsSpotlightCollapsed((c) => !c)}
           onPress={handleStorePress}
         />
       )}
@@ -1153,7 +1208,47 @@ export default function ShopperHomePage() {
         })}
       </div>
 
-      {/* Panels + drag */}
+      {/* Active filter chip strip */}
+      {currentTab === 0 && hasActiveFilters && (
+        <div style={styles.activeFilters}>
+          <span style={styles.activeFiltersLabel}>Showing:</span>
+          {feedFilter !== 'mixed' && (
+            <span style={styles.activeFilterChip}>
+              {feedFilter === 'items' ? 'Items' : 'Services'}
+              <button
+                type="button"
+                onClick={() => setFeedFilter('mixed')}
+                aria-label="Remove kind filter"
+                style={styles.activeFilterClose}
+              >
+                <MdClose size={12} color="#0504AA" />
+              </button>
+            </span>
+          )}
+          {activeCategoryLabel && (
+            <span style={styles.activeFilterChip}>
+              {activeCategoryLabel}
+              <button
+                type="button"
+                onClick={() => setSelectedCategory(null)}
+                aria-label="Remove category filter"
+                style={styles.activeFilterClose}
+              >
+                <MdClose size={12} color="#0504AA" />
+              </button>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            style={styles.activeFiltersClear}
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Panels */}
       <div
         style={styles.tabContent}
         onTouchStart={handleTouchStart}
@@ -1189,11 +1284,20 @@ export default function ShopperHomePage() {
               {loadingFeed ? (
                 <FeedSkeleton columns={columns} />
               ) : feedItems.length === 0 ? (
-                <FeedEmpty
-                  icon={<MdImage size={40} color="#94a3b8" />}
-                  title="Nothing to show yet"
-                  body="Pull down to refresh, or check back soon."
-                />
+                hasActiveFilters ? (
+                  <FeedEmpty
+                    icon={<MdTune size={40} color="#94a3b8" />}
+                    title="No matches"
+                    body="Try a different category or clear the filters."
+                    onClear={clearAllFilters}
+                  />
+                ) : (
+                  <FeedEmpty
+                    icon={<MdImage size={40} color="#94a3b8" />}
+                    title="Nothing to show yet"
+                    body="Pull down to refresh, or check back soon."
+                  />
+                )
               ) : (
                 <>
                   <MasonryColumns
@@ -1283,7 +1387,7 @@ export default function ShopperHomePage() {
         </div>
       </div>
 
-      {/* Feed options sheet — REAL filter */}
+      {/* Feed options sheet */}
       {showFilter && (
         <div style={styles.modalOverlay} onClick={closeFilter}>
           <div
@@ -1304,55 +1408,136 @@ export default function ShopperHomePage() {
                 <MdClose size={20} color="#64748b" />
               </button>
             </div>
-            <p style={styles.sheetSubtitle}>
-              Choose what to see in the feed.
-            </p>
 
-            <div style={styles.filterOptions}>
-              {FILTER_OPTIONS.map((opt) => {
-                const active = feedFilter === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => {
-                      setFeedFilter(opt.value);
-                      setVisibleCount(INITIAL_VISIBLE);
-                    }}
-                    style={{
-                      ...styles.filterOption,
-                      background: active ? '#EEF0FF' : '#fff',
-                      borderColor: active ? '#0504AA' : '#E5E7EF',
-                    }}
-                  >
-                    <span style={styles.filterOptionText}>
-                      <span
-                        style={{
-                          ...styles.filterOptionLabel,
-                          color: active ? '#0504AA' : '#0F172A',
-                        }}
-                      >
-                        {opt.label}
+            {/* Show */}
+            <div style={styles.filterSection}>
+              <div style={styles.filterSectionLabel}>Show</div>
+              <div style={styles.filterOptions}>
+                {FILTER_OPTIONS.map((opt) => {
+                  const active = feedFilter === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setFeedFilter(opt.value);
+                        setVisibleCount(INITIAL_VISIBLE);
+                      }}
+                      style={{
+                        ...styles.filterOption,
+                        background: active ? '#EEF0FF' : '#fff',
+                        borderColor: active ? '#0504AA' : '#E5E7EF',
+                      }}
+                    >
+                      <span style={styles.filterOptionText}>
+                        <span
+                          style={{
+                            ...styles.filterOptionLabel,
+                            color: active ? '#0504AA' : '#0F172A',
+                          }}
+                        >
+                          {opt.label}
+                        </span>
+                        <span style={styles.filterOptionHint}>{opt.hint}</span>
                       </span>
-                      <span style={styles.filterOptionHint}>
-                        {opt.hint}
-                      </span>
-                    </span>
-                    {active && (
-                      <MdCheckCircle size={20} color="#0504AA" />
-                    )}
-                  </button>
-                );
-              })}
+                      {active && <MdCheckCircle size={20} color="#0504AA" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={closeFilter}
-              style={styles.applyBtn}
-            >
-              Done
-            </button>
+            {/* Product categories */}
+            <div style={styles.filterSection}>
+              <div style={styles.filterSectionLabel}>Products</div>
+              <div style={styles.chipGrid}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory(null);
+                    setVisibleCount(INITIAL_VISIBLE);
+                  }}
+                  style={{
+                    ...styles.categoryChip,
+                    background: !selectedCategory ? '#0504AA' : '#fff',
+                    borderColor: !selectedCategory ? '#0504AA' : '#E5E7EF',
+                    color: !selectedCategory ? '#fff' : '#334155',
+                  }}
+                >
+                  All
+                </button>
+                {PRODUCT_CATEGORIES.map((cat) => {
+                  const active = selectedCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory(active ? null : cat.id);
+                        setVisibleCount(INITIAL_VISIBLE);
+                      }}
+                      style={{
+                        ...styles.categoryChip,
+                        background: active ? '#0504AA' : '#fff',
+                        borderColor: active ? '#0504AA' : '#E5E7EF',
+                        color: active ? '#fff' : '#334155',
+                      }}
+                    >
+                      <span aria-hidden="true">{cat.emoji}</span>
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Service categories */}
+            <div style={styles.filterSection}>
+              <div style={styles.filterSectionLabel}>Services</div>
+              <div style={styles.chipGrid}>
+                {SERVICE_CATEGORIES.map((cat) => {
+                  const active = selectedCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory(active ? null : cat.id);
+                        setVisibleCount(INITIAL_VISIBLE);
+                      }}
+                      style={{
+                        ...styles.categoryChip,
+                        background: active ? '#0504AA' : '#fff',
+                        borderColor: active ? '#0504AA' : '#E5E7EF',
+                        color: active ? '#fff' : '#334155',
+                      }}
+                    >
+                      <span aria-hidden="true">{cat.emoji}</span>
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={styles.sheetActions}>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  style={styles.clearBtn}
+                >
+                  Clear all
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={closeFilter}
+                style={styles.applyBtn}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1383,10 +1568,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 18,
     letterSpacing: '-0.3px',
   },
-  appBarActions: {
-    display: 'flex',
-    gap: 4,
-  },
+  appBarActions: { display: 'flex', gap: 4 },
   iconBtn: {
     background: 'none',
     border: 'none',
@@ -1415,6 +1597,54 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: 0.6,
     cursor: 'pointer',
     transition: 'all 0.22s',
+    fontFamily: 'inherit',
+  },
+  // ✅ NEW — active filter strip shown when filters are on
+  activeFilters: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '0 16px 10px',
+    flexWrap: 'wrap',
+  },
+  activeFiltersLabel: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    fontWeight: 700,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  activeFilterChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '4px 8px 4px 12px',
+    borderRadius: 999,
+    background: '#EEF0FF',
+    color: '#0504AA',
+    fontSize: 12,
+    fontWeight: 700,
+  },
+  activeFilterClose: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0,
+    width: 16,
+    height: 16,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeFiltersClear: {
+    background: 'none',
+    border: 'none',
+    color: '#94A3B8',
+    fontSize: 11.5,
+    fontWeight: 700,
+    textDecoration: 'underline',
+    cursor: 'pointer',
+    padding: 0,
     fontFamily: 'inherit',
   },
   tabContent: {
@@ -1455,11 +1685,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     backgroundColor: '#f0f0f0',
   },
-  image: {
-    display: 'block',
-    width: '100%',
-    height: 'auto',
-  },
+  image: { display: 'block', width: '100%', height: 'auto' },
   imagePlaceholder: {
     width: '100%',
     aspectRatio: '1 / 1',
@@ -1476,11 +1702,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     background: 'linear-gradient(135deg, #7B1FA2, #9C27B0)',
   },
-  providerInitials: {
-    fontSize: 48,
-    fontWeight: 700,
-    color: '#fff',
-  },
+  providerInitials: { fontSize: 48, fontWeight: 700, color: '#fff' },
   kindBadge: {
     position: 'absolute',
     top: 8,
@@ -1525,11 +1747,7 @@ const styles: Record<string, React.CSSProperties> = {
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
   },
-  cardPrice: {
-    color: '#0504AA',
-    fontWeight: 700,
-    fontSize: 13,
-  },
+  cardPrice: { color: '#0504AA', fontWeight: 700, fontSize: 13 },
   cardStore: {
     fontSize: 11,
     color: '#64748B',
@@ -1556,16 +1774,24 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     marginBottom: 8,
   },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: 800,
-    color: '#334155',
-  },
+  emptyTitle: { fontSize: 16, fontWeight: 800, color: '#334155' },
   emptyBody: {
     fontSize: 13.5,
     color: '#64748B',
     maxWidth: 340,
     lineHeight: 1.5,
+  },
+  clearFiltersBtn: {
+    marginTop: 12,
+    padding: '10px 20px',
+    borderRadius: 12,
+    border: 'none',
+    background: '#0504AA',
+    color: '#fff',
+    fontSize: 13.5,
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
   skeletonCard: {
     background: '#fff',
@@ -1576,16 +1802,14 @@ const styles: Record<string, React.CSSProperties> = {
   skeletonImage: {
     width: '100%',
     aspectRatio: '1 / 1',
-    background:
-      'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
+    background: 'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
     backgroundSize: '800px 100%',
     animation: 'shimmer 1.4s infinite linear',
   },
   skeletonLine: {
     height: 10,
     borderRadius: 6,
-    background:
-      'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
+    background: 'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
     backgroundSize: '800px 100%',
     animation: 'shimmer 1.4s infinite linear',
     width: '80%',
@@ -1607,7 +1831,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: '10px 20px 24px',
-    maxHeight: '80vh',
+    maxHeight: '88vh',
     overflowY: 'auto',
   },
   sheetGrabber: {
@@ -1621,7 +1845,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 18,
   },
   sheetTitle: {
     fontSize: 18,
@@ -1640,24 +1864,22 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     borderRadius: 8,
   },
-  sheetSubtitle: {
-    fontSize: 13.5,
-    color: '#64748B',
-    margin: '0 0 16px',
-    lineHeight: 1.5,
+  filterSection: { marginBottom: 22 },
+  filterSectionLabel: {
+    fontSize: 11,
+    fontWeight: 800,
+    color: '#94A3B8',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 10,
   },
-  filterOptions: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-    marginBottom: 20,
-  },
+  filterOptions: { display: 'flex', flexDirection: 'column', gap: 8 },
   filterOption: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    padding: '14px 16px',
+    padding: '12px 14px',
     border: '1px solid',
     borderRadius: 14,
     cursor: 'pointer',
@@ -1672,17 +1894,48 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
   },
   filterOptionLabel: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: 800,
     letterSpacing: '-0.2px',
   },
-  filterOptionHint: {
-    fontSize: 12.5,
-    color: '#64748B',
-    lineHeight: 1.4,
+  filterOptionHint: { fontSize: 12.5, color: '#64748B', lineHeight: 1.4 },
+  chipGrid: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    padding: '8px 14px',
+    borderRadius: 999,
+    border: '1px solid',
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: 'pointer',
+    transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+    fontFamily: 'inherit',
+  },
+  sheetActions: {
+    display: 'flex',
+    gap: 10,
+    marginTop: 8,
+  },
+  clearBtn: {
+    flex: 1,
+    padding: '14px',
+    backgroundColor: '#fff',
+    color: '#334155',
+    border: '1px solid #E2E8F0',
+    borderRadius: 14,
+    fontWeight: 700,
+    fontSize: 14,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
   applyBtn: {
-    width: '100%',
+    flex: 2,
     padding: '14px',
     backgroundColor: '#0504AA',
     color: '#fff',
