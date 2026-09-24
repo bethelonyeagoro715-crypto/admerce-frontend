@@ -1728,6 +1728,51 @@ class ApiService {
       // fire-and-forget
     }
   }
+
+    // ======================== COMMUNITY (sellers-to-sellers) ========================
+  public async communityGetMessages(
+    room = 'global',
+    limit = 50,
+    beforeId?: number,
+  ): Promise<JsonArray> {
+    const params: Record<string, string | number> = { room, limit };
+    if (beforeId) params.before_id = beforeId;
+    const res = await this.axios.get('/community/messages', { params });
+    return res.data;
+  }
+
+  public async communityPostMessage(
+    text: string,
+    imageUrl?: string,
+    replyToId?: number,
+    room = 'global',
+  ): Promise<JsonObject> {
+    const res = await this.axios.post('/community/messages', {
+      text,
+      ...(imageUrl ? { image_url: imageUrl } : {}),
+      ...(replyToId ? { reply_to_id: replyToId } : {}),
+      room,
+    });
+    return res.data;
+  }
+
+  public async communityEditMessage(
+    messageId: number,
+    text: string,
+  ): Promise<JsonObject> {
+    const res = await this.axios.put(`/community/messages/${messageId}`, { text });
+    return res.data;
+  }
+
+  public async communityDeleteMessage(messageId: number): Promise<JsonObject> {
+    const res = await this.axios.delete(`/community/messages/${messageId}`);
+    return res.data;
+  }
+
+  public async communityGetStats(room = 'global'): Promise<JsonObject> {
+    const res = await this.axios.get('/community/stats', { params: { room } });
+    return res.data;
+  }
 }
 
 export default ApiService.getInstance();
