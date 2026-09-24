@@ -25,12 +25,8 @@ export default function PermissionPage() {
   const [locationGranted, setLocationGranted] = useState(false);
   const [cameraGranted, setCameraGranted] = useState(false);
   const [micGranted, setMicGranted] = useState(false);
-
-  // ✅ CHANGED — kind drives colour; text is just for display.
   const [message, setMessage] = useState<StatusMessage | null>(null);
 
-  // ✅ NEW — auto-dismiss the banner after 3.2s. Cleared and reset on
-  //    every new message.
   useEffect(() => {
     if (!message) return;
     const t = setTimeout(() => setMessage(null), 3200);
@@ -40,7 +36,6 @@ export default function PermissionPage() {
   const showSuccess = (text: string) => setMessage({ text, kind: 'success' });
   const showError = (text: string) => setMessage({ text, kind: 'error' });
 
-  // ── Location ───────────────────────────────────────────────────
   const requestLocation = async () => {
     if (!navigator.geolocation) {
       showError('Geolocation is not supported by this browser.');
@@ -56,13 +51,9 @@ export default function PermissionPage() {
       setLocationGranted(true);
       showSuccess('Location granted');
     } catch (err: unknown) {
-      // Duck-type on `code` — GeolocationPositionError isn't a global
-      // constructor in every browser.
       const code = (err as { code?: number })?.code;
       if (code === 1) {
-        showError(
-          'Location was denied. Please allow it in your browser settings.',
-        );
+        showError('Location was denied. Please allow it in your browser settings.');
       } else if (code === 2) {
         showError('Location is unavailable. Try again in a moment.');
       } else if (code === 3) {
@@ -75,7 +66,6 @@ export default function PermissionPage() {
     }
   };
 
-  // ── Camera ─────────────────────────────────────────────────────
   const requestCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -94,7 +84,6 @@ export default function PermissionPage() {
     }
   };
 
-  // ── Microphone ─────────────────────────────────────────────────
   const requestMicrophone = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -155,7 +144,6 @@ export default function PermissionPage() {
           {allGranted ? 'All set — Continue' : 'Continue'}
         </button>
 
-        {/* ✅ Snackbar — colour comes from `message.kind`, not string matching */}
         {message && (
           <div
             style={{
@@ -183,7 +171,6 @@ export default function PermissionPage() {
   );
 }
 
-// ─── Tile ──────────────────────────────────────────────────────────
 function PermissionTile({
   Icon,
   title,
@@ -210,8 +197,6 @@ function PermissionTile({
       }}
       style={{
         ...styles.tile,
-        // ✅ Granted tiles get a soft green ring — a persistent cue even
-        //    after the banner fades.
         ...(granted ? styles.tileGranted : {}),
       }}
     >
@@ -240,7 +225,6 @@ function PermissionTile({
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -324,7 +308,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#0504AA',
     color: '#fff',
     border: 'none',
-    borderRadius: '30px',
+    borderRadius: 14,                    // ✅ rounded-rectangle, not pill
     fontSize: '16px',
     fontWeight: 800,
     cursor: 'pointer',

@@ -28,8 +28,6 @@ interface InterestChip {
 }
 
 // ─── Roles — launch set ─────────────────────────────────────────────
-// When courier + flipper launch, add them here. The page layout already
-// handles N roles — no structural change needed.
 const PRIMARY_ROLES: OnboardingRole[] = [
   {
     cardIndex: 0,
@@ -732,7 +730,7 @@ function ExpandedRolePanel({
           color: role.color,
           border: 'none',
           padding: '16px 48px',
-          borderRadius: 30,
+          borderRadius: 14,                      // ✅ rounded-rectangle
           fontSize: 16,
           fontWeight: 800,
           cursor: 'pointer',
@@ -1072,7 +1070,6 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          {/* Floating hero stat cards (desktop only) */}
           <div className="adm-heroStats" aria-hidden="true">
             <div
               style={{
@@ -1406,8 +1403,7 @@ export default function OnboardingPage() {
             style={{
               position: 'sticky',
               bottom: 0,
-              padding:
-                '16px 24px calc(20px + env(safe-area-inset-bottom))',
+              padding: '16px 24px calc(20px + env(safe-area-inset-bottom))',
               background: 'linear-gradient(to top, #0A0A0A 70%, transparent)',
               zIndex: 10,
               display: 'flex',
@@ -1421,7 +1417,7 @@ export default function OnboardingPage() {
                 width: '100%',
                 maxWidth: 640,
                 padding: '16px 24px',
-                borderRadius: 32,
+                borderRadius: 14,              // ✅ rounded-rectangle, not pill
                 border: 'none',
                 background: selectedRole.color,
                 color: 'white',
