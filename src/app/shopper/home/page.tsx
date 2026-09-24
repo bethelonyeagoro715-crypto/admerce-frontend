@@ -13,37 +13,11 @@ import {
   MdStorefront,
   MdExpandLess,
   MdExpandMore,
+  MdClose,
+  MdCheckCircle,
 } from 'react-icons/md';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
-const kProductCategories = [
-  '🔌 Tech & Electronics',
-  '🍏 Food, Beverage & Consumables',
-  '⚕️ Health, Wellness & Beauty',
-  '👗 Fashion, Apparel & Goods',
-  '🏗️ Building, Industrial & Hardware',
-  '🛋️ Home, Living & Garden',
-  '🧸 Kids, Toys & Hobbies',
-  '⚽ Sports, Outdoors & Travel',
-  '🚗 Automotive & Industrial Vehicles',
-  '📚 Media, Office & Education',
-];
-
-const serviceCategories = [
-  { emoji: '💈', name: 'Barber' },
-  { emoji: '💅', name: 'Nail Artist' },
-  { emoji: '🧹', name: 'Cleaner' },
-  { emoji: '👨‍🏫', name: 'Tutor' },
-  { emoji: '🔧', name: 'Handyman' },
-  { emoji: '📸', name: 'Photographer' },
-  { emoji: '🎵', name: 'Musician' },
-  { emoji: '🏋️', name: 'Fitness Trainer' },
-];
-
-const noteworthyImages = Array.from({ length: 20 }, (_, i) =>
-  `https://picsum.photos/800/400?random=${i * 10}`,
-);
-
 const PULL_THRESHOLD_PX = 180;
 const PULL_DEAD_ZONE_PX = 25;
 
@@ -53,6 +27,16 @@ const BATCH_SIZE = 40;
 const REEL_WEIGHT = 1.78;
 const ITEM_WEIGHT = 1;
 
+const SPOTLIGHT_INTERVAL_MS = 4200;
+
+type FeedFilter = 'mixed' | 'items' | 'services';
+
+const FILTER_OPTIONS: { value: FeedFilter; label: string; hint: string }[] = [
+  { value: 'mixed', label: 'Mixed', hint: 'Items and services, interleaved' },
+  { value: 'items', label: 'Items only', hint: 'Hide the service reels' },
+  { value: 'services', label: 'Services only', hint: 'Hide item cards' },
+];
+
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -60,11 +44,11 @@ function resolveImageUrl(url: string | null | undefined): string | null {
     process.env.NEXT_PUBLIC_API_BASE ||
     process.env.NEXT_PUBLIC_API_URL ||
     '';
-  return `${base}${url}`;
+  if (!base) return url;
+  if (url.startsWith('/')) return `${base}${url}`;
+  return `${base}/${url}`;
 }
 
-// ✅ NEW — single source of truth for price rendering. Returns 'Free' for
-//    null/undefined/0/NaN, and a formatted ₦ string otherwise.
 function formatPrice(raw: unknown): string {
   if (raw === null || raw === undefined || raw === '') return 'Free';
   const n = Number(raw);
@@ -82,7 +66,7 @@ function interleave<T>(a: T[], b: T[]): T[] {
   return out;
 }
 
-// ─── Typed response shapes ─────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────
 interface RecallCandidate {
   listing_id: string | number;
 }
@@ -171,14 +155,7 @@ function MasonryColumns<T>({
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap,
-        alignItems: 'flex-start',
-        width: '100%',
-      }}
-    >
+    <div style={{ display: 'flex', gap, alignItems: 'flex-start', width: '100%' }}>
       {cols.map((col, colIdx) => (
         <div
           key={colIdx}
@@ -201,7 +178,7 @@ function MasonryColumns<T>({
   );
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────
+// ─── LocationBanner ────────────────────────────────────────────────────────
 function LocationBanner({
   locationDenied,
   onEnableLocation,
@@ -213,41 +190,234 @@ function LocationBanner({
   return (
     <div
       style={{
-        background: '#FFF3E0',
+        background: '#FEF3C7',
         padding: '10px 16px',
         fontSize: 13,
-        textAlign: 'center',
-        color: '#E65100',
-        borderBottom: '1px solid #FFE0B2',
+        color: '#78350F',
+        borderBottom: '1px solid #FDE68A',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: 8,
+        fontWeight: 600,
       }}
     >
       <span style={{ flex: 1 }}>
-        📍 Location access was denied – showing default results.
+        📍 Location access denied — showing default results.
       </span>
       <button
         onClick={onEnableLocation}
         style={{
-          background: '#0504AA',
-          color: '#fff',
+          background: '#78350F',
+          color: '#FEF3C7',
           border: 'none',
-          borderRadius: 8,
-          padding: '6px 12px',
-          fontWeight: 600,
+          borderRadius: 10,
+          padding: '6px 14px',
+          fontWeight: 700,
           cursor: 'pointer',
           fontSize: 12,
+          fontFamily: 'inherit',
         }}
       >
-        Enable Location
+        Enable
       </button>
     </div>
   );
 }
 
+// ─── StoreSpotlight ────────────────────────────────────────────────────────
+// ✅ Replaces the fake picsum.photos carousel. Uses real store data — only
+//    renders when there's at least one store with an image.
+function StoreSpotlight({
+  stores,
+  collapsed,
+  onToggleCollapsed,
+  onPress,
+}: {
+  stores: Store[];
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  onPress: (storeId: string) => void;
+}) {
+  const withImages = useMemo(
+    () => stores.filter((s) => Boolean(s.image)),
+    [stores],
+  );
+  const [index, setIndex] = useState(0);
+  const touchPaused = useRef(false);
+
+  useEffect(() => {
+    if (collapsed || withImages.length <= 1) return;
+    const id = setInterval(() => {
+      if (touchPaused.current) return;
+      setIndex((prev) => (prev + 1) % withImages.length);
+    }, SPOTLIGHT_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [collapsed, withImages.length]);
+
+  if (withImages.length === 0) return null;
+
+  const current = withImages[index] || withImages[0];
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      {!collapsed ? (
+        <>
+          <div style={{ padding: '0 16px 6px' }}>
+            <button
+              type="button"
+              onClick={() => onPress(current.id)}
+              onTouchStart={() => {
+                touchPaused.current = true;
+              }}
+              onTouchEnd={() => {
+                setTimeout(() => {
+                  touchPaused.current = false;
+                }, 300);
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: 0,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                borderRadius: 20,
+                overflow: 'hidden',
+                position: 'relative',
+                height: 160,
+                textAlign: 'left',
+                fontFamily: 'inherit',
+              }}
+              aria-label={`Featured store: ${current.name}`}
+            >
+              <img
+                key={current.id}
+                src={current.image!}
+                alt=""
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  display: 'block',
+                  animation: 'spotlightFade 0.9s ease',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background:
+                    'linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.05) 55%, transparent 100%)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  padding: '14px 16px',
+                  color: '#fff',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: 1.5,
+                    opacity: 0.75,
+                    marginBottom: 4,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Featured store
+                </div>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 800,
+                    letterSpacing: '-0.3px',
+                    textShadow: '0 1px 4px rgba(0,0,0,0.35)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {current.name}
+                </div>
+              </div>
+              {withImages.length > 1 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 12,
+                    right: 14,
+                    display: 'flex',
+                    gap: 5,
+                  }}
+                  aria-hidden="true"
+                >
+                  {withImages.map((_, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        width: i === index ? 16 : 6,
+                        height: 4,
+                        borderRadius: 2,
+                        background:
+                          i === index
+                            ? '#fff'
+                            : 'rgba(255,255,255,0.45)',
+                        transition: 'width 0.25s, background 0.25s',
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </button>
+          </div>
+          <div style={{ textAlign: 'right', paddingRight: 16 }}>
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label="Collapse featured stores"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#0504AA',
+                cursor: 'pointer',
+                padding: 4,
+              }}
+            >
+              <MdExpandLess size={22} />
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={{ textAlign: 'right', paddingRight: 16 }}>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label="Expand featured stores"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#0504AA',
+              cursor: 'pointer',
+              padding: 4,
+            }}
+          >
+            <MdExpandMore size={22} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ItemCard ──────────────────────────────────────────────────────────────
 function ItemCard({
   item,
   onPress,
@@ -274,7 +444,11 @@ function ItemCard({
   }
 
   return (
-    <div style={styles.card} onClick={() => onPress(item)}>
+    <button
+      type="button"
+      onClick={() => onPress(item)}
+      style={styles.card}
+    >
       <div style={styles.imageWrap}>
         {item.image ? (
           <img src={item.image} alt="" loading="lazy" style={styles.image} />
@@ -284,22 +458,17 @@ function ItemCard({
           </div>
         )}
 
-        <div
-          style={{
-            ...styles.kindBadge,
-            backgroundColor: '#0F172A',
-          }}
-        >
-          ITEM
-        </div>
+        <div style={styles.kindBadge}>ITEM</div>
 
         <div
-          style={styles.visualSearchBtn}
           onClick={(e) => {
             e.stopPropagation();
             onVisualSearch(item.image);
           }}
-          title="Visual Search"
+          role="button"
+          aria-label="Visual search"
+          title="Visual search"
+          style={styles.visualSearchBtn}
         >
           <MdSearch size={18} color="#0504AA" />
         </div>
@@ -316,10 +485,11 @@ function ItemCard({
           </div>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 
+// ─── StoreCard ─────────────────────────────────────────────────────────────
 function StoreCard({
   store,
   onPress,
@@ -328,7 +498,7 @@ function StoreCard({
   onPress: (id: string) => void;
 }) {
   return (
-    <div style={styles.card} onClick={() => onPress(store.id)}>
+    <button type="button" onClick={() => onPress(store.id)} style={styles.card}>
       <div style={styles.imageWrap}>
         {store.image ? (
           <img src={store.image} alt="" loading="lazy" style={styles.image} />
@@ -344,10 +514,11 @@ function StoreCard({
         </div>
         <div style={styles.cardStore}>Store</div>
       </div>
-    </div>
+    </button>
   );
 }
 
+// ─── ProviderCard ──────────────────────────────────────────────────────────
 function ProviderCard({
   provider,
   onPress,
@@ -357,9 +528,10 @@ function ProviderCard({
 }) {
   const initials = (provider.name || '?')[0].toUpperCase();
   return (
-    <div
-      style={styles.card}
+    <button
+      type="button"
       onClick={() => onPress(provider.id, provider.name)}
+      style={styles.card}
     >
       <div style={styles.imageWrap}>
         {provider.image ? (
@@ -383,6 +555,60 @@ function ProviderCard({
           {provider.serviceCount} service{provider.serviceCount > 1 ? 's' : ''}
         </div>
       </div>
+    </button>
+  );
+}
+
+// ─── FeedEmpty ─────────────────────────────────────────────────────────────
+function FeedEmpty({
+  icon,
+  title,
+  body,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div style={styles.emptyState}>
+      <div style={styles.emptyIconWrap} aria-hidden="true">
+        {icon}
+      </div>
+      <div style={styles.emptyTitle}>{title}</div>
+      <div style={styles.emptyBody}>{body}</div>
+    </div>
+  );
+}
+
+// ─── Skeleton ──────────────────────────────────────────────────────────────
+function FeedSkeleton({ columns }: { columns: number }) {
+  const cards = 8;
+  return (
+    <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+      {Array.from({ length: columns }).map((_, colIdx) => (
+        <div
+          key={colIdx}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            minWidth: 0,
+          }}
+        >
+          {Array.from({ length: Math.ceil(cards / columns) }).map((_, i) => (
+            <div key={i} style={styles.skeletonCard}>
+              <div style={styles.skeletonImage} />
+              <div style={{ padding: '10px 12px' }}>
+                <div style={styles.skeletonLine} />
+                <div
+                  style={{ ...styles.skeletonLine, width: '40%', marginTop: 6 }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -392,8 +618,7 @@ export default function ShopperHomePage() {
   const router = useRouter();
 
   const [currentTab, setCurrentTab] = useState(0);
-  const [noteworthyIndex, setNoteworthyIndex] = useState(0);
-  const [isNoteworthyCollapsed, setIsNoteworthyCollapsed] = useState(false);
+  const [isSpotlightCollapsed, setIsSpotlightCollapsed] = useState(false);
 
   const [listingItems, setListingItems] = useState<Item[]>([]);
   const [serviceItems, setServiceItems] = useState<Item[]>([]);
@@ -410,6 +635,7 @@ export default function ShopperHomePage() {
   const [locationDenied, setLocationDenied] = useState(false);
 
   const [showFilter, setShowFilter] = useState(false);
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>('mixed');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [columns, setColumns] = useState(2);
@@ -418,7 +644,6 @@ export default function ShopperHomePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
-  const noteworthyTimer = useRef<NodeJS.Timeout | null>(null);
   const sessionItemsShown = useRef<string[]>([]);
 
   const itemsReqSeq = useRef(0);
@@ -500,7 +725,7 @@ export default function ShopperHomePage() {
       ]);
     } else {
       alert(
-        'Location access was denied. Please enable it in your browser settings (click the lock icon in the address bar) and try again.',
+        'Location access was denied. Please enable it in your browser settings and try again.',
       );
     }
   };
@@ -509,93 +734,87 @@ export default function ShopperHomePage() {
     getCurrentLocation().then(setCachedPosition);
   }, []);
 
-  useEffect(() => {
-    noteworthyTimer.current = setInterval(() => {
-      setNoteworthyIndex((prev) => (prev + 1) % noteworthyImages.length);
-    }, 3000);
-    return () => {
-      if (noteworthyTimer.current) clearInterval(noteworthyTimer.current);
-    };
-  }, []);
+  const loadItems = useCallback(
+    async (lat: number, lng: number, loadMore = false) => {
+      const mySeq = ++itemsReqSeq.current;
 
-  const loadItems = async (lat: number, lng: number, loadMore = false) => {
-    const mySeq = ++itemsReqSeq.current;
-
-    if (!loadMore) {
-      setLoadingItems(true);
-      sessionItemsShown.current = [];
-      setVisibleCount(INITIAL_VISIBLE);
-    }
-    try {
-      const recallData = await api.recallFeed(lat, lng, 50, {
-        geo: 0.4,
-        forage: 0.15,
-        trending: 0.1,
-        following: 0.1,
-        embedding: 0.15,
-        collab: 0.1,
-      });
-
-      if (mySeq !== itemsReqSeq.current) return;
-
-      const candidates: RecallCandidate[] = Array.isArray(
-        recallData.candidates,
-      )
-        ? (recallData.candidates as RecallCandidate[])
-        : [];
-      if (!candidates.length) {
-        if (!loadMore) setLoadingItems(false);
-        return;
+      if (!loadMore) {
+        setLoadingItems(true);
+        sessionItemsShown.current = [];
+        setVisibleCount(INITIAL_VISIBLE);
       }
+      try {
+        const recallData = await api.recallFeed(lat, lng, 50, {
+          geo: 0.4,
+          forage: 0.15,
+          trending: 0.1,
+          following: 0.1,
+          embedding: 0.15,
+          collab: 0.1,
+        });
 
-      const candidateIds = candidates.map((c) => c.listing_id.toString());
-      const rankData = await api.rankFeed(
-        lat,
-        lng,
-        candidateIds,
-        sessionItemsShown.current,
-      );
+        if (mySeq !== itemsReqSeq.current) return;
 
-      if (mySeq !== itemsReqSeq.current) return;
+        const candidates: RecallCandidate[] = Array.isArray(
+          recallData.candidates,
+        )
+          ? (recallData.candidates as RecallCandidate[])
+          : [];
+        if (!candidates.length) {
+          if (!loadMore) setLoadingItems(false);
+          return;
+        }
 
-      const feed: RankedItem[] = Array.isArray(rankData?.feed)
-        ? (rankData.feed as RankedItem[])
-        : [];
-
-      feed.forEach((item, index) => {
-        api.logSeaiEvent(
-          'impression',
-          item.listing_id.toString(),
+        const candidateIds = candidates.map((c) => c.listing_id.toString());
+        const rankData = await api.rankFeed(
           lat,
           lng,
-          index,
+          candidateIds,
+          sessionItemsShown.current,
         );
-      });
 
-      const newItems: Item[] = feed.map((item) => ({
-        id: item.listing_id?.toString() ?? '',
-        kind: 'item',
-        image: resolveImageUrl(item.image_url),
-        video: null,
-        title: item.title ?? 'No Title',
-        price: formatPrice(item.price),   // ✅ guard: 0/null → 'Free'
-        storeName: item.store_name ?? 'Unknown',
-      }));
+        if (mySeq !== itemsReqSeq.current) return;
 
-      newItems.forEach((item) => sessionItemsShown.current.push(item.id));
+        const feed: RankedItem[] = Array.isArray(rankData?.feed)
+          ? (rankData.feed as RankedItem[])
+          : [];
 
-      if (loadMore) {
-        setListingItems((prev) => [...prev, ...newItems]);
-      } else {
-        setListingItems(newItems);
-        setLoadingItems(false);
+        feed.forEach((item, index) => {
+          api.logSeaiEvent(
+            'impression',
+            item.listing_id.toString(),
+            lat,
+            lng,
+            index,
+          );
+        });
+
+        const newItems: Item[] = feed.map((item) => ({
+          id: item.listing_id?.toString() ?? '',
+          kind: 'item',
+          image: resolveImageUrl(item.image_url),
+          video: null,
+          title: item.title ?? 'No Title',
+          price: formatPrice(item.price),
+          storeName: item.store_name ?? 'Unknown',
+        }));
+
+        newItems.forEach((item) => sessionItemsShown.current.push(item.id));
+
+        if (loadMore) {
+          setListingItems((prev) => [...prev, ...newItems]);
+        } else {
+          setListingItems(newItems);
+          setLoadingItems(false);
+        }
+      } catch {
+        if (mySeq === itemsReqSeq.current && !loadMore) setLoadingItems(false);
       }
-    } catch {
-      if (mySeq === itemsReqSeq.current && !loadMore) setLoadingItems(false);
-    }
-  };
+    },
+    [],
+  );
 
-  const loadStores = async (_lat: number, _lng: number) => {
+  const loadStores = useCallback(async (_lat: number, _lng: number) => {
     const mySeq = ++storesReqSeq.current;
     try {
       const locations =
@@ -615,13 +834,12 @@ export default function ShopperHomePage() {
     } finally {
       if (mySeq === storesReqSeq.current) setLoadingStores(false);
     }
-  };
+  }, []);
 
-  const loadServices = async (_lat: number, _lng: number) => {
+  const loadServices = useCallback(async (_lat: number, _lng: number) => {
     const mySeq = ++servicesReqSeq.current;
     try {
-      const services =
-        (await api.listServices()) as unknown as ServiceItem[];
+      const services = (await api.listServices()) as unknown as ServiceItem[];
 
       if (mySeq !== servicesReqSeq.current) return;
 
@@ -633,9 +851,8 @@ export default function ShopperHomePage() {
           image: resolveImageUrl(s.image_url),
           video: resolveImageUrl(s.video_url ?? null),
           title: s.title ?? 'Service',
-          price: formatPrice(s.price),   // ✅ guard: 0/null → 'Free'
-          storeName:
-            s.business_name ?? s.username ?? 'Service Provider',
+          price: formatPrice(s.price),
+          storeName: s.business_name ?? s.username ?? 'Service Provider',
         }));
       setServiceItems(svcItems);
 
@@ -660,7 +877,7 @@ export default function ShopperHomePage() {
     } finally {
       if (mySeq === servicesReqSeq.current) setLoadingServices(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (cachedPosition !== undefined) {
@@ -670,7 +887,7 @@ export default function ShopperHomePage() {
       loadStores(lat, lng);
       loadServices(lat, lng);
     }
-  }, [cachedPosition]);
+  }, [cachedPosition, loadItems, loadStores, loadServices]);
 
   const onRefresh = async (): Promise<void> => {
     const pos = await getCurrentLocation();
@@ -683,9 +900,20 @@ export default function ShopperHomePage() {
     ]);
   };
 
+  // ✅ Applied filter before interleave
+  const filteredListingItems = useMemo(() => {
+    if (feedFilter === 'services') return [];
+    return listingItems;
+  }, [feedFilter, listingItems]);
+
+  const filteredServiceItems = useMemo(() => {
+    if (feedFilter === 'items') return [];
+    return serviceItems;
+  }, [feedFilter, serviceItems]);
+
   const feedItems = useMemo(
-    () => interleave(listingItems, serviceItems),
-    [listingItems, serviceItems],
+    () => interleave(filteredListingItems, filteredServiceItems),
+    [filteredListingItems, filteredServiceItems],
   );
   const displayedFeed = feedItems.slice(0, visibleCount);
 
@@ -693,8 +921,14 @@ export default function ShopperHomePage() {
     totalRef.current = feedItems.length;
   }, [feedItems.length]);
 
+  // ✅ FIXED — observer rebinds when tab, loading state, or feed length changes.
+  //    Previous version had `[]` deps so the sentinel that appears after
+  //    first render was never observed.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (currentTab !== 0) return;
+    if (loadingItems || loadingServices) return;
+
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
 
@@ -712,7 +946,7 @@ export default function ShopperHomePage() {
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, []);
+  }, [currentTab, loadingItems, loadingServices, feedItems.length]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
@@ -834,30 +1068,47 @@ export default function ShopperHomePage() {
   const loadingFeed = loadingItems || loadingServices;
   const hasMoreToReveal = visibleCount < feedItems.length;
 
+  const TAB_LABELS = ['BUYTEMS', 'SHOPNSTORE', 'SERVOOKS'];
+
   return (
     <div style={styles.container}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{CSS}</style>
 
+      {/* App bar */}
       <div style={styles.appBar}>
-        <div style={{ fontWeight: 600, color: '#0504AA', fontSize: 18 }}>
-          Admerce
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={styles.iconBtn} onClick={openSearch} title="Search">
-            <MdSearch size={24} color="#0504AA" />
+        <div style={styles.brand}>Admerce</div>
+        <div style={styles.appBarActions}>
+          <button
+            style={styles.iconBtn}
+            onClick={openSearch}
+            aria-label="Search"
+            title="Search"
+          >
+            <MdSearch size={22} color="#0504AA" />
           </button>
-          <button style={styles.iconBtn} onClick={openBasket} title="Basket">
-            <MdShoppingBasket size={24} color="#0504AA" />
+          <button
+            style={styles.iconBtn}
+            onClick={openBasket}
+            aria-label="Basket"
+            title="Basket"
+          >
+            <MdShoppingBasket size={22} color="#0504AA" />
           </button>
           <button
             style={styles.iconBtn}
             onClick={openNotifications}
+            aria-label="Notifications"
             title="Notifications"
           >
-            <MdNotificationsNone size={24} color="#0504AA" />
+            <MdNotificationsNone size={22} color="#0504AA" />
           </button>
-          <button style={styles.iconBtn} onClick={openFilter} title="Filters">
-            <MdTune size={24} color="#0504AA" />
+          <button
+            style={styles.iconBtn}
+            onClick={openFilter}
+            aria-label="Feed options"
+            title="Feed options"
+          >
+            <MdTune size={22} color="#0504AA" />
           </button>
         </div>
       </div>
@@ -867,108 +1118,42 @@ export default function ShopperHomePage() {
         onEnableLocation={requestLocationManually}
       />
 
-      <div style={{ marginBottom: 8 }}>
-        {!isNoteworthyCollapsed ? (
-          <>
-            <div style={{ padding: '0 16px', marginBottom: 4 }}>
-              <div
-                style={{
-                  borderRadius: 20,
-                  overflow: 'hidden',
-                  position: 'relative',
-                  height: 180,
-                }}
-              >
-                <img
-                  src={noteworthyImages[noteworthyIndex]}
-                  alt="Noteworthy"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    transition: 'opacity 0.8s',
-                  }}
-                />
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    background: 'rgba(0,0,0,0.5)',
-                    color: '#fff',
-                    fontWeight: 700,
-                    padding: 12,
-                  }}
-                >
-                  New & Noteworthy
-                </div>
-              </div>
-            </div>
-            <div style={{ textAlign: 'right', paddingRight: 16 }}>
-              <button
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#0504AA',
-                  cursor: 'pointer',
-                }}
-                onClick={() => setIsNoteworthyCollapsed(true)}
-              >
-                <MdExpandLess size={24} />
-              </button>
-            </div>
-          </>
-        ) : (
-          <div style={{ textAlign: 'right', paddingRight: 16 }}>
+      {/* Real featured stores — replaces the fake picsum carousel */}
+      {!loadingStores && (
+        <StoreSpotlight
+          stores={stores}
+          collapsed={isSpotlightCollapsed}
+          onToggleCollapsed={() =>
+            setIsSpotlightCollapsed((c) => !c)
+          }
+          onPress={handleStorePress}
+        />
+      )}
+
+      {/* Tabs */}
+      <div style={styles.tabsWrap} role="tablist">
+        {TAB_LABELS.map((label, i) => {
+          const active = currentTab === i;
+          return (
             <button
+              key={i}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setCurrentTab(i)}
               style={{
-                background: 'none',
-                border: 'none',
-                color: '#0504AA',
-                cursor: 'pointer',
+                ...styles.tabBtn,
+                background: active ? '#0504AA' : 'transparent',
+                color: active ? '#fff' : '#334155',
+                borderColor: active ? '#0504AA' : 'rgba(15,23,42,0.12)',
               }}
-              onClick={() => setIsNoteworthyCollapsed(false)}
             >
-              <MdExpandMore size={24} />
+              {label}
             </button>
-          </div>
-        )}
+          );
+        })}
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-evenly',
-          alignItems: 'center',
-          marginBottom: 12,
-        }}
-      >
-        {['BUYTEMS', 'SHOPNSTORE', 'SERVOOKS'].map((tab, i) => (
-          <button
-            key={i}
-            onClick={() => setCurrentTab(i)}
-            style={{
-              padding: '8px 20px',
-              borderRadius: 20,
-              border:
-                currentTab === i
-                  ? '1px solid #0504AA'
-                  : '1px solid rgba(26,26,26,0.3)',
-              background: currentTab === i ? '#0504AA' : 'transparent',
-              color: currentTab === i ? '#fff' : '#1A1A1A',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.3s',
-              flex: 1,
-              margin: '0 4px',
-            }}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
+      {/* Panels + drag */}
       <div
         style={styles.tabContent}
         onTouchStart={handleTouchStart}
@@ -995,15 +1180,20 @@ export default function ShopperHomePage() {
             touchAction: 'pan-y',
           }}
         >
+          {/* Tab 0 — feed */}
           <div
             ref={currentTab === 0 ? activePanelRef : null}
             style={styles.panel}
           >
             <div style={styles.panelInner}>
               {loadingFeed ? (
-                <div style={styles.centeredMsg}>Loading…</div>
+                <FeedSkeleton columns={columns} />
               ) : feedItems.length === 0 ? (
-                <div style={styles.centeredMsg}>No items yet.</div>
+                <FeedEmpty
+                  icon={<MdImage size={40} color="#94a3b8" />}
+                  title="Nothing to show yet"
+                  body="Pull down to refresh, or check back soon."
+                />
               ) : (
                 <>
                   <MasonryColumns
@@ -1030,15 +1220,20 @@ export default function ShopperHomePage() {
             </div>
           </div>
 
+          {/* Tab 1 — stores */}
           <div
             ref={currentTab === 1 ? activePanelRef : null}
             style={styles.panel}
           >
             <div style={styles.panelInner}>
               {loadingStores ? (
-                <div style={styles.centeredMsg}>Loading stores…</div>
+                <FeedSkeleton columns={columns} />
               ) : stores.length === 0 ? (
-                <div style={styles.centeredMsg}>No stores yet.</div>
+                <FeedEmpty
+                  icon={<MdStorefront size={40} color="#94a3b8" />}
+                  title="No stores yet"
+                  body="Stores will appear here as storekeepers open them."
+                />
               ) : (
                 <MasonryColumns
                   items={stores}
@@ -1054,19 +1249,20 @@ export default function ShopperHomePage() {
             </div>
           </div>
 
+          {/* Tab 2 — providers */}
           <div
             ref={currentTab === 2 ? activePanelRef : null}
             style={styles.panel}
           >
             <div style={styles.panelInner}>
               {loadingServices ? (
-                <div style={styles.centeredMsg}>
-                  Loading service providers…
-                </div>
+                <FeedSkeleton columns={columns} />
               ) : providers.length === 0 ? (
-                <div style={styles.centeredMsg}>
-                  No service providers yet.
-                </div>
+                <FeedEmpty
+                  icon={<MdStorefront size={40} color="#94a3b8" />}
+                  title="No service providers yet"
+                  body="Providers will appear here as they list services."
+                />
               ) : (
                 <MasonryColumns
                   items={providers}
@@ -1087,88 +1283,75 @@ export default function ShopperHomePage() {
         </div>
       </div>
 
+      {/* Feed options sheet — REAL filter */}
       {showFilter && (
         <div style={styles.modalOverlay} onClick={closeFilter}>
           <div
             style={styles.filterSheet}
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="Feed options"
           >
-            <div
-              style={{
-                width: 40,
-                height: 4,
-                background: 'rgba(0,0,0,0.2)',
-                borderRadius: 2,
-                margin: '0 auto 16px',
-              }}
-            />
-            <h3 style={{ fontSize: 18, fontWeight: 700 }}>
-              {currentTab === 2 ? 'Filter Services' : 'Filter Items'}
-            </h3>
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 8,
-                marginTop: 12,
-              }}
-            >
-              {(currentTab === 2
-                ? serviceCategories.map((c) => `${c.emoji} ${c.name}`)
-                : kProductCategories
-              ).map((cat) => (
-                <button
-                  key={cat}
-                  onClick={closeFilter}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 20,
-                    border: '1px solid #ccc',
-                    background: '#fff',
-                    cursor: 'pointer',
-                    fontSize: 12,
-                  }}
-                >
-                  {cat}
-                </button>
-              ))}
+            <div style={styles.sheetGrabber} />
+            <div style={styles.sheetHeaderRow}>
+              <h3 style={styles.sheetTitle}>Feed options</h3>
+              <button
+                type="button"
+                onClick={closeFilter}
+                aria-label="Close"
+                style={styles.sheetClose}
+              >
+                <MdClose size={20} color="#64748b" />
+              </button>
             </div>
-            {currentTab !== 2 && (
-              <div style={{ marginTop: 16 }}>
-                <div>Max Price: ₦--</div>
-                <input
-                  type="range"
-                  min="1000"
-                  max="200000"
-                  step="1000"
-                  style={{ width: '100%' }}
-                  disabled
-                />
-                <div>Distance: -- km</div>
-                <input
-                  type="range"
-                  min="1"
-                  max="50"
-                  style={{ width: '100%' }}
-                  disabled
-                />
-              </div>
-            )}
+            <p style={styles.sheetSubtitle}>
+              Choose what to see in the feed.
+            </p>
+
+            <div style={styles.filterOptions}>
+              {FILTER_OPTIONS.map((opt) => {
+                const active = feedFilter === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setFeedFilter(opt.value);
+                      setVisibleCount(INITIAL_VISIBLE);
+                    }}
+                    style={{
+                      ...styles.filterOption,
+                      background: active ? '#EEF0FF' : '#fff',
+                      borderColor: active ? '#0504AA' : '#E5E7EF',
+                    }}
+                  >
+                    <span style={styles.filterOptionText}>
+                      <span
+                        style={{
+                          ...styles.filterOptionLabel,
+                          color: active ? '#0504AA' : '#0F172A',
+                        }}
+                      >
+                        {opt.label}
+                      </span>
+                      <span style={styles.filterOptionHint}>
+                        {opt.hint}
+                      </span>
+                    </span>
+                    {active && (
+                      <MdCheckCircle size={20} color="#0504AA" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
             <button
+              type="button"
               onClick={closeFilter}
-              style={{
-                marginTop: 20,
-                width: '100%',
-                padding: 12,
-                backgroundColor: '#0504AA',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
+              style={styles.applyBtn}
             >
-              Apply
+              Done
             </button>
           </div>
         </div>
@@ -1183,7 +1366,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F4F5FB',
+    minHeight: 0,
   },
   appBar: {
     display: 'flex',
@@ -1191,16 +1375,47 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     padding: '12px 16px',
     backgroundColor: '#fff',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    borderBottom: '1px solid #EAECF3',
+  },
+  brand: {
+    fontWeight: 800,
+    color: '#0504AA',
+    fontSize: 18,
+    letterSpacing: '-0.3px',
+  },
+  appBarActions: {
+    display: 'flex',
+    gap: 4,
   },
   iconBtn: {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: 4,
+    padding: 8,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 10,
+    transition: 'background 0.15s',
+    fontFamily: 'inherit',
+  },
+  tabsWrap: {
+    display: 'flex',
+    gap: 6,
+    padding: '12px 16px 10px',
+    backgroundColor: '#F4F5FB',
+  },
+  tabBtn: {
+    flex: 1,
+    padding: '9px 10px',
+    borderRadius: 12,
+    border: '1px solid',
+    fontWeight: 700,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    cursor: 'pointer',
+    transition: 'all 0.22s',
+    fontFamily: 'inherit',
   },
   tabContent: {
     flex: 1,
@@ -1223,18 +1438,17 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0 16px 16px',
     boxSizing: 'border-box',
   },
-  centeredMsg: {
-    textAlign: 'center',
-    padding: 40,
-    color: '#888',
-  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+    boxShadow: '0 1px 3px rgba(11,11,26,0.04)',
     overflow: 'hidden',
     cursor: 'pointer',
     width: '100%',
+    border: '1px solid #EAECF3',
+    padding: 0,
+    textAlign: 'left',
+    fontFamily: 'inherit',
   },
   imageWrap: {
     position: 'relative',
@@ -1278,6 +1492,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    backgroundColor: '#0F172A',
   },
   visualSearchBtn: {
     position: 'absolute',
@@ -1294,10 +1509,10 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
   },
   cardBody: {
-    padding: '8px 10px 10px',
+    padding: '10px 12px 12px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 2,
+    gap: 3,
   },
   cardTitle: {
     fontWeight: 600,
@@ -1322,14 +1537,68 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '64px 24px',
+    gap: 8,
+    textAlign: 'center',
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    background: '#EEF0FF',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: 800,
+    color: '#334155',
+  },
+  emptyBody: {
+    fontSize: 13.5,
+    color: '#64748B',
+    maxWidth: 340,
+    lineHeight: 1.5,
+  },
+  skeletonCard: {
+    background: '#fff',
+    borderRadius: 16,
+    border: '1px solid #EAECF3',
+    overflow: 'hidden',
+  },
+  skeletonImage: {
+    width: '100%',
+    aspectRatio: '1 / 1',
+    background:
+      'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
+    backgroundSize: '800px 100%',
+    animation: 'shimmer 1.4s infinite linear',
+  },
+  skeletonLine: {
+    height: 10,
+    borderRadius: 6,
+    background:
+      'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
+    backgroundSize: '800px 100%',
+    animation: 'shimmer 1.4s infinite linear',
+    width: '80%',
+  },
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(11,11,26,0.5)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'flex-end',
     zIndex: 1000,
+    animation: 'fadeIn 0.18s ease-out',
   },
   filterSheet: {
     backgroundColor: '#fff',
@@ -1337,9 +1606,92 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 500,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: '70vh',
+    padding: '10px 20px 24px',
+    maxHeight: '80vh',
     overflowY: 'auto',
+  },
+  sheetGrabber: {
+    width: 40,
+    height: 5,
+    background: '#E2E8F0',
+    borderRadius: 3,
+    margin: '0 auto 16px',
+  },
+  sheetHeaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: 800,
+    color: '#0F172A',
+    margin: 0,
+    letterSpacing: '-0.2px',
+  },
+  sheetClose: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 6,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  sheetSubtitle: {
+    fontSize: 13.5,
+    color: '#64748B',
+    margin: '0 0 16px',
+    lineHeight: 1.5,
+  },
+  filterOptions: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+    marginBottom: 20,
+  },
+  filterOption: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: '14px 16px',
+    border: '1px solid',
+    borderRadius: 14,
+    cursor: 'pointer',
+    transition: 'background 0.15s, border-color 0.15s',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+  },
+  filterOptionText: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    minWidth: 0,
+  },
+  filterOptionLabel: {
+    fontSize: 15,
+    fontWeight: 800,
+    letterSpacing: '-0.2px',
+  },
+  filterOptionHint: {
+    fontSize: 12.5,
+    color: '#64748B',
+    lineHeight: 1.4,
+  },
+  applyBtn: {
+    width: '100%',
+    padding: '14px',
+    backgroundColor: '#0504AA',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 14,
+    fontWeight: 800,
+    fontSize: 15,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
   refreshIndicator: {
     position: 'absolute',
@@ -1350,15 +1702,34 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     padding: 8,
     zIndex: 10,
-    background: 'rgba(248,249,250,0.9)',
     pointerEvents: 'none',
   },
   spinner: {
     width: 24,
     height: 24,
-    border: '3px solid #ccc',
+    border: '3px solid #E2E8F0',
     borderTopColor: '#0504AA',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
 };
+
+const CSS = `
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes spotlightFade {
+    from { opacity: 0; transform: scale(1.03); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+`;
