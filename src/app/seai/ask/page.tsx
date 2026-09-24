@@ -22,22 +22,28 @@ import {
   MdBuild,
   MdNavigation,
   MdCheck,
+  MdChatBubbleOutline,
 } from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
 
 const Brand = {
   bg: '#FAFAFA',
+  bgWarm: '#F8F9FC',
   cardBg: '#FFFFFF',
-  sidebarBg: '#F5F5F5',
-  textPrimary: '#171717',
-  textSecondary: '#666666',
-  textMuted: '#999999',
+  sidebarBg: '#F6F7FB',
+  textPrimary: '#0F0F1A',
+  textSecondary: '#5A6178',
+  textMuted: '#9AA1B2',
   accent: '#0504AA',
   accentLight: '#3D3BFF',
   accentBg: '#EEEDFF',
-  border: '#E5E5E5',
-  shadowColor: 'rgba(0,0,0,0.1)',
+  border: '#E6E8F0',
+  borderSoft: '#EEF0F7',
+  shadowSm: '0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.04)',
+  shadowMd: '0 2px 6px rgba(15,23,42,0.05), 0 6px 20px rgba(15,23,42,0.06)',
+  shadowLg: '0 8px 24px rgba(5,4,170,0.10), 0 2px 6px rgba(15,23,42,0.05)',
+  shadowBloom: '0 0 0 4px rgba(5,4,170,0.10), 0 8px 24px rgba(5,4,170,0.14)',
 };
 
 type Role = 'user' | 'seai';
@@ -161,7 +167,7 @@ function SeaiResultCard({
   };
 
   return (
-    <div style={styles.tile}>
+    <div className="seai-tile" style={styles.tile}>
       <button
         type="button"
         onClick={onTap}
@@ -182,6 +188,7 @@ function SeaiResultCard({
               )}
             </div>
           )}
+          <div style={styles.tileImageOverlay} />
           <span
             style={{
               ...styles.tileBadge,
@@ -190,6 +197,11 @@ function SeaiResultCard({
           >
             {typeBadgeLabel(card.type)}
           </span>
+          {showPrice && (
+            <span style={styles.tilePriceChip}>
+              ₦{Number(card.price).toLocaleString('en-NG')}
+            </span>
+          )}
           {typeof distance === 'number' && (
             <span style={styles.tileDistancePill}>
               <MdLocationOn size={11} color="#fff" />
@@ -202,19 +214,17 @@ function SeaiResultCard({
           <div style={styles.tileTitle} title={card.title || ''}>
             {card.title || 'Untitled'}
           </div>
-          {showPrice && (
-            <div style={styles.tilePrice}>
-              ₦{Number(card.price).toLocaleString('en-NG')}
-            </div>
-          )}
           {subtitle && (
             <div style={styles.tileSubtitle} title={subtitle}>
-              <MdStore size={12} color="#64748B" />
+              <MdStore size={12} color="#94A3B8" />
               <span style={{ marginLeft: 4 }}>{subtitle}</span>
             </div>
           )}
           {travel !== undefined && (
-            <div style={styles.tileTravel}>~{travel} min away</div>
+            <div style={styles.tileTravel}>
+              <span style={styles.tileTravelDot} />
+              ~{travel} min away
+            </div>
           )}
         </div>
       </button>
@@ -245,6 +255,8 @@ function SeaiAskContent() {
   const [inputHasText, setInputHasText] = useState(false);
   const [isCortexMode, setIsCortexMode] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [inputFocused, setInputFocused] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const [editing, setEditing] = useState<{
     index: number;
@@ -261,12 +273,10 @@ function SeaiAskContent() {
   const isMountedRef = useRef(true);
   const atBottomRef = useRef(true);
 
-  // ── Mirror `messages` into a ref so async callbacks see the latest value ──
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
-  // ── Unmount cleanup: cancel any in-flight stream ──
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -275,14 +285,12 @@ function SeaiAskContent() {
     };
   }, []);
 
-  // ── Toasts ──
   const pushToast = useCallback((kind: Toast['kind'], text: string) => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, kind, text }].slice(-3));
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
 
-  // ── Scroll: only auto-scroll if user is already near the bottom ──
   const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -298,7 +306,6 @@ function SeaiAskContent() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // ── Load recents ──
   useEffect(() => {
     const loadConversations = async () => {
       setIsLoadingRecents(true);
@@ -314,7 +321,6 @@ function SeaiAskContent() {
     loadConversations();
   }, []);
 
-  // ── Initial query from URL ──
   useEffect(() => {
     if (initialQuery) {
       sendMessage(initialQuery);
@@ -359,10 +365,13 @@ function SeaiAskContent() {
   };
 
   const copyText = useCallback(
-    async (text: string) => {
+    async (text: string, index: number) => {
       try {
         await navigator.clipboard.writeText(text);
-        pushToast('success', 'Copied');
+        setCopiedIndex(index);
+        setTimeout(() => {
+          setCopiedIndex((curr) => (curr === index ? null : curr));
+        }, 1600);
       } catch {
         pushToast('error', 'Could not copy');
       }
@@ -390,7 +399,6 @@ function SeaiAskContent() {
     if (!editing) return;
     const { index, text, role } = editing;
 
-    // AI messages are not editable in this revision — flip the guard if that changes.
     if (role === 'seai') {
       setEditing(null);
       return;
@@ -412,12 +420,11 @@ function SeaiAskContent() {
       inputRef.current.value = '';
       setInputHasText(false);
       inputRef.current.blur();
+      setInputFocused(false);
     }
 
-    // Read from ref when no explicit override — avoids stale closure on `messages`.
     const baseMessages = overrideHistory ?? messagesRef.current;
 
-    // Cancel any in-flight stream before starting a new one.
     streamAbortRef.current?.abort();
     const controller = new AbortController();
     streamAbortRef.current = controller;
@@ -561,8 +568,6 @@ function SeaiAskContent() {
 
       if (!isMountedRef.current) return;
 
-      // Persist only non-empty exchanges. Partial responses from a stream error
-      // never reach here (the outer catch handles them).
       if (full.trim().length > 0) {
         try {
           await api.saveSeaiExchange(text, full);
@@ -591,7 +596,6 @@ function SeaiAskContent() {
       scrollToBottom();
     } catch (err) {
       if (!isMountedRef.current) return;
-      // AbortError is expected when the user navigates or cancels — don't surface it.
       if ((err as { name?: string })?.name === 'AbortError') return;
 
       setMessages((prev) => {
@@ -630,22 +634,39 @@ function SeaiAskContent() {
 
   const renderWelcome = () => (
     <div style={styles.welcomeContainer}>
-      <div style={styles.logo}>
-        <MdAutoAwesome size={32} color="#FFFFFF" />
-      </div>
-      <h2 style={styles.greeting}>Hi there.</h2>
-      <p style={styles.subGreeting}>How can I help you today?</p>
-      <div className="seai-suggestions" style={styles.suggestionsGrid}>
-        {suggestions.map((s, i) => (
-          <button
-            key={i}
-            onClick={() => sendMessage(s.text)}
-            style={styles.suggestionChip}
-          >
-            <span style={{ marginRight: 8 }}>{s.emoji}</span>
-            <span>{s.text}</span>
-          </button>
-        ))}
+      <div className="seai-orb seai-orb-a" aria-hidden />
+      <div className="seai-orb seai-orb-b" aria-hidden />
+
+      <div style={styles.welcomeContent}>
+        <div style={styles.logoWrap}>
+          <div className="seai-logo-glow" style={styles.logoGlow} aria-hidden />
+          <div style={styles.logo}>
+            <MdAutoAwesome size={34} color="#FFFFFF" />
+          </div>
+        </div>
+
+        <div style={styles.brandTag}>SEAI · Intelligent search</div>
+
+        <h2 style={styles.greeting}>Hi there.</h2>
+        <p style={styles.subGreeting}>What can I help you find today?</p>
+
+        <div className="seai-suggestions" style={styles.suggestionsGrid}>
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => sendMessage(s.text)}
+              className="seai-chip"
+              style={{
+                ...styles.suggestionChip,
+                animationDelay: `${120 + i * 70}ms`,
+              }}
+            >
+              <span style={styles.chipEmoji}>{s.emoji}</span>
+              <span style={styles.chipText}>{s.text}</span>
+              <MdChevronRight size={16} color="#B6BCCB" />
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -698,16 +719,22 @@ function SeaiAskContent() {
                 {!isEditing && !msg.isStreaming && msg.text && (
                   <div style={{ ...styles.actionBar, justifyContent: 'flex-end' }}>
                     <button
-                      onClick={() => copyText(msg.text)}
+                      onClick={() => copyText(msg.text, i)}
                       style={styles.actionBtn}
                       title="Copy"
+                      aria-label="Copy message"
                     >
-                      <MdContentCopy size={14} color="#666" />
+                      {copiedIndex === i ? (
+                        <MdCheck size={14} color={Brand.accent} />
+                      ) : (
+                        <MdContentCopy size={14} color="#666" />
+                      )}
                     </button>
                     <button
                       onClick={() => startEdit(i)}
                       style={styles.actionBtn}
                       title="Edit"
+                      aria-label="Edit message"
                     >
                       <MdEdit size={14} color="#666" />
                     </button>
@@ -716,27 +743,27 @@ function SeaiAskContent() {
               </div>
             ) : (
               <div style={styles.aiMessageRow}>
-                <div style={styles.aiAvatar}>
-                  <MdAutoAwesome size={14} color="#FFFFFF" />
+                <div style={styles.aiAvatarWrap}>
+                  <div className="seai-ai-ring" style={styles.aiAvatarRing} aria-hidden />
+                  <div style={styles.aiAvatar}>
+                    <MdAutoAwesome size={14} color="#FFFFFF" />
+                  </div>
                 </div>
                 <div style={styles.aiBubble} aria-live="polite">
                   {msg.isThinking ? (
-                    <div style={styles.thinkingDots}>
-                      <span className="dot" />
-                      <span className="dot" />
-                      <span className="dot" />
+                    <div style={styles.thinkingWrap}>
+                      <span className="seai-thinking-dot" aria-hidden />
+                      <span style={styles.thinkingText}>Thinking</span>
                     </div>
                   ) : msg.text ? (
-                    <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                    <div style={styles.aiText}>
                       {msg.text}
                       {msg.isStreaming && <SeaiCursor />}
                     </div>
                   ) : null}
 
                   {msg.error && !msg.isStreaming && (
-                    <div style={styles.errorLine}>
-                      {msg.error}
-                    </div>
+                    <div style={styles.errorLine}>{msg.error}</div>
                   )}
 
                   {msg.cards && msg.cards.length > 0 && (
@@ -754,23 +781,37 @@ function SeaiAskContent() {
                   {!msg.isThinking && !msg.isStreaming && msg.text && !isEditing && (
                     <div style={styles.actionBar}>
                       <button
-                        onClick={() => copyText(msg.text)}
+                        onClick={() => copyText(msg.text, i)}
                         style={styles.actionBtn}
                         title="Copy"
+                        aria-label="Copy response"
                       >
-                        <MdContentCopy size={15} color="#666" />
+                        {copiedIndex === i ? (
+                          <MdCheck size={15} color={Brand.accent} />
+                        ) : (
+                          <MdContentCopy size={15} color="#666" />
+                        )}
                       </button>
                       <button
                         onClick={() => retryMessage(i)}
                         style={styles.actionBtn}
                         title="Retry"
+                        aria-label="Retry"
                       >
                         <MdRefresh size={15} color="#666" />
                       </button>
-                      <button style={styles.actionBtn} title="Good response">
+                      <button
+                        style={styles.actionBtn}
+                        title="Good response"
+                        aria-label="Good response"
+                      >
                         <MdThumbUp size={15} color="#666" />
                       </button>
-                      <button style={styles.actionBtn} title="Bad response">
+                      <button
+                        style={styles.actionBtn}
+                        title="Bad response"
+                        aria-label="Bad response"
+                      >
                         <MdThumbDown size={15} color="#666" />
                       </button>
                     </div>
@@ -787,10 +828,17 @@ function SeaiAskContent() {
 
   const renderInputArea = () => (
     <div className="seai-input-area" style={styles.inputArea}>
-      <div style={styles.inputBox}>
+      <div
+        style={{
+          ...styles.inputBox,
+          ...(inputFocused ? styles.inputBoxFocused : null),
+        }}
+      >
         <textarea
           ref={inputRef}
           onChange={handleInputChange}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -802,24 +850,26 @@ function SeaiAskContent() {
           rows={1}
         />
         <div style={styles.inputActions}>
-          <button style={styles.inputIconBtn} title="Attach">
+          <button style={styles.inputIconBtn} title="Attach" aria-label="Attach">
             <MdAdd size={20} color="#666" />
           </button>
-          <button style={styles.inputIconBtn} title="Voice">
+          <button style={styles.inputIconBtn} title="Voice" aria-label="Voice">
             <MdMic size={20} color="#666" />
           </button>
           <div style={{ flex: 1 }} />
           <button
             onClick={() => sendMessage()}
             disabled={!inputHasText || isStreaming}
+            className="seai-send"
             style={{
               ...styles.sendBtn,
-              backgroundColor: inputHasText ? Brand.accent : Brand.border,
-              color: inputHasText ? '#FFFFFF' : Brand.textMuted,
-              cursor: inputHasText ? 'pointer' : 'not-allowed',
+              ...(inputHasText && !isStreaming
+                ? styles.sendBtnActive
+                : styles.sendBtnDisabled),
             }}
+            aria-label="Send"
           >
-            <MdArrowUpward size={18} />
+            <MdArrowUpward size={18} color={inputHasText ? '#fff' : Brand.textMuted} />
           </button>
         </div>
       </div>
@@ -833,6 +883,7 @@ function SeaiAskContent() {
     <>
       {drawerOpen && (
         <div
+          className="seai-drawer-overlay"
           style={styles.sidebarOverlay}
           onClick={() => setDrawerOpen(false)}
         />
@@ -848,11 +899,18 @@ function SeaiAskContent() {
           <div style={styles.sidebarLogo}>
             <MdAutoAwesome size={14} color="#FFFFFF" />
           </div>
-          <span style={{ fontWeight: 600 }}>Admerce AI</span>
-          <button onClick={() => setDrawerOpen(false)} style={styles.closeBtn}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: Brand.textPrimary }}>
+            Admerce AI
+          </span>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            style={styles.closeBtn}
+            aria-label="Close drawer"
+          >
             <MdClose size={20} color="#666" />
           </button>
         </div>
+
         <button
           onClick={() => {
             clearConversation();
@@ -863,24 +921,45 @@ function SeaiAskContent() {
           <MdEdit size={16} color={Brand.accent} style={{ marginRight: 8 }} />
           New chat
         </button>
+
         <div style={styles.recentLabel}>Recent</div>
         <div style={styles.conversationList}>
           {isLoadingRecents ? (
-            <div style={{ textAlign: 'center', padding: 16, color: Brand.textMuted, fontSize: 13 }}>
-              Loading…
+            <div style={styles.skelStack}>
+              {[0, 1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="seai-skel"
+                  style={{ height: 38, width: `${70 + (i % 3) * 10}%` }}
+                />
+              ))}
             </div>
           ) : conversations.length === 0 ? (
-            <div style={{ color: Brand.textMuted, fontSize: 13, padding: 16 }}>
-              No conversations yet
+            <div style={styles.emptyRecents}>
+              <div style={styles.emptyRecentsIcon}>
+                <MdChatBubbleOutline size={18} color={Brand.accent} />
+              </div>
+              <div style={styles.emptyRecentsTitle}>No conversations yet</div>
+              <div style={styles.emptyRecentsSub}>
+                Start a chat and it&rsquo;ll show up here
+              </div>
             </div>
           ) : (
             conversations.map((c) => (
               <button
                 key={c.id}
                 onClick={() => loadConversation(c.id)}
+                className="seai-recent-item"
                 style={styles.conversationItem}
               >
-                {c.title || `Conversation ${c.id}`}
+                <MdChatBubbleOutline
+                  size={14}
+                  color={Brand.textMuted}
+                  style={{ flexShrink: 0, marginRight: 8 }}
+                />
+                <span style={styles.conversationItemText}>
+                  {c.title || `Conversation ${c.id}`}
+                </span>
               </button>
             ))
           )}
@@ -891,7 +970,8 @@ function SeaiAskContent() {
 
   return (
     <main className="seai-container" style={styles.container}>
-      {/* Toasts */}
+      <div style={styles.topHairline} aria-hidden />
+
       <div style={styles.toastStack}>
         {toasts.map((t) => (
           <button
@@ -914,29 +994,40 @@ function SeaiAskContent() {
           <button
             onClick={() => setDrawerOpen(!drawerOpen)}
             style={styles.iconBtn}
+            aria-label="Open menu"
           >
             <MdMenu size={22} color="#666" />
           </button>
+
+          <div style={styles.headerBrand}>
+            <div style={styles.headerBrandMark}>
+              <MdAutoAwesome size={12} color="#fff" />
+            </div>
+            <span style={styles.headerBrandText}>Admerce AI</span>
+          </div>
+
           <div style={{ flex: 1 }} />
+
           <button
             onClick={() => setIsCortexMode(!isCortexMode)}
             style={styles.modelToggle}
+            aria-label={`Switch to ${isCortexMode ? 'SEAI' : 'SEAI Cortex'}`}
           >
             <span
+              className="seai-model-dot"
               style={{
-                width: 14,
-                height: 14,
+                width: 8,
+                height: 8,
                 borderRadius: '50%',
                 backgroundColor: isCortexMode ? Brand.accentLight : Brand.accent,
-                marginRight: 6,
+                marginRight: 7,
               }}
             />
-            <span style={{ fontWeight: 600, fontSize: 13 }}>
-              {isCortexMode ? 'SEAI Cortex' : 'SEAI'}
+            <span style={{ fontWeight: 600, fontSize: 12.5 }}>
+              {isCortexMode ? 'Cortex' : 'SEAI'}
             </span>
-            <MdChevronRight size={16} color="#666" />
           </button>
-          <div style={{ flex: 1 }} />
+
           {inChat ? (
             <button
               onClick={clearConversation}
@@ -947,7 +1038,7 @@ function SeaiAskContent() {
               <MdEdit size={20} color="#666" />
             </button>
           ) : (
-            <div style={{ width: 48 }} />
+            <div style={{ width: 40 }} />
           )}
         </div>
 
@@ -976,9 +1067,10 @@ export default function SeaiAskPage() {
             justifyContent: 'center',
             alignItems: 'center',
             height: '100vh',
+            backgroundColor: Brand.bg,
           }}
         >
-          Loading SEAI…
+          <div style={styles.spinner} />
         </div>
       }
     >
@@ -998,6 +1090,27 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
+  topHairline: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    background:
+      'linear-gradient(90deg, rgba(5,4,170,0) 0%, rgba(5,4,170,0.55) 20%, rgba(61,59,255,0.95) 50%, rgba(5,4,170,0.55) 80%, rgba(5,4,170,0) 100%)',
+    zIndex: 30,
+    pointerEvents: 'none',
+  },
+  spinner: {
+    width: 32,
+    height: 32,
+    borderRadius: '50%',
+    border: '3px solid #E6E8F0',
+    borderTopColor: Brand.accent,
+    animation: 'seaiSpin 0.9s linear infinite',
+  },
+
+  // ── Sidebar
   sidebar: {
     position: 'absolute',
     top: 0,
@@ -1007,30 +1120,33 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: Brand.sidebarBg,
     padding: '16px',
     zIndex: 20,
-    transition: 'transform 0.24s ease-out',
+    transition: 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
     display: 'flex',
     flexDirection: 'column',
+    borderRight: `1px solid ${Brand.borderSoft}`,
   },
   sidebarOverlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(15,23,42,0.38)',
     zIndex: 15,
+    animation: 'seaiFade 200ms ease-out both',
   },
   sidebarHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   sidebarLogo: {
     width: 28,
     height: 28,
-    borderRadius: '50%',
-    backgroundColor: Brand.accent,
+    borderRadius: 10,
+    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    boxShadow: '0 4px 10px rgba(5,4,170,0.28)',
   },
   closeBtn: {
     background: 'none',
@@ -1042,33 +1158,42 @@ const styles: Record<string, React.CSSProperties> = {
   newChatBtn: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: '10px 12px',
     backgroundColor: Brand.cardBg,
     border: `1px solid ${Brand.border}`,
-    borderRadius: 10,
-    boxShadow: `0 2px 4px ${Brand.shadowColor}`,
+    borderRadius: 12,
+    boxShadow: Brand.shadowSm,
     cursor: 'pointer',
-    fontSize: 14,
+    fontSize: 13.5,
+    fontWeight: 600,
     color: Brand.textPrimary,
     width: '100%',
-    marginBottom: 12,
+    marginBottom: 14,
+    transition: 'box-shadow 180ms, transform 180ms',
   },
   recentLabel: {
-    fontSize: 12,
-    fontWeight: 600,
+    fontSize: 11,
+    fontWeight: 700,
     color: Brand.textMuted,
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    paddingLeft: 4,
   },
   conversationList: {
     flex: 1,
     overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
   },
   conversationItem: {
-    display: 'block',
+    display: 'flex',
+    alignItems: 'center',
     width: '100%',
-    padding: '10px 8px',
-    borderRadius: 8,
+    padding: '10px 10px',
+    borderRadius: 10,
     cursor: 'pointer',
     background: 'none',
     border: 'none',
@@ -1076,9 +1201,52 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     color: Brand.textSecondary,
     overflow: 'hidden',
+    transition: 'background-color 140ms',
+  },
+  conversationItemText: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  skelStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    padding: 4,
+  },
+  emptyRecents: {
+    padding: '24px 12px',
+    textAlign: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  emptyRecentsIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    background: Brand.accentBg,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  emptyRecentsTitle: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: Brand.textPrimary,
+  },
+  emptyRecentsSub: {
+    fontSize: 11.5,
+    color: Brand.textMuted,
+    marginTop: 4,
+    lineHeight: 1.5,
+    maxWidth: 200,
+  },
+
+  // ── Main
   main: {
     flex: 1,
     display: 'flex',
@@ -1089,9 +1257,12 @@ const styles: Record<string, React.CSSProperties> = {
   header: {
     display: 'flex',
     alignItems: 'center',
-    padding: '8px 16px',
+    gap: 8,
+    padding: '10px 14px',
     backgroundColor: Brand.bg,
     flexShrink: 0,
+    position: 'relative',
+    zIndex: 10,
   },
   iconBtn: {
     background: 'none',
@@ -1101,16 +1272,40 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 10,
+  },
+  headerBrand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '4px 4px 4px 4px',
+  },
+  headerBrandMark: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 2px 6px rgba(5,4,170,0.28)',
+  },
+  headerBrandText: {
+    fontSize: 13.5,
+    fontWeight: 700,
+    color: Brand.textPrimary,
+    letterSpacing: -0.1,
   },
   modelToggle: {
     display: 'flex',
     alignItems: 'center',
-    padding: '5px 10px',
+    padding: '6px 12px',
     backgroundColor: Brand.cardBg,
     border: `1px solid ${Brand.border}`,
     borderRadius: 20,
-    boxShadow: `0 2px 4px ${Brand.shadowColor}`,
+    boxShadow: Brand.shadowSm,
     cursor: 'pointer',
+    transition: 'box-shadow 180ms',
   },
   body: {
     flex: 1,
@@ -1119,7 +1314,10 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 0,
     width: '100%',
   },
+
+  // ── Welcome
   welcomeContainer: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -1127,51 +1325,109 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
     padding: '0 24px',
     textAlign: 'center',
+    overflow: 'hidden',
   },
-  logo: {
-    width: 70,
-    height: 70,
-    borderRadius: 20,
-    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
-    boxShadow: `0 8px 20px rgba(5,4,170,0.3)`,
+  welcomeContent: {
+    position: 'relative',
+    zIndex: 2,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 520,
+  },
+  logoWrap: {
+    position: 'relative',
+    width: 96,
+    height: 96,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 28,
+    marginBottom: 20,
+  },
+  logoGlow: {
+    position: 'absolute',
+    inset: -8,
+    borderRadius: '50%',
+    background:
+      'radial-gradient(circle, rgba(5,4,170,0.28) 0%, rgba(5,4,170,0.10) 40%, rgba(5,4,170,0) 70%)',
+    pointerEvents: 'none',
+  },
+  logo: {
+    position: 'relative',
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    background: `linear-gradient(135deg, ${Brand.accent} 0%, ${Brand.accentLight} 100%)`,
+    boxShadow:
+      '0 12px 32px rgba(5,4,170,0.32), inset 0 1px 0 rgba(255,255,255,0.22)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandTag: {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: Brand.accent,
+    background: Brand.accentBg,
+    padding: '5px 12px',
+    borderRadius: 999,
+    marginBottom: 18,
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: 600,
+    fontSize: 34,
+    fontWeight: 700,
     color: Brand.textPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: -0.9,
     margin: 0,
+    lineHeight: 1.05,
   },
   subGreeting: {
-    fontSize: 20,
+    fontSize: 17,
     color: Brand.textSecondary,
-    margin: '6px 0 40px',
+    margin: '10px 0 36px',
+    lineHeight: 1.4,
+    maxWidth: 380,
   },
   suggestionsGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: 12,
+    gap: 10,
     width: '100%',
-    maxWidth: 500,
+    maxWidth: 480,
   },
   suggestionChip: {
     display: 'flex',
     alignItems: 'center',
-    padding: '12px 14px',
+    padding: '14px 14px',
     backgroundColor: Brand.cardBg,
     border: `1px solid ${Brand.border}`,
-    borderRadius: 12,
-    boxShadow: `0 2px 8px ${Brand.shadowColor}`,
+    borderRadius: 14,
+    boxShadow: Brand.shadowSm,
     cursor: 'pointer',
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: 500,
     color: Brand.textPrimary,
     textAlign: 'left',
+    gap: 10,
+    transition: 'transform 200ms, box-shadow 200ms, border-color 200ms',
   },
+  chipEmoji: {
+    fontSize: 18,
+    lineHeight: 1,
+    flexShrink: 0,
+  },
+  chipText: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
+  // ── Chat list
   chatList: {
     padding: '16px',
     maxWidth: 900,
@@ -1182,7 +1438,7 @@ const styles: Record<string, React.CSSProperties> = {
   msgRow: {
     width: '100%',
     maxWidth: '100%',
-    marginBottom: 20,
+    marginBottom: 22,
   },
   userWrap: {
     display: 'flex',
@@ -1195,11 +1451,13 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '85%',
     padding: '12px 16px',
     borderRadius: 18,
-    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
+    borderTopRightRadius: 6,
+    background: `linear-gradient(135deg, ${Brand.accent} 0%, ${Brand.accentLight} 100%)`,
     color: '#FFFFFF',
     fontSize: 15,
-    lineHeight: 1.5,
-    boxShadow: `0 4px 10px rgba(5,4,170,0.2)`,
+    lineHeight: 1.55,
+    boxShadow:
+      '0 6px 16px rgba(5,4,170,0.22), inset 0 1px 0 rgba(255,255,255,0.14)',
     wordBreak: 'break-word',
     overflowWrap: 'anywhere',
     whiteSpace: 'pre-wrap',
@@ -1212,44 +1470,73 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     maxWidth: '100%',
   },
+  aiAvatarWrap: {
+    position: 'relative',
+    width: 30,
+    height: 30,
+    flexShrink: 0,
+    marginTop: 2,
+  },
+  aiAvatarRing: {
+    position: 'absolute',
+    inset: -3,
+    borderRadius: '50%',
+    background:
+      'radial-gradient(circle, rgba(5,4,170,0.24) 0%, rgba(5,4,170,0) 70%)',
+    pointerEvents: 'none',
+  },
   aiAvatar: {
-    width: 28,
-    height: 28,
+    position: 'relative',
+    width: 30,
+    height: 30,
     borderRadius: '50%',
     background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 2,
+    boxShadow: '0 3px 8px rgba(5,4,170,0.28)',
   },
   aiBubble: {
     flex: 1,
-    backgroundColor: 'transparent',
+    position: 'relative',
+    paddingLeft: 14,
     color: Brand.textPrimary,
     fontSize: 15,
-    lineHeight: 1.65,
+    lineHeight: 1.68,
     overflowWrap: 'anywhere',
     wordBreak: 'break-word',
     minWidth: 0,
     maxWidth: '100%',
   },
-  thinkingDots: {
+  aiText: {
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+  },
+  thinkingWrap: {
     display: 'flex',
-    gap: 4,
     alignItems: 'center',
-    height: 24,
+    gap: 10,
+    height: 26,
+  },
+  thinkingText: {
+    fontSize: 13,
+    color: Brand.textMuted,
+    fontWeight: 500,
+    letterSpacing: 0.1,
   },
   errorLine: {
-    marginTop: 8,
-    padding: '8px 10px',
+    marginTop: 10,
+    padding: '9px 12px',
     backgroundColor: '#FEF2F2',
     border: '1px solid #FECACA',
-    borderRadius: 8,
+    borderRadius: 10,
     color: '#991B1B',
     fontSize: 12,
     fontWeight: 500,
   },
+
+  // ── Edit
   editWrap: {
     display: 'flex',
     flexDirection: 'column',
@@ -1271,6 +1558,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: Brand.textPrimary,
     backgroundColor: '#fff',
     boxSizing: 'border-box',
+    boxShadow: '0 0 0 4px rgba(5,4,170,0.08)',
   },
   editActions: {
     display: 'flex',
@@ -1294,29 +1582,33 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 14px',
     borderRadius: 10,
     border: 'none',
-    backgroundColor: Brand.accent,
+    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
     color: '#fff',
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(5,4,170,0.25)',
   },
+
+  // ── Result cards
   cardStack: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
     gap: 14,
-    marginTop: 14,
+    marginTop: 16,
     width: '100%',
     maxWidth: '100%',
   },
   tile: {
     display: 'flex',
     flexDirection: 'column',
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#fff',
-    border: 'none',
-    boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
+    border: `1px solid ${Brand.borderSoft}`,
+    boxShadow: Brand.shadowSm,
     width: '100%',
+    transition: 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms',
   },
   tileTap: {
     display: 'flex',
@@ -1343,6 +1635,13 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
     objectFit: 'cover',
   },
+  tileImageOverlay: {
+    position: 'absolute',
+    inset: 0,
+    background:
+      'linear-gradient(180deg, rgba(15,23,42,0) 45%, rgba(15,23,42,0.42) 100%)',
+    pointerEvents: 'none',
+  },
   tilePlaceholder: {
     width: '100%',
     height: '100%',
@@ -1353,50 +1652,62 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tileBadge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
+    top: 10,
+    left: 10,
     fontSize: 9,
-    fontWeight: 700,
-    letterSpacing: 0.6,
+    fontWeight: 800,
+    letterSpacing: 0.7,
     color: '#fff',
-    padding: '3px 7px',
-    borderRadius: 6,
+    padding: '4px 8px',
+    borderRadius: 7,
     textTransform: 'uppercase',
+    boxShadow: '0 2px 6px rgba(15,23,42,0.15)',
+  },
+  tilePriceChip: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    padding: '5px 10px',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    backdropFilter: 'blur(6px)',
+    color: Brand.accent,
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: -0.1,
+    boxShadow: '0 2px 8px rgba(15,23,42,0.12)',
   },
   tileDistancePill: {
     position: 'absolute',
-    bottom: 8,
-    left: 8,
+    bottom: 10,
+    left: 10,
     display: 'flex',
     alignItems: 'center',
-    padding: '3px 7px',
-    borderRadius: 6,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: '4px 8px',
+    borderRadius: 8,
+    backgroundColor: 'rgba(15,23,42,0.72)',
+    backdropFilter: 'blur(6px)',
     color: '#fff',
     fontSize: 10,
-    fontWeight: 600,
+    fontWeight: 700,
   },
   tileBody: {
-    padding: '10px 12px 12px',
+    padding: '12px 14px 14px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 3,
+    gap: 5,
   },
   tileTitle: {
     fontSize: 14,
-    fontWeight: 600,
-    color: '#0F172A',
+    fontWeight: 700,
+    color: Brand.textPrimary,
     lineHeight: 1.3,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     display: '-webkit-box',
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
-  },
-  tilePrice: {
-    fontSize: 15,
-    fontWeight: 700,
-    color: Brand.accent,
+    letterSpacing: -0.1,
   },
   tileSubtitle: {
     fontSize: 12,
@@ -1406,28 +1717,39 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    marginTop: 2,
   },
   tileTravel: {
     fontSize: 11,
     color: '#94A3B8',
-    fontWeight: 500,
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  tileTravelDot: {
+    width: 5,
+    height: 5,
+    borderRadius: '50%',
+    backgroundColor: '#10B981',
   },
   directionsBtn: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    padding: '8px 10px',
+    padding: '10px 10px',
     backgroundColor: '#F8FAFC',
     border: 'none',
-    borderTopWidth: 1,
-    borderTopStyle: 'solid',
-    borderTopColor: Brand.border,
+    borderTop: `1px solid ${Brand.borderSoft}`,
     cursor: 'pointer',
     fontSize: 12,
-    fontWeight: 600,
+    fontWeight: 700,
     color: Brand.accent,
   },
+
+  // ── Action bar
   actionBar: {
     display: 'flex',
     gap: 2,
@@ -1443,7 +1765,10 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 6,
+    transition: 'background-color 140ms',
   },
+
+  // ── Input
   inputArea: {
     padding: '8px 16px 12px',
     backgroundColor: Brand.bg,
@@ -1453,10 +1778,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   inputBox: {
     backgroundColor: Brand.cardBg,
-    borderRadius: 20,
+    borderRadius: 22,
     border: `1px solid ${Brand.border}`,
-    boxShadow: `0 2px 8px ${Brand.shadowColor}`,
-    padding: '8px 8px 0',
+    boxShadow: Brand.shadowMd,
+    padding: '4px 6px 0',
+    transition: 'box-shadow 220ms, border-color 220ms',
+  },
+  inputBoxFocused: {
+    borderColor: '#C7CCFF',
+    boxShadow: Brand.shadowBloom,
   },
   textarea: {
     width: '100%',
@@ -1464,9 +1794,9 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     resize: 'none',
     fontSize: 15,
-    lineHeight: 1.5,
+    lineHeight: 1.55,
     color: Brand.textPrimary,
-    padding: '14px 18px 0',
+    padding: '14px 16px 0',
     background: 'transparent',
     fontFamily: 'inherit',
     boxSizing: 'border-box',
@@ -1474,38 +1804,49 @@ const styles: Record<string, React.CSSProperties> = {
   inputActions: {
     display: 'flex',
     alignItems: 'center',
-    padding: '4px 8px 8px',
+    padding: '4px 6px 6px',
   },
   inputIconBtn: {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: 6,
+    padding: 8,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 10,
   },
   sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: '50%',
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     border: 'none',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'background-color 0.18s',
+    transition: 'transform 160ms, box-shadow 200ms, background 200ms',
+  },
+  sendBtnActive: {
+    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
+    boxShadow: '0 6px 16px rgba(5,4,170,0.30)',
+    cursor: 'pointer',
+  },
+  sendBtnDisabled: {
+    backgroundColor: '#E6E8F0',
+    cursor: 'not-allowed',
   },
   disclaimer: {
     fontSize: 11,
     color: Brand.textMuted,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 10,
+    letterSpacing: 0.1,
   },
 
   // ── Toasts
   toastStack: {
     position: 'fixed',
-    top: 12,
+    top: 14,
     left: '50%',
     transform: 'translateX(-50%)',
     display: 'flex',
@@ -1521,7 +1862,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     border: '1px solid transparent',
-    boxShadow: '0 6px 18px rgba(15,23,42,0.08)',
+    boxShadow: '0 6px 18px rgba(15,23,42,0.10)',
     cursor: 'pointer',
     maxWidth: 320,
     animation: 'seaiToastIn 220ms ease-out both',
@@ -1537,16 +1878,94 @@ const GLOBAL_CSS = `
     max-width: 100vw;
   }
 
-  /* Branded SEAI thinking cursor — pulsing rotating brand square */
+  /* ── Ambient orbs behind welcome state ─────────────────── */
+  .seai-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(70px);
+    pointer-events: none;
+    will-change: transform, opacity;
+    opacity: 0.55;
+    z-index: 0;
+  }
+  .seai-orb-a {
+    width: 340px;
+    height: 340px;
+    top: -100px;
+    left: -100px;
+    background: radial-gradient(circle, rgba(5,4,170,0.22) 0%, rgba(5,4,170,0) 68%);
+    animation: seaiFloatOrb 24s ease-in-out infinite;
+  }
+  .seai-orb-b {
+    width: 420px;
+    height: 420px;
+    bottom: -140px;
+    right: -140px;
+    background: radial-gradient(circle, rgba(61,59,255,0.18) 0%, rgba(61,59,255,0) 68%);
+    animation: seaiFloatOrb 30s ease-in-out infinite reverse;
+  }
+  @keyframes seaiFloatOrb {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33%      { transform: translate(28px, -22px) scale(1.08); }
+    66%      { transform: translate(-22px, 26px) scale(0.96); }
+  }
+
+  /* ── Logo glow breathing ───────────────────────────────── */
+  .seai-logo-glow {
+    animation: seaiLogoBreathe 3.4s ease-in-out infinite;
+  }
+  @keyframes seaiLogoBreathe {
+    0%, 100% { transform: scale(1);    opacity: 0.55; }
+    50%      { transform: scale(1.18); opacity: 0.9; }
+  }
+
+  /* ── Suggestion chips ──────────────────────────────────── */
+  .seai-chip {
+    animation: seaiChipIn 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .seai-chip:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 26px rgba(5,4,170,0.10), 0 2px 6px rgba(15,23,42,0.05);
+    border-color: #C7CCFF;
+  }
+  .seai-chip:active {
+    transform: translateY(0) scale(0.985);
+  }
+  @keyframes seaiChipIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Message arrival ───────────────────────────────────── */
+  .seai-msg-row {
+    animation: seaiMsgIn 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes seaiMsgIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── AI thinking dot ───────────────────────────────────── */
+  .seai-thinking-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
+    box-shadow:
+      0 0 0 4px rgba(5,4,170,0.10),
+      0 0 12px rgba(5,4,170,0.45);
+    animation: seaiThinkPulse 1.5s ease-in-out infinite;
+  }
+  @keyframes seaiThinkPulse {
+    0%, 100% { transform: scale(0.8); opacity: 0.55; }
+    50%      { transform: scale(1.15); opacity: 1; }
+  }
+
+  /* ── Branded SEAI streaming cursor ─────────────────────── */
   @keyframes seaiPulse {
-    0%, 100% {
-      transform: scale(0.85) rotate(0deg);
-      opacity: 0.7;
-    }
-    50% {
-      transform: scale(1.15) rotate(45deg);
-      opacity: 1;
-    }
+    0%, 100% { transform: scale(0.85) rotate(0deg); opacity: 0.7; }
+    50%      { transform: scale(1.15) rotate(45deg); opacity: 1; }
   }
   .seai-cursor {
     display: inline-block;
@@ -1556,30 +1975,69 @@ const GLOBAL_CSS = `
     margin-left: 4px;
     vertical-align: middle;
     background: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
-    box-shadow: 0 0 10px rgba(5, 4, 170, 0.55), inset 0 0 4px rgba(255,255,255,0.35);
+    box-shadow: 0 0 10px rgba(5,4,170,0.55), inset 0 0 4px rgba(255,255,255,0.35);
     animation: seaiPulse 1.1s ease-in-out infinite;
   }
 
-  /* Thinking dots */
-  @keyframes bounce {
-    0%, 80%, 100% { transform: scale(0); }
-    40% { transform: scale(1); }
+  /* ── Tile cards (hover lift on desktop) ────────────────── */
+  .seai-tile:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 30px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06);
+    border-color: #DDE3F5;
   }
-  .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background-color: #0504AA;
-    animation: bounce 1.2s infinite;
-    opacity: 0.6;
+  .seai-tile:active {
+    transform: translateY(-1px);
   }
-  .dot:nth-child(2) { animation-delay: 0.2s; }
-  .dot:nth-child(3) { animation-delay: 0.4s; }
 
-  /* Toast entrance */
+  /* ── Send button ───────────────────────────────────────── */
+  .seai-send:hover {
+    transform: scale(1.06);
+  }
+  .seai-send:active {
+    transform: scale(0.96);
+  }
+
+  /* ── Sidebar recents ───────────────────────────────────── */
+  .seai-recent-item:hover {
+    background-color: #EEEDFF;
+    color: #0504AA;
+  }
+  .seai-recent-item:active {
+    background-color: #E2E1FF;
+  }
+
+  /* ── Skeleton shimmer ──────────────────────────────────── */
+  .seai-skel {
+    background: linear-gradient(90deg, #E9ECF3 25%, #F4F6FB 50%, #E9ECF3 75%);
+    background-size: 200% 100%;
+    animation: seaiShimmer 1.4s linear infinite;
+    border-radius: 8px;
+  }
+  @keyframes seaiShimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ── Model dot pulse ───────────────────────────────────── */
+  .seai-model-dot {
+    animation: seaiModelPulse 2.2s ease-in-out infinite;
+  }
+  @keyframes seaiModelPulse {
+    0%, 100% { transform: scale(1);   opacity: 0.9; }
+    50%      { transform: scale(1.2); opacity: 0.5; }
+  }
+
+  /* ── Toast + fade + spinner ────────────────────────────── */
   @keyframes seaiToastIn {
     from { opacity: 0; transform: translateY(-6px); }
     to   { opacity: 1; transform: none; }
+  }
+  @keyframes seaiFade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes seaiSpin {
+    to { transform: rotate(360deg); }
   }
 
   /* ─── Mobile responsiveness ─────────────────────────────── */
@@ -1605,6 +2063,10 @@ const GLOBAL_CSS = `
 
     .seai-header {
       padding: 6px 8px !important;
+    }
+
+    .seai-header-brand-text {
+      display: none;
     }
 
     .seai-input-area {
