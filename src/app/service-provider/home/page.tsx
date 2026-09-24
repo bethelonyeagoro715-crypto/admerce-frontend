@@ -22,6 +22,8 @@ import {
   MdStorefront,
   MdToggleOn,
   MdToggleOff,
+  MdChevronRight,
+  MdGroups,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -63,6 +65,12 @@ interface Profile {
   [key: string]: unknown;
 }
 
+interface CommunityStats {
+  room: string;
+  total_messages: number;
+  active_senders_7d: number;
+}
+
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -76,13 +84,14 @@ export default function ServiceProviderDashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [stats, setStats] = useState<Stats>({});
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
   const [isAvailable, setIsAvailable] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadDashboardData = async () => {
     setIsLoading(true);
     try {
-      const [servicesData, bookingsData, statsData, profileData] = await Promise.all([
+      const [servicesData, bookingsData, statsData, profileData, communityData] = await Promise.all([
         api.getProviderServices() as Promise<ServiceItem[]>,
         api.getProviderBookings() as Promise<Booking[]>,
         api.getProviderStats() as Promise<Stats>,
@@ -91,14 +100,19 @@ export default function ServiceProviderDashboardPage() {
           username: 'Provider',
           avatar_url: null,
         })) as Promise<Profile>,
+        Promise.resolve(
+          (api as typeof api & {
+            communityGetStats?: (scope: string) => Promise<CommunityStats | null>;
+          }).communityGetStats?.('global'),
+        ).catch(() => null),
       ]);
 
       setServices(Array.isArray(servicesData) ? servicesData : []);
       setBookings(Array.isArray(bookingsData) ? bookingsData : []);
       setStats(statsData || {});
       setProfile(profileData);
+      setCommunityStats(communityData as CommunityStats | null);
 
-      // Use profile.is_available if present; otherwise keep default true
       if (typeof profileData?.is_available === 'boolean') {
         setIsAvailable(profileData.is_available);
       }
@@ -202,6 +216,14 @@ export default function ServiceProviderDashboardPage() {
 
   return (
     <main style={styles.container}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulseDot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.55; transform: scale(1.5); }
+        }
+      `}</style>
+
       {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>Dashboard</h1>
@@ -260,7 +282,6 @@ export default function ServiceProviderDashboardPage() {
               {isAvailable ? 'Customers can book your services' : 'Paused – no new bookings will be accepted'}
             </div>
           </div>
-          {/* Toggle Switch with sliding knob */}
           <label style={styles.switch}>
             <input
               type="checkbox"
@@ -278,6 +299,27 @@ export default function ServiceProviderDashboardPage() {
             }} />
           </label>
         </div>
+
+        {/* Community row — enticing entry point */}
+        <button
+          type="button"
+          onClick={() => router.push('/service-provider/community')}
+          style={styles.communityRow}
+        >
+          <span style={styles.communityIcon}>
+            <MdGroups size={22} color="#0504AA" />
+            <span style={styles.communityLiveDot} />
+          </span>
+          <span style={styles.communityText}>
+            <span style={styles.communityTitle}>Community</span>
+            <span style={styles.communityHint}>
+              {communityStats && communityStats.active_senders_7d > 0
+                ? `${communityStats.active_senders_7d} seller${communityStats.active_senders_7d === 1 ? '' : 's'} active this week`
+                : 'Chat with other sellers'}
+            </span>
+          </span>
+          <MdChevronRight size={22} color="#94A3B8" />
+        </button>
 
         {/* Stats Row */}
         <div style={styles.statsRow}>
@@ -306,13 +348,11 @@ export default function ServiceProviderDashboardPage() {
           ))
         )}
 
-        {/* Add Service Button */}
         <button onClick={addService} style={styles.addBtn}>
           <MdAdd size={20} color="#fff" />
           Add to Menu
         </button>
 
-        {/* Bookings Section */}
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Upcoming Bookings</h2>
           {bookings.length > 0 && <span style={styles.pendingCount}>{bookings.length} pending</span>}
@@ -337,8 +377,6 @@ export default function ServiceProviderDashboardPage() {
           </button>
         )}
       </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }
@@ -480,13 +518,73 @@ const styles: Record<string, React.CSSProperties> = {
   avatar: { width: '100%', height: '100%', objectFit: 'cover' },
   profileName: { fontSize: 16, fontWeight: 700, color: '#1A1A1A' },
   profileRole: { fontSize: 13, color: '#888' },
-  availabilityCard: { display: 'flex', alignItems: 'center', padding: '12px 16px', borderRadius: 12, border: '1px solid', marginBottom: 24 },
+  availabilityCard: { display: 'flex', alignItems: 'center', padding: '12px 16px', borderRadius: 12, border: '1px solid', marginBottom: 12 },
   availabilityIcon: { marginRight: 12 },
   availabilityTitle: { fontSize: 15, fontWeight: 600, color: '#1A1A1A' },
   availabilitySubtitle: { fontSize: 12, color: '#888' },
   switch: { position: 'relative', width: 44, height: 24, display: 'inline-block' },
   slider: { position: 'absolute', inset: 0, borderRadius: 24, transition: 'background-color 0.3s' },
   knob: { position: 'absolute', top: 2, left: 2, width: 20, height: 20, borderRadius: '50%', backgroundColor: '#fff', transition: 'transform 0.3s' },
+
+  // ── Community row (enticing)
+  communityRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    padding: '14px 16px',
+    background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
+    border: '1px solid #DDE3F5',
+    borderRadius: 16,
+    marginBottom: 24,
+    cursor: 'pointer',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+    boxShadow: '0 6px 18px rgba(5, 4, 170, 0.06)',
+  },
+  communityIcon: {
+    position: 'relative',
+    width: 42,
+    height: 42,
+    flex: '0 0 42px',
+    borderRadius: 12,
+    background: 'linear-gradient(135deg, #EEF0FF, #E0E7FF)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  communityLiveDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 9,
+    height: 9,
+    borderRadius: '50%',
+    backgroundColor: '#22C55E',
+    border: '2px solid #FFFFFF',
+    animation: 'pulseDot 2s ease-in-out infinite',
+  },
+  communityText: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  communityTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    letterSpacing: '-0.01em',
+    color: '#0504AA',
+  },
+  communityHint: {
+    fontSize: 12.5,
+    color: '#64748B',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
   statsRow: { display: 'flex', gap: 8, marginBottom: 24 },
   statCard: { flex: 1, padding: 12, backgroundColor: '#f9f9f9', borderRadius: 12 },
   statTitle: { fontSize: 12, color: '#888' },

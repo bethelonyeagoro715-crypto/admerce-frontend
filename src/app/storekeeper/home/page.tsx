@@ -23,6 +23,7 @@ import {
   MdErrorOutline,
   MdInfoOutline,
   MdChevronRight,
+  MdGroups,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -30,8 +31,6 @@ interface Store {
   name?: string;
   store_image_url?: string;
   store_id?: string;
-  // ✅ NEW — comes from `SELECT * FROM stores`; the main.py migration
-  //    added these columns.
   verification_status?: string;
   verified?: boolean;
   verified_at?: string | null;
@@ -50,6 +49,16 @@ interface StoreStats {
   revenue?: number;
 }
 
+interface CommunityStats {
+  room: string;
+  total_messages: number;
+  active_senders_7d: number;
+}
+
+interface CommunityStatsApi {
+  communityGetStats?: (room: string) => Promise<CommunityStats | null>;
+}
+
 type VerificationStatus =
   | 'unverified'
   | 'pending'
@@ -63,8 +72,6 @@ function resolveImageUrl(url: string | null | undefined): string {
   return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
 }
 
-// ✅ NEW — normalise whatever the backend sends into one of five states.
-//    Falls back to `verified` boolean if the new column isn't present.
 function safeVerificationStatus(store: Store | null): VerificationStatus {
   const vs = (store?.verification_status || '').toLowerCase();
   if (
@@ -121,20 +128,18 @@ export default function StorekeeperDashboardPage() {
   const [store, setStore] = useState<Store | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<StoreStats>({});
+  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Modal states
   const [showStoreImageModal, setShowStoreImageModal] = useState(false);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
 
   const storeImageInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  // Store image preview state
   const [storeImagePreview, setStoreImagePreview] = useState<string | null>(null);
   const [storeImageFile, setStoreImageFile] = useState<File | null>(null);
 
-  // Avatar preview state
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
@@ -144,14 +149,17 @@ export default function StorekeeperDashboardPage() {
   const loadDashboardData = async () => {
     setIsLoading(true);
     try {
-      const [storeData, profileData, statsData] = await Promise.all([
+      const [storeData, profileData, statsData, communityData] = await Promise.all([
         api.getMyStore() as Promise<Store | null>,
         api.getMyProfile() as Promise<Profile>,
         api.getStoreStats() as Promise<StoreStats>,
+        (api as unknown as CommunityStatsApi).communityGetStats?.('global').catch(() => null) ??
+          Promise.resolve(null),
       ]);
       setStore(storeData);
       setProfile(profileData);
       setStats(statsData);
+      setCommunityStats(communityData as CommunityStats | null);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
     } finally {
@@ -245,6 +253,14 @@ export default function StorekeeperDashboardPage() {
 
   return (
     <main style={styles.container}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulseDot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.55; transform: scale(1.5); }
+        }
+      `}</style>
+
       {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>{store?.name || 'Dashboard'}</h1>
@@ -262,7 +278,6 @@ export default function StorekeeperDashboardPage() {
         <MdAutoAwesome size={24} color="#fff" />
       </button>
 
-      {/* Content */}
       <div style={styles.scrollArea}>
         {/* Store preview */}
         <h2 style={styles.sectionTitle}>Store Preview</h2>
@@ -302,7 +317,7 @@ export default function StorekeeperDashboardPage() {
           </button>
         </div>
 
-        {/* ✅ NEW — verification status row */}
+        {/* Verification status row */}
         <button
           type="button"
           onClick={() => router.push('/storekeeper/verification')}
@@ -338,6 +353,27 @@ export default function StorekeeperDashboardPage() {
               {verificationMeta.label}
             </span>
             <span style={styles.verificationHint}>{verificationMeta.hint}</span>
+          </span>
+          <MdChevronRight size={22} color="#94A3B8" />
+        </button>
+
+        {/* Community row — enticing entry point */}
+        <button
+          type="button"
+          onClick={() => router.push('/storekeeper/community')}
+          style={styles.communityRow}
+        >
+          <span style={styles.communityIcon}>
+            <MdGroups size={22} color="#0504AA" />
+            <span style={styles.communityLiveDot} />
+          </span>
+          <span style={styles.communityText}>
+            <span style={styles.communityTitle}>Community</span>
+            <span style={styles.communityHint}>
+              {communityStats && communityStats.active_senders_7d > 0
+                ? `${communityStats.active_senders_7d} seller${communityStats.active_senders_7d === 1 ? '' : 's'} active this week`
+                : 'Chat with other sellers'}
+            </span>
           </span>
           <MdChevronRight size={22} color="#94A3B8" />
         </button>
@@ -463,8 +499,6 @@ export default function StorekeeperDashboardPage() {
           </button>
         </Modal>
       )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }
@@ -645,7 +679,8 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     padding: 4,
   },
-  // ✅ NEW — verification row styles
+
+  // ── Verification row
   verificationRow: {
     display: 'flex',
     alignItems: 'center',
@@ -655,7 +690,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#fff',
     border: '1px solid #eee',
     borderRadius: 16,
-    marginBottom: 24,
+    marginBottom: 12,
     cursor: 'pointer',
     textAlign: 'left',
     fontFamily: 'inherit',
@@ -688,6 +723,66 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+
+  // ── Community row (enticing)
+  communityRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    padding: '14px 16px',
+    background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
+    border: '1px solid #DDE3F5',
+    borderRadius: 16,
+    marginBottom: 24,
+    cursor: 'pointer',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+    boxShadow: '0 6px 18px rgba(5, 4, 170, 0.06)',
+  },
+  communityIcon: {
+    position: 'relative',
+    width: 42,
+    height: 42,
+    flex: '0 0 42px',
+    borderRadius: 12,
+    background: 'linear-gradient(135deg, #EEF0FF, #E0E7FF)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  communityLiveDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 9,
+    height: 9,
+    borderRadius: '50%',
+    backgroundColor: '#22C55E',
+    border: '2px solid #FFFFFF',
+    animation: 'pulseDot 2s ease-in-out infinite',
+  },
+  communityText: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  communityTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    letterSpacing: '-0.01em',
+    color: '#0504AA',
+  },
+  communityHint: {
+    fontSize: 12.5,
+    color: '#64748B',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+
   metricsRow: {
     display: 'flex',
     gap: 12,
