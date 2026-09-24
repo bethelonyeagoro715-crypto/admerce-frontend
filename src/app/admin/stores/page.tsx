@@ -14,9 +14,12 @@ import {
   MdLocationOn,
   MdKeyboardArrowLeft,
   MdKeyboardArrowRight,
+  MdInfoOutline,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
+type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected' | 'suspended';
+
 interface StoreRecord {
   store_id: string;
   name?: string;
@@ -25,26 +28,75 @@ interface StoreRecord {
   category?: string;
   created_at?: string;
   verified?: number | boolean;
+  verification_status?: VerificationStatus | string;
   status?: string;
   lat?: number;
   lng?: number;
   [key: string]: unknown;
 }
 
-type StoreState = 'active' | 'pending' | 'suspended';
-
-function storeState(store: StoreRecord): StoreState {
+// ✅ CHANGED: read verification_status directly. Falls back to `verified`
+//    boolean only when the column isn't present (old API responses).
+function storeState(store: StoreRecord): VerificationStatus {
+  const vs = (store.verification_status || '').toLowerCase();
+  if (vs === 'unverified' || vs === 'pending' || vs === 'verified' ||
+      vs === 'rejected' || vs === 'suspended') {
+    return vs as VerificationStatus;
+  }
+  // Fallback for old API responses lacking the column
   const verified = store.verified === 1 || store.verified === true;
-  if (verified) return 'active';
-  if (store.status === 'Suspended') return 'suspended';
-  return 'pending';
+  return verified ? 'verified' : 'unverified';
 }
 
-const STATUS_META: Record<StoreState, { label: string; color: string; soft: string }> = {
-  active: { label: 'Active', color: '#16A34A', soft: '#DCFCE7' },
-  pending: { label: 'Pending', color: '#D97706', soft: '#FEF3C7' },
-  suspended: { label: 'Suspended', color: '#DC2626', soft: '#FEE2E2' },
+const STATUS_META: Record<VerificationStatus, { label: string; color: string; soft: string }> = {
+  unverified: { label: 'Unverified', color: '#64748B', soft: '#F1F5F9' },
+  pending:    { label: 'Pending',    color: '#D97706', soft: '#FEF3C7' },
+  verified:   { label: 'Verified',   color: '#16A34A', soft: '#DCFCE7' },
+  rejected:   { label: 'Rejected',   color: '#B91C1C', soft: '#FEE2E2' },
+  suspended:  { label: 'Suspended',  color: '#DC2626', soft: '#FEE2E2' },
 };
+
+// ✅ NEW — categories are stored as JSON strings in `stores.category`.
+//    Parse and prettify. Handles: `["food_beverage"]`, `food_beverage`,
+//    `["a","b"]`, or null.
+function prettyCategory(raw: unknown): string | null {
+  if (!raw) return null;
+  let list: string[] = [];
+  if (Array.isArray(raw)) {
+    list = raw.map((x) => String(x));
+  } else if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) list = parsed.map((x) => String(x));
+      } catch {
+        // not valid JSON — treat as a single tag
+        list = [trimmed];
+      }
+    } else {
+      list = [trimmed];
+    }
+  }
+  if (list.length === 0) return null;
+  return list
+    .map((s) =>
+      s
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+        // Common humanisations
+        .replace(/\bTech Electronics\b/, 'Tech & Electronics')
+        .replace(/\bFood Beverage\b/, 'Food & Beverage')
+        .replace(/\bHealth Wellness\b/, 'Health & Wellness')
+        .replace(/\bFashion Apparel\b/, 'Fashion & Apparel')
+        .replace(/\bBuilding Industrial\b/, 'Building & Industrial')
+        .replace(/\bHome Garden\b/, 'Home & Garden')
+        .replace(/\bKids Toys\b/, 'Kids & Toys')
+        .replace(/\bSports Outdoors\b/, 'Sports & Outdoors')
+        .replace(/\bMedia Office\b/, 'Media & Office'),
+    )
+    .join(' · ');
+}
 
 // ─── Reducer ────────────────────────────────────────────────────────
 interface FetchState {
@@ -96,10 +148,23 @@ function initialsOf(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-function formatDate(dateString?: string): string {
-  if (!dateString) return '—';
+// ✅ CHANGED — defensive date parsing. Accepts Date, ISO string, or the
+//    `YYYY-MM-DD HH:MM:SS` format asyncpg often serializes as.
+function formatDate(value: unknown): string {
+  if (!value) return '—';
+  let d: Date;
+  if (value instanceof Date) {
+    d = value;
+  } else if (typeof value === 'string') {
+    // Normalise "2026-09-22 17:32:44" → "2026-09-22T17:32:44"
+    const normalised = value.includes('T') ? value : value.replace(' ', 'T');
+    d = new Date(normalised);
+  } else {
+    return '—';
+  }
+  if (isNaN(d.getTime())) return '—';
   try {
-    return new Date(dateString).toLocaleDateString('en-GB', {
+    return d.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -110,10 +175,12 @@ function formatDate(dateString?: string): string {
 }
 
 // ─── Confirm dialog ─────────────────────────────────────────────────
-type ConfirmKind = 'verify' | 'suspend';
+type ConfirmKind = 'approve' | 'reject' | 'suspend' | 'reinstate';
 interface ConfirmState {
   kind: ConfirmKind;
   store: StoreRecord;
+  reference?: string;
+  reason?: string;
 }
 
 // ─── Component ──────────────────────────────────────────────────────
@@ -124,7 +191,7 @@ export default function AdminStoresPage() {
   );
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'All' | StoreState>('All');
+  const [filterStatus, setFilterStatus] = useState<'All' | VerificationStatus>('All');
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [isActing, setIsActing] = useState(false);
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
@@ -135,7 +202,7 @@ export default function AdminStoresPage() {
 
   const showToast = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 1800);
+    setTimeout(() => setToast(null), 2000);
   };
 
   const loadStores = useCallback(
@@ -143,13 +210,10 @@ export default function AdminStoresPage() {
       dispatch({ type: 'FETCH_START', page });
       try {
         const offset = page * limit;
-        // Map the frontend status to the backend's binary filter.
+        // ✅ CHANGED — pass the verification_status directly. Backend now
+        //    filters by that column, not by the old `verified` boolean.
         const backendStatus =
-          status === 'All'
-            ? undefined
-            : status === 'active'
-            ? 'Active'
-            : 'Inactive';
+          status === 'All' ? undefined : status;
 
         const data = await api.adminGetStores(
           query.trim() || undefined,
@@ -172,8 +236,6 @@ export default function AdminStoresPage() {
     loadStores(0, '', 'All');
   }, [loadStores]);
 
-  // ✅ Close the kebab menu when the list changes.
-  //    Wrapped in setTimeout to satisfy react-hooks/set-state-in-effect.
   useEffect(() => {
     const t = setTimeout(() => {
       setOpenMenuFor(null);
@@ -197,7 +259,7 @@ export default function AdminStoresPage() {
     loadStores(0, '', filterStatus);
   };
 
-  const pickStatusChip = (value: 'All' | StoreState) => {
+  const pickStatusChip = (value: 'All' | VerificationStatus) => {
     setFilterStatus(value);
     loadStores(0, searchQuery, value);
   };
@@ -208,26 +270,82 @@ export default function AdminStoresPage() {
   };
 
   // ── Actions ────────────────────────────────────────────────────
-  const promptVerify = (store: StoreRecord) => {
+  // ✅ CHANGED — the kebab now derives actions from `verification_status`
+  //    instead of a stale `verified` boolean. Each action maps to a
+  //    legal state-machine transition.
+
+  const startApprove = async (store: StoreRecord) => {
     setOpenMenuFor(null);
-    setConfirm({ kind: 'verify', store });
+    try {
+      // Fetch the reference_code from the store's latest request
+      const info = (await api.adminGetStoreVerification(store.store_id)) as {
+        request?: { reference_code?: string } | null;
+      };
+      const ref = info?.request?.reference_code;
+      if (!ref) {
+        alert('This store has no pending verification request to approve.');
+        return;
+      }
+      setConfirm({ kind: 'approve', store, reference: ref });
+    } catch (err) {
+      alert('Could not load the verification request: ' +
+        (err instanceof Error ? err.message : ''));
+    }
   };
-  const promptSuspend = (store: StoreRecord) => {
+
+  const startReject = async (store: StoreRecord) => {
     setOpenMenuFor(null);
-    setConfirm({ kind: 'suspend', store });
+    try {
+      const info = (await api.adminGetStoreVerification(store.store_id)) as {
+        request?: { reference_code?: string } | null;
+      };
+      const ref = info?.request?.reference_code;
+      if (!ref) {
+        alert('This store has no pending verification request to reject.');
+        return;
+      }
+      const reason = window.prompt(
+        'Reason for rejection? (This is shown to the storekeeper.)',
+      );
+      if (!reason || !reason.trim()) return;
+      setConfirm({ kind: 'reject', store, reference: ref, reason: reason.trim() });
+    } catch (err) {
+      alert('Could not load the verification request: ' +
+        (err instanceof Error ? err.message : ''));
+    }
+  };
+
+  const startSuspend = (store: StoreRecord) => {
+    setOpenMenuFor(null);
+    const reason = window.prompt(
+      'Reason for suspension? (This is recorded in the audit log.)',
+    );
+    if (!reason || !reason.trim()) return;
+    setConfirm({ kind: 'suspend', store, reason: reason.trim() });
+  };
+
+  const startReinstate = (store: StoreRecord) => {
+    setOpenMenuFor(null);
+    setConfirm({ kind: 'reinstate', store });
   };
 
   const runConfirm = async () => {
     if (!confirm) return;
-    const { kind, store } = confirm;
+    const { kind, store, reference, reason } = confirm;
     setIsActing(true);
     try {
-      if (kind === 'verify') {
-        await api.adminVerifyStore(store.store_id);
+      if (kind === 'approve') {
+        await api.adminApproveStoreVerification(store.store_id, reference!);
         showToast('Store verified');
-      } else {
-        await api.adminSuspendStore(store.store_id);
+      } else if (kind === 'reject') {
+        await api.adminRejectStoreVerification(store.store_id, reference!, reason!);
+        showToast('Verification rejected');
+      } else if (kind === 'suspend') {
+        await api.adminSuspendStoreWithReason(store.store_id, reason!);
         showToast('Store suspended');
+      } else if (kind === 'reinstate') {
+        await api.adminReinstateStore(store.store_id);
+        showToast('Store reinstated');
       }
       setConfirm(null);
       await loadStores(currentPage, searchQuery, filterStatus);
@@ -260,13 +378,14 @@ export default function AdminStoresPage() {
   const displayName = (s: StoreRecord) => s.name || s.owner_name || s.store_id.slice(0, 8);
   const ownerLabel = (s: StoreRecord) => s.owner_name || s.owner_id?.slice(0, 8) || '—';
 
-  const activeCount = stores.filter((s) => storeState(s) === 'active').length;
   const pendingCount = stores.filter((s) => storeState(s) === 'pending').length;
+  const verifiedCount = stores.filter((s) => storeState(s) === 'verified').length;
 
-  const CHIPS: { value: 'All' | StoreState; label: string }[] = [
+  const CHIPS: { value: 'All' | VerificationStatus; label: string }[] = [
     { value: 'All', label: 'All' },
-    { value: 'active', label: 'Active' },
+    { value: 'unverified', label: 'Unverified' },
     { value: 'pending', label: 'Pending' },
+    { value: 'verified', label: 'Verified' },
     { value: 'suspended', label: 'Suspended' },
   ];
 
@@ -279,7 +398,7 @@ export default function AdminStoresPage() {
         <div className="sd-heroText">
           <h1 className="sd-title">Stores</h1>
           <p className="sd-subtitle">
-            Every store on Admerce. Verify, suspend, or check location.
+            Verify, suspend, or check location. Pending requests need review.
           </p>
         </div>
         <button
@@ -299,16 +418,16 @@ export default function AdminStoresPage() {
           <span className="sd-statLabel">On this page</span>
         </div>
         <div className="sd-statCard">
-          <span className="sd-statValue" style={{ color: '#16A34A' }}>
-            {activeCount}
-          </span>
-          <span className="sd-statLabel">Active</span>
-        </div>
-        <div className="sd-statCard">
           <span className="sd-statValue" style={{ color: '#D97706' }}>
             {pendingCount}
           </span>
-          <span className="sd-statLabel">Pending</span>
+          <span className="sd-statLabel">Pending review</span>
+        </div>
+        <div className="sd-statCard">
+          <span className="sd-statValue" style={{ color: '#16A34A' }}>
+            {verifiedCount}
+          </span>
+          <span className="sd-statLabel">Verified</span>
         </div>
       </section>
 
@@ -402,10 +521,11 @@ export default function AdminStoresPage() {
               const name = displayName(store);
               const menuOpen = openMenuFor === store.store_id;
               const canOpenMap = store.lat != null && store.lng != null;
+              const categoryLabel = prettyCategory(store.category);
 
               return (
                 <article key={store.store_id} className="sd-card">
-                  {/* Kebab */}
+                  {/* Kebab — actions derived from verification_status */}
                   <div
                     className="sd-kebabWrap"
                     onClick={(e) => e.stopPropagation()}
@@ -429,44 +549,93 @@ export default function AdminStoresPage() {
                           onClick={() => setOpenMenuFor(null)}
                         />
                         <div className="sd-menu" role="menu">
-                          {state === 'active' ? (
+                          {/* unverified: no positive action, just a hint */}
+                          {state === 'unverified' && (
+                            <div className="sd-menuHint">
+                              <MdInfoOutline size={14} color="#94A3B8" />
+                              <span>Awaiting storekeeper submission</span>
+                            </div>
+                          )}
+
+                          {/* pending: approve or reject */}
+                          {state === 'pending' && (
+                            <>
+                              <button
+                                type="button"
+                                className="sd-menuItem"
+                                role="menuitem"
+                                onClick={() => startApprove(store)}
+                              >
+                                <MdCheckCircle size={16} color="#16A34A" />
+                                <span>Approve verification</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="sd-menuItem sd-menuItemDanger"
+                                role="menuitem"
+                                onClick={() => startReject(store)}
+                              >
+                                <MdClose size={16} color="#DC2626" />
+                                <span>Reject verification</span>
+                              </button>
+                            </>
+                          )}
+
+                          {/* verified: suspend only */}
+                          {state === 'verified' && (
                             <button
                               type="button"
                               className="sd-menuItem"
                               role="menuitem"
-                              onClick={() => promptSuspend(store)}
+                              onClick={() => startSuspend(store)}
                             >
                               <MdBlock size={16} color="#EA580C" />
                               <span>Suspend store</span>
                             </button>
-                          ) : (
+                          )}
+
+                          {/* rejected: hint only */}
+                          {state === 'rejected' && (
+                            <div className="sd-menuHint">
+                              <MdInfoOutline size={14} color="#94A3B8" />
+                              <span>Awaiting storekeeper resubmission</span>
+                            </div>
+                          )}
+
+                          {/* suspended: reinstate */}
+                          {state === 'suspended' && (
                             <button
                               type="button"
                               className="sd-menuItem"
                               role="menuitem"
-                              onClick={() => promptVerify(store)}
+                              onClick={() => startReinstate(store)}
                             >
                               <MdCheckCircle size={16} color="#16A34A" />
-                              <span>Verify store</span>
+                              <span>Reinstate store</span>
                             </button>
                           )}
+
+                          {/* Map — available in every state if coords exist */}
                           {canOpenMap && (
-                            <button
-                              type="button"
-                              className="sd-menuItem"
-                              role="menuitem"
-                              onClick={() => openMap(store)}
-                            >
-                              <MdLocationOn size={16} color="#0504AA" />
-                              <span>View on map</span>
-                            </button>
+                            <>
+                              <div className="sd-menuDivider" />
+                              <button
+                                type="button"
+                                className="sd-menuItem"
+                                role="menuitem"
+                                onClick={() => openMap(store)}
+                              >
+                                <MdLocationOn size={16} color="#0504AA" />
+                                <span>View on map</span>
+                              </button>
+                            </>
                           )}
                         </div>
                       </>
                     )}
                   </div>
 
-                  {/* Status-ringed avatar */}
+                  {/* Avatar */}
                   <div
                     className="sd-avatarRing"
                     style={{ backgroundColor: meta.soft }}
@@ -489,8 +658,10 @@ export default function AdminStoresPage() {
 
                   {/* Meta row */}
                   <div className="sd-meta">
-                    {store.category && (
-                      <span className="sd-catPill">{store.category}</span>
+                    {categoryLabel && (
+                      <span className="sd-catPill" title={categoryLabel}>
+                        {categoryLabel}
+                      </span>
                     )}
                     <span className="sd-status">
                       <span
@@ -550,19 +721,42 @@ export default function AdminStoresPage() {
         >
           <div className="sd-modal" onClick={(e) => e.stopPropagation()}>
             <h3 className="sd-modalTitle">
-              {confirm.kind === 'verify' ? 'Verify store?' : 'Suspend store?'}
+              {confirm.kind === 'approve' && 'Approve verification?'}
+              {confirm.kind === 'reject' && 'Reject verification?'}
+              {confirm.kind === 'suspend' && 'Suspend store?'}
+              {confirm.kind === 'reinstate' && 'Reinstate store?'}
             </h3>
             <p className="sd-modalBody">
-              {confirm.kind === 'verify' && (
+              {confirm.kind === 'approve' && (
                 <>
-                  <strong>{displayName(confirm.store)}</strong> will become active
-                  and visible to shoppers. You can suspend it at any time.
+                  <strong>{displayName(confirm.store)}</strong> will receive the
+                  verified badge and become visible to shoppers.
+                </>
+              )}
+              {confirm.kind === 'reject' && (
+                <>
+                  <strong>{displayName(confirm.store)}</strong> will be notified
+                  and asked to correct the submission.
+                  <br />
+                  <span className="sd-modalReason">
+                    Reason: <em>{confirm.reason}</em>
+                  </span>
                 </>
               )}
               {confirm.kind === 'suspend' && (
                 <>
-                  <strong>{displayName(confirm.store)}</strong> will be hidden from
-                  shoppers and its listings will not appear in the feed.
+                  <strong>{displayName(confirm.store)}</strong> will be hidden
+                  from shoppers and its listings will be delisted.
+                  <br />
+                  <span className="sd-modalReason">
+                    Reason: <em>{confirm.reason}</em>
+                  </span>
+                </>
+              )}
+              {confirm.kind === 'reinstate' && (
+                <>
+                  <strong>{displayName(confirm.store)}</strong> will be set back
+                  to unverified. The owner can submit a new verification request.
                 </>
               )}
             </p>
@@ -578,7 +772,7 @@ export default function AdminStoresPage() {
               <button
                 type="button"
                 className={
-                  confirm.kind === 'suspend'
+                  confirm.kind === 'reject' || confirm.kind === 'suspend'
                     ? 'sd-modalConfirm sd-modalConfirmDanger'
                     : 'sd-modalConfirm'
                 }
@@ -587,9 +781,13 @@ export default function AdminStoresPage() {
               >
                 {isActing
                   ? 'Working…'
-                  : confirm.kind === 'verify'
-                  ? 'Verify'
-                  : 'Suspend'}
+                  : confirm.kind === 'approve'
+                  ? 'Approve'
+                  : confirm.kind === 'reject'
+                  ? 'Reject'
+                  : confirm.kind === 'suspend'
+                  ? 'Suspend'
+                  : 'Reinstate'}
               </button>
             </div>
           </div>
@@ -626,7 +824,6 @@ const CSS = `
     background: #F4F5FB;
   }
 
-  /* Hero */
   .sd-hero {
     display: flex;
     align-items: flex-start;
@@ -664,7 +861,6 @@ const CSS = `
   }
   .sd-refresh:hover { background: #EEF0FF; border-color: #C9CBFF; }
 
-  /* Stats */
   .sd-stats {
     display: flex;
     gap: 10px;
@@ -698,7 +894,6 @@ const CSS = `
     font-weight: 600;
   }
 
-  /* Chips */
   .sd-chips {
     display: flex;
     gap: 8px;
@@ -729,7 +924,6 @@ const CSS = `
   }
   .sd-chipActive:hover { background: #0504AA; color: #fff; }
 
-  /* Search */
   .sd-searchWrap {
     position: relative;
     margin: 0 22px 18px;
@@ -775,7 +969,6 @@ const CSS = `
   }
   .sd-searchClear:hover { background: #E0E0E0; }
 
-  /* Content + Grid */
   .sd-content { flex: 1; padding: 0 22px 24px; }
 
   .sd-grid {
@@ -793,7 +986,6 @@ const CSS = `
     .sd-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   }
 
-  /* Card */
   .sd-card {
     position: relative;
     display: flex;
@@ -813,7 +1005,6 @@ const CSS = `
   }
   .sd-cardSkeleton { pointer-events: none; }
 
-  /* Kebab */
   .sd-kebabWrap {
     position: absolute;
     top: 10px;
@@ -842,7 +1033,7 @@ const CSS = `
     position: absolute;
     top: 40px;
     right: 0;
-    min-width: 190px;
+    min-width: 220px;
     background: #fff;
     border: 1px solid #E8EAF0;
     border-radius: 12px;
@@ -856,7 +1047,7 @@ const CSS = `
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding: 9px 10px;
+    padding: 10px 12px;
     border: none;
     background: transparent;
     border-radius: 8px;
@@ -868,8 +1059,23 @@ const CSS = `
     transition: background 0.12s;
   }
   .sd-menuItem:hover { background: #F5F6FB; }
+  .sd-menuItemDanger { color: #DC2626; }
+  .sd-menuItemDanger:hover { background: #FEF2F2; }
+  .sd-menuHint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    color: #94A3B8;
+    font-style: italic;
+  }
+  .sd-menuDivider {
+    height: 1px;
+    background: #F1F5F9;
+    margin: 4px 6px;
+  }
 
-  /* Avatar */
   .sd-avatarRing {
     width: 60px;
     height: 60px;
@@ -892,7 +1098,6 @@ const CSS = `
     letter-spacing: 0.02em;
   }
 
-  /* Identity */
   .sd-name {
     font-size: 16px;
     font-weight: 800;
@@ -915,7 +1120,6 @@ const CSS = `
     white-space: nowrap;
   }
 
-  /* Meta */
   .sd-meta {
     display: flex;
     align-items: center;
@@ -931,7 +1135,7 @@ const CSS = `
     font-size: 11.5px;
     font-weight: 800;
     letter-spacing: 0.02em;
-    max-width: 140px;
+    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -959,7 +1163,6 @@ const CSS = `
     font-weight: 600;
   }
 
-  /* Center states */
   .sd-center {
     display: flex;
     flex-direction: column;
@@ -994,7 +1197,6 @@ const CSS = `
     font-weight: 700;
   }
 
-  /* Skeleton */
   .sd-skel {
     background: linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%);
     background-size: 800px 100%;
@@ -1005,7 +1207,6 @@ const CSS = `
   .sd-skelLine { height: 14px; width: 70%; margin-bottom: 8px; }
   .sd-skelLineShort { height: 12px; width: 50%; margin-bottom: 6px; }
 
-  /* Pagination */
   .sd-pagination {
     display: flex;
     align-items: center;
@@ -1038,7 +1239,6 @@ const CSS = `
     color: #64748B;
   }
 
-  /* Modal */
   .sd-modalOverlay {
     position: fixed;
     inset: 0;
@@ -1054,7 +1254,7 @@ const CSS = `
     background: #fff;
     border-radius: 18px;
     padding: 22px;
-    max-width: 400px;
+    max-width: 420px;
     width: 100%;
     box-shadow: 0 24px 70px rgba(11, 11, 26, 0.35);
   }
@@ -1070,6 +1270,15 @@ const CSS = `
     color: #475569;
     line-height: 1.55;
     margin: 0 0 22px;
+  }
+  .sd-modalReason {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #F8FAFC;
+    color: #334155;
+    font-size: 13px;
   }
   .sd-modalActions {
     display: flex;
@@ -1105,7 +1314,6 @@ const CSS = `
   }
   .sd-modalConfirmDanger { background: #DC2626; }
 
-  /* Toast */
   .sd-toast {
     position: fixed;
     left: 50%;
