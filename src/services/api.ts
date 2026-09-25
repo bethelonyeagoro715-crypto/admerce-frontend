@@ -35,7 +35,7 @@ export interface StoreVerificationStatus {
   events: JsonArray;
 }
 
-// ─── Error helper (module-level, can be used by callers too) ────────
+// ─── Error helper ──────────────────────────────────────────────────
 export function extractErrorDetail(err: unknown, fallback = 'Something went wrong.'): string {
   if (err instanceof Error && err.message) {
     const ax = err as AxiosError;
@@ -118,7 +118,6 @@ class ApiService {
     return ApiService.instance;
   }
 
-  // ---------- Token & Role Management ----------
   private async loadTokenFromStorage(): Promise<void> {
     const token = getToken();
     if (token) {
@@ -352,6 +351,9 @@ class ApiService {
     return res.data;
   }
 
+  // ✅ NEW — `pickupWindowHours` maps to the backend's `pickup_window_hours`.
+  //    The checkout call site should pass the result of
+  //    `pickupValueToHours(pickupTimeString)` from PickTimeBottomSheet.
   public async reserveItem(
     orderId: string,
     storekeeperId: string,
@@ -360,6 +362,7 @@ class ApiService {
     courierId?: string,
     deliveryFee = 0.0,
     quantity = 1,
+    pickupWindowHours = 3,
   ): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/reserve', {
       order_id: orderId,
@@ -369,6 +372,7 @@ class ApiService {
       quantity,
       ...(courierId ? { courier_id: courierId } : {}),
       delivery_fee: deliveryFee,
+      pickup_window_hours: pickupWindowHours,
     });
     return res.data;
   }
@@ -946,8 +950,6 @@ class ApiService {
     return res.data;
   }
 
-  // ✅ NEW — cancel a service booking. Sender (customer or provider) must own it.
-  // Expected to mirror the confirm/complete pattern: POST /services/bookings/{id}/cancel
   public async cancelServiceBooking(bookingId: string): Promise<JsonObject> {
     const res = await this.axios.post(`/services/bookings/${bookingId}/cancel`);
     return res.data;
@@ -1458,7 +1460,6 @@ class ApiService {
     return res.data;
   }
 
-  // @deprecated Use adminApproveStoreVerification (which requires a reference)
   public async adminVerifyStore(storeId: string): Promise<void> {
     const info = (await this.adminGetStoreVerification(storeId)) as {
       request?: { reference_code?: string } | null;
@@ -1470,8 +1471,6 @@ class ApiService {
     await this.adminApproveStoreVerification(storeId, ref);
   }
 
-  // @deprecated Use adminSuspendStoreWithReason — this alias submits a
-  //   generic reason so old callers keep working.
   public async adminSuspendStore(storeId: string): Promise<void> {
     await this.adminSuspendStoreWithReason(storeId, 'Suspended by admin (no reason recorded)');
   }

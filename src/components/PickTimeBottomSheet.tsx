@@ -32,6 +32,33 @@ interface PickTimeOption {
   color: string;
 }
 
+/* ─── Public helper — translate a pickup preset string to a window in hours.
+       Used by the checkout flow when calling `api.reserveItem`.
+       '3 hours' → 3, '6 hours' → 6, '9 hours' → 9,
+       'Tomorrow' → hours until 23:59 tomorrow (matches the sheet copy).  */
+export function pickupValueToHours(value: string | null | undefined): number {
+  if (!value) return 3;
+  const lower = String(value).toLowerCase().trim();
+
+  if (lower === 'tomorrow') {
+    const now = new Date();
+    const endOfTomorrow = new Date(now);
+    endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
+    endOfTomorrow.setHours(23, 59, 0, 0);
+    const hours = Math.ceil((endOfTomorrow.getTime() - now.getTime()) / 3_600_000);
+    // Clamp to backend range (1..168), same as ReserveRequest.
+    return Math.max(1, Math.min(168, hours));
+  }
+
+  const match = lower.match(/(\d+)/);
+  if (match) {
+    const n = parseInt(match[1], 10);
+    if (Number.isFinite(n) && n > 0 && n <= 168) return n;
+  }
+
+  return 3;
+}
+
 /* ─── Datetime helpers ─────────────────────────────────────── */
 // Local YYYY-MM-DDTHH:MM — the format <input type="datetime-local"> uses.
 function toLocalInputValue(d: Date): string {
