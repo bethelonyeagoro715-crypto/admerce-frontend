@@ -22,6 +22,9 @@ import {
   MdToggleOn,
   MdToggleOff,
   MdClose,
+  MdAccessTime,
+  MdTimer,
+  MdStorefront,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -50,11 +53,17 @@ interface WantedAlert {
 interface WalletOrder {
   order_id: string;
   total_amount?: number | string;
+  item_amount?: number | string;
   status?: string;
   expires_at?: string;
   created_at?: string;
-  pickup_time?: string;
+  quantity?: number;
+  listing_id?: string;
   store_name?: string;
+  store_image_url?: string;
+  storekeeper_name?: string;
+  customer_name?: string;
+  pickup_time?: string;
   [key: string]: unknown;
 }
 
@@ -138,6 +147,79 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
+// ─── Time helpers ───────────────────────────────────────────────────
+// Backend stores datetime.utcnow() (naive UTC). JS would parse a
+// naive string as local time — off by the user's UTC offset. Append
+// Z when there's no explicit timezone marker. Also truncate microseconds
+// to milliseconds (some engines reject 6-digit fractions).
+function parseAsUtc(iso?: string | null): number {
+  if (!iso) return NaN;
+  const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
+  const trimmed = iso.replace(/(\.\d{3})\d+/, '$1');
+  return new Date(hasTz ? trimmed : `${trimmed}Z`).getTime();
+}
+
+// Human-friendly remaining time. Examples:
+//   "in 45 secs" | "in 1 min" | "in 12 mins" | "in 4h 23m" | "in 2d 6h"
+function formatRemaining(expiresMs: number, nowMs: number): string {
+  if (!Number.isFinite(expiresMs)) return '';
+  const ms = expiresMs - nowMs;
+  if (ms <= 0) return 'expired';
+
+  const totalSecs = Math.floor(ms / 1000);
+  if (totalSecs < 60) return `in ${totalSecs}s`;
+
+  const totalMins = Math.floor(totalSecs / 60);
+  if (totalMins < 60) {
+    return totalMins === 1 ? 'in 1 min' : `in ${totalMins} mins`;
+  }
+
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hrs < 24) {
+    return mins > 0 ? `in ${hrs}h ${mins}m` : `in ${hrs}h`;
+  }
+
+  const days = Math.floor(hrs / 24);
+  const remHrs = hrs % 24;
+  return remHrs > 0 ? `in ${days}d ${remHrs}h` : `in ${days}d`;
+}
+
+// Status chip metadata. Colors match the design system (bg / border / fg).
+function statusMeta(status?: string): {
+  label: string;
+  bg: string;
+  fg: string;
+  border: string;
+} {
+  switch ((status || '').toLowerCase()) {
+    case 'locked':
+      return { label: 'Reserved', bg: '#EEF0FF', fg: '#0504AA', border: '#C7CCFF' };
+    case 'accepted':
+      return { label: 'Store accepted', bg: '#F3E8FF', fg: '#7E22CE', border: '#D8B4FE' };
+    case 'picked_up':
+      return { label: 'Picked up', bg: '#ECFDF5', fg: '#065F46', border: '#A7F3D0' };
+    case 'dispatched':
+      return { label: 'Out for delivery', bg: '#ECFEFF', fg: '#0E7490', border: '#A5F3FC' };
+    case 'returned':
+      return { label: 'Returned', bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1' };
+    case 'expired':
+      return { label: 'Expired', bg: '#F1F5F9', fg: '#64748B', border: '#CBD5E1' };
+    case 'reversed':
+      return { label: 'Reversed', bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1' };
+    default:
+      return {
+        label: status ? status : 'Unknown',
+        bg: '#F1F5F9',
+        fg: '#475569',
+        border: '#CBD5E1',
+      };
+  }
+}
+
+// 30 minutes in ms — threshold for the "expiring soon" warning.
+const EXPIRING_SOON_MS = 30 * 60 * 1000;
+
 function SavedPageContent() {
   useAuthGuard();
 
@@ -162,6 +244,15 @@ function SavedPageContent() {
   const [basketItems, setBasketItems] = useState<BasketItem[]>([]);
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
+
+  // Countdown heartbeat — forces re-render every 30s so the "expires in"
+  // text stays accurate without needing per-card timers.
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Create-alert sheet
   const [showCreateWanted, setShowCreateWanted] = useState(false);
@@ -284,25 +375,20 @@ function SavedPageContent() {
   };
 
   // ─── Navigation ───────────────────────────────────────────────
+  // ✅ FIX — no longer fakes `pickup_time` from a nonexistent field.
+  //    The confirmation page reads the truth from the backend.
   const openReservation = (order: WalletOrder) => {
-    router.push(
-      `/reservation-confirmed?order_id=${order.order_id}&pickup_time=${encodeURIComponent(
-        order.pickup_time || 'Now',
-      )}`,
-    );
+    router.push(`/reservation-confirmed?order_id=${order.order_id}`);
   };
 
   const openDelivery = (order: WalletOrder) => openReservation(order);
 
-  // ✅ Route to the same screen the fresh-booking flow uses. We only pass
-  //    the booking_id — the confirmation page enriches the rest from the API.
   const openBooking = (booking: ServiceBooking) => {
     if (booking.booking_id) {
       router.push(
         `/booking-confirmed?booking_id=${encodeURIComponent(booking.booking_id)}`,
       );
     } else if (booking.service_id) {
-      // Fallback for old rows that predate booking_id support
       router.push(`/service-detail/${booking.service_id}`);
     }
   };
@@ -428,6 +514,108 @@ function SavedPageContent() {
     () => applyFilter(history, ['order_id', 'store_name', 'status']),
     [history, q],
   );
+
+  // ─── Order card renderer (shared between Reservations + Deliveries) ──
+  const renderOrderCard = (order: WalletOrder, opts: { showExpiry: boolean }) => {
+    const image = resolveImageUrl(order.store_image_url);
+    const expiresMs = parseAsUtc(order.expires_at);
+    const expired =
+      Number.isFinite(expiresMs) && expiresMs <= nowMs && order.status !== 'picked_up';
+    const expiresSoon =
+      !expired &&
+      opts.showExpiry &&
+      Number.isFinite(expiresMs) &&
+      expiresMs - nowMs < EXPIRING_SOON_MS &&
+      expiresMs - nowMs > 0;
+    const meta = statusMeta(order.status);
+    const qty = Number(order.quantity ?? 1);
+
+    return (
+      <div
+        key={order.order_id}
+        style={{
+          ...styles.resCard,
+          ...(expired ? styles.resCardExpired : null),
+        }}
+        onClick={() => openReservation(order)}
+        role="button"
+        tabIndex={0}
+      >
+        {/* Top: thumbnail + store + amount */}
+        <div style={styles.resTopRow}>
+          <div style={styles.resThumb}>
+            {image ? (
+              <img
+                src={image}
+                alt=""
+                loading="lazy"
+                style={styles.resThumbImg}
+              />
+            ) : (
+              <MdStorefront size={22} color="#94A3B8" />
+            )}
+          </div>
+
+          <div style={styles.resInfo}>
+            <div style={styles.resStoreName} title={order.store_name}>
+              {order.store_name || 'Store'}
+            </div>
+            <div style={styles.resMeta}>
+              Order #{shortId(order.order_id)}
+              {qty > 1 ? ` · ${qty} items` : ''}
+            </div>
+          </div>
+
+          <div style={styles.resAmount}>
+            {fmtNaira(order.total_amount)}
+          </div>
+        </div>
+
+        {/* Bottom: chip + countdown */}
+        <div style={styles.resBottomRow}>
+          <span
+            style={{
+              ...styles.resChip,
+              backgroundColor: meta.bg,
+              color: meta.fg,
+              borderColor: meta.border,
+            }}
+          >
+            {meta.label}
+          </span>
+
+          {opts.showExpiry && Number.isFinite(expiresMs) ? (
+            <span
+              style={{
+                ...styles.resCountdown,
+                ...(expired ? styles.resCountdownExpired : null),
+                ...(expiresSoon ? styles.resCountdownWarn : null),
+              }}
+            >
+              <MdAccessTime size={13} />
+              <span>
+                {expired
+                  ? 'Expired'
+                  : `Expires ${formatRemaining(expiresMs, nowMs)}`}
+              </span>
+            </span>
+          ) : (
+            <span style={styles.resCountdown}>
+              <MdAccessTime size={13} />
+              <span>Ordered {fmtDate(order.created_at)}</span>
+            </span>
+          )}
+        </div>
+
+        {expiresSoon && (
+          <div style={styles.resWarnRow}>
+            <MdTimer size={14} color="#B45309" />
+            <span>Expiring soon — pick up before it&apos;s cancelled</span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ─── Tab renderers ─────────────────────────────────────────────
   const renderItemsTab = () => {
@@ -573,29 +761,20 @@ function SavedPageContent() {
         />
       );
     }
+
+    // Sort by soonest expiry first — the ones that need attention float up.
+    const sorted = [...filteredReservations].sort((a, b) => {
+      const ta = parseAsUtc(a.expires_at);
+      const tb = parseAsUtc(b.expires_at);
+      if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+      if (Number.isNaN(ta)) return 1;
+      if (Number.isNaN(tb)) return -1;
+      return ta - tb;
+    });
+
     return (
       <div style={styles.list}>
-        {filteredReservations.map((order, i) => (
-          <div
-            key={order.order_id || i}
-            style={styles.card}
-            onClick={() => openReservation(order)}
-            role="button"
-            tabIndex={0}
-          >
-            <MdEventNote size={20} color="#0504AA" style={{ marginRight: 8 }} />
-            <div style={styles.cardContent}>
-              <div style={styles.cardTitle}>
-                Order #{shortId(order.order_id)}
-              </div>
-              <div style={styles.cardSubtitle}>
-                {fmtNaira(order.total_amount)} ·{' '}
-                {order.store_name || 'Pickup'}
-              </div>
-            </div>
-            <MdChevronRight size={16} color="#999" />
-          </div>
-        ))}
+        {sorted.map((order) => renderOrderCard(order, { showExpiry: true }))}
       </div>
     );
   };
@@ -613,33 +792,21 @@ function SavedPageContent() {
         />
       );
     }
+
+    // Deliveries: sort by newest first (they're all in transit; recency is
+    // the more useful ordering).
+    const sorted = [...filteredDeliveries].sort((a, b) => {
+      const ta = parseAsUtc(a.created_at);
+      const tb = parseAsUtc(b.created_at);
+      if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+      if (Number.isNaN(ta)) return 1;
+      if (Number.isNaN(tb)) return -1;
+      return tb - ta;
+    });
+
     return (
       <div style={styles.list}>
-        {filteredDeliveries.map((order, i) => (
-          <div
-            key={order.order_id || i}
-            style={styles.card}
-            onClick={() => openDelivery(order)}
-            role="button"
-            tabIndex={0}
-          >
-            <MdLocalShipping
-              size={20}
-              color="#0504AA"
-              style={{ marginRight: 8 }}
-            />
-            <div style={styles.cardContent}>
-              <div style={styles.cardTitle}>
-                Order #{shortId(order.order_id)}
-              </div>
-              <div style={styles.cardSubtitle}>
-                {fmtNaira(order.total_amount)} ·{' '}
-                {order.status || 'In transit'}
-              </div>
-            </div>
-            <MdChevronRight size={16} color="#999" />
-          </div>
-        ))}
+        {sorted.map((order) => renderOrderCard(order, { showExpiry: false }))}
       </div>
     );
   };
@@ -1150,6 +1317,119 @@ const styles: Record<string, React.CSSProperties> = {
     marginLeft: 8,
     whiteSpace: 'nowrap',
   },
+
+  // ── Richer reservation/delivery cards
+  resCard: {
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    border: '1px solid #EAECF3',
+    cursor: 'pointer',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  },
+  resCardExpired: {
+    backgroundColor: '#FAFAFC',
+    borderColor: '#EEF0F7',
+  },
+  resTopRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+  },
+  resThumb: {
+    width: 48,
+    height: 48,
+    flex: '0 0 48px',
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  resThumbImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  resInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  resStoreName: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: '#0B0B1A',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    letterSpacing: '-0.01em',
+  },
+  resMeta: {
+    fontSize: 12.5,
+    color: '#64748B',
+    marginTop: 2,
+    fontWeight: 500,
+  },
+  resAmount: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: '#0504AA',
+    whiteSpace: 'nowrap',
+    letterSpacing: '-0.01em',
+  },
+  resBottomRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  resChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '4px 10px',
+    borderRadius: 999,
+    border: '1px solid',
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  resCountdown: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: '#64748B',
+  },
+  resCountdownWarn: {
+    color: '#B45309',
+    fontWeight: 800,
+  },
+  resCountdownExpired: {
+    color: '#94A3B8',
+  },
+  resWarnRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '8px 10px',
+    marginTop: 2,
+    backgroundColor: '#FEF3C7',
+    border: '1px solid #FDE68A',
+    borderRadius: 10,
+    fontSize: 12,
+    fontWeight: 700,
+    color: '#92400E',
+    lineHeight: 1.4,
+  },
+
   createAlertBtn: {
     display: 'flex',
     alignItems: 'center',
