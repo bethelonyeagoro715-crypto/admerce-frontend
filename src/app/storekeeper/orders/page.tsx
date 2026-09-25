@@ -4,6 +4,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
 import {
+  confirmDialog,
+  alertDialog,
+  promptDialog,
+} from '../../../components/ui/dialogs';
+import {
   MdRefresh,
   MdEventNote,
   MdLocalShipping,
@@ -35,7 +40,7 @@ interface Store {
 const TABS = [
   'All',
   'Reservations',
-  'Pickups',
+  'Awaiting pickup',
   'Deliveries',
   'Cancelled',
   'Reversed',
@@ -73,12 +78,12 @@ export default function StorekeeperOrdersPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Derived filtered orders per tab
+  // ─── Filters ──────────────────────────────────────────────────
   const reservations = useMemo(
     () => allOrders.filter((o) => o.status === 'locked' || o.status === 'pending'),
     [allOrders]
   );
-  const Pickups = useMemo(
+  const awaitingPickup = useMemo(
     () =>
       allOrders.filter(
         (o) =>
@@ -104,9 +109,6 @@ export default function StorekeeperOrdersPage() {
       ),
     [allOrders]
   );
-  // ✅ "Cancelled" covers both directions: shopper drop (returned, refunded)
-  //    and storekeeper decline (declined). Both mean the reservation didn't
-  //    happen — same tab, same list, different label in the card.
   const cancelled = useMemo(
     () =>
       allOrders.filter(
@@ -126,80 +128,132 @@ export default function StorekeeperOrdersPage() {
     switch (activeTab) {
       case 0: return allOrders;
       case 1: return reservations;
-      case 2: return Pickups;
+      case 2: return awaitingPickup;
       case 3: return deliveries;
       case 4: return cancelled;
       case 5: return reversed;
       default: return [];
     }
-  }, [activeTab, allOrders, reservations, Pickups, deliveries, cancelled, reversed]);
+  }, [activeTab, allOrders, reservations, awaitingPickup, deliveries, cancelled, reversed]);
 
-  // ─── Actions ──────────────────────────────────────────────────────
-  //
-  // Mental model:
-  //   - Storekeeper HOLDS the item (no money moves).
-  //   - Storekeeper can DECLINE before holding (money refunds to shopper).
-  //   - Shopper PICKS UP (money moves to storekeeper).
-  //
-  const holdForPickup = async (orderId: string) => {
-    const ok = window.confirm(
-      'Hold this item for the shopper?\n\n' +
-        'Your payment will stay in escrow until the shopper arrives and ' +
-        'confirms pickup. That is when your wallet is credited.',
-    );
+  // ─── Actions ──────────────────────────────────────────────────
+  const holdForPickup = async (orderId: string, customer: string, amount: number) => {
+    const ok = await confirmDialog({
+      title: 'Hold this item for the shopper?',
+      body:
+        `The shopper will be notified. Your payment of ₦${amount.toLocaleString(
+          'en-NG',
+          { maximumFractionDigits: 0 },
+        )} stays in escrow until they arrive and confirm pickup. ` +
+        `That's when your wallet is credited.`,
+      kind: 'info',
+      confirmLabel: 'Hold for pickup',
+      cancelLabel: 'Not yet',
+    });
     if (!ok) return;
+
     try {
       await api.acceptOrder(orderId);
       await loadOrders();
-      alert('Holding item. Payment releases when the shopper picks up.');
+      await alertDialog({
+        title: 'Item held',
+        body: `${customer}'s order is on hold. You'll receive your payment when they confirm pickup.`,
+        kind: 'success',
+        confirmLabel: 'Got it',
+      });
     } catch (err) {
-      alert('Failed to hold: ' + (err instanceof Error ? err.message : ''));
+      await alertDialog({
+        title: "Couldn't hold the item",
+        body: err instanceof Error ? err.message : 'Please try again.',
+        kind: 'danger',
+      });
     }
   };
 
-  const declineReservation = async (orderId: string) => {
-    const ok = window.confirm(
-      'Decline this reservation?\n\n' +
-        'The shopper will be refunded in full and notified. You can only ' +
-        'decline a reservation before holding it for pickup.',
-    );
-    if (!ok) return;
+  const declineReservation = async (orderId: string, customer: string, amount: number) => {
+    const reason = await promptDialog({
+      title: 'Decline this reservation?',
+      body:
+        `${customer} will be refunded ₦${amount.toLocaleString('en-NG', {
+          maximumFractionDigits: 0,
+        })} in full and notified. ` +
+        `You can add a reason to help them understand — it's optional.`,
+      kind: 'warning',
+      placeholder: 'e.g. Out of stock, Store is closed today…',
+      multiline: true,
+      confirmLabel: 'Decline & refund',
+      cancelLabel: 'Keep reservation',
+      required: false,
+    });
 
-    // Reason is optional — helps the shopper understand.
-    const reason = window.prompt(
-      'Why are you declining? (optional — the shopper will see this)',
-      '',
-    );
-    if (reason === null) return; // user cancelled the prompt
+    // null = user dismissed / tapped outside / hit Esc
+    if (reason === null) return;
 
     try {
       await api.declineOrder(orderId, reason.trim() || undefined);
       await loadOrders();
-      alert('Reservation declined. The shopper has been refunded and notified.');
+      await alertDialog({
+        title: 'Reservation declined',
+        body: `${customer} has been refunded and notified.`,
+        kind: 'success',
+        confirmLabel: 'Done',
+      });
     } catch (err) {
-      alert('Failed to decline: ' + (err instanceof Error ? err.message : ''));
+      await alertDialog({
+        title: "Couldn't decline",
+        body: err instanceof Error ? err.message : 'Please try again.',
+        kind: 'danger',
+      });
     }
   };
 
   const updateDeliveryStatus = async (orderId: string, newStatus: string) => {
-    if (!window.confirm(`Update delivery status to ${newStatus}?`)) return;
+    const ok = await confirmDialog({
+      title: 'Update delivery status?',
+      body: `Set this delivery to "${newStatus}"?`,
+      kind: 'warning',
+      confirmLabel: 'Update',
+    });
+    if (!ok) return;
     try {
       await api.updateCourierJobStatus(orderId, newStatus);
       await loadOrders();
-      alert(`Status updated to ${newStatus}`);
+      await alertDialog({
+        title: 'Status updated',
+        body: `Delivery is now "${newStatus}".`,
+        kind: 'success',
+      });
     } catch (err) {
-      alert('Failed to update status: ' + (err instanceof Error ? err.message : ''));
+      await alertDialog({
+        title: "Couldn't update",
+        body: err instanceof Error ? err.message : 'Please try again.',
+        kind: 'danger',
+      });
     }
   };
 
   const releaseReversed = async (orderId: string) => {
-    if (!window.confirm('Release courier fee for this reversed package?')) return;
+    const ok = await confirmDialog({
+      title: 'Release courier fee?',
+      body: 'The courier will be paid from this reversed package.',
+      kind: 'info',
+      confirmLabel: 'Release',
+    });
+    if (!ok) return;
     try {
       await api.reversedPackage(orderId);
       await loadOrders();
-      alert('Package released, courier fee paid.');
+      await alertDialog({
+        title: 'Fee released',
+        body: 'The courier has been paid.',
+        kind: 'success',
+      });
     } catch (err) {
-      alert('Failed: ' + (err instanceof Error ? err.message : ''));
+      await alertDialog({
+        title: "Couldn't release",
+        body: err instanceof Error ? err.message : 'Please try again.',
+        kind: 'danger',
+      });
     }
   };
 
@@ -350,7 +404,6 @@ export default function StorekeeperOrdersPage() {
           </div>
         )}
 
-        {/* After acceptance: reassure the storekeeper about when money lands. */}
         {isAccepted && !isPickedUp && (
           <div style={styles.holdingNote}>
             <MdAccessTime size={14} color="#7E22CE" />
@@ -364,13 +417,12 @@ export default function StorekeeperOrdersPage() {
           </div>
         )}
 
-        {/* Actions */}
         {!isPickedUp && (
           <div style={styles.actions}>
             {isReservation && (
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
-                  onClick={() => holdForPickup(order.order_id)}
+                  onClick={() => holdForPickup(order.order_id, customer, total)}
                   style={styles.holdBtn}
                 >
                   <MdCheckCircleOutline
@@ -381,7 +433,7 @@ export default function StorekeeperOrdersPage() {
                   Hold for pickup
                 </button>
                 <button
-                  onClick={() => declineReservation(order.order_id)}
+                  onClick={() => declineReservation(order.order_id, customer, total)}
                   style={styles.declineBtn}
                 >
                   <MdCancel size={18} color="#DC2626" style={{ marginRight: 4 }} />
@@ -421,13 +473,7 @@ export default function StorekeeperOrdersPage() {
         )}
 
         {isPickedUp && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              marginTop: 12,
-            }}
-          >
+          <div style={{ display: 'flex', alignItems: 'center', marginTop: 12 }}>
             <MdCheckCircle
               size={18}
               color="#4CAF50"
@@ -442,19 +488,13 @@ export default function StorekeeperOrdersPage() {
 
   return (
     <main style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>Orders</h1>
-        <button
-          onClick={loadOrders}
-          style={styles.refreshBtn}
-          title="Refresh"
-        >
+        <button onClick={loadOrders} style={styles.refreshBtn} title="Refresh">
           <MdRefresh size={24} color="#0504AA" />
         </button>
       </div>
 
-      {/* Tab bar */}
       <div style={styles.tabBar}>
         {TABS.map((tab, i) => (
           <button
@@ -475,7 +515,6 @@ export default function StorekeeperOrdersPage() {
         ))}
       </div>
 
-      {/* Content */}
       <div style={styles.content}>
         {loading ? (
           <div style={styles.center}>
