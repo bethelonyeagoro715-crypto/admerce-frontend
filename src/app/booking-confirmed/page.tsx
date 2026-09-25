@@ -20,7 +20,7 @@ import {
   MdWarning,
   MdClose,
 } from 'react-icons/md';
-import api from '../../services/api';
+import api, { extractErrorDetail } from '../../services/api';
 
 // ─── Types ────────────────────────────────────────────────────────
 interface BookingDetail {
@@ -42,7 +42,7 @@ interface BookingDetail {
 
 interface Toast {
   id: number;
-  kind: 'success' | 'error';
+  kind: 'success' | 'error' | 'info';
   text: string;
 }
 
@@ -65,6 +65,13 @@ function fmtDateTime(iso: string | undefined | null): string {
 function shortId(id: string): string {
   if (!id) return '';
   return id.length > 8 ? `${id.slice(0, 8)}…` : id;
+}
+
+// Conversation ID convention — matches item-detail and chat pages.
+// Sorted user-ID pair joined with underscore.
+function buildConversationId(myUserId: string, otherUserId: string): string {
+  const pair = [myUserId || 'me', otherUserId].sort();
+  return `${pair[0]}_${pair[1]}`;
 }
 
 // ─── Ambient background ───────────────────────────────────────────
@@ -151,6 +158,10 @@ function BookingConfirmedContent() {
   const searchParams = useSearchParams();
 
   const bookingIdFromUrl = searchParams.get('booking_id') || '';
+  const hasUrlDisplayData =
+    !!searchParams.get('service_name') &&
+    !!searchParams.get('provider_name') &&
+    !!searchParams.get('amount');
 
   const [serviceName, setServiceName] = useState(
     searchParams.get('service_name') || 'Service',
@@ -158,6 +169,8 @@ function BookingConfirmedContent() {
   const [providerName, setProviderName] = useState(
     searchParams.get('provider_name') || 'Provider',
   );
+  const [providerId, setProviderId] = useState<string>('');
+  const [customerId, setCustomerId] = useState<string>('');
   const [customerName, setCustomerName] = useState(
     searchParams.get('customer_name') || '',
   );
@@ -168,7 +181,9 @@ function BookingConfirmedContent() {
   const [bookingId, setBookingId] = useState(bookingIdFromUrl);
   const [status, setStatus] = useState<string>('');
 
-  const [enriching, setEnriching] = useState(false);
+  const [enriching, setEnriching] = useState(
+    !!bookingIdFromUrl && !hasUrlDisplayData,
+  );
   const [enrichError, setEnrichError] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
@@ -176,6 +191,7 @@ function BookingConfirmedContent() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -185,51 +201,57 @@ function BookingConfirmedContent() {
     };
   }, []);
 
-  const pushToast = useCallback((kind: Toast['kind'], text: string) => {
-    const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, kind, text }].slice(-3));
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
-  }, []);
+  const pushToast = useCallback(
+    (kind: Toast['kind'], text: string) => {
+      const id = Date.now() + Math.random();
+      setToasts((t) => [...t, { id, kind, text }].slice(-3));
+      setTimeout(
+        () => setToasts((t) => t.filter((x) => x.id !== id)),
+        3200,
+      );
+    },
+    [],
+  );
 
   // ── Enrichment ──
+  // We ALWAYS fetch, even when the URL carries everything — the URL is an
+  // optimistic preview, but the backend is the source of truth for IDs
+  // (provider_id, customer_id) that aren't in the URL at all.
   useEffect(() => {
     if (!bookingIdFromUrl) return;
 
-    const hasFullUrl =
-      !!searchParams.get('service_name') &&
-      !!searchParams.get('provider_name') &&
-      !!searchParams.get('amount');
-
-    if (hasFullUrl) return;
-
+    // Only show the full-page spinner if we have nothing to render yet.
     let cancelled = false;
 
     (async () => {
-      setEnriching(true);
-      setEnrichError(null);
       try {
         const data = (await api.getServiceBookingDetail(
           bookingIdFromUrl,
         )) as BookingDetail;
 
-        if (cancelled) return;
+        if (cancelled || !isMountedRef.current) return;
 
-        setBookingId(data.booking_id || bookingIdFromUrl);
-        setServiceName(data.service_title || data.title || 'Service');
-        setProviderName(data.provider_name || 'Provider');
-        setCustomerName(data.customer_name || '');
-        setScheduledFor(data.scheduled_for || data.created_at || '');
-        setAmount(String(data.amount ?? 0));
-        setStatus(data.status || '');
+        if (data.booking_id) setBookingId(data.booking_id);
+        if (data.service_title || data.title) {
+          setServiceName(data.service_title || data.title || 'Service');
+        }
+        if (data.provider_name) setProviderName(data.provider_name);
+        if (data.customer_name) setCustomerName(data.customer_name);
+        if (data.provider_id) setProviderId(String(data.provider_id));
+        if (data.customer_id) setCustomerId(String(data.customer_id));
+        if (data.scheduled_for || data.created_at) {
+          setScheduledFor(data.scheduled_for || data.created_at || '');
+        }
+        if (data.amount != null) setAmount(String(data.amount));
+        if (data.status) setStatus(data.status);
       } catch (err: unknown) {
-        if (cancelled) return;
-        const msg =
-          err instanceof Error
-            ? err.message
-            : 'Could not load booking details.';
-        setEnrichError(msg);
+        if (cancelled || !isMountedRef.current) return;
+        // Only surface a hard error when we have nothing to show.
+        if (!hasUrlDisplayData) {
+          setEnrichError(extractErrorDetail(err, 'Could not load booking details.'));
+        }
       } finally {
-        if (!cancelled) setEnriching(false);
+        if (!cancelled && !hasUrlDisplayData) setEnriching(false);
       }
     })();
 
@@ -299,16 +321,9 @@ function BookingConfirmedContent() {
         goToReceipt('completed');
       }, 700);
     } catch (err: unknown) {
-      const error = err as {
-        response?: { data?: { detail?: string } };
-        message?: string;
-      };
-      const detail =
-        error?.response?.data?.detail ||
-        error?.message ||
-        'Failed to complete job';
+      const detail = extractErrorDetail(err, 'Failed to complete job');
       pushToast('error', detail);
-      setCompleting(false);
+      if (isMountedRef.current) setCompleting(false);
     }
   }, [bookingId, goToReceipt, pushToast]);
 
@@ -327,23 +342,88 @@ function BookingConfirmedContent() {
       setShowCancelModal(false);
       pushToast('success', 'Booking cancelled');
 
-      // Brief pause so the toast is visible before we leave the page.
       setTimeout(() => {
         router.replace('/shopper/saved?tab=Bookings');
       }, 500);
     } catch (err: unknown) {
-      const error = err as {
-        response?: { data?: { detail?: string } };
-        message?: string;
-      };
-      const detail =
-        error?.response?.data?.detail ||
-        error?.message ||
-        'Could not cancel this booking';
+      const detail = extractErrorDetail(err, 'Could not cancel this booking');
       pushToast('error', detail);
-      setCancelling(false);
+      if (isMountedRef.current) setCancelling(false);
     }
   }, [bookingId, router, pushToast]);
+
+  // ── Message the other party — direct chat, not inbox ──
+  const handleMessageAboutBooking = useCallback(async () => {
+    if (openingChat) return;
+    if (!bookingId) {
+      pushToast('error', 'Booking ID missing');
+      return;
+    }
+
+    // If we somehow never got the IDs (failed enrichment), fall back to inbox.
+    if (!providerId && !customerId) {
+      pushToast('info', 'Opening your inbox');
+      router.push('/shopper/inbox');
+      return;
+    }
+
+    setOpeningChat(true);
+    try {
+      const me = (await api.getMyProfile()) as { id?: string };
+      const myId = me?.id || '';
+      if (!myId) {
+        pushToast('error', 'Could not resolve your account');
+        setOpeningChat(false);
+        return;
+      }
+
+      // Determine the other party.
+      // This page can be reached by either the customer or the provider.
+      let otherId = '';
+      let otherName = '';
+      if (myId === customerId && providerId) {
+        otherId = providerId;
+        otherName = providerName || 'Provider';
+      } else if (myId === providerId && customerId) {
+        otherId = customerId;
+        otherName = customerName || 'Customer';
+      } else if (providerId) {
+        // Fallback: assume the "other" is the provider
+        otherId = providerId;
+        otherName = providerName || 'Provider';
+      } else if (customerId) {
+        otherId = customerId;
+        otherName = customerName || 'Customer';
+      }
+
+      if (!otherId) {
+        pushToast('info', 'Opening your inbox');
+        router.push('/shopper/inbox');
+        setOpeningChat(false);
+        return;
+      }
+
+      const conversationId = buildConversationId(myId, otherId);
+      const qs = new URLSearchParams();
+      qs.set('otherUserId', otherId);
+      qs.set('otherUserName', otherName);
+
+      router.push(`/chat/${conversationId}?${qs.toString()}`);
+    } catch (err: unknown) {
+      const detail = extractErrorDetail(err, 'Could not open chat');
+      pushToast('error', detail);
+      if (isMountedRef.current) setOpeningChat(false);
+    }
+  }, [
+    openingChat,
+    bookingId,
+    providerId,
+    customerId,
+    providerName,
+    customerName,
+    router,
+    pushToast,
+  ]);
 
   const handleCopyId = useCallback(async () => {
     if (!bookingId) return;
@@ -409,10 +489,16 @@ function BookingConfirmedContent() {
         {toasts.map((t) => (
           <button
             key={t.id}
-            onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+            onClick={() =>
+              setToasts((prev) => prev.filter((x) => x.id !== t.id))
+            }
             style={{
               ...styles.toast,
-              ...(t.kind === 'success' ? styles.toastSuccess : styles.toastError),
+              ...(t.kind === 'success'
+                ? styles.toastSuccess
+                : t.kind === 'error'
+                  ? styles.toastError
+                  : styles.toastInfo),
             }}
           >
             {t.text}
@@ -535,7 +621,11 @@ function BookingConfirmedContent() {
                   : '#92400E',
             }}
           >
-            {isCompleted ? 'Completed' : isCancelled ? 'Cancelled' : 'Confirmed'}
+            {isCompleted
+              ? 'Completed'
+              : isCancelled
+                ? 'Cancelled'
+                : 'Confirmed'}
           </span>
         </motion.div>
 
@@ -681,15 +771,26 @@ function BookingConfirmedContent() {
             </div>
           )}
 
-          {/* Message link — not shown for cancelled */}
+          {/* ✅ Message — routes directly to chat with the other party */}
           {bookingId && !isCancelled && (
             <button
-              onClick={() => router.push('/shopper/inbox')}
+              onClick={handleMessageAboutBooking}
+              disabled={openingChat}
               className="bc-ghost"
-              style={styles.ghostBtn}
+              style={{
+                ...styles.ghostBtn,
+                opacity: openingChat ? 0.6 : 1,
+                cursor: openingChat ? 'wait' : 'pointer',
+              }}
             >
-              <MdChat size={16} color="#5A6178" />
-              <span>Message about this booking</span>
+              {openingChat ? (
+                <span style={styles.inlineSpinnerSmall} />
+              ) : (
+                <MdChat size={16} color="#5A6178" />
+              )}
+              <span>
+                {openingChat ? 'Opening chat…' : 'Message about this booking'}
+              </span>
             </button>
           )}
         </motion.div>
@@ -855,6 +956,16 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'bcSpin 0.7s linear infinite',
     marginRight: 2,
   },
+  inlineSpinnerSmall: {
+    display: 'inline-block',
+    width: 14,
+    height: 14,
+    border: '2px solid rgba(90,97,120,0.3)',
+    borderTopColor: '#5A6178',
+    borderRadius: '50%',
+    animation: 'bcSpin 0.7s linear infinite',
+    marginRight: 6,
+  },
   inlineSpinnerDark: {
     display: 'inline-block',
     width: 14,
@@ -866,7 +977,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginRight: 8,
   },
 
-  // ── Hero
   heroWrap: {
     position: 'relative',
     width: 120,
@@ -905,7 +1015,6 @@ const styles: Record<string, React.CSSProperties> = {
     zIndex: 3,
   },
 
-  // ── Headline
   heading: {
     fontSize: 30,
     fontWeight: 800,
@@ -923,7 +1032,6 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 340,
   },
 
-  // ── Status chip
   statusChip: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -940,7 +1048,6 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
 
-  // ── Card
   card: {
     width: '100%',
     marginTop: 24,
@@ -1020,7 +1127,6 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: 0.2,
   },
 
-  // ── Actions
   actions: {
     width: '100%',
     marginTop: 24,
@@ -1095,7 +1201,6 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
 
-  // ── Cancel link (tertiary)
   cancelLink: {
     marginTop: 20,
     background: 'none',
@@ -1110,7 +1215,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
 
-  // ── Error
   errorHalo: {
     width: 84,
     height: 84,
@@ -1147,7 +1251,6 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.55,
   },
 
-  // ── Cancel modal
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -1234,7 +1337,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
 
-  // ── Toasts
   toastStack: {
     position: 'fixed',
     top: 14,
@@ -1267,6 +1369,11 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#FEF2F2',
     color: '#991B1B',
     borderColor: '#FECACA',
+  },
+  toastInfo: {
+    backgroundColor: '#EEF0FF',
+    color: '#0504AA',
+    borderColor: '#C7CCFF',
   },
 };
 
