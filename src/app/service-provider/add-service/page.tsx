@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import api, { extractErrorDetail } from '../../../services/api';
+import { alertDialog } from '../../../components/ui/dialogs';
 import {
   MdVideocam,
   MdDeleteOutline,
@@ -37,7 +38,6 @@ export default function CreateServicePage() {
   const [duration, setDuration] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(null);
 
-  // ✅ Media is video-only now. No image state.
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
 
@@ -83,10 +83,38 @@ export default function CreateServicePage() {
   };
 
   const submitService = async () => {
-    if (!title.trim()) return alert('Please enter a service title.');
-    if (!selectedCategory) return alert('Please select a category.');
-    if (!price.trim()) return alert('Please enter a price.');
-    if (!duration.trim()) return alert('Please enter the duration in minutes.');
+    if (!title.trim()) {
+      await alertDialog({
+        title: 'Service title required',
+        body: 'Give shoppers a short, clear name for what you offer.',
+        kind: 'warning',
+      });
+      return;
+    }
+    if (!selectedCategory) {
+      await alertDialog({
+        title: 'Category required',
+        body: 'Pick the category that best fits this service.',
+        kind: 'warning',
+      });
+      return;
+    }
+    if (!price.trim()) {
+      await alertDialog({
+        title: 'Price required',
+        body: 'Enter how much you charge for this service.',
+        kind: 'warning',
+      });
+      return;
+    }
+    if (!duration.trim()) {
+      await alertDialog({
+        title: 'Duration required',
+        body: 'How many minutes does this service take?',
+        kind: 'warning',
+      });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -106,25 +134,39 @@ export default function CreateServicePage() {
       const serviceId = result.service_id;
       if (!serviceId) throw new Error('Service created but no ID returned');
 
-      // ✅ Video-only upload. Image upload removed.
+      // Video upload is best-effort — the service itself already exists.
+      let videoWarning: string | null = null;
       if (videoFile) {
         try {
           await api.uploadServiceVideo(serviceId, videoFile);
         } catch (err) {
-          alert(
-            `Service created, but video upload failed: ${extractErrorDetail(
-              err,
-              'Unknown error',
-            )}`,
-          );
+          videoWarning = extractErrorDetail(err, 'Unknown error');
         }
       }
 
-      alert('Service created successfully!');
-      setTimeout(() => router.replace('/service-provider/home'), 500);
+      if (videoWarning) {
+        await alertDialog({
+          title: 'Service live, video failed',
+          body: `Your service was created but the video didn't upload: ${videoWarning}. You can add it later from Edit Service.`,
+          kind: 'warning',
+          confirmLabel: 'Got it',
+        });
+      } else {
+        await alertDialog({
+          title: 'Service published',
+          body: `"${title.trim()}" is now live for shoppers to book.`,
+          kind: 'success',
+          confirmLabel: 'View dashboard',
+        });
+      }
+
+      router.replace('/service-provider/home');
     } catch (err) {
-      alert(extractErrorDetail(err, 'Failed to create service'));
-    } finally {
+      await alertDialog({
+        title: "Couldn't create service",
+        body: extractErrorDetail(err, 'Please check your details and try again.'),
+        kind: 'danger',
+      });
       setIsSubmitting(false);
     }
   };
@@ -137,7 +179,6 @@ export default function CreateServicePage() {
       </div>
 
       <div style={styles.scrollArea}>
-        {/* ✅ Reel preview — 9:16, matches how shoppers see it in the feed. */}
         <div style={styles.mediaUpload}>
           {videoPreview ? (
             <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -250,9 +291,13 @@ export default function CreateServicePage() {
         <button
           onClick={submitService}
           disabled={isSubmitting}
-          style={{ ...styles.submitBtn, opacity: isSubmitting ? 0.7 : 1 }}
+          style={{
+            ...styles.submitBtn,
+            opacity: isSubmitting ? 0.7 : 1,
+            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+          }}
         >
-          {isSubmitting ? 'Publishing...' : 'Publish Service'}
+          {isSubmitting ? 'Publishing…' : 'Publish Service'}
         </button>
 
         <div style={styles.locationInfo}>
@@ -260,7 +305,7 @@ export default function CreateServicePage() {
           <span style={{ fontSize: 13, color: '#666', flex: 1, marginLeft: 8 }}>
             {locationReady
               ? `Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
-              : 'Fetching location...'}
+              : 'Fetching location…'}
           </span>
         </div>
       </div>
@@ -271,12 +316,7 @@ export default function CreateServicePage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    backgroundColor: '#fff',
-  },
+  container: { display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#fff' },
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -295,7 +335,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   scrollArea: { flex: 1, overflowY: 'auto', padding: '16px' },
   mediaUpload: {
-    // ✅ Was 180px fixed. Now 9:16, capped so desktop isn't absurd.
     width: '100%',
     maxWidth: 280,
     aspectRatio: '9 / 16',
@@ -349,6 +388,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontWeight: 600,
     fontSize: 13,
+    fontFamily: 'inherit',
   },
   input: {
     width: '100%',
@@ -359,13 +399,10 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     marginBottom: 12,
     backgroundColor: '#fff',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
   },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: 600,
-    marginBottom: 8,
-    color: '#1A1A1A',
-  },
+  sectionTitle: { fontSize: 15, fontWeight: 600, marginBottom: 8, color: '#1A1A1A' },
   categoryGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
@@ -379,6 +416,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     cursor: 'pointer',
     textAlign: 'left',
+    fontFamily: 'inherit',
   },
   submitBtn: {
     width: '100%',
@@ -390,6 +428,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 16,
     fontWeight: 600,
     cursor: 'pointer',
+    fontFamily: 'inherit',
   },
   locationInfo: {
     display: 'flex',

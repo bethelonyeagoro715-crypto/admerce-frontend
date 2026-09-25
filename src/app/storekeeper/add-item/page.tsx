@@ -2,22 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '../../../services/api';
+import api, { extractErrorDetail } from '../../../services/api';
+import { alertDialog } from '../../../components/ui/dialogs';
 import {
   MdAddPhotoAlternate,
   MdAutoAwesome,
   MdClose,
   MdPreview,
-  MdTextFields,
-  MdDescription,
-  MdAttachMoney,
-  MdNumbers,
-  MdInfoOutline,
-  MdCameraAlt,
-  MdPhotoLibrary,
   MdWbSunny,
   MdPhotoCamera,
-  MdRefresh,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -26,11 +19,6 @@ interface Category {
   label: string;
 }
 
-// ✅ FIX: category IDs must match the backend whitelist in
-//    app/utils/category_utils.py `validate_product_category`.
-//    Two were mismatched:
-//      "health_beauty" → "health_wellness"
-//      "fashion"       → "fashion_apparel"
 const CATEGORIES: Category[] = [
   { id: 'tech_electronics', label: '🔌 Tech & Electronics' },
   { id: 'food_beverage', label: '🍏 Food, Beverage & Consumables' },
@@ -79,7 +67,7 @@ export default function AddItemPage() {
       const store = (await api.getMyStore()) as { store_id?: string } | null;
       if (store?.store_id) setStoreId(store.store_id);
     } catch {
-      // ignore
+      // ignore — check later at submit time
     }
   };
 
@@ -91,9 +79,9 @@ export default function AddItemPage() {
         setLng(pos.coords.longitude);
       },
       () => {
-        // keep default
+        // keep defaults
       },
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
   };
 
@@ -104,10 +92,6 @@ export default function AddItemPage() {
     }, 0);
     return () => clearTimeout(timer);
   }, []);
-
-  const showAlert = (message: string, isError = false) => {
-    alert(message);
-  };
 
   const pickImage = () => {
     fileInputRef.current?.click();
@@ -130,9 +114,14 @@ export default function AddItemPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // ── AI actions ─────────────────────────────────────────────────
   const scanImageWithAI = async () => {
     if (!imageFile) {
-      showAlert('Please select an image first.', true);
+      await alertDialog({
+        title: 'Add a photo first',
+        body: 'AI scan needs a product photo to analyse.',
+        kind: 'info',
+      });
       return;
     }
     setIsAnalyzing(true);
@@ -140,14 +129,25 @@ export default function AddItemPage() {
       const data = await api.analyzeImage(imageFile);
       if (data.title) setTitle(data.title as string);
       if (data.category) {
-        const cat = CATEGORIES.find((c) => c.label.includes(data.category as string));
+        const cat = CATEGORIES.find((c) =>
+          c.label.includes(data.category as string),
+        );
         if (cat) setSelectedCategory(cat);
       }
       if (data.condition) setSelectedCondition(data.condition as string);
       if (data.description) setDescription(data.description as string);
-      showAlert('AI filled in the details!');
+      await alertDialog({
+        title: 'Details filled in',
+        body: "AI scanned your photo and populated the form. Review and adjust before publishing.",
+        kind: 'success',
+        confirmLabel: 'Got it',
+      });
     } catch (err) {
-      showAlert('AI scan failed', true);
+      await alertDialog({
+        title: "Couldn't scan the photo",
+        body: extractErrorDetail(err, 'Please fill in the details manually.'),
+        kind: 'danger',
+      });
     } finally {
       setIsAnalyzing(false);
     }
@@ -155,18 +155,33 @@ export default function AddItemPage() {
 
   const rewriteTitle = async () => {
     if (!title.trim()) {
-      showAlert('Please enter a title first.', true);
+      await alertDialog({
+        title: 'Enter a title first',
+        body: 'AI rewrite needs a starting title to work from.',
+        kind: 'info',
+      });
       return;
     }
     setIsRewritingTitle(true);
     try {
-      const response = await api.rewriteListing(title.trim(), selectedCategory?.id);
+      const response = await api.rewriteListing(
+        title.trim(),
+        selectedCategory?.id,
+      );
       if (response.rewritten_title) {
         setTitle(response.rewritten_title as string);
-        showAlert('Title rewritten!');
+        await alertDialog({
+          title: 'Title rewritten',
+          body: 'The AI version is now in the field. Edit it if you want.',
+          kind: 'success',
+        });
       }
-    } catch {
-      showAlert('Rewrite failed', true);
+    } catch (err) {
+      await alertDialog({
+        title: 'Rewrite failed',
+        body: extractErrorDetail(err, 'Please try again.'),
+        kind: 'danger',
+      });
     } finally {
       setIsRewritingTitle(false);
     }
@@ -174,18 +189,33 @@ export default function AddItemPage() {
 
   const rewriteDescription = async () => {
     if (!description.trim()) {
-      showAlert('Please enter a description first.', true);
+      await alertDialog({
+        title: 'Enter a description first',
+        body: 'AI rewrite needs a starting description to work from.',
+        kind: 'info',
+      });
       return;
     }
     setIsRewritingDescription(true);
     try {
-      const response = await api.rewriteListing(description.trim(), selectedCategory?.id);
+      const response = await api.rewriteListing(
+        description.trim(),
+        selectedCategory?.id,
+      );
       if (response.rewritten_title) {
         setDescription(response.rewritten_title as string);
-        showAlert('Description rewritten!');
+        await alertDialog({
+          title: 'Description rewritten',
+          body: 'The AI version is now in the field. Edit it if you want.',
+          kind: 'success',
+        });
       }
-    } catch {
-      showAlert('Rewrite failed', true);
+    } catch (err) {
+      await alertDialog({
+        title: 'Rewrite failed',
+        body: extractErrorDetail(err, 'Please try again.'),
+        kind: 'danger',
+      });
     } finally {
       setIsRewritingDescription(false);
     }
@@ -193,7 +223,11 @@ export default function AddItemPage() {
 
   const previewImageStyle = async () => {
     if (!imageFile) {
-      showAlert('Please select an image first.', true);
+      await alertDialog({
+        title: 'Add a photo first',
+        body: 'Style preview needs a product photo to work with.',
+        kind: 'info',
+      });
       return;
     }
     setIsAnalyzing(true);
@@ -202,22 +236,72 @@ export default function AddItemPage() {
       if (response.image_url) {
         setProcessedImageUrl(response.image_url as string);
         setImagePreview(response.image_url as string);
-        showAlert('Preview ready!');
+        await alertDialog({
+          title: 'Preview ready',
+          body: 'This is how your item will look to shoppers.',
+          kind: 'success',
+        });
       }
-    } catch {
-      showAlert('Preview failed', true);
+    } catch (err) {
+      await alertDialog({
+        title: "Couldn't preview",
+        body: extractErrorDetail(err, 'Please try again.'),
+        kind: 'danger',
+      });
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const submitListing = async () => {
-    if (!imageFile) return showAlert('Please add a product image.', true);
-    if (!title.trim()) return showAlert('Please enter a title.', true);
-    if (!selectedCategory) return showAlert('Please select a category.', true);
-    if (!price.trim()) return showAlert('Please enter a price.', true);
-    if (!quantity.trim()) return showAlert('Please enter quantity available.', true);
-    if (!storeId) return showAlert('Please create a store first.', true);
+    if (!imageFile) {
+      await alertDialog({
+        title: 'Product photo required',
+        body: 'Every listing needs at least one photo.',
+        kind: 'warning',
+      });
+      return;
+    }
+    if (!title.trim()) {
+      await alertDialog({
+        title: 'Title required',
+        body: 'Give your item a short, descriptive name.',
+        kind: 'warning',
+      });
+      return;
+    }
+    if (!selectedCategory) {
+      await alertDialog({
+        title: 'Category required',
+        body: 'Pick the category that best fits this item.',
+        kind: 'warning',
+      });
+      return;
+    }
+    if (!price.trim()) {
+      await alertDialog({
+        title: 'Price required',
+        body: 'Enter how much this item costs.',
+        kind: 'warning',
+      });
+      return;
+    }
+    if (!quantity.trim()) {
+      await alertDialog({
+        title: 'Quantity required',
+        body: 'How many of these do you have in stock?',
+        kind: 'warning',
+      });
+      return;
+    }
+    if (!storeId) {
+      await alertDialog({
+        title: 'Create a store first',
+        body: 'Set up your store before adding items to it.',
+        kind: 'warning',
+      });
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -229,16 +313,24 @@ export default function AddItemPage() {
         lng,
         selectedCategory.id,
         imageFile,
-        '',            // barcode
+        '',
         selectedStyle,
-        parseInt(quantity.trim(), 10)
+        parseInt(quantity.trim(), 10),
       );
-      showAlert('Item published successfully!');
-      setTimeout(() => router.replace('/storekeeper/items'), 500);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Publishing failed';
-      showAlert(message, true);
-    } finally {
+
+      await alertDialog({
+        title: 'Item published',
+        body: `"${title.trim()}" is now live on your store.`,
+        kind: 'success',
+        confirmLabel: 'View items',
+      });
+      router.replace('/storekeeper/items');
+    } catch (err) {
+      await alertDialog({
+        title: "Couldn't publish",
+        body: extractErrorDetail(err, 'Please check your details and try again.'),
+        kind: 'danger',
+      });
       setIsLoading(false);
     }
   };
@@ -254,17 +346,28 @@ export default function AddItemPage() {
         <div onClick={pickImage} style={styles.imageUpload}>
           {imagePreview ? (
             <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={imagePreview} alt="Product" style={styles.imagePreview} />
               <button
-                onClick={(e) => { e.stopPropagation(); scanImageWithAI(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  scanImageWithAI();
+                }}
                 disabled={isAnalyzing}
                 style={styles.aiScanBtn}
                 title="AI auto-fill"
               >
-                {isAnalyzing ? <div style={styles.spinnerSmall} /> : <MdAutoAwesome size={18} color="#fff" />}
+                {isAnalyzing ? (
+                  <div style={styles.spinnerSmallWhite} />
+                ) : (
+                  <MdAutoAwesome size={18} color="#fff" />
+                )}
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); removeImage(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeImage();
+                }}
                 style={styles.removeBtn}
                 title="Remove"
               >
@@ -274,8 +377,12 @@ export default function AddItemPage() {
           ) : (
             <div style={styles.imagePlaceholder}>
               <MdAddPhotoAlternate size={48} color="#888" />
-              <p>Tap to add product photo</p>
-              <p style={{ fontSize: 12 }}>Then tap ✨ AI to auto-fill</p>
+              <p style={{ fontWeight: 600, marginBottom: 2 }}>
+                Tap to add product photo
+              </p>
+              <p style={{ fontSize: 12, margin: 0, color: '#9A9DA6' }}>
+                Then tap ✨ AI to auto-fill
+              </p>
             </div>
           )}
         </div>
@@ -295,7 +402,8 @@ export default function AddItemPage() {
               onClick={() => setSelectedStyle(style.value)}
               style={{
                 ...styles.styleButton,
-                backgroundColor: selectedStyle === style.value ? '#0504AA' : '#f0f0f0',
+                backgroundColor:
+                  selectedStyle === style.value ? '#0504AA' : '#f0f0f0',
                 color: selectedStyle === style.value ? '#fff' : '#0504AA',
                 borderColor: selectedStyle === style.value ? '#0504AA' : '#ccc',
               }}
@@ -308,8 +416,12 @@ export default function AddItemPage() {
 
         <button
           onClick={previewImageStyle}
-          disabled={!imageFile}
-          style={styles.previewBtn}
+          disabled={!imageFile || isAnalyzing}
+          style={{
+            ...styles.previewBtn,
+            opacity: !imageFile || isAnalyzing ? 0.5 : 1,
+            cursor: !imageFile || isAnalyzing ? 'not-allowed' : 'pointer',
+          }}
         >
           <MdPreview size={18} color="#0504AA" />
           Preview Style
@@ -323,8 +435,17 @@ export default function AddItemPage() {
             onChange={(e) => setTitle(e.target.value)}
             style={styles.input}
           />
-          <button onClick={rewriteTitle} disabled={isRewritingTitle} style={styles.aiBtn} title="AI Rewrite Title">
-            {isRewritingTitle ? <div style={styles.spinnerSmall} /> : <MdAutoAwesome size={20} color="#0504AA" />}
+          <button
+            onClick={rewriteTitle}
+            disabled={isRewritingTitle}
+            style={styles.aiBtn}
+            title="AI Rewrite Title"
+          >
+            {isRewritingTitle ? (
+              <div style={styles.spinnerSmall} />
+            ) : (
+              <MdAutoAwesome size={20} color="#0504AA" />
+            )}
           </button>
         </div>
 
@@ -335,8 +456,17 @@ export default function AddItemPage() {
             onChange={(e) => setDescription(e.target.value)}
             style={{ ...styles.input, minHeight: 80, resize: 'vertical' }}
           />
-          <button onClick={rewriteDescription} disabled={isRewritingDescription} style={styles.aiBtn} title="AI Rewrite Description">
-            {isRewritingDescription ? <div style={styles.spinnerSmall} /> : <MdAutoAwesome size={20} color="#0504AA" />}
+          <button
+            onClick={rewriteDescription}
+            disabled={isRewritingDescription}
+            style={styles.aiBtn}
+            title="AI Rewrite Description"
+          >
+            {isRewritingDescription ? (
+              <div style={styles.spinnerSmall} />
+            ) : (
+              <MdAutoAwesome size={20} color="#0504AA" />
+            )}
           </button>
         </div>
 
@@ -364,9 +494,11 @@ export default function AddItemPage() {
               onClick={() => setSelectedCategory(cat)}
               style={{
                 ...styles.categoryButton,
-                backgroundColor: selectedCategory?.id === cat.id ? '#0504AA' : '#f0f0f0',
+                backgroundColor:
+                  selectedCategory?.id === cat.id ? '#0504AA' : '#f0f0f0',
                 color: selectedCategory?.id === cat.id ? '#fff' : '#333',
-                borderColor: selectedCategory?.id === cat.id ? '#0504AA' : '#ccc',
+                borderColor:
+                  selectedCategory?.id === cat.id ? '#0504AA' : '#ccc',
               }}
             >
               {cat.label}
@@ -380,7 +512,9 @@ export default function AddItemPage() {
           style={styles.select}
         >
           {CONDITIONS.map((cond) => (
-            <option key={cond} value={cond}>{cond}</option>
+            <option key={cond} value={cond}>
+              {cond}
+            </option>
           ))}
         </select>
 
@@ -390,9 +524,10 @@ export default function AddItemPage() {
           style={{
             ...styles.submitBtn,
             opacity: isLoading ? 0.7 : 1,
+            cursor: isLoading ? 'not-allowed' : 'pointer',
           }}
         >
-          {isLoading ? 'Publishing...' : 'Publish Item'}
+          {isLoading ? 'Publishing…' : 'Publish Item'}
         </button>
       </div>
 
@@ -402,12 +537,7 @@ export default function AddItemPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    backgroundColor: '#fff',
-  },
+  container: { display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#fff' },
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -415,12 +545,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '12px 16px',
     borderBottom: '1px solid #eee',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 600,
-    color: '#1A1A1A',
-    margin: 0,
-  },
+  headerTitle: { fontSize: 18, fontWeight: 600, color: '#1A1A1A', margin: 0 },
   spinnerSmall: {
     width: 20,
     height: 20,
@@ -429,11 +554,15 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
-  scrollArea: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '16px',
+  spinnerSmallWhite: {
+    width: 18,
+    height: 18,
+    border: '2px solid rgba(255,255,255,0.4)',
+    borderTopColor: '#fff',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
   },
+  scrollArea: { flex: 1, overflowY: 'auto', padding: '16px' },
   imageUpload: {
     width: '100%',
     height: 180,
@@ -444,11 +573,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     marginBottom: 16,
   },
-  imagePreview: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
+  imagePreview: { width: '100%', height: '100%', objectFit: 'cover' },
   aiScanBtn: {
     position: 'absolute',
     bottom: 12,
@@ -462,6 +587,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(5,4,170,0.35)',
   },
   removeBtn: {
     position: 'absolute',
@@ -484,18 +610,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     color: '#888',
+    padding: 16,
+    textAlign: 'center',
   },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: 600,
-    marginBottom: 8,
-    color: '#1A1A1A',
-  },
-  styleRow: {
-    display: 'flex',
-    gap: 8,
-    marginBottom: 8,
-  },
+  sectionTitle: { fontSize: 15, fontWeight: 600, marginBottom: 8, color: '#1A1A1A' },
+  styleRow: { display: 'flex', gap: 8, marginBottom: 8 },
   styleButton: {
     display: 'flex',
     alignItems: 'center',
@@ -505,6 +624,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     fontWeight: 600,
     cursor: 'pointer',
+    fontFamily: 'inherit',
   },
   previewBtn: {
     display: 'flex',
@@ -520,13 +640,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 16,
     cursor: 'pointer',
     fontWeight: 600,
+    fontFamily: 'inherit',
   },
-  fieldRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
+  fieldRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
   input: {
     flex: 1,
     padding: '12px 14px',
@@ -535,6 +651,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     outline: 'none',
     marginBottom: 12,
+    fontFamily: 'inherit',
   },
   aiBtn: {
     background: 'none',
@@ -558,6 +675,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     cursor: 'pointer',
     textAlign: 'left',
+    fontFamily: 'inherit',
   },
   select: {
     width: '100%',
@@ -568,6 +686,7 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     marginBottom: 20,
     backgroundColor: '#fff',
+    fontFamily: 'inherit',
   },
   submitBtn: {
     width: '100%',
@@ -579,5 +698,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 16,
     fontWeight: 600,
     cursor: 'pointer',
+    fontFamily: 'inherit',
   },
 };
