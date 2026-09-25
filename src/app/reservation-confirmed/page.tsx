@@ -76,14 +76,30 @@ function formatTime(seconds: number): string {
   return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-// Treat a timestamp as UTC when it has no explicit timezone.
+// Parse a timestamp as UTC when it has no explicit timezone.
 // Backend stores datetime.utcnow() (naive UTC); FastAPI serializes it
-// without a Z suffix, so JavaScript would otherwise interpret it as
-// local time — off by the user's UTC offset.
+// without a Z suffix, so JS would otherwise interpret it as local time
+// — off by the user's UTC offset.
+//
+// Also truncates fractional seconds to 3 digits — some engines reject
+// microsecond precision in Date parsing, silently returning NaN.
 function parseAsUtc(iso: string | null | undefined): number {
   if (!iso) return NaN;
   const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
-  return new Date(hasTz ? iso : `${iso}Z`).getTime();
+  // Trim > 3 fractional digits (microseconds → milliseconds)
+  const trimmed = iso.replace(/(\.\d{3})\d+/, '$1');
+  const final = hasTz ? trimmed : `${trimmed}Z`;
+  return new Date(final).getTime();
+}
+
+// Human-readable duration from a span in seconds.
+function formatDurationShort(seconds: number): string {
+  if (seconds <= 0) return '0 minutes';
+  const hours = seconds / 3600;
+  if (Number.isInteger(hours)) {
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  }
+  return `${hours.toFixed(1)} hours`;
 }
 
 // ─── Ambient background ───────────────────────────────────────────
@@ -201,7 +217,6 @@ function ReservationConfirmedContent() {
   const [copied, setCopied] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const [totalSeconds, setTotalSeconds] = useState(1);
   const isMountedRef = useRef(true);
   const droppedOrCompletedRef = useRef(false);
 
@@ -219,17 +234,16 @@ function ReservationConfirmedContent() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
 
-  // ── Enrichment ──
+  // ── Enrichment — ALWAYS fetch, even when the URL carries everything.
+  //    The URL params are just an optimistic preview; the backend is the
+  //    only source of truth for `expires_at` and `created_at`, and the
+  //    countdown depends on those. Skipping this call was causing the
+  //    timer to run off `pickup_time` from the URL instead.
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
-      if (!orderId) return;
-
-      const hasEverything =
-        urlStoreName && urlTotal && urlCustomerName && urlStoreLat && urlStoreLng;
-
-      if (hasEverything) {
+      if (!orderId) {
         setEnriching(false);
         return;
       }
@@ -238,38 +252,41 @@ function ReservationConfirmedContent() {
         const raw = (await api.getOrderDetail(orderId)) as OrderDetail;
         if (cancelled) return;
 
-        if (!urlCustomerName && raw.customer_name) {
-          setCustomerName(raw.customer_name);
-        }
-        if (!urlStoreName && raw.store_name) {
-          setStoreName(raw.store_name);
-        }
-        if (!urlTotal && raw.total_amount != null) {
-          setTotal(Number(raw.total_amount));
-        }
-        if (raw.expires_at) {
-          setExpiresAt(String(raw.expires_at));
-        }
-        if (raw.created_at) {
-          setCreatedAt(String(raw.created_at));
-        }
+        // Backend values win when present — the URL is a preview, but if
+        // the backend has the record, its values are authoritative.
+        if (raw.customer_name) setCustomerName(raw.customer_name);
+        if (raw.store_name) setStoreName(raw.store_name);
+        if (raw.total_amount != null) setTotal(Number(raw.total_amount));
+        if (raw.expires_at) setExpiresAt(String(raw.expires_at));
+        if (raw.created_at) setCreatedAt(String(raw.created_at));
 
-        if (!urlStoreName && !raw.store_name && raw.store_id) {
-          try {
-            const store = (await api.getStoreById(String(raw.store_id))) as StoreDetail;
-            if (!cancelled && store?.name) setStoreName(store.name);
-            if (!cancelled && store?.latitude != null && store?.longitude != null) {
-              setStoreLat(Number(store.latitude));
-              setStoreLng(Number(store.longitude));
+        // Store location fallback — only fetched when the URL is missing it.
+        if (
+          (!urlStoreName && !raw.store_name) ||
+          (!urlStoreLat && !urlStoreLng)
+        ) {
+          if (raw.store_id) {
+            try {
+              const store = (await api.getStoreById(String(raw.store_id))) as StoreDetail;
+              if (cancelled) return;
+              if (store?.name && !raw.store_name) setStoreName(store.name);
+              if (store?.latitude != null && store?.longitude != null) {
+                setStoreLat(Number(store.latitude));
+                setStoreLng(Number(store.longitude));
+              }
+            } catch {
+              // ignore — best-effort enrichment
             }
-          } catch {
-            // ignore — best-effort enrichment
           }
         }
       } catch (e) {
         if (cancelled) return;
-        const msg = e instanceof Error ? e.message : 'Could not load reservation details.';
-        setEnrichError(msg);
+        // Only surface a hard error when we have no fallback data at all.
+        const hasFallback = !!(urlStoreName || urlCustomerName);
+        if (!hasFallback) {
+          const msg = e instanceof Error ? e.message : 'Could not load reservation details.';
+          setEnrichError(msg);
+        }
       } finally {
         if (!cancelled) setEnriching(false);
       }
@@ -283,28 +300,16 @@ function ReservationConfirmedContent() {
   }, [orderId]);
 
   // ── Countdown ──
+  // The deadline is computed once per dependency change, then every tick
+  // is a pure subtraction against Date.now() — so tab-throttling and
+  // clock jitter self-correct.
   useEffect(() => {
-    // Work out the deadline (in absolute ms) and total duration once per
-    // mount / dependency change. Then every tick is a pure subtraction
-    // against Date.now(), so tab-throttling and clock jitter self-correct.
     let deadlineMs: number | null = null;
-    let totalSecs: number | null = null;
 
     if (expiresAt) {
       const end = parseAsUtc(expiresAt);
       if (!Number.isNaN(end)) {
         deadlineMs = end;
-        // Prefer the real span (created → expires) for the ring progress.
-        if (createdAt) {
-          const start = parseAsUtc(createdAt);
-          if (!Number.isNaN(start) && end > start) {
-            totalSecs = Math.floor((end - start) / 1000);
-          }
-        }
-        // Fallback: use however much time was left at first observation.
-        if (totalSecs === null) {
-          totalSecs = Math.max(1, Math.floor((end - Date.now()) / 1000));
-        }
       }
     }
 
@@ -312,22 +317,16 @@ function ReservationConfirmedContent() {
       // No usable expires_at — derive from pickup_time + created_at.
       const numeric = (pickupTime || '').replace(/\D/g, '');
       const hours = numeric ? parseInt(numeric, 10) : 3;
-      totalSecs = hours * 3600;
 
       const start = parseAsUtc(createdAt);
       if (!Number.isNaN(start)) {
         deadlineMs = start + hours * 3600 * 1000;
       } else {
-        // No created_at either — anchor to page load. Countdown resets on
-        // refresh in this branch; that's the honest best we can do without
-        // a real deadline from the backend.
+        // Last resort — anchor to page load. Countdown resets on refresh
+        // in this branch; that's honest best-effort without a real deadline.
         deadlineMs = Date.now() + hours * 3600 * 1000;
       }
     }
-
-    const totalSecondsId = setTimeout(() => {
-      setTotalSeconds(totalSecs ?? 1);
-    }, 0);
 
     const tick = () => {
       const secs =
@@ -338,11 +337,32 @@ function ReservationConfirmedContent() {
     };
     tick();
     const id = setInterval(tick, 1000);
-    return () => {
-      clearTimeout(totalSecondsId);
-      clearInterval(id);
-    };
+    return () => clearInterval(id);
   }, [expiresAt, pickupTime, createdAt]);
+
+  const totalSeconds = (() => {
+    if (expiresAt) {
+      const end = parseAsUtc(expiresAt);
+      if (!Number.isNaN(end)) {
+        if (createdAt) {
+          const start = parseAsUtc(createdAt);
+          if (!Number.isNaN(start) && end > start) {
+            return Math.max(1, Math.floor((end - start) / 1000));
+          }
+        }
+        // Keep render pure when no creation timestamp is available. The live
+        // countdown is updated by the effect above; use the pickup window as
+        // the stable progress denominator in this fallback case.
+        const numeric = (pickupTime || '').replace(/\D/g, '');
+        const hours = numeric ? parseInt(numeric, 10) : 3;
+        return Math.max(1, hours * 3600);
+      }
+    }
+
+    const numeric = (pickupTime || '').replace(/\D/g, '');
+    const hours = numeric ? parseInt(numeric, 10) : 3;
+    return Math.max(1, hours * 3600);
+  })();
 
   // ── Actions ──
   const handlePickUpComplete = async () => {
@@ -362,7 +382,6 @@ function ReservationConfirmedContent() {
         colors: ['#0504AA', '#3D3BFF', '#16A34A', '#22C55E'],
       });
 
-      // Give the confetti a beat to register, then navigate.
       setTimeout(() => {
         if (!isMountedRef.current) return;
         router.push(
@@ -435,10 +454,24 @@ function ReservationConfirmedContent() {
   const displayCustomer = customerName || 'Customer';
   const shortOrder = orderId.length > 8 ? orderId.substring(0, 8) : orderId;
   const expired = remaining <= 0;
+
+  // Pickup window pill — prefer the real span the backend stored. Falls
+  // back to the URL string only when we couldn't load the order.
+  const displayPickupWindow = (() => {
+    if (createdAt && expiresAt) {
+      const start = parseAsUtc(createdAt);
+      const end = parseAsUtc(expiresAt);
+      if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
+        return formatDurationShort((end - start) / 1000);
+      }
+    }
+    return pickupTime;
+  })();
+
   const progress = Math.max(0, Math.min(1, remaining / totalSeconds));
 
   // ── Loading ──
-  if (enriching && !justCompleted) {
+  if (enriching && !storeName && !customerName && !justCompleted) {
     return (
       <main style={styles.container}>
         <AmbientBackground />
@@ -523,7 +556,9 @@ function ReservationConfirmedContent() {
         {/* Pickup time pill */}
         <div style={styles.pickupPill}>
           <MdAccessTime size={16} color="#0504AA" />
-          <span style={styles.pickupPillText}>Pickup window: {pickupTime}</span>
+          <span style={styles.pickupPillText}>
+            Pickup window: {displayPickupWindow}
+          </span>
         </div>
 
         {/* Order detail card */}
@@ -798,7 +833,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginRight: 8,
   },
 
-  // ── Eyebrow
   eyebrowRow: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -826,7 +860,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#065F46',
   },
 
-  // ── Ring hero
   ringWrap: {
     position: 'relative',
     width: 220,
@@ -862,7 +895,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#94A3B8',
   },
 
-  // ── Heading
   heading: {
     fontSize: 28,
     fontWeight: 800,
@@ -880,7 +912,6 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 340,
   },
 
-  // ── Pickup pill
   pickupPill: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -897,7 +928,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#0504AA',
   },
 
-  // ── Order card
   card: {
     width: '100%',
     marginTop: 22,
@@ -984,7 +1014,6 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: 0.2,
   },
 
-  // ── Actions
   actions: {
     width: '100%',
     marginTop: 22,
@@ -1069,7 +1098,6 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.55,
   },
 
-  // ── Error
   errorHalo: {
     width: 84,
     height: 84,
@@ -1098,7 +1126,6 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
   },
 
-  // ── Modal
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -1185,7 +1212,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
 
-  // ── Toasts
   toastStack: {
     position: 'fixed',
     top: 14,
