@@ -35,7 +35,7 @@ interface Store {
 const TABS = [
   'All',
   'Reservations',
-  'Awaiting pickup',
+  'Pickups',
   'Deliveries',
   'Cancelled',
   'Reversed',
@@ -78,7 +78,7 @@ export default function StorekeeperOrdersPage() {
     () => allOrders.filter((o) => o.status === 'locked' || o.status === 'pending'),
     [allOrders]
   );
-  const awaitingPickup = useMemo(
+  const Pickups = useMemo(
     () =>
       allOrders.filter(
         (o) =>
@@ -126,13 +126,13 @@ export default function StorekeeperOrdersPage() {
     switch (activeTab) {
       case 0: return allOrders;
       case 1: return reservations;
-      case 2: return awaitingPickup;
+      case 2: return Pickups;
       case 3: return deliveries;
       case 4: return cancelled;
       case 5: return reversed;
       default: return [];
     }
-  }, [activeTab, allOrders, reservations, awaitingPickup, deliveries, cancelled, reversed]);
+  }, [activeTab, allOrders, reservations, Pickups, deliveries, cancelled, reversed]);
 
   // ─── Actions ──────────────────────────────────────────────────────
   //
