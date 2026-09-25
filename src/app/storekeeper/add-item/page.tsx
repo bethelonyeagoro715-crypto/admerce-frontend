@@ -13,7 +13,6 @@ import {
   MdPhotoCamera,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface Category {
   id: string;
   label: string;
@@ -67,7 +66,7 @@ export default function AddItemPage() {
       const store = (await api.getMyStore()) as { store_id?: string } | null;
       if (store?.store_id) setStoreId(store.store_id);
     } catch {
-      // ignore — check later at submit time
+      // ignore
     }
   };
 
@@ -114,7 +113,7 @@ export default function AddItemPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // ── AI actions ─────────────────────────────────────────────────
+  // ── AI scan — looks at the photo, fills title + description + category ──
   const scanImageWithAI = async () => {
     if (!imageFile) {
       await alertDialog({
@@ -126,21 +125,45 @@ export default function AddItemPage() {
     }
     setIsAnalyzing(true);
     try {
-      const data = await api.analyzeImage(imageFile);
-      if (data.title) setTitle(data.title as string);
-      if (data.category) {
-        const cat = CATEGORIES.find((c) =>
-          c.label.includes(data.category as string),
-        );
-        if (cat) setSelectedCategory(cat);
+      const res = (await api.rewriteListingVision(
+        imageFile,
+        title,
+        description,
+        selectedCategory?.id || '',
+      )) as {
+        item_identified?: string;
+        title?: string;
+        description?: string;
+        category_hint?: string;
+        condition_hint?: string;
+        confidence?: string;
+      };
+
+      // Fill fields, but don't overwrite with empty strings.
+      if (res.title) setTitle(res.title);
+      if (res.description) setDescription(res.description);
+      if (res.condition_hint && CONDITIONS.includes(res.condition_hint)) {
+        setSelectedCondition(res.condition_hint);
       }
-      if (data.condition) setSelectedCondition(data.condition as string);
-      if (data.description) setDescription(data.description as string);
+      if (res.category_hint) {
+        const matched = CATEGORIES.find((c) => c.id === res.category_hint);
+        if (matched) setSelectedCategory(matched);
+      }
+
+      const identified = res.item_identified || 'your item';
+      const confidence = (res.confidence || 'medium').toLowerCase();
+      const confidenceNote =
+        confidence === 'low'
+          ? 'Confidence is low — please review the suggestions carefully.'
+          : confidence === 'high'
+            ? 'Looks confident about this one.'
+            : 'Give the suggestions a quick look before publishing.';
+
       await alertDialog({
-        title: 'Details filled in',
-        body: "AI scanned your photo and populated the form. Review and adjust before publishing.",
+        title: `Detected: ${identified}`,
+        body: `AI filled in the title, description, category, and condition. ${confidenceNote}`,
         kind: 'success',
-        confirmLabel: 'Got it',
+        confirmLabel: 'Review',
       });
     } catch (err) {
       await alertDialog({
@@ -167,6 +190,7 @@ export default function AddItemPage() {
       const response = await api.rewriteListing(
         title.trim(),
         selectedCategory?.id,
+        'title',
       );
       if (response.rewritten_title) {
         setTitle(response.rewritten_title as string);
@@ -201,6 +225,7 @@ export default function AddItemPage() {
       const response = await api.rewriteListing(
         description.trim(),
         selectedCategory?.id,
+        'description',
       );
       if (response.rewritten_title) {
         setDescription(response.rewritten_title as string);

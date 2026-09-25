@@ -2,11 +2,9 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { getToken, setToken, clearToken, getUserRole, setUserRole } from './localStorage';
 
-// ─── Common response types ──────────────────────────────────────────
 type JsonObject = Record<string, unknown>;
 type JsonArray = unknown[];
 
-// ─── Card interface ─────────────────────────────────────────────────
 interface Card {
   id: number;
   last4: string;
@@ -16,7 +14,6 @@ interface Card {
   cardholder_name?: string;
 }
 
-// ─── Store verification types ───────────────────────────────────────
 export interface StoreVerificationRequest {
   legal_name: string;
   business_type: string;
@@ -35,7 +32,6 @@ export interface StoreVerificationStatus {
   events: JsonArray;
 }
 
-// ─── Error helper ──────────────────────────────────────────────────
 export function extractErrorDetail(err: unknown, fallback = 'Something went wrong.'): string {
   if (err instanceof Error && err.message) {
     const ax = err as AxiosError;
@@ -55,7 +51,6 @@ export function extractErrorDetail(err: unknown, fallback = 'Something went wron
   return fallback;
 }
 
-// ─── ApiService ──────────────────────────────────────────────────────
 class ApiService {
   private static instance: ApiService;
   private axios: AxiosInstance;
@@ -174,18 +169,8 @@ class ApiService {
     return res.data;
   }
 
-  public async signup(
-    phone: string,
-    password: string,
-    email: string,
-    username: string,
-  ): Promise<JsonObject> {
-    const res = await this.axios.post('/auth/signup', {
-      phone,
-      password,
-      email,
-      username,
-    });
+  public async signup(phone: string, password: string, email: string, username: string): Promise<JsonObject> {
+    const res = await this.axios.post('/auth/signup', { phone, password, email, username });
     return res.data;
   }
 
@@ -203,33 +188,18 @@ class ApiService {
     return res.data;
   }
 
-  public async resetPassword(
-    phone: string,
-    otp: string,
-    newPassword: string,
-  ): Promise<JsonObject> {
-    const res = await this.axios.post('/auth/reset-password', {
-      phone,
-      otp,
-      new_password: newPassword,
-    });
+  public async resetPassword(phone: string, otp: string, newPassword: string): Promise<JsonObject> {
+    const res = await this.axios.post('/auth/reset-password', { phone, otp, new_password: newPassword });
     return res.data;
   }
 
   public async resetPasswordDirect(phone: string, newPassword: string): Promise<JsonObject> {
-    const res = await this.axios.post('/auth/reset-password-direct', {
-      phone,
-      new_password: newPassword,
-    });
+    const res = await this.axios.post('/auth/reset-password-direct', { phone, new_password: newPassword });
     return res.data;
   }
 
   public async socialLogin(provider: string, token: string, secret?: string): Promise<JsonObject> {
-    const res = await this.axios.post('/auth/social', {
-      provider,
-      token,
-      ...(secret ? { secret } : {}),
-    });
+    const res = await this.axios.post('/auth/social', { provider, token, ...(secret ? { secret } : {}) });
     if (res.data.access_token) {
       this.setToken(res.data.access_token as string);
       await this.fetchAndStoreUserRole();
@@ -247,10 +217,7 @@ class ApiService {
     return res.data;
   }
 
-  public async changePassword(
-    currentPassword: string,
-    newPassword: string,
-  ): Promise<JsonObject> {
+  public async changePassword(currentPassword: string, newPassword: string): Promise<JsonObject> {
     const res = await this.axios.post('/auth/change-password', {
       current_password: currentPassword,
       new_password: newPassword,
@@ -336,17 +303,9 @@ class ApiService {
     return res.data;
   }
 
-  public async withdraw(
-    amount: number,
-    method: string,
-    accountNumber: string,
-    pin: string,
-  ): Promise<JsonObject> {
+  public async withdraw(amount: number, method: string, accountNumber: string, pin: string): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/withdraw', {
-      amount,
-      method,
-      account_number: accountNumber,
-      pin,
+      amount, method, account_number: accountNumber, pin,
     });
     return res.data;
   }
@@ -374,14 +333,11 @@ class ApiService {
     return res.data;
   }
 
-  // ✅ Storekeeper-only. Flips locked → accepted. No wallet mutation.
   public async acceptOrder(orderId: string): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/accept', { order_id: orderId });
     return res.data;
   }
 
-  // ✅ NEW — storekeeper-only. Flips locked → declined, refunds the shopper.
-  //    Only valid on 'locked' (can't decline after accepting).
   public async declineOrder(orderId: string, reason?: string): Promise<JsonObject> {
     const body: Record<string, string> = { order_id: orderId };
     if (reason && reason.trim()) body.reason = reason.trim();
@@ -389,7 +345,6 @@ class ApiService {
     return res.data;
   }
 
-  // ⚠️ Shopper-only. Storekeepers calling this get 403.
   public async confirmOrder(orderId: string): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/confirm', { order_id: orderId });
     return res.data;
@@ -415,25 +370,15 @@ class ApiService {
     return res.data;
   }
 
-  public async instantPickup(
-    listingId: string,
-    storekeeperId: string,
-    amount: number,
-    quantity = 1,
-  ): Promise<JsonObject> {
+  public async instantPickup(listingId: string, storekeeperId: string, amount: number, quantity = 1): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/instant-pickup', {
-      listing_id: listingId,
-      storekeeper_id: storekeeperId,
-      amount,
-      quantity,
+      listing_id: listingId, storekeeper_id: storekeeperId, amount, quantity,
     });
     return res.data;
   }
 
   public async getWalletTransactions(limit = 20, offset = 0): Promise<JsonArray> {
-    const res = await this.axios.get('/wallet/transactions', {
-      params: { limit, offset },
-    });
+    const res = await this.axios.get('/wallet/transactions', { params: { limit, offset } });
     return res.data;
   }
 
@@ -489,13 +434,7 @@ class ApiService {
     contactPreference = 'in-app',
   ): Promise<JsonObject> {
     const res = await this.axios.post('/storekeeper/store', {
-      name,
-      description,
-      category,
-      address,
-      lat,
-      lng,
-      phone,
+      name, description, category, address, lat, lng, phone,
       store_image_url: storeImageUrl,
       business_hours: businessHours,
       contact_preference: contactPreference,
@@ -541,20 +480,12 @@ class ApiService {
     return res.data;
   }
 
-  public async submitStoreVerification(
-    storeId: string,
-    payload: StoreVerificationRequest,
-  ): Promise<JsonObject> {
-    const res = await this.axios.post(
-      `/storekeeper/${storeId}/verification/request`,
-      payload,
-    );
+  public async submitStoreVerification(storeId: string, payload: StoreVerificationRequest): Promise<JsonObject> {
+    const res = await this.axios.post(`/storekeeper/${storeId}/verification/request`, payload);
     return res.data;
   }
 
-  public async getStoreVerificationStatus(
-    storeId: string,
-  ): Promise<StoreVerificationStatus> {
+  public async getStoreVerificationStatus(storeId: string): Promise<StoreVerificationStatus> {
     const res = await this.axios.get(`/storekeeper/${storeId}/verification`);
     return res.data as StoreVerificationStatus;
   }
@@ -596,9 +527,7 @@ class ApiService {
     return res.data;
   }
 
-  public async deleteListing(
-    listingId: string,
-  ): Promise<{ success: boolean; deleted: string }> {
+  public async deleteListing(listingId: string): Promise<{ success: boolean; deleted: string }> {
     const res = await this.axios.delete(`/storekeeper/listing/${listingId}`);
     return res.data;
   }
@@ -619,9 +548,7 @@ class ApiService {
   }
 
   public async searchStoreItems(storeId: string, query: string): Promise<JsonArray> {
-    const res = await this.axios.get(`/storekeeper/items/${storeId}/search`, {
-      params: { q: query },
-    });
+    const res = await this.axios.get(`/storekeeper/items/${storeId}/search`, { params: { q: query } });
     return res.data;
   }
 
@@ -642,10 +569,38 @@ class ApiService {
     }
   }
 
-  public async rewriteListing(title: string, category?: string): Promise<JsonObject> {
+  // ✅ UPDATED — added `mode` ('title' | 'description'). Backward
+  //    compatible: old callers omit it and get title behaviour.
+  public async rewriteListing(
+    text: string,
+    category?: string,
+    mode: 'title' | 'description' = 'title',
+  ): Promise<JsonObject> {
     const res = await this.axios.post('/storekeeper/rewrite-listing', {
-      title,
+      title: text,
       ...(category ? { category } : {}),
+      mode,
+    });
+    return res.data;
+  }
+
+  // ✅ NEW — sends the photo + any existing text to Groq's vision model.
+  //    Returns { item_identified, title, description, category_hint,
+  //    condition_hint, confidence }.
+  public async rewriteListingVision(
+    image: File,
+    title = '',
+    description = '',
+    category = '',
+  ): Promise<JsonObject> {
+    const form = new FormData();
+    form.append('image', image, image.name || 'item.jpg');
+    form.append('title', title);
+    form.append('description', description);
+    form.append('category', category);
+    const res = await this.axios.post('/storekeeper/rewrite-listing-vision', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 90_000,
     });
     return res.data;
   }
@@ -675,9 +630,7 @@ class ApiService {
 
   // ======================== SHOPPER ========================
   public async getFeed(lat: number, lng: number, radiusKm = 10): Promise<JsonObject> {
-    const res = await this.axios.get('/shopper/real-feed', {
-      params: { lat, lng, radius_km: radiusKm },
-    });
+    const res = await this.axios.get('/shopper/real-feed', { params: { lat, lng, radius_km: radiusKm } });
     return res.data;
   }
 
@@ -686,50 +639,22 @@ class ApiService {
     return res.data;
   }
 
-  public async recallFeed(
-    lat: number,
-    lng: number,
-    radiusKm: number,
-    mix: Record<string, number>,
-  ): Promise<JsonObject> {
-    const res = await this.axios.post('/shopper/feed/recall', {
-      lat,
-      lng,
-      radius_km: radiusKm,
-      mix,
-    });
+  public async recallFeed(lat: number, lng: number, radiusKm: number, mix: Record<string, number>): Promise<JsonObject> {
+    const res = await this.axios.post('/shopper/feed/recall', { lat, lng, radius_km: radiusKm, mix });
     return res.data;
   }
 
-  public async rankFeed(
-    lat: number,
-    lng: number,
-    candidateIds: string[],
-    sessionItemsShown: string[],
-  ): Promise<JsonObject> {
+  public async rankFeed(lat: number, lng: number, candidateIds: string[], sessionItemsShown: string[]): Promise<JsonObject> {
     const res = await this.axios.post('/shopper/feed/rank', {
-      lat,
-      lng,
-      candidate_ids: candidateIds,
-      session_items_shown: sessionItemsShown,
+      lat, lng, candidate_ids: candidateIds, session_items_shown: sessionItemsShown,
     });
     return res.data;
   }
 
-  public async logSeaiEvent(
-    eventType: string,
-    listingId: string,
-    userLat: number,
-    userLng: number,
-    position: number,
-  ): Promise<void> {
+  public async logSeaiEvent(eventType: string, listingId: string, userLat: number, userLng: number, position: number): Promise<void> {
     try {
       await this.axios.post('/seai/events', {
-        event_type: eventType,
-        listing_id: listingId,
-        user_lat: userLat,
-        user_lng: userLng,
-        position,
+        event_type: eventType, listing_id: listingId, user_lat: userLat, user_lng: userLng, position,
       });
     } catch {
       // fire-and-forget
@@ -754,22 +679,8 @@ class ApiService {
   }
 
   // ======================== SEAI ========================
-  public async search(
-    query: string,
-    lat: number,
-    lng: number,
-    radiusKm = 10,
-    page = 0,
-    limit = 20,
-  ): Promise<JsonArray> {
-    const res = await this.axios.post('/seai/search', {
-      query,
-      lat,
-      lng,
-      radius_km: radiusKm,
-      page,
-      limit,
-    });
+  public async search(query: string, lat: number, lng: number, radiusKm = 10, page = 0, limit = 20): Promise<JsonArray> {
+    const res = await this.axios.post('/seai/search', { query, lat, lng, radius_km: radiusKm, page, limit });
     return res.data;
   }
 
@@ -782,17 +693,9 @@ class ApiService {
     mode?: 'gpt' | 'agent',
     signal?: AbortSignal,
   ): AsyncGenerator<string, void, unknown> {
-    const body: JsonObject = {
-      query,
-      lat,
-      lng,
-      radius_km: radiusKm,
-      conversation_history: conversationHistory,
-    };
+    const body: JsonObject = { query, lat, lng, radius_km: radiusKm, conversation_history: conversationHistory };
     if (mode) body.mode = mode;
-
     const token = this._token || getToken() || '';
-
     const response = await fetch(`${ApiService.baseUrl}/seai/ask`, {
       method: 'POST',
       headers: {
@@ -802,25 +705,15 @@ class ApiService {
       body: JSON.stringify(body),
       signal,
     });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const reader = response.body?.getReader();
     if (!reader) throw new Error('ReadableStream not supported');
-
     const decoder = new TextDecoder();
     let buffer = '';
-
     try {
       while (true) {
         if (signal?.aborted) {
-          try {
-            await reader.cancel();
-          } catch {
-            // ignore
-          }
+          try { await reader.cancel(); } catch {}
           return;
         }
         const { done, value } = await reader.read();
@@ -834,11 +727,7 @@ class ApiService {
       }
       if (buffer) yield buffer;
     } finally {
-      try {
-        reader.releaseLock();
-      } catch {
-        // ignore
-      }
+      try { reader.releaseLock(); } catch {}
     }
   }
 
@@ -846,12 +735,7 @@ class ApiService {
     throw new Error('Use seaiLensWithFile(image: File, lat, lng, radiusKm) instead');
   }
 
-  public async seaiLensWithFile(
-    image: File,
-    lat: number,
-    lng: number,
-    radiusKm = 10,
-  ): Promise<JsonObject> {
+  public async seaiLensWithFile(image: File, lat: number, lng: number, radiusKm = 10): Promise<JsonObject> {
     const form = new FormData();
     form.append('image', image);
     form.append('lat', lat.toString());
@@ -868,16 +752,8 @@ class ApiService {
     return res.data;
   }
 
-  public async suggest(
-    q: string,
-    lat: number,
-    lng: number,
-    radiusKm = 10,
-    limit = 10,
-  ): Promise<JsonArray> {
-    const res = await this.axios.get('/seai/suggest', {
-      params: { q, lat, lng, radius_km: radiusKm, limit },
-    });
+  public async suggest(q: string, lat: number, lng: number, radiusKm = 10, limit = 10): Promise<JsonArray> {
+    const res = await this.axios.get('/seai/suggest', { params: { q, lat, lng, radius_km: radiusKm, limit } });
     return res.data;
   }
 
@@ -898,10 +774,7 @@ class ApiService {
     lng = 3.3792,
   ): Promise<JsonObject> {
     const res = await this.axios.post('/services/', {
-      title,
-      category,
-      description,
-      price,
+      title, category, description, price,
       duration_minutes: durationMinutes,
       location_lat: lat,
       location_lng: lng,
@@ -919,16 +792,13 @@ class ApiService {
     return res.data;
   }
 
-  public async updateService(
-    serviceId: string,
-    patch: {
-      title?: string;
-      category?: string;
-      description?: string;
-      price?: number;
-      duration_minutes?: number;
-    },
-  ): Promise<JsonObject> {
+  public async updateService(serviceId: string, patch: {
+    title?: string;
+    category?: string;
+    description?: string;
+    price?: number;
+    duration_minutes?: number;
+  }): Promise<JsonObject> {
     const res = await this.axios.patch(`/services/${serviceId}`, patch);
     return res.data;
   }
@@ -937,18 +807,9 @@ class ApiService {
     await this.axios.delete(`/services/${serviceId}/video`);
   }
 
-  public async bookService(
-    serviceId: string,
-    scheduledFor?: string,
-    notes?: string,
-    lat?: number,
-    lng?: number,
-  ): Promise<JsonObject> {
+  public async bookService(serviceId: string, scheduledFor?: string, notes?: string, lat?: number, lng?: number): Promise<JsonObject> {
     const res = await this.axios.post(`/services/${serviceId}/book`, {
-      scheduled_for: scheduledFor,
-      notes,
-      location_lat: lat,
-      location_lng: lng,
+      scheduled_for: scheduledFor, notes, location_lat: lat, location_lng: lng,
     });
     return res.data;
   }
@@ -978,16 +839,8 @@ class ApiService {
     return res.data;
   }
 
-  public async instantServicePay(
-    serviceId: string,
-    providerId: string,
-    reference: string,
-  ): Promise<JsonObject> {
-    const res = await this.axios.post('/services/instant-pay', {
-      service_id: serviceId,
-      provider_id: providerId,
-      reference,
-    });
+  public async instantServicePay(serviceId: string, providerId: string, reference: string): Promise<JsonObject> {
+    const res = await this.axios.post('/services/instant-pay', { service_id: serviceId, provider_id: providerId, reference });
     return res.data;
   }
 
@@ -1070,19 +923,8 @@ class ApiService {
   }
 
   // ======================== COURIER ========================
-  public async registerCourier(
-    name: string,
-    vehicleType: string,
-    lat: number,
-    lng: number,
-  ): Promise<JsonObject> {
-    const res = await this.axios.post('/courier/register', {
-      courier_id: '',
-      name,
-      vehicle_type: vehicleType,
-      lat,
-      lng,
-    });
+  public async registerCourier(name: string, vehicleType: string, lat: number, lng: number): Promise<JsonObject> {
+    const res = await this.axios.post('/courier/register', { courier_id: '', name, vehicle_type: vehicleType, lat, lng });
     return res.data;
   }
 
@@ -1091,21 +933,11 @@ class ApiService {
     return res.data;
   }
 
-  public async matchCourier(
-    orderId: string,
-    storekeeperId: string,
-    pickupLat: number,
-    pickupLng: number,
-    dropoffLat: number,
-    dropoffLng: number,
-  ): Promise<JsonObject> {
+  public async matchCourier(orderId: string, storekeeperId: string, pickupLat: number, pickupLng: number, dropoffLat: number, dropoffLng: number): Promise<JsonObject> {
     const res = await this.axios.post('/courier/match', {
-      order_id: orderId,
-      storekeeper_id: storekeeperId,
-      pickup_lat: pickupLat,
-      pickup_lng: pickupLng,
-      dropoff_lat: dropoffLat,
-      dropoff_lng: dropoffLng,
+      order_id: orderId, storekeeper_id: storekeeperId,
+      pickup_lat: pickupLat, pickup_lng: pickupLng,
+      dropoff_lat: dropoffLat, dropoff_lng: dropoffLng,
     });
     return res.data;
   }
@@ -1137,24 +969,12 @@ class ApiService {
 
   // ======================== FLIPPER ========================
   public async createFlipperListing(
-    title: string,
-    description: string,
-    price: number,
-    source = 'thrift',
-    condition = 'Used',
-    imageUrl?: string,
-    lat = 6.5244,
-    lng = 3.3792,
+    title: string, description: string, price: number,
+    source = 'thrift', condition = 'Used', imageUrl?: string,
+    lat = 6.5244, lng = 3.3792,
   ): Promise<JsonObject> {
     const res = await this.axios.post('/flipper/listings', {
-      title,
-      description,
-      price,
-      source,
-      condition,
-      image_url: imageUrl,
-      lat,
-      lng,
+      title, description, price, source, condition, image_url: imageUrl, lat, lng,
     });
     return res.data;
   }
@@ -1169,13 +989,7 @@ class ApiService {
     return res.data;
   }
 
-  public async scanResell(
-    barcode?: string,
-    image?: File,
-    lat = 6.5244,
-    lng = 3.3792,
-    radiusKm = 10,
-  ): Promise<JsonObject> {
+  public async scanResell(barcode?: string, image?: File, lat = 6.5244, lng = 3.3792, radiusKm = 10): Promise<JsonObject> {
     const form = new FormData();
     if (barcode) form.append('barcode', barcode);
     if (image) form.append('image', image);
@@ -1226,24 +1040,12 @@ class ApiService {
   }
 
   // ======================== CHAT ========================
-  public async sendMessage(
-    receiverId: string,
-    text: string,
-    replyToId?: number | null,
-  ): Promise<JsonObject> {
-    const res = await this.axios.post('/chat/send', {
-      receiver_id: receiverId,
-      text,
-      reply_to_id: replyToId ?? null,
-    });
+  public async sendMessage(receiverId: string, text: string, replyToId?: number | null): Promise<JsonObject> {
+    const res = await this.axios.post('/chat/send', { receiver_id: receiverId, text, reply_to_id: replyToId ?? null });
     return res.data;
   }
 
-  public async sendVoiceNote(
-    receiverId: string,
-    audioFile: File,
-    replyToId?: number | null,
-  ): Promise<JsonObject> {
+  public async sendVoiceNote(receiverId: string, audioFile: File, replyToId?: number | null): Promise<JsonObject> {
     const form = new FormData();
     form.append('receiver_id', receiverId);
     form.append('audio', audioFile);
@@ -1257,11 +1059,7 @@ class ApiService {
     return res.data;
   }
 
-  public async getMessages(
-    conversationId: string,
-    limit = 50,
-    beforeId?: number,
-  ): Promise<JsonObject> {
+  public async getMessages(conversationId: string, limit = 50, beforeId?: number): Promise<JsonObject> {
     const params: Record<string, string | number> = { limit };
     if (beforeId) params.before_id = beforeId;
     const res = await this.axios.get(`/chat/messages/${conversationId}`, { params });
@@ -1272,35 +1070,21 @@ class ApiService {
     return this.getMessages(conversationId);
   }
 
-  public async getMessagesByUser(
-    userId: string,
-    limit = 50,
-    beforeId?: number,
-  ): Promise<JsonObject> {
-    if (!userId) {
-      throw new Error('getMessagesByUser called with empty userId');
-    }
+  public async getMessagesByUser(userId: string, limit = 50, beforeId?: number): Promise<JsonObject> {
+    if (!userId) throw new Error('getMessagesByUser called with empty userId');
     const params: Record<string, string | number> = { limit };
     if (beforeId) params.before_id = beforeId;
     const res = await this.axios.get(`/chat/messages/user/${userId}`, { params });
     return res.data;
   }
 
-  public async editMessage(
-    messageId: string | number,
-    text: string,
-  ): Promise<JsonObject> {
+  public async editMessage(messageId: string | number, text: string): Promise<JsonObject> {
     const res = await this.axios.put(`/chat/message/${messageId}`, { text });
     return res.data;
   }
 
-  public async deleteMessage(
-    messageId: string | number,
-    scope: 'me' | 'all' = 'me',
-  ): Promise<JsonObject> {
-    const res = await this.axios.delete(`/chat/message/${messageId}`, {
-      params: { scope },
-    });
+  public async deleteMessage(messageId: string | number, scope: 'me' | 'all' = 'me'): Promise<JsonObject> {
+    const res = await this.axios.delete(`/chat/message/${messageId}`, { params: { scope } });
     return res.data;
   }
 
@@ -1309,40 +1093,16 @@ class ApiService {
     return res.data;
   }
 
-  public async sendCallOffer(
-    conversationId: string,
-    receiverId: string,
-    data: string,
-  ): Promise<void> {
-    await this.axios.post('/chat/call/offer', {
-      conversation_id: conversationId,
-      receiver_id: receiverId,
-      data,
-    });
+  public async sendCallOffer(conversationId: string, receiverId: string, data: string): Promise<void> {
+    await this.axios.post('/chat/call/offer', { conversation_id: conversationId, receiver_id: receiverId, data });
   }
 
-  public async sendCallAnswer(
-    conversationId: string,
-    receiverId: string,
-    data: string,
-  ): Promise<void> {
-    await this.axios.post('/chat/call/answer', {
-      conversation_id: conversationId,
-      receiver_id: receiverId,
-      data,
-    });
+  public async sendCallAnswer(conversationId: string, receiverId: string, data: string): Promise<void> {
+    await this.axios.post('/chat/call/answer', { conversation_id: conversationId, receiver_id: receiverId, data });
   }
 
-  public async sendIceCandidate(
-    conversationId: string,
-    receiverId: string,
-    data: string,
-  ): Promise<void> {
-    await this.axios.post('/chat/call/ice-candidate', {
-      conversation_id: conversationId,
-      receiver_id: receiverId,
-      data,
-    });
+  public async sendIceCandidate(conversationId: string, receiverId: string, data: string): Promise<void> {
+    await this.axios.post('/chat/call/ice-candidate', { conversation_id: conversationId, receiver_id: receiverId, data });
   }
 
   public async pollCallSignals(conversationId: string): Promise<JsonArray> {
@@ -1356,19 +1116,11 @@ class ApiService {
   }
 
   public async saveSeaiExchange(userText: string, aiText: string): Promise<void> {
-    await this.axios.post('/chat/seai/save', {
-      user_text: userText,
-      ai_text: aiText,
-    });
+    await this.axios.post('/chat/seai/save', { user_text: userText, ai_text: aiText });
   }
 
   // ======================== ADMIN ========================
-  public async adminGetUsers(
-    search?: string,
-    limit = 50,
-    offset = 0,
-    role?: string,
-  ): Promise<JsonArray> {
+  public async adminGetUsers(search?: string, limit = 50, offset = 0, role?: string): Promise<JsonArray> {
     const params: Record<string, string | number> = { limit, offset };
     if (search) params.search = search;
     if (role && role !== 'All') params.role = role;
@@ -1398,12 +1150,7 @@ class ApiService {
     await this.axios.post(`/admin/users/${userId}/unsuspend`);
   }
 
-  public async adminGetStores(
-    search?: string,
-    status?: string,
-    limit = 50,
-    offset = 0,
-  ): Promise<JsonArray> {
+  public async adminGetStores(search?: string, status?: string, limit = 50, offset = 0): Promise<JsonArray> {
     const params: Record<string, string | number> = { limit, offset };
     if (search && search.trim()) params.search = search;
     if (status && status !== 'All') params.status = status;
@@ -1420,14 +1167,8 @@ class ApiService {
     await this.axios.delete(`/admin/stores/${storeId}`);
   }
 
-  public async adminGetPendingVerifications(
-    status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'all' = 'pending',
-    limit = 50,
-    offset = 0,
-  ): Promise<JsonArray> {
-    const res = await this.axios.get('/admin/verifications', {
-      params: { status, limit, offset },
-    });
+  public async adminGetPendingVerifications(status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'all' = 'pending', limit = 50, offset = 0): Promise<JsonArray> {
+    const res = await this.axios.get('/admin/verifications', { params: { status, limit, offset } });
     return res.data;
   }
 
@@ -1436,34 +1177,17 @@ class ApiService {
     return res.data;
   }
 
-  public async adminApproveStoreVerification(
-    storeId: string,
-    reference: string,
-    note?: string,
-  ): Promise<JsonObject> {
-    const res = await this.axios.post(
-      `/admin/stores/${storeId}/verification/approve`,
-      { reference, note },
-    );
+  public async adminApproveStoreVerification(storeId: string, reference: string, note?: string): Promise<JsonObject> {
+    const res = await this.axios.post(`/admin/stores/${storeId}/verification/approve`, { reference, note });
     return res.data;
   }
 
-  public async adminRejectStoreVerification(
-    storeId: string,
-    reference: string,
-    reason: string,
-  ): Promise<JsonObject> {
-    const res = await this.axios.post(
-      `/admin/stores/${storeId}/verification/reject`,
-      { reference, reason },
-    );
+  public async adminRejectStoreVerification(storeId: string, reference: string, reason: string): Promise<JsonObject> {
+    const res = await this.axios.post(`/admin/stores/${storeId}/verification/reject`, { reference, reason });
     return res.data;
   }
 
-  public async adminSuspendStoreWithReason(
-    storeId: string,
-    reason: string,
-  ): Promise<JsonObject> {
+  public async adminSuspendStoreWithReason(storeId: string, reason: string): Promise<JsonObject> {
     const res = await this.axios.post(`/admin/stores/${storeId}/suspend`, { reason });
     return res.data;
   }
@@ -1478,9 +1202,7 @@ class ApiService {
       request?: { reference_code?: string } | null;
     };
     const ref = info?.request?.reference_code;
-    if (!ref) {
-      throw new Error('No pending verification request to approve for this store');
-    }
+    if (!ref) throw new Error('No pending verification request to approve for this store');
     await this.adminApproveStoreVerification(storeId, ref);
   }
 
@@ -1488,12 +1210,7 @@ class ApiService {
     await this.adminSuspendStoreWithReason(storeId, 'Suspended by admin (no reason recorded)');
   }
 
-  public async adminGetOrders(
-    search?: string,
-    status?: string,
-    limit = 50,
-    offset = 0,
-  ): Promise<JsonArray> {
+  public async adminGetOrders(search?: string, status?: string, limit = 50, offset = 0): Promise<JsonArray> {
     const params: Record<string, string | number> = { limit, offset };
     if (search && search.trim()) params.search = search;
     if (status && status !== 'All') params.status = status;
@@ -1511,9 +1228,7 @@ class ApiService {
   }
 
   public async adminUpdateOrderStatus(orderId: string, status: string): Promise<void> {
-    await this.axios.post(`/admin/orders/${orderId}/status`, null, {
-      params: { status },
-    });
+    await this.axios.post(`/admin/orders/${orderId}/status`, null, { params: { status } });
   }
 
   public async adminGetListings(search?: string, limit = 50, offset = 0): Promise<JsonArray> {
@@ -1572,9 +1287,7 @@ class ApiService {
   }
 
   public async adminGetTransactions(limit = 100, offset = 0): Promise<JsonArray> {
-    const res = await this.axios.get('/admin/transactions', {
-      params: { limit, offset },
-    });
+    const res = await this.axios.get('/admin/transactions', { params: { limit, offset } });
     return res.data;
   }
 
@@ -1606,14 +1319,11 @@ class ApiService {
   }
 
   public async updateFeatureFlag(key: string, value: string): Promise<void> {
-    await this.axios.post('/settings/admin/update-setting', null, {
-      params: { key, value },
-    });
+    await this.axios.post('/settings/admin/update-setting', null, { params: { key, value } });
   }
 
   public async isAdminUser(): Promise<boolean> {
     if (this._isAdminCache !== null) return this._isAdminCache;
-
     try {
       const profile = await this.getMyProfile();
       const isAdmin = profile.role === 'admin';
@@ -1631,11 +1341,7 @@ class ApiService {
   }
 
   public async addToBasket(listingId: string, storeId: string, quantity = 1): Promise<void> {
-    await this.axios.post('/basket/add', {
-      listing_id: listingId,
-      store_id: storeId,
-      quantity,
-    });
+    await this.axios.post('/basket/add', { listing_id: listingId, store_id: storeId, quantity });
   }
 
   public async removeBasketItem(itemId: number): Promise<void> {
@@ -1745,23 +1451,14 @@ class ApiService {
   }
 
   // ======================== COMMUNITY ========================
-  public async communityGetMessages(
-    room = 'global',
-    limit = 50,
-    beforeId?: number,
-  ): Promise<JsonArray> {
+  public async communityGetMessages(room = 'global', limit = 50, beforeId?: number): Promise<JsonArray> {
     const params: Record<string, string | number> = { room, limit };
     if (beforeId) params.before_id = beforeId;
     const res = await this.axios.get('/community/messages', { params });
     return res.data;
   }
 
-  public async communityPostMessage(
-    text: string,
-    imageUrl?: string,
-    replyToId?: number,
-    room = 'global',
-  ): Promise<JsonObject> {
+  public async communityPostMessage(text: string, imageUrl?: string, replyToId?: number, room = 'global'): Promise<JsonObject> {
     const res = await this.axios.post('/community/messages', {
       text,
       ...(imageUrl ? { image_url: imageUrl } : {}),
@@ -1771,10 +1468,7 @@ class ApiService {
     return res.data;
   }
 
-  public async communityEditMessage(
-    messageId: number,
-    text: string,
-  ): Promise<JsonObject> {
+  public async communityEditMessage(messageId: number, text: string): Promise<JsonObject> {
     const res = await this.axios.put(`/community/messages/${messageId}`, { text });
     return res.data;
   }
