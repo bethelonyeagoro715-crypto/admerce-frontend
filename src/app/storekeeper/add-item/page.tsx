@@ -11,6 +11,7 @@ import {
   MdPreview,
   MdWbSunny,
   MdPhotoCamera,
+  MdInsertDriveFile,
 } from 'react-icons/md';
 
 interface Category {
@@ -50,6 +51,8 @@ export default function AddItemPage() {
   const [selectedStyle, setSelectedStyle] = useState('warm');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageFileName, setImageFileName] = useState<string>('');
+  const [previewError, setPreviewError] = useState(false);
   const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -92,24 +95,56 @@ export default function AddItemPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Revoke any lingering blob URL on unmount so memory doesn't leak.
+  useEffect(() => {
+    return () => {
+      if (imagePreview && imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Revoke the previous blob URL if we're replacing a local preview.
+    if (imagePreview && imagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
     setImageFile(file);
+    setImageFileName(file.name);
     setProcessedImageUrl(null);
-    const reader = new FileReader();
-    reader.onload = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(file);
+    setPreviewError(false);
+
+    // URL.createObjectURL is faster than FileReader for previews and
+    // doesn't fail on large files the way a giant base64 string can.
+    // It also handles HEIC/HEIF on Safari, where the img tag can decode
+    // them natively (Chrome/Firefox will fire onError — the fallback
+    // below covers those).
+    try {
+      const url = URL.createObjectURL(file);
+      setImagePreview(url);
+    } catch (err) {
+      console.warn('createObjectURL failed:', err);
+      setPreviewError(true);
+    }
   };
 
   const removeImage = () => {
+    if (imagePreview && imagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(imagePreview);
+    }
     setImageFile(null);
     setImagePreview(null);
+    setImageFileName('');
     setProcessedImageUrl(null);
+    setPreviewError(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // ── AI scan — looks at the photo, fills title + description + category ──
+  // ── AI scan ──────────────────────────────────────────────────────
   const scanImageWithAI = async () => {
     if (!imageFile) {
       await alertDialog({
@@ -254,8 +289,14 @@ export default function AddItemPage() {
     try {
       const response = await api.previewImage(imageFile, selectedStyle);
       if (response.image_url) {
+        // The processed image is a remote Cloudinary URL — not a blob.
+        // Revoke the blob preview URL since we're replacing it.
+        if (imagePreview && imagePreview.startsWith('blob:')) {
+          URL.revokeObjectURL(imagePreview);
+        }
         setProcessedImageUrl(response.image_url as string);
         setImagePreview(response.image_url as string);
+        setPreviewError(false);
         await alertDialog({
           title: 'Preview ready',
           body: 'This is how your item will look to shoppers.',
@@ -355,9 +396,6 @@ export default function AddItemPage() {
     }
   };
 
-  // Visually-hidden input style — keeps the input in the layout (so
-  // `label` clicks trigger it reliably across browsers) while making
-  // it invisible to the eye.
   const visuallyHiddenInput: React.CSSProperties = {
     position: 'absolute',
     width: 1,
@@ -370,6 +408,8 @@ export default function AddItemPage() {
     border: 0,
   };
 
+  const hasPreviewImage = imagePreview && !previewError;
+
   return (
     <main style={styles.container}>
       <div style={styles.header}>
@@ -378,8 +418,8 @@ export default function AddItemPage() {
       </div>
 
       <div style={styles.scrollArea}>
-        {/* Upload area — wrapped in <label> so clicking it opens the
-            file picker natively. No JS needed. */}
+        {/* Upload area — label wraps the input, so the picker opens
+            natively across all browsers. No JS click() needed. */}
         <label htmlFor="add-item-image-input" style={styles.imageUpload}>
           <input
             id="add-item-image-input"
@@ -389,10 +429,15 @@ export default function AddItemPage() {
             style={visuallyHiddenInput}
             onChange={handleFileChange}
           />
-          {imagePreview ? (
+          {hasPreviewImage ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imagePreview} alt="Product" style={styles.imagePreview} />
+              <img
+                src={imagePreview}
+                alt="Product"
+                style={styles.imagePreview}
+                onError={() => setPreviewError(true)}
+              />
               <button
                 type="button"
                 onClick={(e) => {
@@ -427,14 +472,37 @@ export default function AddItemPage() {
             <div style={styles.imagePlaceholder}>
               <MdAddPhotoAlternate size={48} color="#888" />
               <p style={{ fontWeight: 600, marginBottom: 2 }}>
-                Tap to add product photo
+                {previewError
+                  ? "This image can't be previewed"
+                  : 'Tap to add product photo'}
               </p>
               <p style={{ fontSize: 12, margin: 0, color: '#9A9DA6' }}>
-                Then tap ✨ AI to auto-fill
+                {previewError
+                  ? 'Try a different photo — JPG or PNG work best'
+                  : 'Then tap ✨ AI to auto-fill'}
               </p>
             </div>
           )}
         </label>
+
+        {/* Filename feedback — proves the file was picked, even if the
+            thumbnail can't render. */}
+        {imageFileName && (
+          <div style={styles.fileChip}>
+            <MdInsertDriveFile size={14} color="#0504AA" />
+            <span style={styles.fileChipText} title={imageFileName}>
+              {imageFileName}
+            </span>
+            <button
+              type="button"
+              onClick={removeImage}
+              style={styles.fileChipRemove}
+              aria-label="Remove file"
+            >
+              <MdClose size={14} color="#64748B" />
+            </button>
+          </div>
+        )}
 
         <h3 style={styles.sectionTitle}>Image Style</h3>
         <div style={styles.styleRow}>
@@ -612,8 +680,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   scrollArea: { flex: 1, overflowY: 'auto', padding: '16px' },
   imageUpload: {
-    // `position: relative` so the AI/remove buttons can be absolutely
-    // positioned inside. `display: block` so the label fills width.
     position: 'relative',
     display: 'block',
     width: '100%',
@@ -623,9 +689,14 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #ccc',
     cursor: 'pointer',
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  imagePreview: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  },
   aiScanBtn: {
     position: 'absolute',
     bottom: 12,
@@ -667,6 +738,38 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 16,
     textAlign: 'center',
   },
+
+  // ✅ Filename chip
+  fileChip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 12px',
+    marginBottom: 16,
+    backgroundColor: '#EEF0FF',
+    border: '1px solid #C7CCFF',
+    borderRadius: 10,
+  },
+  fileChipText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: '#0504AA',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  fileChipRemove: {
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 4,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   sectionTitle: { fontSize: 15, fontWeight: 600, marginBottom: 8, color: '#1A1A1A' },
   styleRow: { display: 'flex', gap: 8, marginBottom: 8 },
   styleButton: {
