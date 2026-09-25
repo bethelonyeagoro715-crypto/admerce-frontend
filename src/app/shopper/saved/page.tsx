@@ -27,6 +27,7 @@ import {
   MdStorefront,
   MdLocationOn,
   MdInventory2,
+  MdCalendarToday,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -78,14 +79,23 @@ interface WalletOrder {
 }
 
 interface ServiceBooking {
+  booking_id?: string;
   service_id?: string;
   service_title?: string;
+  service_image_url?: string;
+  service_duration?: number;
   title?: string;
-  status?: string;
-  booking_id?: string;
+  provider_id?: string;
+  provider_name?: string;
+  provider_image_url?: string;
+  provider_avatar?: string;
+  customer_id?: string;
+  customer_name?: string;
+  customer_avatar?: string;
   amount?: number | string;
-  created_at?: string;
+  status?: string;
   scheduled_for?: string;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -146,6 +156,20 @@ function fmtDate(iso: string | undefined | null): string {
   }
 }
 
+function fmtDateTime(iso: string | undefined | null): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso ?? '—';
+  }
+}
+
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -189,6 +213,7 @@ function formatRemaining(expiresMs: number, nowMs: number): string {
   return remHrs > 0 ? `in ${days}d ${remHrs}h` : `in ${days}d`;
 }
 
+// Order status → chip
 function statusMeta(status?: string): {
   label: string;
   bg: string;
@@ -199,7 +224,7 @@ function statusMeta(status?: string): {
     case 'locked':
       return { label: 'Reserved', bg: '#EEF0FF', fg: '#0504AA', border: '#C7CCFF' };
     case 'accepted':
-      return { label: 'Store accepted', bg: '#F3E8FF', fg: '#7E22CE', border: '#D8B4FE' };
+      return { label: 'Holding for pickup', bg: '#F3E8FF', fg: '#7E22CE', border: '#D8B4FE' };
     case 'picked_up':
       return { label: 'Picked up', bg: '#ECFDF5', fg: '#065F46', border: '#A7F3D0' };
     case 'dispatched':
@@ -220,7 +245,35 @@ function statusMeta(status?: string): {
   }
 }
 
-// Truncate an address string for display in a tight row.
+// Booking status → chip. Deliberately distinct palette so a shopper
+// glancing at the tab doesn't confuse bookings with reservations.
+function bookingStatusMeta(status?: string): {
+  label: string;
+  bg: string;
+  fg: string;
+  border: string;
+} {
+  switch ((status || '').toLowerCase()) {
+    case 'locked':
+      return { label: 'Booked', bg: '#EEF0FF', fg: '#0504AA', border: '#C7CCFF' };
+    case 'accepted':
+      return { label: 'Provider confirmed', bg: '#F3E8FF', fg: '#7E22CE', border: '#D8B4FE' };
+    case 'completed':
+      return { label: 'Completed', bg: '#ECFDF5', fg: '#065F46', border: '#A7F3D0' };
+    case 'cancelled':
+      return { label: 'Cancelled', bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1' };
+    case 'declined':
+      return { label: 'Declined', bg: '#FEF2F2', fg: '#991B1B', border: '#FECACA' };
+    default:
+      return {
+        label: status ? status : 'Unknown',
+        bg: '#F1F5F9',
+        fg: '#475569',
+        border: '#CBD5E1',
+      };
+  }
+}
+
 function shortAddress(addr?: string | null): string {
   if (!addr) return '';
   const s = String(addr).trim();
@@ -255,7 +308,7 @@ function SavedPageContent() {
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
 
-  // Heartbeat for live countdowns.
+  // Live countdown heartbeat.
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 30_000);
@@ -307,37 +360,27 @@ function SavedPageContent() {
     if (savedResult.status === 'fulfilled') {
       const raw = savedResult.value;
       setSavedItems(Array.isArray(raw) ? (raw as SavedListing[]) : []);
-    } else {
-      setSavedItems([]);
-    }
+    } else setSavedItems([]);
 
     if (wantedResult.status === 'fulfilled') {
       const raw = wantedResult.value;
       setWantedAlerts(Array.isArray(raw) ? (raw as WantedAlert[]) : []);
-    } else {
-      setWantedAlerts([]);
-    }
+    } else setWantedAlerts([]);
 
     if (reservationsResult.status === 'fulfilled') {
       const raw = reservationsResult.value;
       setReservations(Array.isArray(raw) ? (raw as WalletOrder[]) : []);
-    } else {
-      setReservations([]);
-    }
+    } else setReservations([]);
 
     if (deliveriesResult.status === 'fulfilled') {
       const raw = deliveriesResult.value;
       setDeliveries(Array.isArray(raw) ? (raw as WalletOrder[]) : []);
-    } else {
-      setDeliveries([]);
-    }
+    } else setDeliveries([]);
 
     if (bookingsResult.status === 'fulfilled') {
       const raw = bookingsResult.value;
       setBookings(Array.isArray(raw) ? (raw as ServiceBooking[]) : []);
-    } else {
-      setBookings([]);
-    }
+    } else setBookings([]);
 
     if (basketResult.status === 'fulfilled') {
       const raw = basketResult.value as BasketResponse | null;
@@ -352,9 +395,7 @@ function SavedPageContent() {
     if (historyResult.status === 'fulfilled') {
       const raw = historyResult.value;
       setHistory(Array.isArray(raw) ? (raw as WalletOrder[]) : []);
-    } else {
-      setHistory([]);
-    }
+    } else setHistory([]);
 
     const allFailed = results.every((r) => r.status === 'rejected');
     if (allFailed) {
@@ -386,8 +427,6 @@ function SavedPageContent() {
   const openReservation = (order: WalletOrder) => {
     router.push(`/reservation-confirmed?order_id=${order.order_id}`);
   };
-
-  const openDelivery = (order: WalletOrder) => openReservation(order);
 
   const openBooking = (booking: ServiceBooking) => {
     if (booking.booking_id) {
@@ -536,15 +575,31 @@ function SavedPageContent() {
         'title',
         'status',
         'booking_id',
+        'provider_name',
+        'customer_name',
       ]),
     [bookings, q],
   );
   const filteredHistory = useMemo(
-    () => applyFilter(history, ['order_id', 'store_name', 'status']),
+    () =>
+      applyFilter(history, [
+        'order_id',
+        'store_name',
+        'status',
+        'listing_title',
+      ]),
     [history, q],
   );
+  const filteredBasket = useMemo(
+    () =>
+      applyFilter(basketItems as unknown as Record<string, unknown>[], [
+        'title',
+        'store_name',
+      ]) as unknown as BasketItem[],
+    [basketItems, q],
+  );
 
-  // ─── Shared order card ─────────────────────────────────────────
+  // ─── Shared order card (Reservations, Deliveries, History) ─────
   const renderOrderCard = (order: WalletOrder, opts: { showExpiry: boolean }) => {
     const storeImage = resolveImageUrl(order.store_image_url);
     const itemTitle = (order.listing_title as string) || '';
@@ -576,7 +631,6 @@ function SavedPageContent() {
         role="button"
         tabIndex={0}
       >
-        {/* Top row: store image + store + item + amount */}
         <div style={styles.resTopRow}>
           <div style={styles.resThumb}>
             {storeImage ? (
@@ -625,7 +679,6 @@ function SavedPageContent() {
           <div style={styles.resAmount}>{fmtNaira(order.total_amount)}</div>
         </div>
 
-        {/* Bottom row: chip + countdown */}
         <div style={styles.resBottomRow}>
           <span
             style={{
@@ -667,6 +720,81 @@ function SavedPageContent() {
             <span>Expiring soon — pick up before it&apos;s cancelled</span>
           </div>
         )}
+      </div>
+    );
+  };
+
+  // ─── Booking card ──────────────────────────────────────────────
+  const renderBookingCard = (booking: ServiceBooking) => {
+    const providerImage = resolveImageUrl(
+      booking.provider_image_url || booking.provider_avatar,
+    );
+    const serviceImage = resolveImageUrl(booking.service_image_url);
+    const thumb = providerImage || serviceImage;
+    const title = booking.service_title || booking.title || 'Service booking';
+    const meta = bookingStatusMeta(booking.status);
+    const scheduled = booking.scheduled_for
+      ? fmtDateTime(booking.scheduled_for)
+      : null;
+    const created = booking.created_at ? fmtDate(booking.created_at) : '';
+
+    return (
+      <div
+        key={booking.booking_id || booking.service_id}
+        style={styles.resCard}
+        onClick={() => openBooking(booking)}
+        role="button"
+        tabIndex={0}
+      >
+        <div style={styles.resTopRow}>
+          <div style={styles.resThumb}>
+            {thumb ? (
+              <img src={thumb} alt="" loading="lazy" style={styles.resThumbImg} />
+            ) : (
+              <MdBuild size={22} color="#94A3B8" />
+            )}
+          </div>
+
+          <div style={styles.resInfo}>
+            <div style={styles.resStoreName} title={title}>
+              {title}
+            </div>
+
+            {booking.provider_name ? (
+              <div style={styles.resItemLine}>
+                <MdStorefront size={12} color="#64748B" />
+                <span style={styles.resItemText}>{booking.provider_name}</span>
+              </div>
+            ) : null}
+
+            {scheduled ? (
+              <div style={styles.resItemLine}>
+                <MdCalendarToday size={12} color="#64748B" />
+                <span style={styles.resItemText}>{scheduled}</span>
+              </div>
+            ) : null}
+          </div>
+
+          <div style={styles.resAmount}>{fmtNaira(booking.amount)}</div>
+        </div>
+
+        <div style={styles.resBottomRow}>
+          <span
+            style={{
+              ...styles.resChip,
+              backgroundColor: meta.bg,
+              color: meta.fg,
+              borderColor: meta.border,
+            }}
+          >
+            {meta.label}
+          </span>
+
+          <span style={styles.resCountdown}>
+            <MdAccessTime size={13} />
+            <span>{created ? `Booked ${created}` : 'View booking'}</span>
+          </span>
+        </div>
       </div>
     );
   };
@@ -815,7 +943,6 @@ function SavedPageContent() {
         />
       );
     }
-
     const sorted = [...filteredReservations].sort((a, b) => {
       const ta = parseAsUtc(a.expires_at);
       const tb = parseAsUtc(b.expires_at);
@@ -824,7 +951,6 @@ function SavedPageContent() {
       if (Number.isNaN(tb)) return -1;
       return ta - tb;
     });
-
     return (
       <div style={styles.list}>
         {sorted.map((order) => renderOrderCard(order, { showExpiry: true }))}
@@ -845,7 +971,6 @@ function SavedPageContent() {
         />
       );
     }
-
     const sorted = [...filteredDeliveries].sort((a, b) => {
       const ta = parseAsUtc(a.created_at);
       const tb = parseAsUtc(b.created_at);
@@ -854,7 +979,6 @@ function SavedPageContent() {
       if (Number.isNaN(tb)) return -1;
       return tb - ta;
     });
-
     return (
       <div style={styles.list}>
         {sorted.map((order) => renderOrderCard(order, { showExpiry: false }))}
@@ -871,68 +995,78 @@ function SavedPageContent() {
         />
       );
     }
+    const sorted = [...filteredBookings].sort((a, b) => {
+      const ta = parseAsUtc(a.created_at);
+      const tb = parseAsUtc(b.created_at);
+      if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+      if (Number.isNaN(ta)) return 1;
+      if (Number.isNaN(tb)) return -1;
+      return tb - ta;
+    });
     return (
       <div style={styles.list}>
-        {filteredBookings.map((booking, i) => (
-          <div
-            key={booking.booking_id || i}
-            style={styles.card}
-            onClick={() => openBooking(booking)}
-            role="button"
-            tabIndex={0}
-          >
-            <MdBuild size={20} color="#0504AA" style={{ marginRight: 8 }} />
-            <div style={styles.cardContent}>
-              <div style={styles.cardTitle}>
-                {booking.service_title || booking.title || 'Booking'}
-              </div>
-              <div style={styles.cardSubtitle}>
-                Status: {booking.status || '—'} ·{' '}
-                {fmtDate(booking.created_at)}
-              </div>
-            </div>
-            <MdChevronRight size={16} color="#999" />
-          </div>
-        ))}
+        {sorted.map((booking) => renderBookingCard(booking))}
       </div>
     );
   };
 
   const renderBasketTab = () => {
-    if (basketItems.length === 0) {
+    if (filteredBasket.length === 0) {
       return (
         <EmptyState
           icon={<MdShoppingBasket size={44} color="#C7D2FE" />}
-          text="Basket is empty."
+          text={q ? `No basket items match "${query}"` : 'Basket is empty.'}
         />
       );
     }
     return (
       <div style={styles.list}>
-        {basketItems.map((item, i) => (
-          <div
-            key={item.id || item.listing_id || i}
-            style={styles.card}
-            onClick={() => router.push(`/item-detail/${item.listing_id}`)}
-            role="button"
-            tabIndex={0}
-          >
-            <MdShoppingBasket
-              size={20}
-              color="#0504AA"
-              style={{ marginRight: 8 }}
-            />
-            <div style={styles.cardContent}>
-              <div style={styles.cardTitle}>
-                {item.title || 'Item'} × {item.quantity ?? 1}
-              </div>
-              <div style={styles.cardSubtitle}>
-                {fmtNaira(Number(item.price || 0) * (item.quantity ?? 1))}
+        {filteredBasket.map((item, i) => {
+          const image = resolveImageUrl(item.image_url);
+          const lineTotal = Number(item.price || 0) * (item.quantity ?? 1);
+          return (
+            <div
+              key={item.id || item.listing_id || i}
+              style={styles.resCard}
+              onClick={() => router.push(`/item-detail/${item.listing_id}`)}
+              role="button"
+              tabIndex={0}
+            >
+              <div style={styles.resTopRow}>
+                <div style={styles.resThumb}>
+                  {image ? (
+                    <img
+                      src={image}
+                      alt=""
+                      loading="lazy"
+                      style={styles.resThumbImg}
+                    />
+                  ) : (
+                    <MdImage size={22} color="#94A3B8" />
+                  )}
+                </div>
+                <div style={styles.resInfo}>
+                  <div style={styles.resStoreName} title={item.title || 'Item'}>
+                    {item.title || 'Item'}
+                  </div>
+                  {item.store_name ? (
+                    <div style={styles.resItemLine}>
+                      <MdStorefront size={12} color="#64748B" />
+                      <span style={styles.resItemText}>{item.store_name}</span>
+                    </div>
+                  ) : null}
+                  <div style={styles.resItemLine}>
+                    <MdInventory2 size={12} color="#64748B" />
+                    <span style={styles.resItemText}>
+                      Qty {item.quantity ?? 1}
+                    </span>
+                  </div>
+                </div>
+                <div style={styles.resAmount}>{fmtNaira(lineTotal)}</div>
               </div>
             </div>
-            <MdChevronRight size={16} color="#999" />
-          </div>
-        ))}
+          );
+        })}
 
         <div style={styles.basketFooter}>
           <div style={styles.basketTotalRow}>
@@ -959,45 +1093,17 @@ function SavedPageContent() {
         />
       );
     }
+    const sorted = [...filteredHistory].sort((a, b) => {
+      const ta = parseAsUtc(a.created_at);
+      const tb = parseAsUtc(b.created_at);
+      if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+      if (Number.isNaN(ta)) return 1;
+      if (Number.isNaN(tb)) return -1;
+      return tb - ta;
+    });
     return (
       <div style={styles.list}>
-        {filteredHistory.map((order, i) => {
-          const isReturnedOrExpired =
-            order.status === 'returned' || order.status === 'expired';
-          return (
-            <div
-              key={order.order_id || i}
-              style={styles.card}
-              onClick={() => openReceipt(order)}
-              role="button"
-              tabIndex={0}
-            >
-              {isReturnedOrExpired ? (
-                <MdCancel
-                  size={20}
-                  color="#FF0000"
-                  style={{ marginRight: 8 }}
-                />
-              ) : (
-                <MdCheckCircle
-                  size={20}
-                  color="#00AA00"
-                  style={{ marginRight: 8 }}
-                />
-              )}
-              <div style={styles.cardContent}>
-                <div style={styles.cardTitle}>
-                  Order #{shortId(order.order_id)}
-                </div>
-                <div style={styles.cardSubtitle}>
-                  {fmtNaira(order.total_amount)} · {order.status || '—'} ·{' '}
-                  {fmtDate(order.created_at)}
-                </div>
-              </div>
-              <MdChevronRight size={16} color="#999" />
-            </div>
-          );
-        })}
+        {sorted.map((order) => renderOrderCard(order, { showExpiry: false }))}
       </div>
     );
   };
@@ -1086,7 +1192,6 @@ function SavedPageContent() {
         )}
       </div>
 
-      {/* Create wanted alert sheet */}
       {showCreateWanted && (
         <div
           style={styles.modalOverlay}
@@ -1369,7 +1474,7 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
   },
 
-  // ── Rich reservation card
+  // ── Rich card (Reservations, Deliveries, Bookings, Basket, History)
   resCard: {
     padding: 14,
     marginBottom: 10,
