@@ -12,7 +12,6 @@ import {
   MdTrendingUp,
   MdTrendingDown,
   MdHistory,
-  MdCreditCard,
   MdArrowOutward,
   MdAccountBalanceWallet,
   MdVisibility,
@@ -22,6 +21,12 @@ import {
   MdShield,
   MdWarning,
   MdErrorOutline,
+  MdLock,
+  MdAccessTime,
+  MdEventNote,
+  MdBuild,
+  MdChevronRight,
+  MdMailOutline,
 } from 'react-icons/md';
 
 // ─── API response shapes ────────────────────────────────────────────
@@ -34,6 +39,29 @@ interface RawTransaction {
   description?: string;
   created_at?: string;
 }
+interface RawEscrow {
+  order_id: string;
+  status?: string;
+  total_amount?: number | string;
+  expires_at?: string;
+  created_at?: string;
+  listing_title?: string;
+  store_name?: string;
+  [key: string]: unknown;
+}
+interface RawBooking {
+  booking_id?: string;
+  service_id?: string;
+  service_title?: string;
+  title?: string;
+  provider_name?: string;
+  customer_name?: string;
+  status?: string;
+  amount?: number | string;
+  scheduled_for?: string;
+  created_at?: string;
+  [key: string]: unknown;
+}
 
 // ─── Domain types ────────────────────────────────────────────────────
 interface Transaction {
@@ -44,26 +72,46 @@ interface Transaction {
   date: string;
 }
 
-type FilterKind = 'all' | 'in' | 'out';
+interface InFlightItem {
+  id: string;
+  kind: 'reservation' | 'booking';
+  title: string;
+  subtitle: string;
+  amount: number;
+  expiresAt?: string;
+  status: string;
+  routeTo: string;
+}
 
 // ─── Fetch state + reducer ───────────────────────────────────────────
 interface WalletState {
   balance: number;
   email: string;
   transactions: Transaction[];
+  escrows: RawEscrow[];
+  bookings: RawBooking[];
   loading: boolean;
   errored: boolean;
 }
 
 type WalletAction =
   | { type: 'FETCH_START' }
-  | { type: 'FETCH_SUCCESS'; balance: number; email: string; transactions: Transaction[] }
+  | {
+      type: 'FETCH_SUCCESS';
+      balance: number;
+      email: string;
+      transactions: Transaction[];
+      escrows: RawEscrow[];
+      bookings: RawBooking[];
+    }
   | { type: 'FETCH_ERROR' };
 
 const initialState: WalletState = {
   balance: 0,
   email: '',
   transactions: [],
+  escrows: [],
+  bookings: [],
   loading: true,
   errored: false,
 };
@@ -79,6 +127,8 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
         balance: action.balance,
         email: action.email,
         transactions: action.transactions,
+        escrows: action.escrows,
+        bookings: action.bookings,
       };
     case 'FETCH_ERROR':
       return { ...state, loading: false, errored: true };
@@ -90,7 +140,7 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
 // ─── Constants ───────────────────────────────────────────────────────
 const PRESET_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
 const MIN_TOPUP = 100;
-const MAX_TOPUP = 100_000_000; // ₦100M hard cap
+const MAX_TOPUP = 100_000_000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 const fmt = (v: number) =>
@@ -102,8 +152,6 @@ const fmt = (v: number) =>
 const fmtShort = (v: number) =>
   '₦' + Math.round(v).toLocaleString('en-NG');
 
-// Naive-UTC safe: backend sends datetime.utcnow() strings without Z.
-// Append Z when no timezone marker is present.
 function parseAsUtc(iso?: string | null): number {
   if (!iso) return NaN;
   const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
@@ -137,8 +185,6 @@ function normalizeTransactions(raw: unknown): Transaction[] {
   }));
 }
 
-// Format a raw digit string with thousands separators. Used by the
-// custom-amount input so users see "10,000" as they type.
 function formatAmountInput(raw: string): string {
   const digits = raw.replace(/[^\d]/g, '');
   if (!digits) return '';
@@ -148,50 +194,6 @@ function formatAmountInput(raw: string): string {
   return n.toLocaleString('en-NG');
 }
 
-// Group transactions into Today / Yesterday / This week / Earlier.
-function groupByDate(
-  txns: Transaction[],
-): { label: string; items: Transaction[] }[] {
-  const now = new Date();
-  const todayStart = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  ).getTime();
-  const yesterdayStart = todayStart - 86_400_000;
-  const weekStart = todayStart - 6 * 86_400_000;
-
-  const buckets: Record<string, Transaction[]> = {
-    Today: [],
-    Yesterday: [],
-    'This week': [],
-    Earlier: [],
-  };
-
-  for (const t of txns) {
-    const ts = parseAsUtc(t.date);
-    if (Number.isNaN(ts)) {
-      buckets['Earlier'].push(t);
-      continue;
-    }
-    const dayStart = new Date(
-      new Date(ts).getFullYear(),
-      new Date(ts).getMonth(),
-      new Date(ts).getDate(),
-    ).getTime();
-
-    if (dayStart >= todayStart) buckets['Today'].push(t);
-    else if (dayStart >= yesterdayStart) buckets['Yesterday'].push(t);
-    else if (dayStart >= weekStart) buckets['This week'].push(t);
-    else buckets['Earlier'].push(t);
-  }
-
-  return Object.entries(buckets)
-    .filter(([, items]) => items.length > 0)
-    .map(([label, items]) => ({ label, items }));
-}
-
-// Relative time for "Updated Xs ago". Ticks from a timestamp.
 function relativeFrom(ms: number, nowMs: number): string {
   const secs = Math.max(0, Math.floor((nowMs - ms) / 1000));
   if (secs < 5) return 'just now';
@@ -203,6 +205,21 @@ function relativeFrom(ms: number, nowMs: number): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+function formatTimeRemaining(expiresMs: number, nowMs: number): string {
+  if (!Number.isFinite(expiresMs)) return '';
+  const ms = expiresMs - nowMs;
+  if (ms <= 0) return 'Expired';
+  const totalSecs = Math.floor(ms / 1000);
+  if (totalSecs < 60) return `${totalSecs}s left`;
+  const totalMins = Math.floor(totalSecs / 60);
+  if (totalMins < 60) return `${totalMins}m left`;
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hrs < 24) return mins > 0 ? `${hrs}h ${mins}m left` : `${hrs}h left`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ${hrs % 24}h left`;
+}
+
 // ─── Component ───────────────────────────────────────────────────────
 export default function WalletPage() {
   useAuthGuard();
@@ -210,7 +227,7 @@ export default function WalletPage() {
   const router = useRouter();
 
   const [state, dispatch] = useReducer(walletReducer, initialState);
-  const { balance, email, transactions, loading, errored } = state;
+  const { balance, email, transactions, escrows, bookings, loading, errored } = state;
 
   const [refreshing, setRefreshing] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
@@ -218,47 +235,46 @@ export default function WalletPage() {
   const [amountTouched, setAmountTouched] = useState(false);
   const [paying, setPaying] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
-  const [filter, setFilter] = useState<FilterKind>('all');
   const [copied, setCopied] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number>(() => Date.now());
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
 
-  // Ticker for the "Updated Xs ago" pill — refresh every 5s.
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 5000);
     return () => clearInterval(id);
   }, []);
 
   // ── Data ────────────────────────────────────────────────────────
-  const loadData = useCallback(
-    async (showSpinner = true) => {
-      if (showSpinner) dispatch({ type: 'FETCH_START' });
-      try {
-        const [balData, txnData, profileData] = await Promise.all([
+  const loadData = useCallback(async (showSpinner = true) => {
+    if (showSpinner) dispatch({ type: 'FETCH_START' });
+    try {
+      const [balData, txnData, profileData, escrowData, bookingData] =
+        await Promise.all([
           api.getWalletBalance() as Promise<BalanceResponse>,
           api.getWalletTransactions(30, 0).catch(() => [] as unknown[]),
           api.getMyProfile() as Promise<ProfileResponse>,
+          api.getMyEscrows().catch(() => [] as unknown[]),
+          api.getServiceBookings().catch(() => [] as unknown[]),
         ]);
-        dispatch({
-          type: 'FETCH_SUCCESS',
-          balance: balData.balance ?? 0,
-          email: profileData.email ?? '',
-          transactions: normalizeTransactions(txnData),
-        });
-        setUpdatedAt(Date.now());
-      } catch {
-        dispatch({ type: 'FETCH_ERROR' });
-      }
-    },
-    [],
-  );
+      dispatch({
+        type: 'FETCH_SUCCESS',
+        balance: balData.balance ?? 0,
+        email: profileData.email ?? '',
+        transactions: normalizeTransactions(txnData),
+        escrows: Array.isArray(escrowData) ? (escrowData as RawEscrow[]) : [],
+        bookings: Array.isArray(bookingData) ? (bookingData as RawBooking[]) : [],
+      });
+      setUpdatedAt(Date.now());
+    } catch {
+      dispatch({ type: 'FETCH_ERROR' });
+    }
+  }, []);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
+    const id = setTimeout(() => {
       void loadData();
     }, 0);
-
-    return () => window.clearTimeout(timeoutId);
+    return () => clearTimeout(id);
   }, [loadData]);
 
   const handleRefresh = async () => {
@@ -302,7 +318,7 @@ export default function WalletPage() {
     setAmountTouched(false);
   };
 
-  // ── Balance copy ────────────────────────────────────────────────
+  // ── Copy balance ────────────────────────────────────────────────
   const handleCopyBalance = async () => {
     if (!balance) return;
     try {
@@ -310,34 +326,11 @@ export default function WalletPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      // Silent — some browsers block clipboard without HTTPS. Not worth a toast.
+      // Silent — non-critical
     }
   };
 
   // ── Derived ─────────────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    if (filter === 'in') return transactions.filter((t) => t.type === 'credit');
-    if (filter === 'out') return transactions.filter((t) => t.type === 'debit');
-    return transactions;
-  }, [transactions, filter]);
-
-  const grouped = useMemo(() => groupByDate(filtered), [filtered]);
-
-  const totalIn = useMemo(
-    () =>
-      transactions
-        .filter((t) => t.type === 'credit')
-        .reduce((s, t) => s + t.amount, 0),
-    [transactions],
-  );
-  const totalOut = useMemo(
-    () =>
-      transactions
-        .filter((t) => t.type === 'debit')
-        .reduce((s, t) => s + t.amount, 0),
-    [transactions],
-  );
-
   const weekIn = useMemo(() => {
     const cutoff = nowTick - 7 * 86_400_000;
     return transactions
@@ -348,6 +341,80 @@ export default function WalletPage() {
       })
       .reduce((s, t) => s + t.amount, 0);
   }, [transactions, nowTick]);
+
+  const weekOut = useMemo(() => {
+    const cutoff = nowTick - 7 * 86_400_000;
+    return transactions
+      .filter((t) => t.type === 'debit')
+      .filter((t) => {
+        const ts = parseAsUtc(t.date);
+        return !Number.isNaN(ts) && ts >= cutoff;
+      })
+      .reduce((s, t) => s + t.amount, 0);
+  }, [transactions, nowTick]);
+
+  // Active escrows: any status that means money is still held.
+  const activeEscrows = useMemo(
+    () =>
+      escrows.filter((e) => {
+        const s = (e.status || '').toLowerCase();
+        return s === 'locked' || s === 'accepted' || s === 'dispatched';
+      }),
+    [escrows],
+  );
+
+  // Active bookings: money held in escrow until completion or cancellation.
+  const activeBookings = useMemo(
+    () =>
+      bookings.filter((b) => {
+        const s = (b.status || '').toLowerCase();
+        return s === 'locked' || s === 'accepted';
+      }),
+    [bookings],
+  );
+
+  const inFlightItems = useMemo<InFlightItem[]>(() => {
+    const items: InFlightItem[] = [];
+
+    for (const e of activeEscrows) {
+      const expiresMs = parseAsUtc(e.expires_at);
+      items.push({
+        id: `esc-${e.order_id}`,
+        kind: 'reservation',
+        title: (e.listing_title as string) || 'Reservation',
+        subtitle: (e.store_name as string) || 'Store',
+        amount: Number(e.total_amount ?? 0),
+        expiresAt: Number.isFinite(expiresMs) ? e.expires_at : undefined,
+        status: (e.status || '').toLowerCase(),
+        routeTo: `/reservation-confirmed?order_id=${e.order_id}`,
+      });
+    }
+
+    for (const b of activeBookings) {
+      const title =
+        (b.service_title as string) || (b.title as string) || 'Service booking';
+      const subtitle = (b.provider_name as string) || 'Provider';
+      const routeId = b.booking_id || b.service_id || '';
+      items.push({
+        id: `bk-${routeId}`,
+        kind: 'booking',
+        title,
+        subtitle,
+        amount: Number(b.amount ?? 0),
+        status: (b.status || '').toLowerCase(),
+        routeTo: b.booking_id
+          ? `/booking-confirmed?booking_id=${b.booking_id}`
+          : `/service-detail/${b.service_id}`,
+      });
+    }
+
+    return items;
+  }, [activeEscrows, activeBookings]);
+
+  const inFlightTotal = useMemo(
+    () => inFlightItems.reduce((s, i) => s + i.amount, 0),
+    [inFlightItems],
+  );
 
   const isEmptyWallet = transactions.length === 0 && balance === 0;
 
@@ -363,24 +430,37 @@ export default function WalletPage() {
             <div style={{ width: 38 }} />
           </div>
           <div style={{ padding: '8px 0 26px' }}>
-            <div style={skel.block({ width: 140, height: 10, opacity: 0.25 })} />
             <div
               style={{
-                ...skel.block({ width: 220, height: 42, opacity: 0.35 }),
+                width: 140,
+                height: 10,
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.18)',
+              }}
+            />
+            <div
+              style={{
+                width: 220,
+                height: 42,
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.24)',
                 marginTop: 18,
               }}
             />
             <div
               style={{
-                ...skel.block({ width: 160, height: 12, opacity: 0.2 }),
-                marginTop: 14,
+                width: 180,
+                height: 12,
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.14)',
+                marginTop: 16,
               }}
             />
           </div>
         </div>
         <div style={css.sheet}>
           <div style={css.actionsGrid}>
-            {[0, 1, 2, 3].map((i) => (
+            {[0, 1, 2].map((i) => (
               <div key={i} style={{ ...css.actionBtn, pointerEvents: 'none' }}>
                 <div
                   style={{
@@ -405,7 +485,7 @@ export default function WalletPage() {
           <div style={css.divider} />
           <div
             style={{
-              width: 140,
+              width: 100,
               height: 12,
               borderRadius: 4,
               background: '#EEF2FF',
@@ -413,59 +493,18 @@ export default function WalletPage() {
               animation: 'skelPulse 1.4s ease-in-out infinite',
             }}
           />
-          {[0, 1, 2, 3, 4].map((i) => (
+          {[0, 1].map((i) => (
             <div
               key={i}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '14px 14px 14px 12px',
-                borderRadius: 12,
+                height: 74,
+                borderRadius: 14,
                 backgroundColor: '#FAFBFF',
                 border: '1px solid #EEF2FF',
                 marginBottom: 10,
+                animation: 'skelPulse 1.4s ease-in-out infinite',
               }}
-            >
-              <div
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 10,
-                  background: '#EEF2FF',
-                  animation: 'skelPulse 1.4s ease-in-out infinite',
-                }}
-              />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div
-                  style={{
-                    width: '60%',
-                    height: 12,
-                    borderRadius: 4,
-                    background: '#EEF2FF',
-                    animation: 'skelPulse 1.4s ease-in-out infinite',
-                  }}
-                />
-                <div
-                  style={{
-                    width: '35%',
-                    height: 9,
-                    borderRadius: 4,
-                    background: '#EEF2FF',
-                    animation: 'skelPulse 1.4s ease-in-out infinite',
-                  }}
-                />
-              </div>
-              <div
-                style={{
-                  width: 60,
-                  height: 12,
-                  borderRadius: 4,
-                  background: '#EEF2FF',
-                  animation: 'skelPulse 1.4s ease-in-out infinite',
-                }}
-              />
-            </div>
+            />
           ))}
         </div>
       </div>
@@ -530,13 +569,11 @@ export default function WalletPage() {
           </button>
         </div>
 
-        {/* Wallet status chip */}
         <div style={css.statusChip}>
           <MdShield size={12} color="rgba(255,255,255,0.9)" />
           <span style={css.statusChipText}>Admerce Wallet · Secured</span>
         </div>
 
-        {/* Balance block — tappable to copy */}
         <button
           type="button"
           onClick={handleCopyBalance}
@@ -581,14 +618,21 @@ export default function WalletPage() {
           </span>
         </button>
 
-        {/* Insight line */}
+        {/* This-week in/out — non-interactive, informational */}
         <div style={css.insight}>
-          {weekIn > 0 ? (
+          {weekIn > 0 || weekOut > 0 ? (
             <>
               <MdTrendingUp size={14} color="#4CDE80" />
               <span style={css.insightText}>
-                <strong>+{fmtShort(weekIn)}</strong> received this week
+                <strong>+{fmtShort(weekIn)}</strong> in
               </span>
+              <span style={css.insightDivider}>·</span>
+              <MdTrendingDown size={14} color="#FF9C9C" />
+              <span style={css.insightText}>
+                <strong>−{fmtShort(weekOut)}</strong> out
+              </span>
+              <span style={css.insightDivider}>·</span>
+              <span style={css.insightTextMuted}>this week</span>
             </>
           ) : (
             <span style={css.insightTextMuted}>
@@ -596,45 +640,11 @@ export default function WalletPage() {
             </span>
           )}
         </div>
-
-        {/* In / Out filter pills */}
-        <div style={css.filterRow}>
-          <button
-            type="button"
-            onClick={() => setFilter(filter === 'in' ? 'all' : 'in')}
-            style={{
-              ...css.filterPill,
-              ...(filter === 'in' ? css.filterPillActive : null),
-            }}
-          >
-            <MdTrendingUp
-              size={13}
-              color={filter === 'in' ? '#0504AA' : '#4CDE80'}
-            />
-            <span style={css.filterLabel}>In</span>
-            <span style={css.filterValue}>{fmtShort(totalIn)}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter(filter === 'out' ? 'all' : 'out')}
-            style={{
-              ...css.filterPill,
-              ...(filter === 'out' ? css.filterPillActive : null),
-            }}
-          >
-            <MdTrendingDown
-              size={13}
-              color={filter === 'out' ? '#0504AA' : '#FF9C9C'}
-            />
-            <span style={css.filterLabel}>Out</span>
-            <span style={css.filterValue}>{fmtShort(totalOut)}</span>
-          </button>
-        </div>
       </div>
 
       {/* ═══ SHEET ═══════════════════════════════════════════════ */}
       <div style={css.sheet}>
-        {/* Actions grid */}
+        {/* Actions — 3 buttons now, Cards removed */}
         <div style={css.actionsGrid}>
           <ActionButton
             icon={<MdAdd size={20} color="#fff" />}
@@ -654,41 +664,44 @@ export default function WalletPage() {
             bg="linear-gradient(135deg, #0891B2 0%, #06B6D4 100%)"
             onClick={() => router.push('/shopper/wallet/history')}
           />
-          <ActionButton
-            icon={<MdCreditCard size={20} color="#fff" />}
-            label="Cards"
-            bg="linear-gradient(135deg, #059669 0%, #10B981 100%)"
-            onClick={() => router.push('/shopper/wallet/cards')}
-          />
         </div>
 
         <div style={css.divider} />
 
-        {/* Transactions header */}
+        {/* Setup nudge — only if email missing */}
+        {!hasEmail && (
+          <button
+            type="button"
+            onClick={() => router.push('/shopper/profile')}
+            style={css.nudge}
+          >
+            <div style={css.nudgeIcon}>
+              <MdMailOutline size={18} color="#B45309" />
+            </div>
+            <div style={css.nudgeBody}>
+              <span style={css.nudgeTitle}>Add an email to unlock top-ups</span>
+              <span style={css.nudgeSub}>
+                Paystack needs it for receipts and payment confirmation.
+              </span>
+            </div>
+            <MdChevronRight size={20} color="#B45309" />
+          </button>
+        )}
+
+        {/* In-flight section */}
         <div style={css.secHead}>
           <span style={css.secTitle}>
-            {filter === 'all'
-              ? 'Recent transactions'
-              : filter === 'in'
-                ? 'Money in'
-                : 'Money out'}
+            In flight{inFlightItems.length > 0 ? ` · ${fmtShort(inFlightTotal)}` : ''}
           </span>
-          {filter !== 'all' ? (
-            <button style={css.seeAll} onClick={() => setFilter('all')}>
-              Clear filter
-            </button>
-          ) : (
-            <button
-              style={css.seeAll}
-              onClick={() => router.push('/shopper/wallet/history')}
-            >
-              See all →
-            </button>
-          )}
+          <button
+            style={css.seeAll}
+            onClick={() => router.push('/shopper/wallet/history')}
+          >
+            See all →
+          </button>
         </div>
 
-        {/* Transactions list */}
-        {grouped.length === 0 ? (
+        {inFlightItems.length === 0 ? (
           isEmptyWallet ? (
             <div style={css.empty}>
               <div style={css.emptyHalo}>
@@ -709,80 +722,74 @@ export default function WalletPage() {
               </button>
             </div>
           ) : (
-            <div style={css.empty}>
+            <div style={css.emptyMuted}>
               <div style={css.emptyHaloMuted}>
-                {filter === 'in' ? (
-                  <MdTrendingUp size={30} color="#94A3B8" />
-                ) : filter === 'out' ? (
-                  <MdTrendingDown size={30} color="#94A3B8" />
-                ) : (
-                  <MdAccountBalanceWallet size={30} color="#94A3B8" />
-                )}
+                <MdCheck size={26} color="#16A34A" />
               </div>
-              <h3 style={css.emptyTitle}>
-                {filter === 'in'
-                  ? 'No money in yet'
-                  : filter === 'out'
-                    ? 'No money out yet'
-                    : 'No transactions yet'}
-              </h3>
+              <h3 style={css.emptyTitle}>Nothing in flight</h3>
               <p style={css.emptyBody}>
-                {filter === 'in'
-                  ? 'Top-ups and refunds will appear here.'
-                  : filter === 'out'
-                    ? 'Payments and withdrawals will appear here.'
-                    : 'Your history will appear here once you start using the wallet.'}
+                Your wallet is settled. Reservations and bookings you make will
+                show up here while their funds are held.
               </p>
             </div>
           )
         ) : (
-          <div style={css.txnList}>
-            {grouped.map((group) => (
-              <div key={group.label} style={css.txnGroup}>
-                <div style={css.txnGroupLabel}>{group.label}</div>
-                {group.items.map((txn, i) => {
-                  const isCredit = txn.type === 'credit';
-                  return (
-                    <div
-                      key={txn.id}
-                      style={{
-                        ...css.txnCard,
-                        borderLeft: `3px solid ${
-                          isCredit ? '#4CDE80' : '#FF5757'
-                        }`,
-                        animationDelay: `${i * 30}ms`,
-                      }}
-                    >
-                      <div
-                        style={{
-                          ...css.txnIconWrap,
-                          backgroundColor: isCredit ? '#DCFCE7' : '#FEE2E2',
-                        }}
-                      >
-                        {isCredit ? (
-                          <MdTrendingUp size={18} color="#16A34A" />
-                        ) : (
-                          <MdTrendingDown size={18} color="#DC2626" />
-                        )}
-                      </div>
-                      <div style={css.txnMeta}>
-                        <span style={css.txnDesc}>{txn.description}</span>
-                        <span style={css.txnDate}>{fmtDate(txn.date)}</span>
-                      </div>
-                      <span
-                        style={{
-                          ...css.txnAmt,
-                          color: isCredit ? '#16A34A' : '#DC2626',
-                        }}
-                      >
-                        {isCredit ? '+' : '−'}
-                        {fmt(txn.amount)}
+          <div style={css.inFlightList}>
+            {inFlightItems.map((item) => {
+              const expiresMs = item.expiresAt
+                ? parseAsUtc(item.expiresAt)
+                : NaN;
+              const expiryText = Number.isFinite(expiresMs)
+                ? formatTimeRemaining(expiresMs, nowTick)
+                : null;
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => router.push(item.routeTo)}
+                  style={css.inFlightCard}
+                >
+                  <div style={css.inFlightIconWrap}>
+                    {item.kind === 'reservation' ? (
+                      <MdEventNote size={18} color="#0504AA" />
+                    ) : (
+                      <MdBuild size={18} color="#7C3AED" />
+                    )}
+                  </div>
+                  <div style={css.inFlightMeta}>
+                    <span style={css.inFlightTitle} title={item.title}>
+                      {item.title}
+                    </span>
+                    <span style={css.inFlightSub} title={item.subtitle}>
+                      {item.subtitle} · {item.status === 'accepted'
+                        ? 'Held for pickup'
+                        : item.status === 'dispatched'
+                          ? 'Out for delivery'
+                          : 'Awaiting confirmation'}
+                    </span>
+                  </div>
+                  <div style={css.inFlightRight}>
+                    <span style={css.inFlightAmount}>
+                      {fmtShort(item.amount)}
+                    </span>
+                    {expiryText && (
+                      <span style={css.inFlightExpiry}>
+                        <MdAccessTime size={11} />
+                        <span>{expiryText}</span>
                       </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+
+            <p style={css.inFlightNote}>
+              <MdLock size={12} color="#64748B" />
+              <span>
+                Held funds release to the store when you confirm pickup.
+              </span>
+            </p>
           </div>
         )}
       </div>
@@ -798,7 +805,6 @@ export default function WalletPage() {
               Choose a preset or enter a custom amount
             </p>
 
-            {/* Email warning — blocks payment */}
             {!hasEmail && (
               <div style={css.warnBox}>
                 <MdWarning size={16} color="#B45309" />
@@ -809,7 +815,6 @@ export default function WalletPage() {
               </div>
             )}
 
-            {/* Presets */}
             <div style={css.presets}>
               {PRESET_AMOUNTS.map((p) => {
                 const active = amount === p.toLocaleString('en-NG');
@@ -833,7 +838,6 @@ export default function WalletPage() {
               })}
             </div>
 
-            {/* Custom amount input with live comma formatting */}
             <div
               style={{
                 ...css.inputWrap,
@@ -859,7 +863,6 @@ export default function WalletPage() {
               />
             </div>
 
-            {/* Inline validation */}
             {hasEmail && belowMin && (
               <div style={css.inlineError}>
                 <MdWarning size={13} color="#B91C1C" />
@@ -938,15 +941,6 @@ const KF = `
   .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 `;
 
-// ─── Skeleton helper ──────────────────────────────────────────────────
-const skel = {
-  block: (extra: React.CSSProperties): React.CSSProperties => ({
-    background: 'rgba(255,255,255,0.18)',
-    borderRadius: 6,
-    ...extra,
-  }),
-};
-
 // ─── Styles ───────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
@@ -1003,7 +997,6 @@ const css: Record<string, React.CSSProperties> = {
     letterSpacing: 0.3,
   },
 
-  // ── Status chip
   statusChip: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -1022,7 +1015,6 @@ const css: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
 
-  // ── Balance block
   balanceBlock: {
     display: 'flex',
     flexDirection: 'column',
@@ -1033,7 +1025,7 @@ const css: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     textAlign: 'left',
     fontFamily: 'inherit',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   balLabel: {
     fontSize: 11.5,
@@ -1073,60 +1065,30 @@ const css: Record<string, React.CSSProperties> = {
     letterSpacing: 0.2,
   },
 
-  // ── Insight
   insight: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 6,
-    padding: '6px 12px',
+    padding: '7px 14px',
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.08)',
-    marginBottom: 16,
     maxWidth: '100%',
+    flexWrap: 'wrap',
   },
   insightText: {
     fontSize: 12,
     fontWeight: 600,
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(255,255,255,0.9)',
   },
   insightTextMuted: {
     fontSize: 12,
     fontWeight: 500,
     color: 'rgba(255,255,255,0.55)',
   },
-
-  // ── Filter pills
-  filterRow: {
-    display: 'flex',
-    gap: 8,
-  },
-  filterPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '8px 14px',
-    borderRadius: 999,
-    border: '1px solid rgba(255,255,255,0.18)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'background-color 0.15s, border-color 0.15s',
-  },
-  filterPillActive: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
-  },
-  filterLabel: {
+  insightDivider: {
     fontSize: 12,
-    fontWeight: 700,
-    color: '#fff',
-    letterSpacing: 0.3,
-  },
-  filterValue: {
-    fontSize: 12,
-    fontWeight: 700,
-    color: 'rgba(255,255,255,0.75)',
-    marginLeft: 2,
+    color: 'rgba(255,255,255,0.35)',
+    margin: '0 2px',
   },
 
   // ── Sheet
@@ -1140,7 +1102,6 @@ const css: Record<string, React.CSSProperties> = {
     position: 'relative',
   },
 
-  // ── Actions
   actionsGrid: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1180,12 +1141,57 @@ const css: Record<string, React.CSSProperties> = {
     margin: '20px 0',
   },
 
+  // ── Nudge
+  nudge: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '14px 14px',
+    borderRadius: 14,
+    backgroundColor: '#FEF3C7',
+    border: '1px solid #FDE68A',
+    marginBottom: 20,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    width: '100%',
+  },
+  nudgeIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#FFF7E6',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  nudgeBody: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    minWidth: 0,
+  },
+  nudgeTitle: {
+    fontSize: 13.5,
+    fontWeight: 700,
+    color: '#92400E',
+    letterSpacing: -0.1,
+  },
+  nudgeSub: {
+    fontSize: 12,
+    color: '#92400E',
+    opacity: 0.75,
+    lineHeight: 1.4,
+  },
+
   // ── Section header
   secHead: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   secTitle: {
     fontSize: 15,
@@ -1204,70 +1210,92 @@ const css: Record<string, React.CSSProperties> = {
     padding: 4,
   },
 
-  // ── Transaction groups
-  txnList: {
+  // ── In-flight list
+  inFlightList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 20,
+    gap: 10,
   },
-  txnGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
-  txnGroupLabel: {
-    fontSize: 11,
-    fontWeight: 800,
-    color: '#94A3B8',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 2,
-    paddingLeft: 4,
-  },
-  txnCard: {
+  inFlightCard: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
-    padding: '14px 14px 14px 12px',
+    padding: '14px 14px 14px 14px',
     backgroundColor: '#FAFBFF',
-    borderRadius: 12,
-    animation: 'fadeUp 0.3s ease both',
     border: '1px solid #EEF2FF',
+    borderRadius: 14,
+    cursor: 'pointer',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+    width: '100%',
+    transition: 'border-color 0.15s, background-color 0.15s',
   },
-  txnIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+  inFlightIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#EEF0FF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  txnMeta: {
+  inFlightMeta: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
     gap: 3,
     minWidth: 0,
   },
-  txnDesc: {
+  inFlightTitle: {
     fontSize: 14,
-    fontWeight: 600,
-    color: '#0F172A',
+    fontWeight: 700,
+    color: '#0B0B1A',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    letterSpacing: -0.1,
+  },
+  inFlightSub: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  txnDate: {
-    fontSize: 11,
-    color: '#94A3B8',
-    letterSpacing: 0.3,
+  inFlightRight: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 3,
+    flexShrink: 0,
   },
-  txnAmt: {
+  inFlightAmount: {
     fontSize: 14,
-    fontWeight: 700,
-    whiteSpace: 'nowrap',
+    fontWeight: 800,
+    color: '#0504AA',
     fontVariantNumeric: 'tabular-nums',
+    letterSpacing: -0.2,
+  },
+  inFlightExpiry: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#94A3B8',
+  },
+  inFlightNote: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 11.5,
+    color: '#64748B',
+    marginTop: 12,
+    marginBottom: 0,
+    paddingLeft: 4,
+    lineHeight: 1.4,
   },
 
   // ── Empty states
@@ -1277,6 +1305,14 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '40px 20px',
+    textAlign: 'center',
+  },
+  emptyMuted: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '32px 20px',
     textAlign: 'center',
   },
   emptyHalo: {
@@ -1291,10 +1327,11 @@ const css: Record<string, React.CSSProperties> = {
     boxShadow: '0 10px 28px rgba(5,4,170,0.08)',
   },
   emptyHaloMuted: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    background: '#F1F5F9',
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    background: '#ECFDF5',
+    border: '1px solid #A7F3D0',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
