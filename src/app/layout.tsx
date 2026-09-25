@@ -6,14 +6,22 @@ import NotificationInitializer from "../components/NotificationInitializer";
 export const metadata: Metadata = {
   title: "Admerce",
   description: "Buy, sell, and provide services locally",
-  manifest: "/manifest.webmanifest", // ✅ Added — links the PWA manifest
+  manifest: "/manifest.json", // ✅ fixed — was "/manifest.webmanifest" which 404s
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent", // ✅ matches brand-blue status bar
     title: "Admerce",
   },
   formatDetection: {
     telephone: false,
+  },
+  icons: {
+    icon: [
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+    ],
   },
 };
 
