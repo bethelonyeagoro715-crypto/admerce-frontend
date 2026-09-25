@@ -946,6 +946,13 @@ class ApiService {
     return res.data;
   }
 
+  // ✅ NEW — cancel a service booking. Sender (customer or provider) must own it.
+  // Expected to mirror the confirm/complete pattern: POST /services/bookings/{id}/cancel
+  public async cancelServiceBooking(bookingId: string): Promise<JsonObject> {
+    const res = await this.axios.post(`/services/bookings/${bookingId}/cancel`);
+    return res.data;
+  }
+
   public async getServiceBookings(): Promise<JsonArray> {
     const res = await this.axios.get('/services/bookings');
     return res.data;

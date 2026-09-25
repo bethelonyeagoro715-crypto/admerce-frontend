@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   MdCheckCircle,
   MdCalendarToday,
@@ -16,8 +16,9 @@ import {
   MdChat,
   MdContentCopy,
   MdCheck,
-  MdLocationOn,
   MdAccessTime,
+  MdWarning,
+  MdClose,
 } from 'react-icons/md';
 import api from '../../services/api';
 
@@ -66,7 +67,7 @@ function shortId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 8)}…` : id;
 }
 
-// ─── Ambient background elements ──────────────────────────────────
+// ─── Ambient background ───────────────────────────────────────────
 function AmbientBackground() {
   return (
     <div style={styles.bgWrap} aria-hidden>
@@ -77,7 +78,7 @@ function AmbientBackground() {
   );
 }
 
-// ─── Confetti burst — CSS-only, no dependency ─────────────────────
+// ─── Confetti ─────────────────────────────────────────────────────
 function ConfettiBurst({ active }: { active: boolean }) {
   if (!active) return null;
   const pieces = Array.from({ length: 16 });
@@ -88,11 +89,7 @@ function ConfettiBurst({ active }: { active: boolean }) {
         const distance = 90 + (i % 4) * 22;
         const rotate = (i * 47) % 360;
         const color =
-          i % 3 === 0
-            ? '#0504AA'
-            : i % 3 === 1
-              ? '#3D3BFF'
-              : '#16A34A';
+          i % 3 === 0 ? '#0504AA' : i % 3 === 1 ? '#3D3BFF' : '#16A34A';
         return (
           <span
             key={i}
@@ -100,7 +97,6 @@ function ConfettiBurst({ active }: { active: boolean }) {
             style={{
               backgroundColor: color,
               animationDelay: `${i * 18}ms`,
-              // CSS variables consumed by the keyframe
               ['--bc-angle' as never]: `${angle}deg`,
               ['--bc-distance' as never]: `${distance}px`,
               ['--bc-rotate' as never]: `${rotate}deg`,
@@ -110,6 +106,43 @@ function ConfettiBurst({ active }: { active: boolean }) {
       })}
     </div>
   );
+}
+
+// ─── Detail row ───────────────────────────────────────────────────
+function DetailRow({
+  icon,
+  label,
+  value,
+  emphasis,
+  valueColor,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  emphasis?: boolean;
+  valueColor?: string;
+}) {
+  return (
+    <div style={styles.row}>
+      <div style={styles.rowLabel}>
+        {icon}
+        <span style={styles.rowLabelText}>{label}</span>
+      </div>
+      <span
+        style={{
+          ...styles.rowValue,
+          ...(emphasis ? styles.rowValueEmphasis : null),
+          ...(valueColor ? { color: valueColor } : null),
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div style={styles.divider} />;
 }
 
 // ─── Page content ─────────────────────────────────────────────────
@@ -141,6 +174,8 @@ function BookingConfirmedContent() {
   const [justCompleted, setJustCompleted] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -150,14 +185,13 @@ function BookingConfirmedContent() {
     };
   }, []);
 
-  // ── Toasts ──
   const pushToast = useCallback((kind: Toast['kind'], text: string) => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, kind, text }].slice(-3));
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
 
-  // ── Enrichment (unchanged logic) ──
+  // ── Enrichment ──
   useEffect(() => {
     if (!bookingIdFromUrl) return;
 
@@ -278,6 +312,39 @@ function BookingConfirmedContent() {
     }
   }, [bookingId, goToReceipt, pushToast]);
 
+  // ── Cancel booking ──
+  const handleCancel = useCallback(async () => {
+    if (!bookingId) {
+      pushToast('error', 'Booking ID missing');
+      return;
+    }
+    setCancelling(true);
+    try {
+      await api.cancelServiceBooking(bookingId);
+
+      if (!isMountedRef.current) return;
+
+      setShowCancelModal(false);
+      pushToast('success', 'Booking cancelled');
+
+      // Brief pause so the toast is visible before we leave the page.
+      setTimeout(() => {
+        router.replace('/shopper/saved?tab=Bookings');
+      }, 500);
+    } catch (err: unknown) {
+      const error = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      const detail =
+        error?.response?.data?.detail ||
+        error?.message ||
+        'Could not cancel this booking';
+      pushToast('error', detail);
+      setCancelling(false);
+    }
+  }, [bookingId, router, pushToast]);
+
   const handleCopyId = useCallback(async () => {
     if (!bookingId) return;
     try {
@@ -300,6 +367,7 @@ function BookingConfirmedContent() {
   const formattedDate = fmtDateTime(scheduledFor);
   const amountNumber = Number(amount) || 0;
   const isCompleted = status === 'completed' || justCompleted;
+  const isCancelled = status === 'cancelled';
 
   // ── Loading ──
   if (enriching) {
@@ -336,7 +404,7 @@ function BookingConfirmedContent() {
     <main style={styles.container}>
       <AmbientBackground />
 
-      {/* Toast stack */}
+      {/* Toasts */}
       <div style={styles.toastStack}>
         {toasts.map((t) => (
           <button
@@ -353,7 +421,7 @@ function BookingConfirmedContent() {
       </div>
 
       <div style={styles.content}>
-        {/* ─── Hero ─────────────────────────────────────────── */}
+        {/* ── Hero ── */}
         <div style={styles.heroWrap}>
           <ConfettiBurst active={justCompleted} />
 
@@ -366,7 +434,11 @@ function BookingConfirmedContent() {
             transition={{ type: 'spring', stiffness: 280, damping: 22 }}
             style={{
               ...styles.heroIconRing,
-              borderColor: isCompleted ? 'rgba(22,163,74,0.28)' : 'rgba(217,119,6,0.28)',
+              borderColor: isCompleted
+                ? 'rgba(22,163,74,0.28)'
+                : isCancelled
+                  ? 'rgba(148,163,184,0.28)'
+                  : 'rgba(217,119,6,0.28)',
             }}
           >
             <div
@@ -374,14 +446,20 @@ function BookingConfirmedContent() {
                 ...styles.heroIcon,
                 background: isCompleted
                   ? 'linear-gradient(135deg, #16A34A 0%, #22C55E 100%)'
-                  : 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
+                  : isCancelled
+                    ? 'linear-gradient(135deg, #64748B 0%, #94A3B8 100%)'
+                    : 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
                 boxShadow: isCompleted
                   ? '0 14px 32px rgba(22,163,74,0.32), inset 0 1px 0 rgba(255,255,255,0.28)'
-                  : '0 14px 32px rgba(217,119,6,0.32), inset 0 1px 0 rgba(255,255,255,0.28)',
+                  : isCancelled
+                    ? '0 14px 32px rgba(100,116,139,0.28), inset 0 1px 0 rgba(255,255,255,0.28)'
+                    : '0 14px 32px rgba(217,119,6,0.32), inset 0 1px 0 rgba(255,255,255,0.28)',
               }}
             >
               {isCompleted ? (
                 <MdCheckCircle size={40} color="#fff" />
+              ) : isCancelled ? (
+                <MdClose size={40} color="#fff" />
               ) : (
                 <MdAccessTime size={40} color="#fff" />
               )}
@@ -389,14 +467,18 @@ function BookingConfirmedContent() {
           </motion.div>
         </div>
 
-        {/* ─── Headline ─────────────────────────────────────── */}
+        {/* ── Headline ── */}
         <motion.h1
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.4 }}
           style={styles.heading}
         >
-          {isCompleted ? 'Booking Successful' : 'Booking Confirmed'}
+          {isCompleted
+            ? 'Booking Successful'
+            : isCancelled
+              ? 'Booking Cancelled'
+              : 'Booking Confirmed'}
         </motion.h1>
 
         <motion.p
@@ -407,39 +489,57 @@ function BookingConfirmedContent() {
         >
           {justCompleted
             ? 'Redirecting to your receipt…'
-            : isCompleted
-              ? 'Funds have been released to the provider.'
-              : 'Your service has been booked successfully.'}
+            : isCancelled
+              ? 'Your payment has been released back to your wallet.'
+              : isCompleted
+                ? 'Funds have been released to the provider.'
+                : 'Your service has been booked successfully.'}
         </motion.p>
 
-        {/* ─── Status chip ──────────────────────────────────── */}
+        {/* ── Status chip ── */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.32 }}
           style={{
             ...styles.statusChip,
-            backgroundColor: isCompleted ? '#ECFDF5' : '#FEF3C7',
-            borderColor: isCompleted ? '#A7F3D0' : '#FDE68A',
+            backgroundColor: isCompleted
+              ? '#ECFDF5'
+              : isCancelled
+                ? '#F1F5F9'
+                : '#FEF3C7',
+            borderColor: isCompleted
+              ? '#A7F3D0'
+              : isCancelled
+                ? '#CBD5E1'
+                : '#FDE68A',
           }}
         >
           <span
             className="bc-status-dot"
             style={{
-              backgroundColor: isCompleted ? '#16A34A' : '#D97706',
+              backgroundColor: isCompleted
+                ? '#16A34A'
+                : isCancelled
+                  ? '#64748B'
+                  : '#D97706',
             }}
           />
           <span
             style={{
               ...styles.statusChipText,
-              color: isCompleted ? '#065F46' : '#92400E',
+              color: isCompleted
+                ? '#065F46'
+                : isCancelled
+                  ? '#334155'
+                  : '#92400E',
             }}
           >
-            {isCompleted ? 'Completed' : 'Confirmed'}
+            {isCompleted ? 'Completed' : isCancelled ? 'Cancelled' : 'Confirmed'}
           </span>
         </motion.div>
 
-        {/* ─── Detail card ──────────────────────────────────── */}
+        {/* ── Detail card ── */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -505,7 +605,7 @@ function BookingConfirmedContent() {
           )}
         </motion.div>
 
-        {/* ─── Actions ──────────────────────────────────────── */}
+        {/* ── Actions ── */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -513,7 +613,6 @@ function BookingConfirmedContent() {
           style={styles.actions}
         >
           {isCompleted ? (
-            // ── Completed: View Receipt is primary ──
             bookingId && (
               <button
                 onClick={handleViewReceipt}
@@ -524,8 +623,16 @@ function BookingConfirmedContent() {
                 <span>View Receipt</span>
               </button>
             )
+          ) : isCancelled ? (
+            <button
+              onClick={() => router.push('/shopper/home')}
+              className="bc-primary"
+              style={styles.primaryBtn}
+            >
+              <MdHome size={20} color="#fff" />
+              <span>Back to Home</span>
+            </button>
           ) : (
-            // ── Confirmed: Job Done is primary ──
             bookingId && (
               <button
                 onClick={handleJobDone}
@@ -553,27 +660,29 @@ function BookingConfirmedContent() {
           )}
 
           {/* Secondary actions */}
-          <div style={styles.secondaryRow}>
-            <button
-              onClick={() => router.push('/shopper/saved?tab=Bookings')}
-              className="bc-secondary"
-              style={styles.secondaryBtn}
-            >
-              <MdListAlt size={18} color="#0504AA" />
-              <span>All bookings</span>
-            </button>
-            <button
-              onClick={() => router.push('/shopper/home')}
-              className="bc-secondary"
-              style={styles.secondaryBtn}
-            >
-              <MdHome size={18} color="#0504AA" />
-              <span>Home</span>
-            </button>
-          </div>
+          {!isCancelled && (
+            <div style={styles.secondaryRow}>
+              <button
+                onClick={() => router.push('/shopper/saved?tab=Bookings')}
+                className="bc-secondary"
+                style={styles.secondaryBtn}
+              >
+                <MdListAlt size={18} color="#0504AA" />
+                <span>All bookings</span>
+              </button>
+              <button
+                onClick={() => router.push('/shopper/home')}
+                className="bc-secondary"
+                style={styles.secondaryBtn}
+              >
+                <MdHome size={18} color="#0504AA" />
+                <span>Home</span>
+              </button>
+            </div>
+          )}
 
-          {/* Message link — tertiary */}
-          {bookingId && (
+          {/* Message link — not shown for cancelled */}
+          {bookingId && !isCancelled && (
             <button
               onClick={() => router.push('/shopper/inbox')}
               className="bc-ghost"
@@ -585,52 +694,102 @@ function BookingConfirmedContent() {
           )}
         </motion.div>
 
-        {/* Faint footer note */}
+        {/* Footer note */}
         <p style={styles.footerNote}>
-          {isCompleted
-            ? 'Your receipt is the official record of this transaction.'
-            : 'You\u2019ll be able to view the receipt once the job is complete.'}
+          {isCancelled
+            ? 'You can book again anytime from this provider\u2019s page.'
+            : isCompleted
+              ? 'Your receipt is the official record of this transaction.'
+              : 'You\u2019ll be able to view the receipt once the job is complete.'}
         </p>
+
+        {/* Cancel link — tertiary, only on the confirmed state */}
+        {!isCompleted && !isCancelled && bookingId && (
+          <button
+            onClick={() => setShowCancelModal(true)}
+            className="bc-cancel-link"
+            style={styles.cancelLink}
+            aria-label="Cancel booking"
+          >
+            Cancel this booking
+          </button>
+        )}
       </div>
+
+      {/* ── Cancel confirmation modal ── */}
+      <AnimatePresence>
+        {showCancelModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            style={styles.modalOverlay}
+            onClick={() => {
+              if (!cancelling) setShowCancelModal(false);
+            }}
+          >
+            <motion.div
+              initial={{ y: 24, opacity: 0, scale: 0.97 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 16, opacity: 0, scale: 0.98 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+              style={styles.modalCard}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={styles.modalIconWrap}>
+                <MdWarning size={26} color="#B45309" />
+              </div>
+
+              <h3 style={styles.modalTitle}>Cancel this booking?</h3>
+              <p style={styles.modalBody}>
+                {providerName} will be notified. Your payment of{' '}
+                <strong style={styles.modalAmount}>
+                  ₦{amountNumber.toLocaleString('en-NG')}
+                </strong>{' '}
+                will be released back to your wallet. This can&rsquo;t be
+                undone.
+              </p>
+
+              <div style={styles.modalActions}>
+                <button
+                  onClick={() => setShowCancelModal(false)}
+                  disabled={cancelling}
+                  className="bc-modal-keep"
+                  style={{
+                    ...styles.modalKeepBtn,
+                    opacity: cancelling ? 0.5 : 1,
+                    cursor: cancelling ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Keep booking
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                  className="bc-modal-cancel"
+                  style={{
+                    ...styles.modalCancelBtn,
+                    opacity: cancelling ? 0.7 : 1,
+                    cursor: cancelling ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {cancelling ? (
+                    <>
+                      <span style={styles.inlineSpinnerDark} />
+                      <span>Cancelling…</span>
+                    </>
+                  ) : (
+                    <span>Yes, cancel</span>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
-}
-
-// ─── Card row ─────────────────────────────────────────────────────
-function DetailRow({
-  icon,
-  label,
-  value,
-  emphasis,
-  valueColor,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  emphasis?: boolean;
-  valueColor?: string;
-}) {
-  return (
-    <div style={styles.row}>
-      <div style={styles.rowLabel}>
-        {icon}
-        <span style={styles.rowLabelText}>{label}</span>
-      </div>
-      <span
-        style={{
-          ...styles.rowValue,
-          ...(emphasis ? styles.rowValueEmphasis : null),
-          ...(valueColor ? { color: valueColor } : null),
-        }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function Divider() {
-  return <div style={styles.divider} />;
 }
 
 export default function BookingConfirmedPage() {
@@ -671,8 +830,6 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     maxWidth: 440,
   },
-
-  // ── Background
   bgWrap: {
     position: 'absolute',
     inset: 0,
@@ -697,6 +854,16 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     animation: 'bcSpin 0.7s linear infinite',
     marginRight: 2,
+  },
+  inlineSpinnerDark: {
+    display: 'inline-block',
+    width: 14,
+    height: 14,
+    border: '2px solid rgba(153,27,27,0.3)',
+    borderTopColor: '#991B1B',
+    borderRadius: '50%',
+    animation: 'bcSpin 0.7s linear infinite',
+    marginRight: 8,
   },
 
   // ── Hero
@@ -728,8 +895,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // ── Confetti
   confettiWrap: {
     position: 'absolute',
     top: '50%',
@@ -823,8 +988,6 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#F1F3F9',
     margin: 0,
   },
-
-  // ── Booking ID
   idRow: {
     display: 'flex',
     alignItems: 'center',
@@ -932,6 +1095,21 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
 
+  // ── Cancel link (tertiary)
+  cancelLink: {
+    marginTop: 20,
+    background: 'none',
+    border: 'none',
+    color: '#94A3B8',
+    fontSize: 12.5,
+    fontWeight: 600,
+    textDecoration: 'underline',
+    textUnderlineOffset: 3,
+    cursor: 'pointer',
+    padding: '6px 10px',
+    fontFamily: 'inherit',
+  },
+
   // ── Error
   errorHalo: {
     width: 84,
@@ -960,8 +1138,6 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 320,
     lineHeight: 1.5,
   },
-
-  // ── Footer note
   footerNote: {
     fontSize: 12,
     color: '#9AA1B2',
@@ -969,6 +1145,93 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 24,
     maxWidth: 320,
     lineHeight: 1.55,
+  },
+
+  // ── Cancel modal
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(15,23,42,0.48)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    zIndex: 400,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: '28px 24px 22px',
+    boxShadow: '0 24px 60px rgba(15,23,42,0.24)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    textAlign: 'center',
+  },
+  modalIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
+    backgroundColor: '#FEF3C7',
+    border: '1px solid #FDE68A',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontWeight: 800,
+    color: '#0F0F1A',
+    margin: 0,
+    letterSpacing: -0.3,
+  },
+  modalBody: {
+    fontSize: 14,
+    color: '#5A6178',
+    marginTop: 10,
+    lineHeight: 1.55,
+    maxWidth: 300,
+  },
+  modalAmount: {
+    color: '#0F0F1A',
+    fontWeight: 800,
+  },
+  modalActions: {
+    display: 'flex',
+    gap: 10,
+    marginTop: 22,
+    width: '100%',
+  },
+  modalKeepBtn: {
+    flex: 1,
+    padding: '13px 16px',
+    borderRadius: 14,
+    border: 'none',
+    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    fontFamily: 'inherit',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '13px 16px',
+    borderRadius: 14,
+    border: '1.5px solid #FCA5A5',
+    backgroundColor: '#FFFFFF',
+    color: '#991B1B',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
 
   // ── Toasts
@@ -1007,9 +1270,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-// ─── Global keyframes (single injection) ──────────────────────────
+// ─── Global CSS (single injection) ────────────────────────────────
 const GLOBAL_CSS = `
-  /* Background dot grid */
   .bc-grid {
     position: absolute;
     inset: 0;
@@ -1020,7 +1282,6 @@ const GLOBAL_CSS = `
     -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 40%, transparent 100%);
   }
 
-  /* Soft brand orbs */
   .bc-orb {
     position: absolute;
     border-radius: 50%;
@@ -1053,7 +1314,6 @@ const GLOBAL_CSS = `
     50%      { transform: translate(-20px, 22px) scale(0.96); }
   }
 
-  /* Pulse rings around hero */
   .bc-pulse {
     position: absolute;
     top: 50%;
@@ -1074,7 +1334,6 @@ const GLOBAL_CSS = `
     100% { transform: scale(1.8); opacity: 0; }
   }
 
-  /* Status dot pulse */
   .bc-status-dot {
     display: inline-block;
     width: 8px;
@@ -1087,7 +1346,6 @@ const GLOBAL_CSS = `
     50%      { transform: scale(1.35); opacity: 0.55; }
   }
 
-  /* Confetti particle */
   .bc-confetti {
     position: absolute;
     top: 0;
@@ -1100,13 +1358,10 @@ const GLOBAL_CSS = `
   }
   @keyframes bcConfettiOut {
     0% {
-      transform:
-        translate(-50%, -50%) rotate(0deg) scale(0.4);
+      transform: translate(-50%, -50%) rotate(0deg) scale(0.4);
       opacity: 0;
     }
-    20% {
-      opacity: 1;
-    }
+    20% { opacity: 1; }
     100% {
       transform:
         translate(
@@ -1119,7 +1374,6 @@ const GLOBAL_CSS = `
     }
   }
 
-  /* Primary button hover */
   .bc-primary:hover {
     transform: translateY(-2px);
     box-shadow: 0 14px 30px rgba(5,4,170,0.32);
@@ -1127,34 +1381,36 @@ const GLOBAL_CSS = `
   .bc-primary:active {
     transform: translateY(0) scale(0.985);
   }
-
-  /* Secondary button hover */
-  .bc-secondary:hover {
-    background-color: #EEF0FF;
-  }
-  .bc-secondary:active {
-    background-color: #E2E1FF;
-  }
-
-  /* Ghost button hover */
-  .bc-ghost:hover {
-    color: #0504AA;
-  }
-
-  /* Copy button hover */
+  .bc-secondary:hover { background-color: #EEF0FF; }
+  .bc-secondary:active { background-color: #E2E1FF; }
+  .bc-ghost:hover { color: #0504AA; }
   .bc-copy-btn:hover {
     background-color: #EEF0FF;
     border-color: #C7CCFF;
   }
+  .bc-cancel-link:hover {
+    color: #DC2626;
+  }
+  .bc-modal-keep:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(5,4,170,0.30);
+  }
+  .bc-modal-keep:active {
+    transform: translateY(0) scale(0.985);
+  }
+  .bc-modal-cancel:hover {
+    background-color: #FEF2F2;
+  }
+  .bc-modal-cancel:active {
+    background-color: #FEE2E2;
+  }
 
-  /* Keyframes for spinner + toast */
   @keyframes bcSpin { to { transform: rotate(360deg); } }
   @keyframes bcToastIn {
     from { opacity: 0; transform: translateY(-6px); }
     to   { opacity: 1; transform: none; }
   }
 
-  /* Respect users who prefer reduced motion */
   @media (prefers-reduced-motion: reduce) {
     .bc-orb, .bc-pulse, .bc-status-dot, .bc-confetti {
       animation: none !important;
