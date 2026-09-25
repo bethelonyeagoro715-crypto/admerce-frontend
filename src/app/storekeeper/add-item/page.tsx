@@ -92,10 +92,6 @@ export default function AddItemPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  const pickImage = () => {
-    fileInputRef.current?.click();
-  };
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -139,7 +135,6 @@ export default function AddItemPage() {
         confidence?: string;
       };
 
-      // Fill fields, but don't overwrite with empty strings.
       if (res.title) setTitle(res.title);
       if (res.description) setDescription(res.description);
       if (res.condition_hint && CONDITIONS.includes(res.condition_hint)) {
@@ -360,6 +355,21 @@ export default function AddItemPage() {
     }
   };
 
+  // Visually-hidden input style — keeps the input in the layout (so
+  // `label` clicks trigger it reliably across browsers) while making
+  // it invisible to the eye.
+  const visuallyHiddenInput: React.CSSProperties = {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: 'hidden',
+    clip: 'rect(0, 0, 0, 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
+  };
+
   return (
     <main style={styles.container}>
       <div style={styles.header}>
@@ -368,13 +378,25 @@ export default function AddItemPage() {
       </div>
 
       <div style={styles.scrollArea}>
-        <div onClick={pickImage} style={styles.imageUpload}>
+        {/* Upload area — wrapped in <label> so clicking it opens the
+            file picker natively. No JS needed. */}
+        <label htmlFor="add-item-image-input" style={styles.imageUpload}>
+          <input
+            id="add-item-image-input"
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={visuallyHiddenInput}
+            onChange={handleFileChange}
+          />
           {imagePreview ? (
-            <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={imagePreview} alt="Product" style={styles.imagePreview} />
               <button
+                type="button"
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   scanImageWithAI();
                 }}
@@ -389,7 +411,9 @@ export default function AddItemPage() {
                 )}
               </button>
               <button
+                type="button"
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   removeImage();
                 }}
@@ -398,7 +422,7 @@ export default function AddItemPage() {
               >
                 <MdClose size={18} color="#fff" />
               </button>
-            </div>
+            </>
           ) : (
             <div style={styles.imagePlaceholder}>
               <MdAddPhotoAlternate size={48} color="#888" />
@@ -410,20 +434,14 @@ export default function AddItemPage() {
               </p>
             </div>
           )}
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: 'none' }}
-          onChange={handleFileChange}
-        />
+        </label>
 
         <h3 style={styles.sectionTitle}>Image Style</h3>
         <div style={styles.styleRow}>
           {STYLES.map((style) => (
             <button
               key={style.value}
+              type="button"
               onClick={() => setSelectedStyle(style.value)}
               style={{
                 ...styles.styleButton,
@@ -440,6 +458,7 @@ export default function AddItemPage() {
         </div>
 
         <button
+          type="button"
           onClick={previewImageStyle}
           disabled={!imageFile || isAnalyzing}
           style={{
@@ -461,6 +480,7 @@ export default function AddItemPage() {
             style={styles.input}
           />
           <button
+            type="button"
             onClick={rewriteTitle}
             disabled={isRewritingTitle}
             style={styles.aiBtn}
@@ -482,6 +502,7 @@ export default function AddItemPage() {
             style={{ ...styles.input, minHeight: 80, resize: 'vertical' }}
           />
           <button
+            type="button"
             onClick={rewriteDescription}
             disabled={isRewritingDescription}
             style={styles.aiBtn}
@@ -516,6 +537,7 @@ export default function AddItemPage() {
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
+              type="button"
               onClick={() => setSelectedCategory(cat)}
               style={{
                 ...styles.categoryButton,
@@ -544,6 +566,7 @@ export default function AddItemPage() {
         </select>
 
         <button
+          type="button"
           onClick={submitListing}
           disabled={isLoading}
           style={{
@@ -589,6 +612,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   scrollArea: { flex: 1, overflowY: 'auto', padding: '16px' },
   imageUpload: {
+    // `position: relative` so the AI/remove buttons can be absolutely
+    // positioned inside. `display: block` so the label fills width.
+    position: 'relative',
+    display: 'block',
     width: '100%',
     height: 180,
     borderRadius: 16,
@@ -598,7 +625,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     marginBottom: 16,
   },
-  imagePreview: { width: '100%', height: '100%', objectFit: 'cover' },
+  imagePreview: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
   aiScanBtn: {
     position: 'absolute',
     bottom: 12,
@@ -613,6 +640,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     cursor: 'pointer',
     boxShadow: '0 4px 12px rgba(5,4,170,0.35)',
+    zIndex: 2,
   },
   removeBtn: {
     position: 'absolute',
@@ -627,6 +655,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
+    zIndex: 2,
   },
   imagePlaceholder: {
     height: '100%',
