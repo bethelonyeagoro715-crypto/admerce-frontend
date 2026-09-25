@@ -76,7 +76,17 @@ function formatTime(seconds: number): string {
   return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-// ─── Ambient background (shared visual language) ──────────────────
+// Treat a timestamp as UTC when it has no explicit timezone.
+// Backend stores datetime.utcnow() (naive UTC); FastAPI serializes it
+// without a Z suffix, so JavaScript would otherwise interpret it as
+// local time — off by the user's UTC offset.
+function parseAsUtc(iso: string | null | undefined): number {
+  if (!iso) return NaN;
+  const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
+  return new Date(hasTz ? iso : `${iso}Z`).getTime();
+}
+
+// ─── Ambient background ───────────────────────────────────────────
 function AmbientBackground() {
   return (
     <div style={styles.bgWrap} aria-hidden>
@@ -179,6 +189,7 @@ function ReservationConfirmedContent() {
     urlStoreLng ? parseFloat(urlStoreLng) : null
   );
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
 
   const [enriching, setEnriching] = useState(true);
   const [enrichError, setEnrichError] = useState<string | null>(null);
@@ -187,11 +198,10 @@ function ReservationConfirmedContent() {
   const [completing, setCompleting] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const [remaining, setRemaining] = useState<number>(0);
-  const [totalSeconds, setTotalSeconds] = useState(1);
   const [copied, setCopied] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const totalSecondsRef = useRef<number | null>(null);
+  const [totalSeconds, setTotalSeconds] = useState(1);
   const isMountedRef = useRef(true);
   const droppedOrCompletedRef = useRef(false);
 
@@ -240,6 +250,9 @@ function ReservationConfirmedContent() {
         if (raw.expires_at) {
           setExpiresAt(String(raw.expires_at));
         }
+        if (raw.created_at) {
+          setCreatedAt(String(raw.created_at));
+        }
 
         if (!urlStoreName && !raw.store_name && raw.store_id) {
           try {
@@ -271,34 +284,65 @@ function ReservationConfirmedContent() {
 
   // ── Countdown ──
   useEffect(() => {
-    const compute = () => {
-      if (expiresAt) {
-        const target = new Date(expiresAt).getTime();
-        if (!isNaN(target)) {
-          const ms = target - Date.now();
-          const secs = ms > 0 ? Math.floor(ms / 1000) : 0;
-          setRemaining(secs);
-          // Capture the highest value we see as the initial total.
-          if (totalSecondsRef.current === null || secs > totalSecondsRef.current) {
-            totalSecondsRef.current = secs;
-            setTotalSeconds(secs || 1);
+    // Work out the deadline (in absolute ms) and total duration once per
+    // mount / dependency change. Then every tick is a pure subtraction
+    // against Date.now(), so tab-throttling and clock jitter self-correct.
+    let deadlineMs: number | null = null;
+    let totalSecs: number | null = null;
+
+    if (expiresAt) {
+      const end = parseAsUtc(expiresAt);
+      if (!Number.isNaN(end)) {
+        deadlineMs = end;
+        // Prefer the real span (created → expires) for the ring progress.
+        if (createdAt) {
+          const start = parseAsUtc(createdAt);
+          if (!Number.isNaN(start) && end > start) {
+            totalSecs = Math.floor((end - start) / 1000);
           }
-          return;
+        }
+        // Fallback: use however much time was left at first observation.
+        if (totalSecs === null) {
+          totalSecs = Math.max(1, Math.floor((end - Date.now()) / 1000));
         }
       }
+    }
+
+    if (deadlineMs === null) {
+      // No usable expires_at — derive from pickup_time + created_at.
       const numeric = (pickupTime || '').replace(/\D/g, '');
       const hours = numeric ? parseInt(numeric, 10) : 3;
-      const secs = hours * 3600;
-      setRemaining(secs);
-      if (totalSecondsRef.current === null) {
-        totalSecondsRef.current = secs;
-        setTotalSeconds(secs || 1);
+      totalSecs = hours * 3600;
+
+      const start = parseAsUtc(createdAt);
+      if (!Number.isNaN(start)) {
+        deadlineMs = start + hours * 3600 * 1000;
+      } else {
+        // No created_at either — anchor to page load. Countdown resets on
+        // refresh in this branch; that's the honest best we can do without
+        // a real deadline from the backend.
+        deadlineMs = Date.now() + hours * 3600 * 1000;
       }
+    }
+
+    const totalSecondsId = setTimeout(() => {
+      setTotalSeconds(totalSecs ?? 1);
+    }, 0);
+
+    const tick = () => {
+      const secs =
+        deadlineMs !== null
+          ? Math.max(0, Math.floor((deadlineMs - Date.now()) / 1000))
+          : 0;
+      setRemaining(secs);
     };
-    compute();
-    const id = setInterval(compute, 1000);
-    return () => clearInterval(id);
-  }, [expiresAt, pickupTime]);
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => {
+      clearTimeout(totalSecondsId);
+      clearInterval(id);
+    };
+  }, [expiresAt, pickupTime, createdAt]);
 
   // ── Actions ──
   const handlePickUpComplete = async () => {
