@@ -3,59 +3,26 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
+import { alertDialog } from '../../../components/ui/dialogs';
+import DateOfBirthPicker from '../../../components/ui/DateOfBirthPicker';
+import CountryPicker from '../../../components/ui/CountryPicker';
 import {
   MdArrowBack,
   MdPersonOutline,
-  MdPublic,
   MdLocationOn,
   MdGpsFixed,
   MdCameraAlt,
   MdClear,
 } from 'react-icons/md';
 
-// ─── Data ───────────────────────────────────────────────────────────
-const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
-
-const MONTHS = [
-  { value: 1, label: 'Jan' },
-  { value: 2, label: 'Feb' },
-  { value: 3, label: 'Mar' },
-  { value: 4, label: 'Apr' },
-  { value: 5, label: 'May' },
-  { value: 6, label: 'Jun' },
-  { value: 7, label: 'Jul' },
-  { value: 8, label: 'Aug' },
-  { value: 9, label: 'Sep' },
-  { value: 10, label: 'Oct' },
-  { value: 11, label: 'Nov' },
-  { value: 12, label: 'Dec' },
-];
-
-const YEARS = Array.from({ length: new Date().getFullYear() - 1900 + 1 }, (_, i) => new Date().getFullYear() - i);
-
-const COUNTRIES = [
-  'Nigeria', 'Ghana', 'South Africa', 'Kenya', 'Egypt', 'Morocco', 'Algeria', 'Tunisia',
-  'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France',
-  'Spain', 'Italy', 'Netherlands', 'Sweden', 'Norway', 'Denmark', 'Finland',
-  'Brazil', 'Argentina', 'Mexico', 'Chile', 'Colombia', 'Peru',
-  'China', 'Japan', 'India', 'South Korea', 'Indonesia', 'Malaysia', 'Singapore',
-  'Saudi Arabia', 'United Arab Emirates', 'Qatar', 'Kuwait', 'Israel',
-  'Turkey', 'Russia', 'Ukraine', 'Poland', 'Belgium', 'Switzerland', 'Austria',
-  'New Zealand', 'Ireland', 'Portugal', 'Greece', 'Czech Republic', 'Hungary',
-  'Romania', 'Bulgaria', 'Thailand', 'Vietnam', 'Philippines', 'Pakistan',
-  'Bangladesh', 'Sri Lanka', 'Nepal', 'Ethiopia', 'Tanzania', 'Uganda',
-  'Rwanda', 'Cameroon', 'Senegal', 'Ivory Coast', 'Zimbabwe', 'Zambia',
-];
-
 export default function ServiceProviderOnboardingPersonalInfoPage() {
   const router = useRouter();
 
   const [fullName, setFullName] = useState('');
   const [city, setCity] = useState('');
-  const [selectedDay, setSelectedDay] = useState(1);
-  const [selectedMonth, setSelectedMonth] = useState(1);
-  const [selectedYear, setSelectedYear] = useState(2000);
-  const [selectedCountry, setSelectedCountry] = useState('Nigeria');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [countryCode, setCountryCode] = useState('NG');
+  const [countryName, setCountryName] = useState('Nigeria');
   const [isLoading, setIsLoading] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
 
@@ -65,11 +32,10 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto‑detect location on mount
+  // Auto-detect location on mount (parity with prior behavior)
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsDetectingLocation(true);
-      // Simulate detection – on web we default to Owerri, Imo
       setTimeout(() => {
         setCity('Owerri, Imo');
         setIsDetectingLocation(false);
@@ -91,7 +57,7 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
           setCity('Owerri, Imo');
           setIsDetectingLocation(false);
         },
-        { timeout: 10000 }
+        { timeout: 10000 },
       );
     } else {
       setCity('Owerri, Imo');
@@ -114,40 +80,65 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
     if (avatarInputRef.current) avatarInputRef.current.value = '';
   };
 
-  const validate = (): boolean => {
+  const validate = async (): Promise<boolean> => {
     if (!fullName.trim()) {
-      alert('Please enter your full name.');
+      await alertDialog({
+        title: 'Full name required',
+        body: 'Please enter your full name so we can set up your profile.',
+        kind: 'warning',
+      });
       return false;
     }
-    if (fullName.trim().split(' ').length < 2) {
-      alert('Please enter at least two names.');
+    if (fullName.trim().split(/\s+/).filter(Boolean).length < 2) {
+      await alertDialog({
+        title: 'Add your surname',
+        body: 'Please enter your first and last name — both are needed.',
+        kind: 'warning',
+      });
+      return false;
+    }
+    if (!dateOfBirth) {
+      await alertDialog({
+        title: 'Date of birth required',
+        body: 'Select your date of birth to continue.',
+        kind: 'warning',
+      });
       return false;
     }
     if (!city.trim()) {
-      alert('City is required.');
-      return false;
-    }
-    if (!selectedCountry) {
-      alert('Please select your country.');
+      await alertDialog({
+        title: 'City required',
+        body: 'Enter your city or state, or tap the location icon to detect it.',
+        kind: 'warning',
+      });
       return false;
     }
     return true;
   };
 
   const handleSubmit = async () => {
-    if (!validate()) return;
+    const ok = await validate();
+    if (!ok) return;
     setIsLoading(true);
 
     let avatarUrl: string | null = null;
 
-    // Upload avatar if selected
     if (avatarFile) {
       setIsUploadingAvatar(true);
       try {
-        const response = (await api.uploadAvatar(avatarFile)) as unknown as { avatar_url?: string };
+        const response = (await api.uploadAvatar(avatarFile)) as unknown as {
+          avatar_url?: string;
+        };
         avatarUrl = response?.avatar_url || null;
       } catch (err) {
-        alert('Failed to upload avatar: ' + (err instanceof Error ? err.message : ''));
+        await alertDialog({
+          title: "Couldn't upload your photo",
+          body:
+            err instanceof Error
+              ? err.message
+              : 'Try again, or continue without a profile picture.',
+          kind: 'danger',
+        });
         setIsUploadingAvatar(false);
         setIsLoading(false);
         return;
@@ -155,25 +146,28 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
       setIsUploadingAvatar(false);
     }
 
-    const dob = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
-
     const params = new URLSearchParams({
       fullName: fullName.trim(),
-      dateOfBirth: dob,
-      country: selectedCountry,
+      dateOfBirth,
+      country: countryName,
       city: city.trim(),
       avatarUrl: avatarUrl || '',
     });
 
     setIsLoading(false);
-    router.push(`/service-provider/onboarding/service-details?${params.toString()}`);
+    router.push(
+      `/service-provider/onboarding/service-details?${params.toString()}`,
+    );
   };
 
   return (
     <main style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
-        <button style={styles.backBtn} onClick={() => router.back()}>
+        <button
+          style={styles.backBtn}
+          onClick={() => router.back()}
+          aria-label="Back"
+        >
           <MdArrowBack size={24} color="#000" />
         </button>
         <h1 style={styles.headerTitle}>Offer Your Service</h1>
@@ -181,7 +175,6 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
       </div>
 
       <div style={styles.scrollArea}>
-        {/* Progress Indicator */}
         <div style={styles.progressRow}>
           <span style={styles.stepText}>Step 1 of 2</span>
           <div style={styles.progressBar}>
@@ -189,16 +182,20 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
           </div>
         </div>
 
-        {/* Heading */}
         <h2 style={styles.heading}>Tell us about yourself</h2>
         <p style={styles.subHeading}>
-          We will use this for your profile and to personalise your experience.
+          We&apos;ll use this for your profile and to personalise your
+          experience.
         </p>
 
         {/* Avatar */}
         <div style={styles.avatarSection}>
-          <div style={styles.avatarWrapper} onClick={() => avatarInputRef.current?.click()}>
+          <div
+            style={styles.avatarWrapper}
+            onClick={() => avatarInputRef.current?.click()}
+          >
             {avatarPreview ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={avatarPreview} alt="Avatar" style={styles.avatar} />
             ) : (
               <MdCameraAlt size={30} color="#aaa" />
@@ -216,7 +213,9 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
             )}
           </div>
           <p style={styles.avatarHint}>
-            {avatarPreview ? 'Profile picture set' : 'Tap to add profile picture'}
+            {avatarPreview
+              ? 'Profile picture set'
+              : 'Tap to add profile picture'}
           </p>
         </div>
         <input
@@ -229,80 +228,61 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
 
         {/* Full Name */}
         <div style={styles.inputWrapper}>
-          <MdPersonOutline size={20} color="#888" style={styles.inputIcon} />
+          <MdPersonOutline
+            size={20}
+            color="#888"
+            style={styles.inputIcon}
+          />
           <input
             type="text"
             placeholder="Full Name"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             style={styles.input}
+            autoComplete="name"
           />
         </div>
 
-        {/* Date of Birth */}
-        <label style={styles.label}>Date of Birth</label>
-        <div style={styles.dobRow}>
-          <select
-            value={selectedDay}
-            onChange={(e) => setSelectedDay(Number(e.target.value))}
-            style={styles.select}
-          >
-            {DAYS.map((day) => (
-              <option key={day} value={day}>
-                {String(day).padStart(2, '0')}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            style={styles.select}
-          >
-            {MONTHS.map((month) => (
-              <option key={month.value} value={month.value}>
-                {month.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            style={styles.select}
-          >
-            {YEARS.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
+        {/* Date of Birth — styled picker */}
+        <div style={{ marginBottom: 20 }}>
+          <DateOfBirthPicker
+            value={dateOfBirth}
+            onChange={setDateOfBirth}
+            label="Date of Birth"
+            required
+            minAge={18}
+            maxAge={120}
+          />
         </div>
 
-        {/* Country */}
-        <div style={styles.inputWrapper}>
-          <MdPublic size={20} color="#888" style={styles.inputIcon} />
-          <select
-            value={selectedCountry}
-            onChange={(e) => setSelectedCountry(e.target.value)}
-            style={{ ...styles.input, appearance: 'auto', paddingLeft: 36 }}
-          >
-            {COUNTRIES.map((country) => (
-              <option key={country} value={country}>
-                {country}
-              </option>
-            ))}
-          </select>
+        {/* Country — searchable modal picker */}
+        <div style={{ marginBottom: 20 }}>
+          <CountryPicker
+            value={countryCode}
+            onChange={(code, name) => {
+              setCountryCode(code);
+              setCountryName(name);
+            }}
+            label="Country"
+            required
+          />
         </div>
 
         {/* City / State */}
         <div style={styles.cityRow}>
-          <div style={styles.inputWrapper}>
-            <MdLocationOn size={20} color="#888" style={styles.inputIcon} />
+          <div style={{ ...styles.inputWrapper, flex: 1, marginBottom: 0 }}>
+            <MdLocationOn
+              size={20}
+              color="#888"
+              style={styles.inputIcon}
+            />
             <input
               type="text"
               placeholder="City / State"
               value={city}
               onChange={(e) => setCity(e.target.value)}
               style={styles.input}
+              autoComplete="address-level2"
             />
           </div>
           <button
@@ -310,6 +290,7 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
             disabled={isDetectingLocation}
             style={styles.gpsBtn}
             title="Detect current city"
+            aria-label="Detect current city"
           >
             {isDetectingLocation ? (
               <div style={styles.spinnerSmall} />
@@ -319,16 +300,20 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
           </button>
         </div>
 
-        {/* Continue Button */}
         <button
           onClick={handleSubmit}
           disabled={isLoading || isUploadingAvatar}
           style={{
             ...styles.continueBtn,
             opacity: isLoading || isUploadingAvatar ? 0.7 : 1,
+            cursor: isLoading || isUploadingAvatar ? 'not-allowed' : 'pointer',
           }}
         >
-          {isUploadingAvatar ? 'Uploading...' : isLoading ? 'Loading...' : 'Continue →'}
+          {isUploadingAvatar
+            ? 'Uploading photo…'
+            : isLoading
+              ? 'Loading…'
+              : 'Continue →'}
         </button>
       </div>
 
@@ -403,6 +388,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     color: '#888',
     marginBottom: 32,
+    marginTop: 6,
   },
   avatarSection: {
     display: 'flex',
@@ -415,7 +401,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 100,
     height: 100,
     borderRadius: '50%',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#F6F7FB',
+    border: '1.5px dashed #C7CCFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -429,21 +416,22 @@ const styles: Record<string, React.CSSProperties> = {
   },
   removeAvatar: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 20,
-    height: 20,
+    bottom: 4,
+    right: 4,
+    width: 24,
+    height: 24,
     borderRadius: '50%',
-    backgroundColor: '#FF0000',
+    backgroundColor: '#DC2626',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
+    border: '2px solid #FFFFFF',
   },
   avatarHint: {
     fontSize: 13,
     color: '#888',
-    marginTop: 8,
+    marginTop: 10,
   },
   inputWrapper: {
     position: 'relative',
@@ -454,36 +442,20 @@ const styles: Record<string, React.CSSProperties> = {
     left: 12,
     top: '50%',
     transform: 'translateY(-50%)',
+    pointerEvents: 'none',
   },
   input: {
     width: '100%',
-    padding: '12px 14px 12px 36px',
+    padding: '14px 14px 14px 40px',
     borderRadius: 12,
-    border: '1px solid #ccc',
-    fontSize: 14,
+    border: '1.5px solid #E2E8F0',
+    fontSize: 15,
     outline: 'none',
-    backgroundColor: '#fff',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: 500,
-    color: '#000',
-    marginBottom: 6,
-    display: 'block',
-  },
-  dobRow: {
-    display: 'flex',
-    gap: 6,
-    marginBottom: 20,
-  },
-  select: {
-    flex: 1,
-    padding: '10px 6px',
-    borderRadius: 12,
-    border: '1px solid #ccc',
-    fontSize: 13,
-    outline: 'none',
-    backgroundColor: '#fff',
+    backgroundColor: '#FAFAFC',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit',
+    color: '#0B0B1A',
+    transition: 'border-color 0.15s, background-color 0.15s',
   },
   cityRow: {
     display: 'flex',
@@ -492,18 +464,22 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 32,
   },
   gpsBtn: {
-    background: 'none',
-    border: 'none',
+    background: '#EEF0FF',
+    border: '1.5px solid #C7CCFF',
+    borderRadius: 12,
     cursor: 'pointer',
-    padding: 8,
+    padding: 12,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+    minWidth: 48,
+    minHeight: 48,
   },
   spinnerSmall: {
     width: 20,
     height: 20,
-    border: '2px solid #eee',
+    border: '2px solid #E0E7FF',
     borderTopColor: '#0504AA',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
@@ -516,7 +492,10 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     borderRadius: 14,
     fontSize: 16,
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    letterSpacing: -0.1,
   },
 };
