@@ -25,6 +25,8 @@ import {
   MdAccessTime,
   MdTimer,
   MdStorefront,
+  MdLocationOn,
+  MdInventory2,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -59,11 +61,19 @@ interface WalletOrder {
   created_at?: string;
   quantity?: number;
   listing_id?: string;
+  // ── Joined from `stores`
   store_name?: string;
   store_image_url?: string;
+  store_address?: string;
+  store_latitude?: number;
+  store_longitude?: number;
   storekeeper_name?: string;
+  // ── Joined from `listings`
+  listing_title?: string;
+  listing_image_url?: string;
+  listing_category?: string;
+  // ── Misc
   customer_name?: string;
-  pickup_time?: string;
   [key: string]: unknown;
 }
 
@@ -148,10 +158,6 @@ function resolveImageUrl(url: string | null | undefined): string | null {
 }
 
 // ─── Time helpers ───────────────────────────────────────────────────
-// Backend stores datetime.utcnow() (naive UTC). JS would parse a
-// naive string as local time — off by the user's UTC offset. Append
-// Z when there's no explicit timezone marker. Also truncate microseconds
-// to milliseconds (some engines reject 6-digit fractions).
 function parseAsUtc(iso?: string | null): number {
   if (!iso) return NaN;
   const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
@@ -159,8 +165,6 @@ function parseAsUtc(iso?: string | null): number {
   return new Date(hasTz ? trimmed : `${trimmed}Z`).getTime();
 }
 
-// Human-friendly remaining time. Examples:
-//   "in 45 secs" | "in 1 min" | "in 12 mins" | "in 4h 23m" | "in 2d 6h"
 function formatRemaining(expiresMs: number, nowMs: number): string {
   if (!Number.isFinite(expiresMs)) return '';
   const ms = expiresMs - nowMs;
@@ -185,7 +189,6 @@ function formatRemaining(expiresMs: number, nowMs: number): string {
   return remHrs > 0 ? `in ${days}d ${remHrs}h` : `in ${days}d`;
 }
 
-// Status chip metadata. Colors match the design system (bg / border / fg).
 function statusMeta(status?: string): {
   label: string;
   bg: string;
@@ -217,7 +220,14 @@ function statusMeta(status?: string): {
   }
 }
 
-// 30 minutes in ms — threshold for the "expiring soon" warning.
+// Truncate an address string for display in a tight row.
+function shortAddress(addr?: string | null): string {
+  if (!addr) return '';
+  const s = String(addr).trim();
+  if (s.length <= 42) return s;
+  return `${s.slice(0, 40)}…`;
+}
+
 const EXPIRING_SOON_MS = 30 * 60 * 1000;
 
 function SavedPageContent() {
@@ -245,10 +255,8 @@ function SavedPageContent() {
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
 
-  // Countdown heartbeat — forces re-render every 30s so the "expires in"
-  // text stays accurate without needing per-card timers.
+  // Heartbeat for live countdowns.
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 30_000);
     return () => clearInterval(id);
@@ -375,8 +383,6 @@ function SavedPageContent() {
   };
 
   // ─── Navigation ───────────────────────────────────────────────
-  // ✅ FIX — no longer fakes `pickup_time` from a nonexistent field.
-  //    The confirmation page reads the truth from the backend.
   const openReservation = (order: WalletOrder) => {
     router.push(`/reservation-confirmed?order_id=${order.order_id}`);
   };
@@ -395,6 +401,15 @@ function SavedPageContent() {
 
   const openReceipt = (order: WalletOrder) => {
     router.push(`/shopper/orders/receipt/${order.order_id}`);
+  };
+
+  const openStoreOnMap = (order: WalletOrder, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const lat = Number(order.store_latitude ?? NaN);
+    const lng = Number(order.store_longitude ?? NaN);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const dest = encodeURIComponent(order.store_name || 'Store');
+    router.push(`/map?lat=${lat}&lng=${lng}&destination=${dest}&navigate=true`);
   };
 
   // ─── Wanted actions ────────────────────────────────────────────
@@ -493,11 +508,25 @@ function SavedPageContent() {
     [wantedAlerts, q],
   );
   const filteredReservations = useMemo(
-    () => applyFilter(reservations, ['order_id', 'store_name', 'status']),
+    () =>
+      applyFilter(reservations, [
+        'order_id',
+        'store_name',
+        'status',
+        'listing_title',
+        'store_address',
+      ]),
     [reservations, q],
   );
   const filteredDeliveries = useMemo(
-    () => applyFilter(deliveries, ['order_id', 'store_name', 'status']),
+    () =>
+      applyFilter(deliveries, [
+        'order_id',
+        'store_name',
+        'status',
+        'listing_title',
+        'store_address',
+      ]),
     [deliveries, q],
   );
   const filteredBookings = useMemo(
@@ -515,9 +544,12 @@ function SavedPageContent() {
     [history, q],
   );
 
-  // ─── Order card renderer (shared between Reservations + Deliveries) ──
+  // ─── Shared order card ─────────────────────────────────────────
   const renderOrderCard = (order: WalletOrder, opts: { showExpiry: boolean }) => {
-    const image = resolveImageUrl(order.store_image_url);
+    const storeImage = resolveImageUrl(order.store_image_url);
+    const itemTitle = (order.listing_title as string) || '';
+    const storeName = (order.store_name as string) || 'Store';
+    const address = (order.store_address as string) || '';
     const expiresMs = parseAsUtc(order.expires_at);
     const expired =
       Number.isFinite(expiresMs) && expiresMs <= nowMs && order.status !== 'picked_up';
@@ -529,6 +561,9 @@ function SavedPageContent() {
       expiresMs - nowMs > 0;
     const meta = statusMeta(order.status);
     const qty = Number(order.quantity ?? 1);
+    const hasCoords =
+      Number.isFinite(Number(order.store_latitude)) &&
+      Number.isFinite(Number(order.store_longitude));
 
     return (
       <div
@@ -541,37 +576,56 @@ function SavedPageContent() {
         role="button"
         tabIndex={0}
       >
-        {/* Top: thumbnail + store + amount */}
+        {/* Top row: store image + store + item + amount */}
         <div style={styles.resTopRow}>
           <div style={styles.resThumb}>
-            {image ? (
-              <img
-                src={image}
-                alt=""
-                loading="lazy"
-                style={styles.resThumbImg}
-              />
+            {storeImage ? (
+              <img src={storeImage} alt="" loading="lazy" style={styles.resThumbImg} />
             ) : (
               <MdStorefront size={22} color="#94A3B8" />
             )}
           </div>
 
           <div style={styles.resInfo}>
-            <div style={styles.resStoreName} title={order.store_name}>
-              {order.store_name || 'Store'}
+            <div style={styles.resStoreName} title={storeName}>
+              {storeName}
             </div>
-            <div style={styles.resMeta}>
-              Order #{shortId(order.order_id)}
-              {qty > 1 ? ` · ${qty} items` : ''}
-            </div>
+
+            {itemTitle ? (
+              <div style={styles.resItemLine} title={itemTitle}>
+                <MdInventory2 size={12} color="#64748B" />
+                <span style={styles.resItemText}>
+                  {itemTitle}
+                  {qty > 1 ? ` × ${qty}` : ''}
+                </span>
+              </div>
+            ) : (
+              <div style={styles.resItemLine}>
+                <MdInventory2 size={12} color="#94A3B8" />
+                <span style={{ ...styles.resItemText, color: '#94A3B8' }}>
+                  Order #{shortId(order.order_id)}
+                </span>
+              </div>
+            )}
+
+            {address ? (
+              <button
+                type="button"
+                onClick={(e) => openStoreOnMap(order, e)}
+                style={styles.resAddressBtn}
+                disabled={!hasCoords}
+                title={hasCoords ? 'Open in map' : address}
+              >
+                <MdLocationOn size={12} color="#64748B" />
+                <span style={styles.resAddressText}>{shortAddress(address)}</span>
+              </button>
+            ) : null}
           </div>
 
-          <div style={styles.resAmount}>
-            {fmtNaira(order.total_amount)}
-          </div>
+          <div style={styles.resAmount}>{fmtNaira(order.total_amount)}</div>
         </div>
 
-        {/* Bottom: chip + countdown */}
+        {/* Bottom row: chip + countdown */}
         <div style={styles.resBottomRow}>
           <span
             style={{
@@ -762,7 +816,6 @@ function SavedPageContent() {
       );
     }
 
-    // Sort by soonest expiry first — the ones that need attention float up.
     const sorted = [...filteredReservations].sort((a, b) => {
       const ta = parseAsUtc(a.expires_at);
       const tb = parseAsUtc(b.expires_at);
@@ -793,8 +846,6 @@ function SavedPageContent() {
       );
     }
 
-    // Deliveries: sort by newest first (they're all in transit; recency is
-    // the more useful ordering).
     const sorted = [...filteredDeliveries].sort((a, b) => {
       const ta = parseAsUtc(a.created_at);
       const tb = parseAsUtc(b.created_at);
@@ -1318,7 +1369,7 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
   },
 
-  // ── Richer reservation/delivery cards
+  // ── Rich reservation card
   resCard: {
     padding: 14,
     marginBottom: 10,
@@ -1337,7 +1388,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   resTopRow: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 12,
   },
   resThumb: {
@@ -1359,21 +1410,53 @@ const styles: Record<string, React.CSSProperties> = {
   resInfo: {
     flex: 1,
     minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 3,
   },
   resStoreName: {
     fontSize: 15,
-    fontWeight: 700,
+    fontWeight: 800,
     color: '#0B0B1A',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     letterSpacing: '-0.01em',
   },
-  resMeta: {
+  resItemLine: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    minWidth: 0,
+  },
+  resItemText: {
     fontSize: 12.5,
-    color: '#64748B',
-    marginTop: 2,
+    fontWeight: 600,
+    color: '#475569',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  resAddressBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: 0,
+    border: 'none',
+    background: 'none',
+    textAlign: 'left',
+    minWidth: 0,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    marginTop: 1,
+  },
+  resAddressText: {
+    fontSize: 11.5,
     fontWeight: 500,
+    color: '#64748B',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   resAmount: {
     fontSize: 15,
@@ -1381,6 +1464,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#0504AA',
     whiteSpace: 'nowrap',
     letterSpacing: '-0.01em',
+    marginTop: 2,
   },
   resBottomRow: {
     display: 'flex',
