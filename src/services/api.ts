@@ -374,15 +374,22 @@ class ApiService {
     return res.data;
   }
 
-  // ✅ NEW — storekeeper accepts a reservation. Status: locked → accepted.
-  //    No money moves here; escrow releases when the shopper confirms pickup.
+  // ✅ Storekeeper-only. Flips locked → accepted. No wallet mutation.
   public async acceptOrder(orderId: string): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/accept', { order_id: orderId });
     return res.data;
   }
 
-  // ⚠️ Shopper-only. Storekeepers calling this get 403. Kept for the
-  //    reservation-confirmed page's "Pick Up & Complete" flow.
+  // ✅ NEW — storekeeper-only. Flips locked → declined, refunds the shopper.
+  //    Only valid on 'locked' (can't decline after accepting).
+  public async declineOrder(orderId: string, reason?: string): Promise<JsonObject> {
+    const body: Record<string, string> = { order_id: orderId };
+    if (reason && reason.trim()) body.reason = reason.trim();
+    const res = await this.axios.post('/wallet/decline', body);
+    return res.data;
+  }
+
+  // ⚠️ Shopper-only. Storekeepers calling this get 403.
   public async confirmOrder(orderId: string): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/confirm', { order_id: orderId });
     return res.data;

@@ -37,7 +37,7 @@ const TABS = [
   'Reservations',
   'Awaiting pickup',
   'Deliveries',
-  'Dropped',
+  'Cancelled',
   'Reversed',
 ];
 
@@ -87,7 +87,8 @@ export default function StorekeeperOrdersPage() {
           o.status !== 'pending' &&
           o.status !== 'returned' &&
           o.status !== 'refunded' &&
-          o.status !== 'reversed'
+          o.status !== 'reversed' &&
+          o.status !== 'declined'
       ),
     [allOrders]
   );
@@ -98,12 +99,22 @@ export default function StorekeeperOrdersPage() {
           o.courier_id != null &&
           o.status !== 'returned' &&
           o.status !== 'refunded' &&
-          o.status !== 'reversed'
+          o.status !== 'reversed' &&
+          o.status !== 'declined'
       ),
     [allOrders]
   );
-  const dropped = useMemo(
-    () => allOrders.filter((o) => o.status === 'returned' || o.status === 'refunded'),
+  // ✅ "Cancelled" covers both directions: shopper drop (returned, refunded)
+  //    and storekeeper decline (declined). Both mean the reservation didn't
+  //    happen — same tab, same list, different label in the card.
+  const cancelled = useMemo(
+    () =>
+      allOrders.filter(
+        (o) =>
+          o.status === 'returned' ||
+          o.status === 'refunded' ||
+          o.status === 'declined'
+      ),
     [allOrders]
   );
   const reversed = useMemo(
@@ -117,21 +128,18 @@ export default function StorekeeperOrdersPage() {
       case 1: return reservations;
       case 2: return awaitingPickup;
       case 3: return deliveries;
-      case 4: return dropped;
+      case 4: return cancelled;
       case 5: return reversed;
       default: return [];
     }
-  }, [activeTab, allOrders, reservations, awaitingPickup, deliveries, dropped, reversed]);
+  }, [activeTab, allOrders, reservations, awaitingPickup, deliveries, cancelled, reversed]);
 
   // ─── Actions ──────────────────────────────────────────────────────
   //
-  // Mental model (matches backend):
-  //   - The storekeeper HOLDS the item. No money moves.
-  //   - The shopper PICKS UP and confirms. Money moves to the storekeeper.
-  //
-  //   "Accept" was ambiguous — it read as "I accept payment". The button
-  //   below is now labelled "Hold for pickup" and the confirmation copy
-  //   says when the money actually arrives.
+  // Mental model:
+  //   - Storekeeper HOLDS the item (no money moves).
+  //   - Storekeeper can DECLINE before holding (money refunds to shopper).
+  //   - Shopper PICKS UP (money moves to storekeeper).
   //
   const holdForPickup = async (orderId: string) => {
     const ok = window.confirm(
@@ -141,13 +149,7 @@ export default function StorekeeperOrdersPage() {
     );
     if (!ok) return;
     try {
-      // The shared API service does not currently expose this endpoint in its
-      // TypeScript surface, although it is available at runtime.
-      await (
-        api as unknown as {
-          acceptReservation: (id: string) => Promise<unknown>;
-        }
-      ).acceptReservation(orderId);
+      await api.acceptOrder(orderId);
       await loadOrders();
       alert('Holding item. Payment releases when the shopper picks up.');
     } catch (err) {
@@ -155,13 +157,28 @@ export default function StorekeeperOrdersPage() {
     }
   };
 
-  // ⚠️ Backend gap: /wallet/return requires shopper_id to match. There is
-  //    no storekeeper-decline endpoint today. Disabled until that ships.
-  const declineReservation = async (_orderId: string) => {
-    alert(
-      'Declining a reservation from the storekeeper side isn\'t available yet. ' +
-        'If you can\'t fulfil a held order, please contact support.',
+  const declineReservation = async (orderId: string) => {
+    const ok = window.confirm(
+      'Decline this reservation?\n\n' +
+        'The shopper will be refunded in full and notified. You can only ' +
+        'decline a reservation before holding it for pickup.',
     );
+    if (!ok) return;
+
+    // Reason is optional — helps the shopper understand.
+    const reason = window.prompt(
+      'Why are you declining? (optional — the shopper will see this)',
+      '',
+    );
+    if (reason === null) return; // user cancelled the prompt
+
+    try {
+      await api.declineOrder(orderId, reason.trim() || undefined);
+      await loadOrders();
+      alert('Reservation declined. The shopper has been refunded and notified.');
+    } catch (err) {
+      alert('Failed to decline: ' + (err instanceof Error ? err.message : ''));
+    }
   };
 
   const updateDeliveryStatus = async (orderId: string, newStatus: string) => {
@@ -189,14 +206,14 @@ export default function StorekeeperOrdersPage() {
   const renderEmptyState = (
     isReservation: boolean,
     isDelivery: boolean,
-    isDropped: boolean,
+    isCancelled: boolean,
     isReversed: boolean
   ) => {
     const icon = isReservation ? (
       <MdEventNote size={48} color="#ccc" />
     ) : isDelivery ? (
       <MdLocalShipping size={48} color="#ccc" />
-    ) : isDropped ? (
+    ) : isCancelled ? (
       <MdDeleteOutline size={48} color="#ccc" />
     ) : isReversed ? (
       <MdSwapHoriz size={48} color="#ccc" />
@@ -207,8 +224,8 @@ export default function StorekeeperOrdersPage() {
       ? 'No reservations yet.'
       : isDelivery
         ? 'No deliveries yet.'
-        : isDropped
-          ? 'No dropped orders.'
+        : isCancelled
+          ? 'No cancelled orders.'
           : isReversed
             ? 'No reversed orders.'
             : 'No orders yet.';
@@ -238,7 +255,10 @@ export default function StorekeeperOrdersPage() {
       label = 'Dispatched';
     } else if (['returned', 'refunded'].includes(lower)) {
       color = '#F44336';
-      label = 'Dropped';
+      label = 'Dropped by shopper';
+    } else if (lower === 'declined') {
+      color = '#DC2626';
+      label = 'Declined';
     } else if (lower === 'reversed') {
       color = '#9C27B0';
       label = 'Reversed';
@@ -266,12 +286,14 @@ export default function StorekeeperOrdersPage() {
     order: StoreOrder,
     isReservation: boolean,
     isDelivery: boolean,
-    isDropped: boolean,
+    isCancelled: boolean,
     isReversed: boolean
   ) => {
     const status = (order.status || '').toLowerCase();
     const isPickedUp = ['completed', 'delivered', 'picked_up'].includes(status);
     const isAccepted = status === 'accepted';
+    const isDeclined = status === 'declined';
+    const isDropped = status === 'returned' || status === 'refunded';
     const shortId =
       order.order_id.length > 8 ? order.order_id.substring(0, 8) : order.order_id;
     const total = Number(order.total_amount || 0);
@@ -309,7 +331,15 @@ export default function StorekeeperOrdersPage() {
               style={{ marginRight: 6 }}
             />
             <span style={{ fontSize: 12, color: '#F44336' }}>
-              Dropped (Refunded)
+              Dropped by shopper · Refunded
+            </span>
+          </div>
+        )}
+        {isDeclined && (
+          <div style={styles.orderDetail}>
+            <MdCancel size={16} color="#DC2626" style={{ marginRight: 6 }} />
+            <span style={{ fontSize: 12, color: '#DC2626' }}>
+              Declined by you · Refunded
             </span>
           </div>
         )}
@@ -320,7 +350,7 @@ export default function StorekeeperOrdersPage() {
           </div>
         )}
 
-        {/* ✅ After acceptance: reassure the storekeeper about when money lands. */}
+        {/* After acceptance: reassure the storekeeper about when money lands. */}
         {isAccepted && !isPickedUp && (
           <div style={styles.holdingNote}>
             <MdAccessTime size={14} color="#7E22CE" />
@@ -352,10 +382,9 @@ export default function StorekeeperOrdersPage() {
                 </button>
                 <button
                   onClick={() => declineReservation(order.order_id)}
-                  style={styles.declineBtnDisabled}
-                  title="Not available yet — backend gap"
+                  style={styles.declineBtn}
                 >
-                  <MdCancel size={18} color="#999" style={{ marginRight: 4 }} />
+                  <MdCancel size={18} color="#DC2626" style={{ marginRight: 4 }} />
                   Decline
                 </button>
               </div>
@@ -388,10 +417,6 @@ export default function StorekeeperOrdersPage() {
                 Release Courier Fee
               </button>
             )}
-
-            {/* NOTE: previously a "Mark Picked Up" button lived here. It
-                called /wallet/confirm which is shopper-only. Removed —
-                only the shopper can trigger pickup + fund release. */}
           </div>
         )}
 
@@ -605,23 +630,10 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     padding: '10px',
     backgroundColor: 'transparent',
-    color: '#F44336',
-    border: '1px solid #F44336',
+    color: '#DC2626',
+    border: '1px solid #DC2626',
     borderRadius: 10,
     cursor: 'pointer',
-    fontWeight: 600,
-  },
-  declineBtnDisabled: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '10px',
-    backgroundColor: '#F8FAFC',
-    color: '#999',
-    border: '1px solid #E2E8F0',
-    borderRadius: 10,
-    cursor: 'not-allowed',
     fontWeight: 600,
   },
   holdingNote: {
