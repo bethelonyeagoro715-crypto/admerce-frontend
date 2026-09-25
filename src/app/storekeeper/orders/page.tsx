@@ -10,11 +10,10 @@ import {
   MdDeleteOutline,
   MdSwapHoriz,
   MdReceiptLong,
-  MdPersonOutline,
-  MdAttachMoney,
   MdCheckCircleOutline,
   MdCancel,
   MdCheckCircle,
+  MdAccessTime,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -33,7 +32,14 @@ interface Store {
   name?: string;
 }
 
-const TABS = ['All', 'Reservations', 'Pickups', 'Deliveries', 'Dropped', 'Reversed'];
+const TABS = [
+  'All',
+  'Reservations',
+  'Awaiting pickup',
+  'Deliveries',
+  'Dropped',
+  'Reversed',
+];
 
 export default function StorekeeperOrdersPage() {
   const router = useRouter();
@@ -72,7 +78,7 @@ export default function StorekeeperOrdersPage() {
     () => allOrders.filter((o) => o.status === 'locked' || o.status === 'pending'),
     [allOrders]
   );
-  const pickups = useMemo(
+  const awaitingPickup = useMemo(
     () =>
       allOrders.filter(
         (o) =>
@@ -100,52 +106,62 @@ export default function StorekeeperOrdersPage() {
     () => allOrders.filter((o) => o.status === 'returned' || o.status === 'refunded'),
     [allOrders]
   );
-  const reversed = useMemo(() => allOrders.filter((o) => o.status === 'reversed'), [allOrders]);
+  const reversed = useMemo(
+    () => allOrders.filter((o) => o.status === 'reversed'),
+    [allOrders]
+  );
 
   const currentOrders = useMemo(() => {
     switch (activeTab) {
       case 0: return allOrders;
       case 1: return reservations;
-      case 2: return pickups;
+      case 2: return awaitingPickup;
       case 3: return deliveries;
       case 4: return dropped;
       case 5: return reversed;
       default: return [];
     }
-  }, [activeTab, allOrders, reservations, pickups, deliveries, dropped, reversed]);
+  }, [activeTab, allOrders, reservations, awaitingPickup, deliveries, dropped, reversed]);
 
   // ─── Actions ──────────────────────────────────────────────────────
-  const acceptReservation = async (orderId: string) => {
-    if (!window.confirm('Accept this reservation?')) return;
+  //
+  // Mental model (matches backend):
+  //   - The storekeeper HOLDS the item. No money moves.
+  //   - The shopper PICKS UP and confirms. Money moves to the storekeeper.
+  //
+  //   "Accept" was ambiguous — it read as "I accept payment". The button
+  //   below is now labelled "Hold for pickup" and the confirmation copy
+  //   says when the money actually arrives.
+  //
+  const holdForPickup = async (orderId: string) => {
+    const ok = window.confirm(
+      'Hold this item for the shopper?\n\n' +
+        'Your payment will stay in escrow until the shopper arrives and ' +
+        'confirms pickup. That is when your wallet is credited.',
+    );
+    if (!ok) return;
     try {
-      await api.confirmOrder(orderId);
+      // The shared API service does not currently expose this endpoint in its
+      // TypeScript surface, although it is available at runtime.
+      await (
+        api as unknown as {
+          acceptReservation: (id: string) => Promise<unknown>;
+        }
+      ).acceptReservation(orderId);
       await loadOrders();
-      alert('Order accepted!');
+      alert('Holding item. Payment releases when the shopper picks up.');
     } catch (err) {
-      alert('Failed to accept: ' + (err instanceof Error ? err.message : ''));
+      alert('Failed to hold: ' + (err instanceof Error ? err.message : ''));
     }
   };
 
-  const declineReservation = async (orderId: string) => {
-    if (!window.confirm('Decline this reservation? It will be refunded.')) return;
-    try {
-      await api.returnOrder(orderId);
-      await loadOrders();
-      alert('Order declined, refunded.');
-    } catch (err) {
-      alert('Failed to decline: ' + (err instanceof Error ? err.message : ''));
-    }
-  };
-
-  const markPickedUp = async (orderId: string) => {
-    if (!window.confirm('Mark this order as picked up?')) return;
-    try {
-      await api.confirmOrder(orderId);
-      await loadOrders();
-      alert('Order picked up!');
-    } catch (err) {
-      alert('Failed: ' + (err instanceof Error ? err.message : ''));
-    }
+  // ⚠️ Backend gap: /wallet/return requires shopper_id to match. There is
+  //    no storekeeper-decline endpoint today. Disabled until that ships.
+  const declineReservation = async (_orderId: string) => {
+    alert(
+      'Declining a reservation from the storekeeper side isn\'t available yet. ' +
+        'If you can\'t fulfil a held order, please contact support.',
+    );
   };
 
   const updateDeliveryStatus = async (orderId: string, newStatus: string) => {
@@ -170,17 +186,32 @@ export default function StorekeeperOrdersPage() {
     }
   };
 
-  const renderEmptyState = (isReservation: boolean, isDelivery: boolean, isDropped: boolean, isReversed: boolean) => {
-    const icon = isReservation ? <MdEventNote size={48} color="#ccc" /> :
-                 isDelivery ? <MdLocalShipping size={48} color="#ccc" /> :
-                 isDropped ? <MdDeleteOutline size={48} color="#ccc" /> :
-                 isReversed ? <MdSwapHoriz size={48} color="#ccc" /> :
-                              <MdReceiptLong size={48} color="#ccc" />;
-    const text = isReservation ? 'No reservations yet.' :
-                 isDelivery ? 'No deliveries yet.' :
-                 isDropped ? 'No dropped orders.' :
-                 isReversed ? 'No reversed orders.' :
-                              'No orders yet.';
+  const renderEmptyState = (
+    isReservation: boolean,
+    isDelivery: boolean,
+    isDropped: boolean,
+    isReversed: boolean
+  ) => {
+    const icon = isReservation ? (
+      <MdEventNote size={48} color="#ccc" />
+    ) : isDelivery ? (
+      <MdLocalShipping size={48} color="#ccc" />
+    ) : isDropped ? (
+      <MdDeleteOutline size={48} color="#ccc" />
+    ) : isReversed ? (
+      <MdSwapHoriz size={48} color="#ccc" />
+    ) : (
+      <MdReceiptLong size={48} color="#ccc" />
+    );
+    const text = isReservation
+      ? 'No reservations yet.'
+      : isDelivery
+        ? 'No deliveries yet.'
+        : isDropped
+          ? 'No dropped orders.'
+          : isReversed
+            ? 'No reversed orders.'
+            : 'No orders yet.';
     return (
       <div style={styles.center}>
         {icon}
@@ -193,32 +224,57 @@ export default function StorekeeperOrdersPage() {
     let color = '#999';
     let label = status;
     const lower = status.toLowerCase();
-    if (['completed', 'delivered', 'picked_up'].includes(lower)) { color = '#4CAF50'; label = 'Completed'; }
-    else if (['locked', 'pending'].includes(lower)) { color = '#FFA000'; label = 'Pending'; }
-    else if (lower === 'dispatched') { color = '#2196F3'; label = 'Dispatched'; }
-    else if (['returned', 'refunded'].includes(lower)) { color = '#F44336'; label = 'Dropped'; }
-    else if (lower === 'reversed') { color = '#9C27B0'; label = 'Reversed'; }
+    if (['completed', 'delivered', 'picked_up'].includes(lower)) {
+      color = '#4CAF50';
+      label = 'Picked up';
+    } else if (['locked', 'pending'].includes(lower)) {
+      color = '#FFA000';
+      label = 'Awaiting your hold';
+    } else if (lower === 'accepted') {
+      color = '#7E22CE';
+      label = 'Awaiting pickup';
+    } else if (lower === 'dispatched') {
+      color = '#2196F3';
+      label = 'Dispatched';
+    } else if (['returned', 'refunded'].includes(lower)) {
+      color = '#F44336';
+      label = 'Dropped';
+    } else if (lower === 'reversed') {
+      color = '#9C27B0';
+      label = 'Reversed';
+    }
 
     return (
-      <span style={{
-        display: 'inline-block',
-        padding: '4px 12px',
-        borderRadius: 20,
-        backgroundColor: `${color}20`,
-        border: `1px solid ${color}50`,
-        color,
-        fontSize: 12,
-        fontWeight: 600,
-      }}>
+      <span
+        style={{
+          display: 'inline-block',
+          padding: '4px 12px',
+          borderRadius: 20,
+          backgroundColor: `${color}20`,
+          border: `1px solid ${color}50`,
+          color,
+          fontSize: 12,
+          fontWeight: 600,
+        }}
+      >
         {label}
       </span>
     );
   };
 
-  const renderOrderCard = (order: StoreOrder, isReservation: boolean, isDelivery: boolean, isDropped: boolean, isReversed: boolean) => {
-    const isCompleted = ['completed', 'delivered', 'picked_up'].includes(order.status || '');
-    const shortId = order.order_id.length > 8 ? order.order_id.substring(0, 8) : order.order_id;
-    const total = Number(order.total_amount || 0).toFixed(2);
+  const renderOrderCard = (
+    order: StoreOrder,
+    isReservation: boolean,
+    isDelivery: boolean,
+    isDropped: boolean,
+    isReversed: boolean
+  ) => {
+    const status = (order.status || '').toLowerCase();
+    const isPickedUp = ['completed', 'delivered', 'picked_up'].includes(status);
+    const isAccepted = status === 'accepted';
+    const shortId =
+      order.order_id.length > 8 ? order.order_id.substring(0, 8) : order.order_id;
+    const total = Number(order.total_amount || 0);
     const customer = order.customer_name || 'Customer';
 
     return (
@@ -232,26 +288,29 @@ export default function StorekeeperOrdersPage() {
         </div>
 
         <div style={styles.orderDetail}>
-          <MdAttachMoney size={16} color="#888" style={{ marginRight: 6 }} />
-          <span style={{ fontWeight: 600, color: '#0504AA' }}>₦{total}</span>
+          <span style={{ fontWeight: 700, color: '#0504AA', fontSize: 16 }}>
+            ₦{total.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
+          </span>
         </div>
 
         {isDelivery && (
           <div style={styles.orderDetail}>
             <MdLocalShipping size={16} color="#888" style={{ marginRight: 6 }} />
-            <span style={{ fontSize: 12, color: '#888' }}>Courier: {order.courier_name || 'Assigned'}</span>
-          </div>
-        )}
-        {isReservation && (
-          <div style={styles.orderDetail}>
-            <MdEventNote size={16} color="#888" style={{ marginRight: 6 }} />
-            <span style={{ fontSize: 12, color: '#888' }}>Reservation</span>
+            <span style={{ fontSize: 12, color: '#888' }}>
+              Courier: {order.courier_name || 'Assigned'}
+            </span>
           </div>
         )}
         {isDropped && (
           <div style={styles.orderDetail}>
-            <MdDeleteOutline size={16} color="#F44336" style={{ marginRight: 6 }} />
-            <span style={{ fontSize: 12, color: '#F44336' }}>Dropped (Refunded)</span>
+            <MdDeleteOutline
+              size={16}
+              color="#F44336"
+              style={{ marginRight: 6 }}
+            />
+            <span style={{ fontSize: 12, color: '#F44336' }}>
+              Dropped (Refunded)
+            </span>
           </div>
         )}
         {isReversed && (
@@ -261,17 +320,42 @@ export default function StorekeeperOrdersPage() {
           </div>
         )}
 
+        {/* ✅ After acceptance: reassure the storekeeper about when money lands. */}
+        {isAccepted && !isPickedUp && (
+          <div style={styles.holdingNote}>
+            <MdAccessTime size={14} color="#7E22CE" />
+            <span>
+              Waiting for {customer} to pick up. Your{' '}
+              <strong>
+                ₦{total.toLocaleString('en-NG', { maximumFractionDigits: 0 })}
+              </strong>{' '}
+              is held in escrow and releases to your wallet when they confirm.
+            </span>
+          </div>
+        )}
+
         {/* Actions */}
-        {!isCompleted && (
+        {!isPickedUp && (
           <div style={styles.actions}>
             {isReservation && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => acceptReservation(order.order_id)} style={styles.acceptBtn}>
-                  <MdCheckCircleOutline size={18} color="#fff" style={{ marginRight: 4 }} />
-                  Accept
+                <button
+                  onClick={() => holdForPickup(order.order_id)}
+                  style={styles.holdBtn}
+                >
+                  <MdCheckCircleOutline
+                    size={18}
+                    color="#fff"
+                    style={{ marginRight: 4 }}
+                  />
+                  Hold for pickup
                 </button>
-                <button onClick={() => declineReservation(order.order_id)} style={styles.declineBtn}>
-                  <MdCancel size={18} color="#F44336" style={{ marginRight: 4 }} />
+                <button
+                  onClick={() => declineReservation(order.order_id)}
+                  style={styles.declineBtnDisabled}
+                  title="Not available yet — backend gap"
+                >
+                  <MdCancel size={18} color="#999" style={{ marginRight: 4 }} />
                   Decline
                 </button>
               </div>
@@ -280,7 +364,9 @@ export default function StorekeeperOrdersPage() {
             {isDelivery && (
               <select
                 value={order.status || 'pending'}
-                onChange={(e) => updateDeliveryStatus(order.order_id, e.target.value)}
+                onChange={(e) =>
+                  updateDeliveryStatus(order.order_id, e.target.value)
+                }
                 style={styles.select}
               >
                 <option value="pending">Pending</option>
@@ -290,25 +376,39 @@ export default function StorekeeperOrdersPage() {
             )}
 
             {isReversed && (
-              <button onClick={() => releaseReversed(order.order_id)} style={styles.releaseBtn}>
-                <MdLocalShipping size={18} color="#fff" style={{ marginRight: 4 }} />
+              <button
+                onClick={() => releaseReversed(order.order_id)}
+                style={styles.releaseBtn}
+              >
+                <MdLocalShipping
+                  size={18}
+                  color="#fff"
+                  style={{ marginRight: 4 }}
+                />
                 Release Courier Fee
               </button>
             )}
 
-            {!isReservation && !isDelivery && !isDropped && !isReversed && (
-              <button onClick={() => markPickedUp(order.order_id)} style={styles.pickedUpBtn}>
-                <MdCheckCircleOutline size={18} color="#fff" style={{ marginRight: 4 }} />
-                Mark Picked Up
-              </button>
-            )}
+            {/* NOTE: previously a "Mark Picked Up" button lived here. It
+                called /wallet/confirm which is shopper-only. Removed —
+                only the shopper can trigger pickup + fund release. */}
           </div>
         )}
 
-        {isCompleted && (
-          <div style={{ display: 'flex', alignItems: 'center', marginTop: 12 }}>
-            <MdCheckCircle size={18} color="#4CAF50" style={{ marginRight: 6 }} />
-            <span style={{ color: '#4CAF50' }}>Completed</span>
+        {isPickedUp && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              marginTop: 12,
+            }}
+          >
+            <MdCheckCircle
+              size={18}
+              color="#4CAF50"
+              style={{ marginRight: 6 }}
+            />
+            <span style={{ color: '#4CAF50' }}>Picked up · Funds released</span>
           </div>
         )}
       </div>
@@ -320,7 +420,11 @@ export default function StorekeeperOrdersPage() {
       {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>Orders</h1>
-        <button onClick={loadOrders} style={styles.refreshBtn} title="Refresh">
+        <button
+          onClick={loadOrders}
+          style={styles.refreshBtn}
+          title="Refresh"
+        >
           <MdRefresh size={24} color="#0504AA" />
         </button>
       </div>
@@ -333,7 +437,10 @@ export default function StorekeeperOrdersPage() {
             onClick={() => setActiveTab(i)}
             style={{
               ...styles.tab,
-              borderBottom: activeTab === i ? '2px solid #0504AA' : '2px solid transparent',
+              borderBottom:
+                activeTab === i
+                  ? '2px solid #0504AA'
+                  : '2px solid transparent',
               color: activeTab === i ? '#0504AA' : '#666',
               fontWeight: activeTab === i ? 700 : 400,
             }}
@@ -478,7 +585,7 @@ const styles: Record<string, React.CSSProperties> = {
   actions: {
     marginTop: 12,
   },
-  acceptBtn: {
+  holdBtn: {
     flex: 1,
     display: 'flex',
     alignItems: 'center',
@@ -489,7 +596,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     borderRadius: 10,
     cursor: 'pointer',
-    fontWeight: 600,
+    fontWeight: 700,
   },
   declineBtn: {
     flex: 1,
@@ -503,6 +610,33 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     cursor: 'pointer',
     fontWeight: 600,
+  },
+  declineBtnDisabled: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '10px',
+    backgroundColor: '#F8FAFC',
+    color: '#999',
+    border: '1px solid #E2E8F0',
+    borderRadius: 10,
+    cursor: 'not-allowed',
+    fontWeight: 600,
+  },
+  holdingNote: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: '10px 12px',
+    marginTop: 12,
+    backgroundColor: '#F3E8FF',
+    border: '1px solid #D8B4FE',
+    borderRadius: 10,
+    color: '#6B21A8',
+    fontSize: 12.5,
+    fontWeight: 500,
+    lineHeight: 1.45,
   },
   select: {
     width: '100%',
@@ -520,19 +654,6 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     padding: '10px',
     backgroundColor: '#FFA000',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-  pickedUpBtn: {
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '10px',
-    backgroundColor: '#0504AA',
     color: '#fff',
     border: 'none',
     borderRadius: 10,

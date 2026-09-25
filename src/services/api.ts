@@ -351,9 +351,6 @@ class ApiService {
     return res.data;
   }
 
-  // ✅ NEW — `pickupWindowHours` maps to the backend's `pickup_window_hours`.
-  //    The checkout call site should pass the result of
-  //    `pickupValueToHours(pickupTimeString)` from PickTimeBottomSheet.
   public async reserveItem(
     orderId: string,
     storekeeperId: string,
@@ -377,6 +374,15 @@ class ApiService {
     return res.data;
   }
 
+  // ✅ NEW — storekeeper accepts a reservation. Status: locked → accepted.
+  //    No money moves here; escrow releases when the shopper confirms pickup.
+  public async acceptOrder(orderId: string): Promise<JsonObject> {
+    const res = await this.axios.post('/wallet/accept', { order_id: orderId });
+    return res.data;
+  }
+
+  // ⚠️ Shopper-only. Storekeepers calling this get 403. Kept for the
+  //    reservation-confirmed page's "Pick Up & Complete" flow.
   public async confirmOrder(orderId: string): Promise<JsonObject> {
     const res = await this.axios.post('/wallet/confirm', { order_id: orderId });
     return res.data;
@@ -1731,7 +1737,7 @@ class ApiService {
     }
   }
 
-  // ======================== COMMUNITY (sellers-to-sellers) ========================
+  // ======================== COMMUNITY ========================
   public async communityGetMessages(
     room = 'global',
     limit = 50,
