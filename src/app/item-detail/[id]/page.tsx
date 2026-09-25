@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api, { extractErrorDetail } from '../../../services/api';
-import PickTimeBottomSheet from '../../../components/PickTimeBottomSheet';
+import PickTimeBottomSheet, {
+  pickupValueToHours,
+} from '../../../components/PickTimeBottomSheet';
 import { getToken } from '../../../services/localStorage';
 import {
   MdArrowBack,
@@ -61,8 +63,6 @@ interface ToastMessage {
 
 type ConfirmKind = 'pickup-now' | null;
 
-// ✅ Cap for unknown stock. The backend rejects over-orders — this is
-//    just a UI sanity bound so users can't tap "+" 500 times.
 const UNKNOWN_STOCK_MAX = 99;
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -93,8 +93,6 @@ function buildConversationId(myUserId: string, otherUserId: string): string {
   return `${pair[0]}_${pair[1]}`;
 }
 
-// ✅ NEW — centralized stock presentation. Four honest states.
-//    `known` distinguishes "0 units" from "backend didn't tell us".
 function deriveStock(
   raw: number | null | undefined,
 ): { known: boolean; count: number; label: string; tone: 'ok' | 'low' | 'out' | 'unknown' } {
@@ -158,8 +156,6 @@ function Toast({
 }
 
 // ─── Fullscreen image viewer ────────────────────────────────────────
-// ✅ NEW — tap the hero image to open it. Tap anywhere (or the X) to close.
-//    Body scroll is locked while open. Escape also closes on desktop.
 function FullscreenViewer({
   src,
   alt,
@@ -282,7 +278,6 @@ export default function ItemDetailPage() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [retryKey, setRetryKey] = useState(0);
 
-  // ── Toast helpers ───────────────────────────────────────────────
   const showToast = useCallback(
     (kind: ToastMessage['kind'], text: string) => {
       const toastId = Date.now() + Math.random();
@@ -298,7 +293,6 @@ export default function ItemDetailPage() {
     setToasts((prev) => prev.filter((t) => t.id !== toastId));
   }, []);
 
-  // ── Auth guard ──────────────────────────────────────────────────
   const requireAuth = useCallback((): boolean => {
     if (!getToken()) {
       router.push('/login');
@@ -307,7 +301,6 @@ export default function ItemDetailPage() {
     return true;
   }, [router]);
 
-  // ── Load listing + store ────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -325,7 +318,6 @@ export default function ItemDetailPage() {
 
       setListing(listingData);
       setStore(storeData);
-      // ✅ Preserve raw value so we can distinguish "0" from "missing"
       setRawStock(listingData.quantity_available);
       setRating(storeData?.rating ?? 0);
       setReviewCount(storeData?.reviews_count ?? 0);
@@ -359,12 +351,10 @@ export default function ItemDetailPage() {
     })();
   }, []);
 
-  // ✅ Derived stock info
   const stock = useMemo(() => deriveStock(rawStock), [rawStock]);
   const outOfStock = stock.known && stock.count === 0;
   const maxQty = stock.known ? stock.count : UNKNOWN_STOCK_MAX;
 
-  // ── Actions ─────────────────────────────────────────────────────
   const confirmInstantPickup = useCallback(async () => {
     if (!listing || !store) return;
     const total = listing.price * quantity;
@@ -389,6 +379,7 @@ export default function ItemDetailPage() {
     }
   }, [listing, store, quantity, showToast]);
 
+  // ✅ FIX — translate the picked preset string to hours and send it.
   const reserveNow = useCallback(
     async (pickupTime: string) => {
       if (!listing || !store) return;
@@ -403,6 +394,8 @@ export default function ItemDetailPage() {
           return;
         }
 
+        const windowHours = pickupValueToHours(pickupTime);
+
         const response = (await api.reserveItem(
           orderId,
           store.owner_id,
@@ -411,6 +404,7 @@ export default function ItemDetailPage() {
           undefined,
           0,
           quantity,
+          windowHours,
         )) as { status?: string };
 
         if (response.status === 'locked') {
@@ -450,6 +444,7 @@ export default function ItemDetailPage() {
     }
   }, [listing, quantity, showToast]);
 
+  // ✅ FIX — delivery gets the minimum 3-hour window.
   const proceedToDelivery = useCallback(async () => {
     if (!listing || !store) return;
     setIsLoading(true);
@@ -474,6 +469,7 @@ export default function ItemDetailPage() {
         undefined,
         0,
         quantity,
+        3,
       );
 
       const match = (await api.matchCourier(
@@ -534,7 +530,6 @@ export default function ItemDetailPage() {
     }
   }, [store, router, requireAuth, showToast]);
 
-  // ✅ NEW — tap the store image or name → store detail
   const openStore = useCallback(() => {
     if (!store?.store_id) return;
     router.push(`/store-detail/${store.store_id}`);
@@ -629,7 +624,6 @@ export default function ItemDetailPage() {
     showToast,
   ]);
 
-  // ── Derived ─────────────────────────────────────────────────────
   const totalPrice = useMemo(
     () => (listing ? listing.price * quantity : 0),
     [listing, quantity],
@@ -651,7 +645,6 @@ export default function ItemDetailPage() {
     }
   }, [outOfStock, fulfillmentType, enableDelivery, pickupTiming, quantity]);
 
-  // ── Render gates ────────────────────────────────────────────────
   if (loading) {
     return (
       <main className="idt-root">
@@ -730,7 +723,6 @@ export default function ItemDetailPage() {
         </div>
       )}
 
-      {/* Fullscreen viewer */}
       {viewerOpen && imageUrl && (
         <FullscreenViewer
           src={imageUrl}
@@ -774,7 +766,6 @@ export default function ItemDetailPage() {
       </header>
 
       <div className="idt-scroll">
-        {/* ✅ Hero image — tappable → fullscreen viewer */}
         <button
           type="button"
           className="idt-hero idt-heroButton"
@@ -792,7 +783,6 @@ export default function ItemDetailPage() {
             </div>
           )}
 
-          {/* Lens button — stops propagation so tapping it doesn't open viewer */}
           {imageUrl && (
             <div
               className="idt-lensBtn"
@@ -831,7 +821,6 @@ export default function ItemDetailPage() {
           )}
         </div>
 
-        {/* ✅ Store row — image AND name both tappable → store detail */}
         <div className="idt-storeRow">
           <button
             type="button"
@@ -899,7 +888,6 @@ export default function ItemDetailPage() {
           </div>
         )}
 
-        {/* ✅ Qty section with inline stock label — Option B */}
         <section className="idt-qtySection">
           <div className="idt-qtyText">
             <span className="idt-qtyLabel">Quantity</span>
@@ -949,7 +937,6 @@ export default function ItemDetailPage() {
           </div>
         </section>
 
-        {/* Fulfillment */}
         <section className="idt-section">
           <span className="idt-sectionLabel">How would you like it?</span>
 
@@ -1013,7 +1000,6 @@ export default function ItemDetailPage() {
           )}
         </section>
 
-        {/* Order summary */}
         <section className="idt-summary">
           <div className="idt-summaryRow">
             <span className="idt-summaryLabel">Subtotal</span>
@@ -1043,7 +1029,6 @@ export default function ItemDetailPage() {
         <div style={{ height: 120 }} />
       </div>
 
-      {/* Sticky CTA */}
       <div className="idt-ctaWrap">
         <button
           type="button"
@@ -1059,7 +1044,6 @@ export default function ItemDetailPage() {
         </button>
       </div>
 
-      {/* Pick Up Now confirm modal */}
       {confirmKind === 'pickup-now' && (
         <div
           className="idt-modalOverlay"
@@ -1198,7 +1182,6 @@ const CSS = `
     WebkitOverflowScrolling: touch;
   }
 
-  /* ✅ Hero — now a <button> for tap-to-view. Reset button defaults. */
   .idt-hero {
     position: relative;
     width: 100%;
@@ -1257,7 +1240,6 @@ const CSS = `
     outline-offset: 3px;
   }
 
-  /* ✅ Fullscreen viewer */
   .idt-viewerOverlay {
     position: fixed;
     inset: 0;
@@ -1296,7 +1278,6 @@ const CSS = `
     -webkit-backdrop-filter: blur(8px);
   }
 
-  /* Title + price */
   .idt-itemTitle {
     font-size: 22px;
     font-weight: 800;
@@ -1323,7 +1304,6 @@ const CSS = `
     font-weight: 600;
   }
 
-  /* ✅ Store row — main cell is now a full tap area to store detail */
   .idt-storeRow {
     display: flex;
     align-items: center;
@@ -1387,7 +1367,6 @@ const CSS = `
   }
   .idt-storeReviews { color: #94A3B8; font-weight: 500; }
 
-  /* Address */
   .idt-addressRow {
     display: flex;
     align-items: center;
@@ -1420,7 +1399,6 @@ const CSS = `
     font-family: inherit;
   }
 
-  /* ✅ Qty section — label + stock line on the left, control on the right */
   .idt-qtySection {
     display: flex;
     align-items: center;
@@ -1465,7 +1443,6 @@ const CSS = `
     margin-bottom: 10px;
   }
 
-  /* Qty control */
   .idt-qtyControl {
     display: inline-flex;
     align-items: center;
@@ -1499,7 +1476,6 @@ const CSS = `
     font-variant-numeric: tabular-nums;
   }
 
-  /* Segment */
   .idt-segment {
     display: flex;
     gap: 8px;
@@ -1530,7 +1506,6 @@ const CSS = `
     color: #0504AA;
   }
 
-  /* Chips */
   .idt-chipRow {
     display: flex;
     flex-wrap: wrap;
@@ -1566,7 +1541,6 @@ const CSS = `
   }
   .idt-hintWarn { color: #B45309; }
 
-  /* Summary */
   .idt-summary {
     padding: 14px 16px;
     background: #fff;
@@ -1594,7 +1568,6 @@ const CSS = `
     letter-spacing: -0.01em;
   }
 
-  /* Description */
   .idt-description {
     font-size: 14px;
     color: #475569;
@@ -1603,7 +1576,6 @@ const CSS = `
     white-space: pre-wrap;
   }
 
-  /* CTA */
   .idt-ctaWrap {
     position: sticky;
     bottom: 0;
@@ -1644,7 +1616,6 @@ const CSS = `
     animation: idSpin 0.7s linear infinite;
   }
 
-  /* Modal */
   .idt-modalOverlay {
     position: fixed;
     inset: 0;
@@ -1724,7 +1695,6 @@ const CSS = `
     cursor: not-allowed;
   }
 
-  /* Center states */
   .idt-center {
     flex: 1;
     display: flex;
