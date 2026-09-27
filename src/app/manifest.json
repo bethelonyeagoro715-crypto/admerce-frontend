@@ -2,7 +2,7 @@
   "name": "Admerce",
   "short_name": "Admerce",
   "description": "Buy, sell, and provide services locally.",
-  "start_url": "/",
+  "start_url": "/splash",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
