@@ -1,8 +1,10 @@
 // scripts/generate-maskable-icons.mjs
 import sharp from 'sharp';
-import { mkdirSync, existsSync } from 'fs';
+import pngToIco from 'png-to-ico';
+import { mkdirSync, existsSync, writeFileSync, unlinkSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import { tmpdir } from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -25,21 +27,40 @@ function findSource() {
   return null;
 }
 
+async function alphaIsMeaningful(buf) {
+  const meta = await sharp(buf).metadata();
+  if (!meta.hasAlpha) return false;
+
+  const { data, info } = await sharp(buf)
+    .ensureAlpha()
+    .resize(32, 32, { fit: 'fill' })
+    .extractChannel('alpha')
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  let transparentPixels = 0;
+  const total = info.width * info.height;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] < 200) transparentPixels++;
+  }
+  return transparentPixels / total > 0.05;
+}
+
 async function whiten(buf) {
   const meta = await sharp(buf).metadata();
   const width = meta.width ?? 512;
   const height = meta.height ?? 512;
-  const hasAlpha = meta.hasAlpha;
 
-  console.log(`    source: ${width}x${height}, hasAlpha=${hasAlpha}`);
-
+  const useAlpha = await alphaIsMeaningful(buf);
   let maskBuf;
-  if (hasAlpha) {
-    console.log('    path: ALPHA channel (transparent logo detected)');
+  if (useAlpha) {
     maskBuf = await sharp(buf).ensureAlpha().extractChannel('alpha').toBuffer();
   } else {
-    console.log('    path: LUMINANCE threshold (opaque logo detected)');
-    maskBuf = await sharp(buf).greyscale().negate().toBuffer();
+    maskBuf = await sharp(buf)
+      .greyscale()
+      .linear(2.0, -100)
+      .threshold(100)
+      .toBuffer();
   }
 
   return sharp({
@@ -57,8 +78,6 @@ async function whiten(buf) {
 
 async function makeIcon(sourcePath, size, ratio, outPath) {
   const inner = Math.round(size * ratio);
-  console.log(`  ${size}x${size} → ${outPath.split(/[\\/]/).pop()}`);
-
   const sourceBuf = await sharp(sourcePath).toBuffer();
   const whiteLogo = await whiten(sourceBuf);
   const scaled = await sharp(whiteLogo)
@@ -75,7 +94,54 @@ async function makeIcon(sourcePath, size, ratio, outPath) {
     .png()
     .toFile(outPath);
 
-  console.log(`    ✓ done`);
+  console.log(`  ✓ ${outPath.split(/[\\/]/).pop()}`);
+}
+
+async function makeFavicons(sourcePath) {
+  console.log('\n🎨 Favicons');
+
+  // 16, 32, 48 — resized copies of the source, transparency preserved.
+  // No filter — keeps whatever color the source logo already is.
+  const sizes = [16, 32, 48];
+  const tmpFiles = [];
+
+  for (const size of sizes) {
+    const out = resolve(PUBLIC, `favicon-${size}x${size}.png`);
+    await sharp(sourcePath)
+      .resize(size, size, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png()
+      .toFile(out);
+    console.log(`  ✓ favicon-${size}x${size}.png`);
+  }
+
+  // Multi-resolution ICO — modern browsers + Windows taskbar pinning.
+  // png-to-ico wants file paths, so we materialize 16/32/48 first.
+  for (const size of sizes) {
+    const tmp = resolve(tmpdir(), `admerce-favicon-${size}.png`);
+    await sharp(sourcePath)
+      .resize(size, size, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png()
+      .toFile(tmp);
+    tmpFiles.push(tmp);
+  }
+
+  const icoBuf = await pngToIco(tmpFiles);
+  const icoPath = resolve(PUBLIC, 'favicon.ico');
+  writeFileSync(icoPath, icoBuf);
+  console.log(`  ✓ favicon.ico`);
+
+  // Clean up temp files
+  for (const f of tmpFiles) {
+    try {
+      unlinkSync(f);
+    } catch {}
+  }
 }
 
 const source = findSource();
@@ -101,4 +167,6 @@ await makeIcon(source, 180, ANY_RATIO, resolve(PUBLIC, 'apple-touch-icon-180x180
 await makeIcon(source, 167, ANY_RATIO, resolve(PUBLIC, 'apple-touch-icon-167x167.png'));
 await makeIcon(source, 152, ANY_RATIO, resolve(PUBLIC, 'apple-touch-icon-152x152.png'));
 
-console.log('\n✅ Done. Open public/maskable-512.png to verify it looks right.');
+await makeFavicons(source);
+
+console.log('\n✅ Done.');
