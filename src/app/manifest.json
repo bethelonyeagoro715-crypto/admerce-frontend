@@ -1,7 +1,7 @@
 {
   "name": "Admerce",
   "short_name": "Admerce",
-  "description": "Buy, sell, and provide services locally. Hyperlocal commerce for nearby stores, services, and makers.",
+  "description": "Buy, sell, and provide services locally.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
