@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import api from '../../services/api';
+import { alertDialog } from '../../components/ui/dialogs';
 import {
   MdDashboard,
   MdCalendarToday,
-  MdAttachMoney,
+  MdDesignServices,
   MdChatBubbleOutline,
   MdAccountBalanceWallet,
 } from 'react-icons/md';
@@ -83,10 +84,18 @@ export default function ServiceProviderLayout({ children }: { children: React.Re
   const checkSetup = async () => {
     setIsLoading(true);
     try {
-      const services = await api.listServices();
+      // CHANGED: getProviderServices() scopes to *this* provider.
+      // listServices() returned every active service platform-wide,
+      // which made hasSetup = true for a fresh provider as soon as
+      // any other provider existed.
+      const services = await api.getProviderServices();
       const servicesList = Array.isArray(services) ? services : [];
-      setHasSetup(servicesList.length > 0);
-      if (servicesList.length === 0) {
+      const has = servicesList.length > 0;
+      setHasSetup(has);
+
+      // CHANGED: guard against redirect loop when already onboarding.
+      const onOnboarding = pathname?.startsWith('/service-provider/onboarding');
+      if (!has && !onOnboarding) {
         router.replace('/service-provider/onboarding');
         return;
       }
@@ -103,24 +112,32 @@ export default function ServiceProviderLayout({ children }: { children: React.Re
       checkSetup();
     }, 0);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   let currentIndex = 0;
   if (pathname.startsWith('/service-provider/bookings')) currentIndex = 1;
-  else if (pathname.startsWith('/service-provider/earnings')) currentIndex = 2;
+  else if (pathname.startsWith('/service-provider/services')) currentIndex = 2;
   else if (pathname.startsWith('/service-provider/inbox')) currentIndex = 3;
   else if (pathname.startsWith('/service-provider/wallet')) currentIndex = 4;
   else if (pathname.startsWith('/service-provider/profile')) currentIndex = 5;
 
-  const navigate = (index: number) => {
-    if (index === 4 && hasSetup !== true) {
-      alert('Please complete setup first.');
+  const navigate = async (index: number) => {
+    // CHANGED: block is now on Bookings + Services (both need a catalog
+    // to be meaningful). Wallet no longer blocked — you can receive a
+    // top-up or refund even with no services.
+    if ((index === 1 || index === 2) && hasSetup !== true) {
+      await alertDialog({
+        title: 'Complete setup first',
+        body: 'Add your first service to unlock this section.',
+        kind: 'warning',
+      });
       return;
     }
     switch (index) {
       case 0: router.replace('/service-provider/home'); break;
       case 1: router.replace('/service-provider/bookings'); break;
-      case 2: router.replace('/service-provider/earnings'); break;
+      case 2: router.replace('/service-provider/services'); break;
       case 3: router.replace('/service-provider/inbox'); break;
       case 4: router.replace('/service-provider/wallet'); break;
       case 5: router.replace('/service-provider/profile'); break;
@@ -175,8 +192,8 @@ export default function ServiceProviderLayout({ children }: { children: React.Re
             onTap={() => navigate(1)}
           />
           <NavItem
-            Icon={MdAttachMoney}
-            label="Earnings"
+            Icon={MdDesignServices}
+            label="Services"
             active={currentIndex === 2}
             onTap={() => navigate(2)}
           />
