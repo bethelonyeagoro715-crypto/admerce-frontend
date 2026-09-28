@@ -323,7 +323,11 @@ export default function TwoFactorPage() {
                 {chosen === 'sms' && (
                   <div style={{ ...css.field, marginTop: 12 }}>
                     <label style={css.fieldLabel}>Phone number</label>
-                    <PhoneField value={phone} onChange={setPhone} />
+                    <PhoneField
+                      id="two-factor-phone"
+                      value={phone}
+                      onChange={setPhone}
+                    />
                   </div>
                 )}
 

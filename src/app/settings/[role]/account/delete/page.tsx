@@ -316,7 +316,7 @@ const css: Record<string, React.CSSProperties> = {
   stepLine: {
     width: 40,
     height: 2,
-    marginHorizontal: 4,
+    margin: '0 4px',
     transition: 'background-color 0.2s',
   },
   reasonsWrap: {

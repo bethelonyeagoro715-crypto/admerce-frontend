@@ -99,7 +99,7 @@ export default function BlockedUsersPage() {
     const ok = await confirmDialog({
       title: 'Unblock this user?',
       body: `${displayName(b)} will be able to message you and see your listings again.`,
-      kind: 'default',
+      kind: 'info',
     });
     if (!ok) return;
     try {

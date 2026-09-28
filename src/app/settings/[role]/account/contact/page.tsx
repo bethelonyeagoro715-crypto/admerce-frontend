@@ -255,7 +255,11 @@ export default function ContactPage() {
                 {open === 'phone' ? (
                   <div style={css.field}>
                     <label style={css.fieldLabel}>New phone number</label>
-                    <PhoneField value={phone} onChange={setPhone} />
+                    <PhoneField
+                      id="new-phone"
+                      value={phone}
+                      onChange={setPhone}
+                    />
                     {error && <span style={css.fieldError}>{error}</span>}
                   </div>
                 ) : (
