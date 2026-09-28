@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api, { extractErrorDetail } from '../../../services/api';
+import { clear as clearLocalStorage } from '../../../services/localStorage';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
-import { alertDialog } from '../../../components/ui/dialogs';
+import { alertDialog, confirmDialog } from '../../../components/ui/dialogs';
 import {
   MdSettings,
   MdEdit,
@@ -25,6 +26,8 @@ import {
   MdRefresh,
   MdArrowForward,
   MdReceiptLong,
+  MdSwapHoriz,
+  MdLogout,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -202,6 +205,21 @@ export default function ShopperProfilePage() {
 
   const handleRefresh = async () => {
     await loadData(false);
+  };
+
+  const handleLogout = async () => {
+    const ok = await confirmDialog({
+      title: 'Log out?',
+      body: 'You will need to sign in again to access your account.',
+      kind: 'danger',
+    });
+    if (!ok) return;
+    clearLocalStorage();
+    router.replace('/');
+  };
+
+  const handleSwitchRole = () => {
+    router.push('/onboarding?mode=switch');
   };
 
   const openAvatarModal = () => setShowAvatarModal(true);
@@ -460,7 +478,10 @@ export default function ShopperProfilePage() {
         <div style={css.walletCard}>
           <div style={css.walletTop}>
             <div style={css.walletLabelRow}>
-              <MdAccountBalanceWallet size={16} color="rgba(255,255,255,0.75)" />
+              <MdAccountBalanceWallet
+                size={16}
+                color="rgba(255,255,255,0.75)"
+              />
               <span style={css.walletLabel}>Available balance</span>
             </div>
             <div style={css.walletBalance}>
@@ -488,6 +509,28 @@ export default function ShopperProfilePage() {
             </button>
           </div>
         </div>
+
+        {/* ACCOUNT — Switch role */}
+        <h3 style={css.sectionLabel}>Account</h3>
+        <div style={css.section}>
+          <Row
+            icon={<MdSwapHoriz size={18} color="#16A34A" />}
+            iconBg="#DCFCE7"
+            label="Switch role"
+            subtitle={roleLabel(role)}
+            onClick={handleSwitchRole}
+          />
+        </div>
+
+        {/* LOG OUT */}
+        <button
+          onClick={handleLogout}
+          style={css.logoutBtn}
+          className="sp-logout"
+        >
+          <MdLogout size={20} color="#DC2626" />
+          <span>Log Out</span>
+        </button>
 
         <div style={{ height: 24 }} />
       </div>
@@ -600,12 +643,14 @@ function Row({
   icon,
   iconBg,
   label,
+  subtitle,
   value,
   onClick,
 }: {
   icon: React.ReactNode;
   iconBg: string;
   label: string;
+  subtitle?: string;
   value?: string;
   onClick?: () => void;
 }) {
@@ -614,7 +659,10 @@ function Row({
       <span style={{ ...css.rowIconWrap, backgroundColor: iconBg }}>
         {icon}
       </span>
-      <span style={css.rowLabel}>{label}</span>
+      <span style={css.rowBody}>
+        <span style={css.rowLabel}>{label}</span>
+        {subtitle && <span style={css.rowSubtitle}>{subtitle}</span>}
+      </span>
       {value && <span style={css.rowValue}>{value}</span>}
       <MdChevronRight size={18} color="#CBD5E1" />
     </button>
@@ -633,6 +681,8 @@ const KF = `
   .sp-edit:active { transform: scale(0.98); }
   .sp-wallet-btn:active { transform: scale(0.98); }
   .sp-wallet-btn2:active { transform: scale(0.98); }
+  .sp-logout:hover { background-color: #FEF2F2; }
+  .sp-logout:active { transform: scale(0.99); }
 `;
 
 // ─── Styles ─────────────────────────────────────────────────────────
@@ -925,12 +975,22 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     flexShrink: 0,
   },
-  rowLabel: {
+  rowBody: {
     flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    minWidth: 0,
+  },
+  rowLabel: {
     fontSize: 14.5,
     fontWeight: 600,
     color: '#0B0B1A',
     letterSpacing: -0.1,
+  },
+  rowSubtitle: {
+    fontSize: 12,
+    color: '#94A3B8',
   },
   rowValue: {
     fontSize: 13,
@@ -1003,6 +1063,25 @@ const css: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
     transition: 'transform 0.12s',
+  },
+  logoutBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    width: '100%',
+    marginTop: 22,
+    padding: '14px 20px',
+    borderRadius: 16,
+    border: '1.5px solid #FECACA',
+    backgroundColor: '#FFFFFF',
+    color: '#DC2626',
+    fontSize: 15,
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    letterSpacing: -0.1,
+    transition: 'background-color 0.15s, transform 0.12s',
   },
   modalOverlay: {
     position: 'fixed',
