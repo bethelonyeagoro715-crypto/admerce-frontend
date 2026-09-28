@@ -3,24 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api, { extractErrorDetail } from '../../../services/api';
-import { clear as clearLocalStorage } from '../../../services/localStorage';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
-import { alertDialog, confirmDialog } from '../../../components/ui/dialogs';
+import { alertDialog } from '../../../components/ui/dialogs';
 import {
   MdSettings,
   MdEdit,
-  MdLock,
-  MdCreditCard,
-  MdLocationOn,
-  MdSwapHoriz,
-  MdNotifications,
-  MdPalette,
-  MdShield,
-  MdHelpOutline,
-  MdReportProblem,
-  MdDescription,
-  MdInfo,
-  MdLogout,
   MdCameraAlt,
   MdPhotoLibrary,
   MdClose,
@@ -32,9 +19,12 @@ import {
   MdSearch,
   MdShoppingBag,
   MdAccountBalanceWallet,
+  MdLocationOn,
+  MdAdd,
   MdErrorOutline,
   MdRefresh,
-  MdFeedback,
+  MdArrowForward,
+  MdReceiptLong,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -58,7 +48,6 @@ interface Stats {
   saved: number;
   wanted: number;
   orders: number;
-  unreadNotifications: number;
   walletBalance: number;
 }
 
@@ -112,12 +101,6 @@ function displayName(p: Profile | null): string {
   return p.nickname || full || p.real_name || p.username || p.phone || 'User';
 }
 
-function isNotificationUnread(n: unknown): boolean {
-  if (!n || typeof n !== 'object') return false;
-  const obj = n as Record<string, unknown>;
-  return obj.read === false || obj.is_read === false;
-}
-
 function roleLabel(role: string): string {
   const map: Record<string, string> = {
     shopper: 'Shopper',
@@ -140,12 +123,10 @@ export default function ShopperProfilePage() {
     saved: 0,
     wanted: 0,
     orders: 0,
-    unreadNotifications: 0,
     walletBalance: 0,
   });
   const [loading, setLoading] = useState(true);
   const [errored, setErrored] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -172,12 +153,11 @@ export default function ShopperProfilePage() {
       if (seq !== reqSeq.current || !isMountedRef.current) return;
       setProfile(profileData);
 
-      const [savedRes, wantedRes, ordersRes, notifsRes, balanceRes] =
+      const [savedRes, wantedRes, ordersRes, balanceRes] =
         await Promise.allSettled([
           api.getSavedItems(),
           api.getWantedAlerts(),
           api.getWalletOrders(),
-          api.getNotifications(30, 0),
           api.getWalletBalance(),
         ]);
 
@@ -195,10 +175,6 @@ export default function ShopperProfilePage() {
         ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value)
           ? ordersRes.value.length
           : 0;
-      const unread =
-        notifsRes.status === 'fulfilled' && Array.isArray(notifsRes.value)
-          ? notifsRes.value.filter(isNotificationUnread).length
-          : 0;
       const balance =
         balanceRes.status === 'fulfilled'
           ? Number((balanceRes.value as { balance?: number })?.balance ?? 0)
@@ -208,7 +184,6 @@ export default function ShopperProfilePage() {
         saved,
         wanted,
         orders,
-        unreadNotifications: unread,
         walletBalance: balance,
       });
     } catch {
@@ -222,25 +197,11 @@ export default function ShopperProfilePage() {
     const timeoutId = window.setTimeout(() => {
       void loadData();
     }, 0);
-
     return () => window.clearTimeout(timeoutId);
   }, [loadData]);
 
   const handleRefresh = async () => {
-    setRefreshing(true);
     await loadData(false);
-    setRefreshing(false);
-  };
-
-  const handleLogout = async () => {
-    const ok = await confirmDialog({
-      title: 'Log out?',
-      body: 'You will need to sign in again to access your account.',
-      kind: 'danger',
-    });
-    if (!ok) return;
-    clearLocalStorage();
-    router.replace('/');
   };
 
   const openAvatarModal = () => setShowAvatarModal(true);
@@ -416,6 +377,16 @@ export default function ShopperProfilePage() {
               </>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => router.push('/shopper/profile/edit')}
+            style={css.editBtn}
+            className="sp-edit"
+          >
+            <MdEdit size={16} color="#0504AA" />
+            <span>Edit profile</span>
+          </button>
         </div>
       </div>
 
@@ -441,7 +412,7 @@ export default function ShopperProfilePage() {
             icon={<MdShoppingBag size={20} color="#7E22CE" />}
             label="Orders"
             value={String(stats.orders)}
-            onClick={() => router.push('/shopper/saved')}
+            onClick={() => router.push('/shopper/wallet')}
           />
           <div style={css.statDivider} />
           <StatTile
@@ -452,121 +423,71 @@ export default function ShopperProfilePage() {
           />
         </div>
 
-        {/* ACCOUNT */}
-        <h3 style={css.sectionLabel}>Your account</h3>
+        {/* YOUR ACTIVITY */}
+        <h3 style={css.sectionLabel}>Your activity</h3>
         <div style={css.section}>
           <Row
-            icon={<MdEdit size={18} color="#0504AA" />}
+            icon={<MdFavoriteBorder size={18} color="#0504AA" />}
             iconBg="#EEF0FF"
-            label="Edit Profile"
-            onClick={() => router.push('/shopper/profile/edit')}
+            label="Saved items"
+            value={String(stats.saved)}
+            onClick={() => router.push('/shopper/saved')}
           />
           <Row
-            icon={<MdLock size={18} color="#0891B2" />}
+            icon={<MdSearch size={18} color="#0891B2" />}
             iconBg="#E0F2FE"
-            label="Change Password"
-            onClick={() => router.push('/change-password')}
+            label="Wanted alerts"
+            value={String(stats.wanted)}
+            onClick={() => router.push('/shopper/saved')}
           />
           <Row
-            icon={<MdCreditCard size={18} color="#7E22CE" />}
+            icon={<MdReceiptLong size={18} color="#7E22CE" />}
             iconBg="#F3E8FF"
-            label="Payment Methods"
-            onClick={() => router.push('/shopper/wallet/cards')}
+            label="Orders"
+            value={String(stats.orders)}
+            onClick={() => router.push('/shopper/wallet')}
           />
           <Row
             icon={<MdLocationOn size={18} color="#D97706" />}
             iconBg="#FEF3C7"
-            label="Delivery Addresses"
+            label="Delivery addresses"
             onClick={() => router.push('/shopper/profile/addresses')}
           />
-          <Row
-            icon={<MdSwapHoriz size={18} color="#16A34A" />}
-            iconBg="#DCFCE7"
-            label="Switch Role"
-            onClick={() => router.push('/onboarding?mode=switch')}
-          />
         </div>
 
-        {/* PREFERENCES */}
-        <h3 style={css.sectionLabel}>Preferences</h3>
-        <div style={css.section}>
-          <Row
-            icon={<MdNotifications size={18} color="#0504AA" />}
-            iconBg="#EEF0FF"
-            label="Notifications"
-            badge={stats.unreadNotifications}
-            onClick={() => router.push('/shopper/notifications')}
-          />
-          <Row
-            icon={<MdPalette size={18} color="#7E22CE" />}
-            iconBg="#F3E8FF"
-            label="Appearance"
-            onClick={() => router.push(`/settings/${roleSlug}/appearance`)}
-          />
-          <Row
-            icon={<MdShield size={18} color="#0891B2" />}
-            iconBg="#E0F2FE"
-            label="Privacy"
-            onClick={() => router.push(`/settings/${roleSlug}/privacy`)}
-          />
+        {/* WALLET */}
+        <h3 style={css.sectionLabel}>Wallet</h3>
+        <div style={css.walletCard}>
+          <div style={css.walletTop}>
+            <div style={css.walletLabelRow}>
+              <MdAccountBalanceWallet size={16} color="rgba(255,255,255,0.75)" />
+              <span style={css.walletLabel}>Available balance</span>
+            </div>
+            <div style={css.walletBalance}>
+              {fmtBalance(stats.walletBalance)}
+            </div>
+          </div>
+          <div style={css.walletActions}>
+            <button
+              type="button"
+              onClick={() => router.push('/shopper/wallet')}
+              style={css.walletPrimary}
+              className="sp-wallet-btn"
+            >
+              <MdAdd size={16} color="#0504AA" />
+              <span>Top up</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/shopper/wallet')}
+              style={css.walletSecondary}
+              className="sp-wallet-btn2"
+            >
+              <span>View wallet</span>
+              <MdArrowForward size={16} color="#fff" />
+            </button>
+          </div>
         </div>
-
-        {/* SUPPORT */}
-        <h3 style={css.sectionLabel}>Support</h3>
-        <div style={css.section}>
-          <Row
-            icon={<MdHelpOutline size={18} color="#0504AA" />}
-            iconBg="#EEF0FF"
-            label="Help Center"
-            onClick={() => router.push(`/settings/${roleSlug}/help`)}
-          />
-          <Row
-            icon={<MdReportProblem size={18} color="#DC2626" />}
-            iconBg="#FEE2E2"
-            label="Report a Problem"
-            onClick={() => router.push(`/settings/${roleSlug}/report`)}
-          />
-          <Row
-            icon={<MdFeedback size={18} color="#0891B2" />}
-            iconBg="#E0F2FE"
-            label="Send Feedback"
-            onClick={() => router.push(`/settings/${roleSlug}/feedback`)}
-          />
-        </div>
-
-        {/* ABOUT */}
-        <h3 style={css.sectionLabel}>About</h3>
-        <div style={css.section}>
-          <Row
-            icon={<MdDescription size={18} color="#475569" />}
-            iconBg="#F1F5F9"
-            label="Terms and Conditions"
-            onClick={() => router.push(`/settings/${roleSlug}/legal/terms`)}
-          />
-          <Row
-            icon={<MdShield size={18} color="#475569" />}
-            iconBg="#F1F5F9"
-            label="Privacy Policy"
-            onClick={() => router.push(`/settings/${roleSlug}/legal/privacy`)}
-          />
-          <Row
-            icon={<MdInfo size={18} color="#475569" />}
-            iconBg="#F1F5F9"
-            label="App Version"
-            value="1.0.0"
-            onClick={() => router.push(`/settings/${roleSlug}/about`)}
-          />
-        </div>
-
-        {/* LOGOUT */}
-        <button
-          onClick={handleLogout}
-          style={css.logoutBtn}
-          className="sp-logout"
-        >
-          <MdLogout size={20} color="#DC2626" />
-          <span>Log Out</span>
-        </button>
 
         <div style={{ height: 24 }} />
       </div>
@@ -680,38 +601,22 @@ function Row({
   iconBg,
   label,
   value,
-  badge,
   onClick,
-  disabled,
 }: {
   icon: React.ReactNode;
   iconBg: string;
   label: string;
   value?: string;
-  badge?: number;
   onClick?: () => void;
-  disabled?: boolean;
 }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        ...css.row,
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.7 : 1,
-      }}
-      className={disabled ? undefined : 'sp-row'}
-    >
+    <button onClick={onClick} style={css.row} className="sp-row">
       <span style={{ ...css.rowIconWrap, backgroundColor: iconBg }}>
         {icon}
       </span>
       <span style={css.rowLabel}>{label}</span>
-      {badge != null && badge > 0 && (
-        <span style={css.rowBadge}>{badge > 99 ? '99+' : badge}</span>
-      )}
       {value && <span style={css.rowValue}>{value}</span>}
-      {!disabled && <MdChevronRight size={18} color="#CBD5E1" />}
+      <MdChevronRight size={18} color="#CBD5E1" />
     </button>
   );
 }
@@ -724,8 +629,10 @@ const KF = `
   .sp-stat-tile:hover { background-color: #FAFBFF; }
   .sp-stat-tile:active { transform: scale(0.97); }
   .sp-row:hover { background-color: #FAFBFF; }
-  .sp-logout:hover { background-color: #FEF2F2; }
-  .sp-logout:active { transform: scale(0.99); }
+  .sp-edit:hover { background-color: #F8FAFF; }
+  .sp-edit:active { transform: scale(0.98); }
+  .sp-wallet-btn:active { transform: scale(0.98); }
+  .sp-wallet-btn2:active { transform: scale(0.98); }
 `;
 
 // ─── Styles ─────────────────────────────────────────────────────────
@@ -906,6 +813,24 @@ const css: Record<string, React.CSSProperties> = {
     color: 'rgba(255,255,255,0.7)',
     fontWeight: 500,
   },
+  editBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 18,
+    padding: '10px 20px',
+    borderRadius: 14,
+    border: 'none',
+    backgroundColor: '#fff',
+    color: '#0504AA',
+    fontSize: 13.5,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    letterSpacing: -0.1,
+    transition: 'background-color 0.15s, transform 0.12s',
+    boxShadow: '0 6px 16px rgba(0,0,0,0.14)',
+  },
   sheet: {
     flex: 1,
     marginTop: -40,
@@ -1012,37 +937,72 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     color: '#94A3B8',
   },
-  rowBadge: {
-    minWidth: 22,
-    height: 22,
-    padding: '0 6px',
-    borderRadius: 999,
-    backgroundColor: '#DC2626',
+  walletCard: {
+    backgroundColor: '#0504AA',
+    backgroundImage:
+      'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    borderRadius: 20,
+    padding: '18px 18px 16px',
     color: '#fff',
-    fontSize: 11,
-    fontWeight: 800,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    boxShadow: '0 14px 32px rgba(5,4,170,0.28)',
   },
-  logoutBtn: {
+  walletTop: { display: 'flex', flexDirection: 'column', gap: 6 },
+  walletLabelRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+  walletLabel: {
+    fontSize: 11.5,
+    fontWeight: 700,
+    letterSpacing: 0.5,
+    color: 'rgba(255,255,255,0.78)',
+    textTransform: 'uppercase',
+  },
+  walletBalance: {
+    fontSize: 28,
+    fontWeight: 800,
+    letterSpacing: -0.5,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  walletActions: {
+    display: 'flex',
+    gap: 10,
+    marginTop: 16,
+  },
+  walletPrimary: {
+    flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    width: '100%',
-    marginTop: 22,
-    padding: '14px 20px',
-    borderRadius: 16,
-    border: '1.5px solid #FECACA',
-    backgroundColor: '#FFFFFF',
-    color: '#DC2626',
-    fontSize: 15,
+    gap: 6,
+    padding: '12px 14px',
+    borderRadius: 14,
+    border: 'none',
+    backgroundColor: '#fff',
+    color: '#0504AA',
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'transform 0.12s',
+  },
+  walletSecondary: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: '12px 14px',
+    borderRadius: 14,
+    border: '1.5px solid rgba(255,255,255,0.4)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    color: '#fff',
+    fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    letterSpacing: -0.1,
-    transition: 'background-color 0.15s, transform 0.12s',
+    transition: 'transform 0.12s',
   },
   modalOverlay: {
     position: 'fixed',
