@@ -1,19 +1,82 @@
 'use client';
 
-import { Suspense, useState, FormEvent } from 'react';
+import { Suspense, useState, useMemo, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import api from '../../services/api';
+import Link from 'next/link';
+import api, { extractErrorDetail } from '../../services/api';
+import {
+  MdPhoneIphone,
+  MdPersonOutline,
+  MdMailOutline,
+  MdLockOutline,
+  MdVisibility,
+  MdVisibilityOff,
+  MdCheckCircle,
+  MdErrorOutline,
+  MdArrowForward,
+  MdStorefront,
+  MdHandyman,
+} from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
 
-const ROLE_OPTIONS = [
-  { key: 'shopper', label: 'Buy items' },
-  { key: 'storekeeper', label: 'Sell items' },
-  { key: 'courier', label: 'Deliver packages' },
-  { key: 'flipper', label: 'Resell for profit' },
-  { key: 'service_provider', label: 'Provide a service' },
-];
+// Human labels for the signup intent banner.
+const ROLE_LABELS: Record<string, string> = {
+  shopper: 'Shopper',
+  storekeeper: 'Storekeeper',
+  courier: 'Courier',
+  flipper: 'Flipper',
+  service_provider: 'Service Provider',
+};
 
+// ─── Password strength ──────────────────────────────────────────────
+interface Strength {
+  score: 0 | 1 | 2 | 3 | 4 | 5;
+  label: string;
+  color: string;
+  bg: string;
+}
+
+function evaluatePassword(pw: string): Strength {
+  if (!pw) return { score: 0, label: '', color: '#E2E8F0', bg: '#E2E8F0' };
+  let s = 0;
+  if (pw.length >= 8) s++;
+  if (pw.length >= 12) s++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+  if (/\d/.test(pw)) s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+
+  if (s <= 1)
+    return { score: 1, label: 'Weak', color: '#DC2626', bg: '#FEE2E2' };
+  if (s === 2)
+    return { score: 2, label: 'Fair', color: '#D97706', bg: '#FEF3C7' };
+  if (s === 3)
+    return { score: 3, label: 'Good', color: '#0891B2', bg: '#E0F2FE' };
+  if (s === 4)
+    return { score: 4, label: 'Strong', color: '#16A34A', bg: '#DCFCE7' };
+  return { score: 5, label: 'Excellent', color: '#065F46', bg: '#ECFDF5' };
+}
+
+// ─── Field validation ───────────────────────────────────────────────
+function normalizeNgPhone(raw: string): string {
+  const digits = raw.replace(/[^\d+]/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('+')) return digits;
+  if (digits.startsWith('0')) return `+234${digits.slice(1)}`;
+  if (digits.startsWith('234')) return `+${digits}`;
+  return `+234${digits}`;
+}
+
+function isEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+}
+
+function isPhone(s: string): boolean {
+  const digits = s.replace(/[^\d]/g, '');
+  return digits.length >= 10 && digits.length <= 15;
+}
+
+// ─── Component ──────────────────────────────────────────────────────
 function SignupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -23,240 +86,695 @@ function SignupContent() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [obscurePassword, setObscurePassword] = useState(true);
-  const [futureRoles, setFutureRoles] = useState<string[]>([]);
+  const [obscure, setObscure] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  const availableRoles = intendedRole
-    ? ROLE_OPTIONS.filter((r) => r.key !== intendedRole).map((r) => r.label)
-    : ROLE_OPTIONS.map((r) => r.label);
+  const strength = useMemo(() => evaluatePassword(password), [password]);
 
-  const toggleRole = (label: string) => {
-    setFutureRoles((prev) =>
-      prev.includes(label) ? prev.filter((r) => r !== label) : [...prev, label]
-    );
-  };
+  const phoneValid = isPhone(phone);
+  const emailValid = isEmail(email);
+  const usernameValid = username.trim().length >= 3;
+  const passwordValid = password.length >= 8;
+
+  const formValid =
+    phoneValid && emailValid && usernameValid && passwordValid && !loading;
 
   const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
+    if (!formValid) {
+      setTouched({
+        phone: true,
+        email: true,
+        username: true,
+        password: true,
+      });
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      await api.signup(phone.trim(), password, email.trim(), username.trim());
+      const normalizedPhone = normalizeNgPhone(phone);
+      await api.signup(
+        normalizedPhone,
+        password,
+        email.trim(),
+        username.trim(),
+      );
       const params = new URLSearchParams();
-      params.set('phone', phone.trim());
+      params.set('phone', normalizedPhone);
       if (intendedRole) params.set('intended_role', intendedRole);
       router.push(`/verify-otp?${params.toString()}`);
-    } catch (err: unknown) {
-      let message = 'Signup failed';
-      if (err instanceof Error) message = err.message;
-      else if (typeof err === 'object' && err !== null && 'response' in err) {
-        const axiosError = err as { response?: { data?: { detail?: string } } };
-        message = axiosError.response?.data?.detail ?? message;
-      }
-      setError(message);
+    } catch (err) {
+      setError(
+        extractErrorDetail(err, "We couldn't create your account. Try again."),
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  const roleBanner =
+    intendedRole && ROLE_LABELS[intendedRole]
+      ? ROLE_LABELS[intendedRole]
+      : null;
+
   return (
-    <main style={styles.container}>
-      <div style={styles.card}>
-        <h1 style={styles.heading}>Let&rsquo;s get started</h1>
-        <p style={styles.subtitle}>Your next big find is just a signup away.</p>
+    <main className="su-root">
+      <style>{CSS}</style>
 
-        <form onSubmit={handleSignup} style={styles.form}>
-          <input
-            type="tel"
-            placeholder="Phone number"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            style={styles.input}
-            required
-          />
-          <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            style={styles.input}
-            required
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={styles.input}
-            required
-          />
+      <div className="su-shell">
+        {/* Brand */}
+        <header className="su-brandRow">
+          <div className="su-brandMark" aria-hidden>
+            <span className="su-brandDot" />
+          </div>
+          <span className="su-brandName">Admerce</span>
+        </header>
 
-          <div style={styles.passwordWrapper}>
+        {/* Intent banner — only when arriving with ?intended_role= */}
+        {roleBanner && (
+          <div className="su-intentBanner">
+            <span className="su-intentIcon" aria-hidden>
+              {intendedRole === 'service_provider' ? (
+                <MdHandyman size={16} color="#0504AA" />
+              ) : (
+                <MdStorefront size={16} color="#0504AA" />
+              )}
+            </span>
+            <span className="su-intentText">
+              Signing up as a <strong>{roleBanner}</strong>
+            </span>
+          </div>
+        )}
+
+        {/* Heading */}
+        <h1 className="su-heading">Let&rsquo;s get started</h1>
+        <p className="su-subtitle">
+          Create your Admerce account in under a minute.
+        </p>
+
+        {/* Form */}
+        <form onSubmit={handleSignup} className="su-form" noValidate>
+          <Field
+            id="su-phone"
+            label="Phone number"
+            icon={<MdPhoneIphone size={18} color="#64748B" />}
+            hint="We'll send a 6-digit code to this number"
+            error={
+              touched.phone && !phoneValid
+                ? 'Enter a valid phone number'
+                : undefined
+            }
+          >
             <input
-              type={obscurePassword ? 'password' : 'text'}
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{ ...styles.input, paddingRight: '48px' }}
+              id="su-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="0803 123 4567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
+              className="su-input"
+              disabled={loading}
               required
             />
-            <button
-              type="button"
-              onClick={() => setObscurePassword(!obscurePassword)}
-              style={styles.eyeButton}
-            >
-              {obscurePassword ? '👁️' : '🙈'}
-            </button>
-          </div>
+          </Field>
 
-          <p style={styles.chipsLabel}>Which would you also fit in the future?</p>
-          <div style={styles.chipsContainer}>
-            {availableRoles.map((label) => {
-              const selected = futureRoles.includes(label);
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => toggleRole(label)}
-                  style={{
-                    ...styles.chip,
-                    backgroundColor: selected ? '#0504AA' : '#ffffff',
-                    color: selected ? '#ffffff' : '#0504AA',
-                    borderColor: selected ? '#0504AA' : '#ccc',
-                  }}
+          <Field
+            id="su-username"
+            label="Username"
+            icon={<MdPersonOutline size={18} color="#64748B" />}
+            hint="This is how buyers and sellers see you"
+            error={
+              touched.username && !usernameValid
+                ? 'At least 3 characters'
+                : undefined
+            }
+          >
+            <input
+              id="su-username"
+              type="text"
+              autoComplete="username"
+              placeholder="e.g. bethel_o"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, username: true }))}
+              className="su-input"
+              disabled={loading}
+              required
+            />
+          </Field>
+
+          <Field
+            id="su-email"
+            label="Email"
+            icon={<MdMailOutline size={18} color="#64748B" />}
+            hint="For receipts and account recovery"
+            error={
+              touched.email && !emailValid ? 'Enter a valid email' : undefined
+            }
+          >
+            <input
+              id="su-email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+              className="su-input"
+              disabled={loading}
+              required
+            />
+          </Field>
+
+          <Field
+            id="su-password"
+            label="Password"
+            icon={<MdLockOutline size={18} color="#64748B" />}
+            hint="At least 8 characters — mix letters, numbers and a symbol"
+            error={
+              touched.password && !passwordValid
+                ? 'Password must be at least 8 characters'
+                : undefined
+            }
+          >
+            <div className="su-passwordRow">
+              <input
+                id="su-password"
+                type={obscure ? 'password' : 'text'}
+                autoComplete="new-password"
+                placeholder="Create a strong password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+                className="su-input su-inputPassword"
+                disabled={loading}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setObscure((v) => !v)}
+                className="su-eyeBtn"
+                aria-label={obscure ? 'Show password' : 'Hide password'}
+                tabIndex={-1}
+              >
+                {obscure ? (
+                  <MdVisibility size={18} color="#64748B" />
+                ) : (
+                  <MdVisibilityOff size={18} color="#64748B" />
+                )}
+              </button>
+            </div>
+
+            {/* Strength meter — only once the user starts typing */}
+            {password.length > 0 && (
+              <div className="su-strengthWrap">
+                <div className="su-strengthBars" aria-hidden>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <span
+                      key={n}
+                      className="su-strengthBar"
+                      style={{
+                        backgroundColor:
+                          n <= strength.score ? strength.color : '#E2E8F0',
+                      }}
+                    />
+                  ))}
+                </div>
+                <span
+                  className="su-strengthLabel"
+                  style={{ color: strength.color }}
                 >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+                  {strength.label}
+                </span>
+              </div>
+            )}
+          </Field>
+
+          {error && (
+            <div className="su-errorBox" role="alert">
+              <MdErrorOutline size={18} color="#991B1B" />
+              <span>{error}</span>
+            </div>
+          )}
 
           <button
             type="submit"
-            disabled={loading}
-            style={{ ...styles.button, opacity: loading ? 0.7 : 1 }}
+            disabled={!formValid}
+            className="su-submit"
+            style={{
+              opacity: formValid ? 1 : 0.55,
+              cursor: formValid ? 'pointer' : 'not-allowed',
+            }}
           >
-            {loading ? 'Creating account...' : 'Create Account'}
+            {loading ? (
+              <>
+                <span className="su-spinner" />
+                <span>Creating account…</span>
+              </>
+            ) : (
+              <>
+                <span>Create account</span>
+                <MdArrowForward size={18} color="#fff" />
+              </>
+            )}
           </button>
+
+          <p className="su-legal">
+            By creating an account you agree to our{' '}
+            <a
+              href="/terms"
+              className="su-legalLink"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Terms
+            </a>{' '}
+            and{' '}
+            <a
+              href="/privacy"
+              className="su-legalLink"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Privacy Policy
+            </a>
+            .
+          </p>
         </form>
 
-        {error && <div style={styles.error}>{error}</div>}
-
-        <a href="/login" style={styles.loginLink}>
-          Already part of Admerce? Right this way
-        </a>
+        {/* Footer */}
+        <div className="su-footer">
+          <span className="su-footerText">Already have an account?</span>
+          <Link href="/login" className="su-footerLink">
+            Sign in
+            <MdArrowForward size={14} color="#0504AA" />
+          </Link>
+        </div>
       </div>
     </main>
   );
 }
 
+// ─── Field wrapper ──────────────────────────────────────────────────
+function Field({
+  id,
+  label,
+  icon,
+  hint,
+  error,
+  children,
+}: {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  hint?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="su-field">
+      <label htmlFor={id} className="su-label">
+        <span className="su-labelIcon" aria-hidden>
+          {icon}
+        </span>
+        <span>{label}</span>
+      </label>
+      {children}
+      {error ? (
+        <p className="su-fieldError">
+          <MdErrorOutline size={12} color="#DC2626" />
+          {error}
+        </p>
+      ) : hint ? (
+        <p className="su-fieldHint">
+          <MdCheckCircle size={12} color="#CBD5E1" />
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ─── Page wrapper ───────────────────────────────────────────────────
 export default function SignupPage() {
   return (
-    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading signup…</div>}>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '100vh',
+            background: '#F4F5FB',
+            color: '#64748B',
+            fontSize: 14,
+          }}
+        >
+          Loading…
+        </div>
+      }
+    >
       <SignupContent />
     </Suspense>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '100vh',
-    backgroundColor: '#ffffff',
-    padding: '24px',
-  },
-  card: {
-    width: '100%',
-    maxWidth: '420px',
-    textAlign: 'center',
-  },
-  heading: {
-    fontSize: '32px',
-    fontWeight: 900,
-    color: '#1A1A1A',
-    marginTop: '40px',
-    marginBottom: '8px',
-  },
-  subtitle: {
-    color: 'grey',
-    fontSize: '16px',
-    marginBottom: '40px',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  input: {
-    padding: '12px 16px',
-    borderRadius: '12px',
-    border: '1px solid #e0e0e0',
-    fontSize: '16px',
-    outline: 'none',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-  },
-  passwordWrapper: {
-    position: 'relative' as const,
-  },
-  eyeButton: {
-    position: 'absolute' as const,
-    right: '8px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    background: 'none',
-    border: 'none',
-    fontSize: '18px',
-    cursor: 'pointer',
-  },
-  chipsLabel: {
-    color: 'grey',
-    fontSize: '14px',
-    marginTop: '12px',
-    textAlign: 'left' as const,
-  },
-  chipsContainer: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  chip: {
-    padding: '8px 14px',
-    borderRadius: '20px',
-    border: '1.5px solid',
-    fontSize: '13px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  button: {
-    padding: '16px',
-    backgroundColor: '#0504AA',
-    color: 'white',
-    border: 'none',
-    borderRadius: '16px',
-    fontSize: '18px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    marginTop: '12px',
-  },
-  error: {
-    marginTop: '16px',
-    padding: '12px',
-    backgroundColor: '#ffebee',
-    color: '#c62828',
-    borderRadius: '8px',
-    fontSize: '14px',
-  },
-  loginLink: {
-    display: 'block',
-    marginTop: '16px',
-    color: 'grey',
-    textDecoration: 'none',
-    fontSize: '14px',
-  },
-};
+// ─── CSS ────────────────────────────────────────────────────────────
+const CSS = `
+  @keyframes suSpin { to { transform: rotate(360deg); } }
+  @keyframes suFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .su-root {
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at 15% 0%, rgba(61,59,255,0.08) 0%, rgba(61,59,255,0) 55%),
+      #F4F5FB;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 20px 48px;
+    font-family: inherit;
+  }
+
+  .su-shell {
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    animation: suFadeIn 0.3s ease both;
+  }
+
+  /* Brand */
+  .su-brandRow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 28px;
+    padding-top: 4px;
+  }
+  .su-brandMark {
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 14px rgba(5,4,170,0.22);
+  }
+  .su-brandDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+  }
+  .su-brandName {
+    font-size: 15px;
+    font-weight: 800;
+    color: #0B0B1A;
+    letter-spacing: -0.02em;
+  }
+
+  /* Intent banner */
+  .su-intentBanner {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #EEF0FF;
+    border: 1px solid #C7CCFF;
+    border-radius: 12px;
+    margin-bottom: 18px;
+    align-self: flex-start;
+  }
+  .su-intentIcon {
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    background: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .su-intentText {
+    font-size: 12.5px;
+    color: #0504AA;
+    font-weight: 600;
+  }
+  .su-intentText strong {
+    font-weight: 800;
+  }
+
+  /* Heading */
+  .su-heading {
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 800;
+    color: #0B0B1A;
+    margin: 0 0 8px;
+    letter-spacing: -0.03em;
+  }
+  .su-subtitle {
+    font-size: 14.5px;
+    color: #64748B;
+    margin: 0 0 28px;
+    line-height: 1.5;
+  }
+
+  /* Form */
+  .su-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .su-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .su-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #334155;
+    letter-spacing: 0.01em;
+  }
+  .su-labelIcon {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .su-input {
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1.5px solid #E6E8F0;
+    background: #FFFFFF;
+    font-size: 15.5px;
+    color: #0B0B1A;
+    font-family: inherit;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .su-input::placeholder {
+    color: #94A3B8;
+  }
+  .su-input:hover:not(:disabled) {
+    border-color: #CBD5E1;
+  }
+  .su-input:focus {
+    border-color: #0504AA;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 4px rgba(5,4,170,0.10);
+  }
+  .su-input:disabled {
+    background: #F8FAFC;
+    color: #94A3B8;
+    cursor: not-allowed;
+  }
+  .su-inputPassword {
+    padding-right: 52px;
+  }
+
+  .su-passwordRow {
+    position: relative;
+  }
+  .su-eyeBtn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+  }
+  .su-eyeBtn:hover { background: #F1F5F9; }
+
+  /* Strength meter */
+  .su-strengthWrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 2px;
+  }
+  .su-strengthBars {
+    flex: 1;
+    display: flex;
+    gap: 4px;
+  }
+  .su-strengthBar {
+    flex: 1;
+    height: 4px;
+    border-radius: 999px;
+    transition: background-color 0.2s;
+  }
+  .su-strengthLabel {
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    min-width: 68px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Hint / error */
+  .su-fieldHint,
+  .su-fieldError {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    margin: 0;
+    padding-left: 4px;
+    line-height: 1.4;
+  }
+  .su-fieldHint { color: #94A3B8; }
+  .su-fieldError { color: #DC2626; font-weight: 600; }
+
+  /* Error box */
+  .su-errorBox {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    color: #991B1B;
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1.45;
+    animation: suFadeIn 0.2s ease both;
+  }
+
+  /* Submit */
+  .su-submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 16px 20px;
+    margin-top: 6px;
+    border: none;
+    border-radius: 14px;
+    background-image: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
+    background-color: #0504AA;
+    color: #FFFFFF;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: inherit;
+    letter-spacing: -0.01em;
+    box-shadow: 0 10px 24px rgba(5,4,170,0.26);
+    transition: transform 0.12s, box-shadow 0.15s, opacity 0.15s;
+  }
+  .su-submit:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 30px rgba(5,4,170,0.32);
+  }
+  .su-submit:active:not(:disabled) {
+    transform: translateY(0) scale(0.985);
+  }
+
+  .su-spinner {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: #fff;
+    animation: suSpin 0.7s linear infinite;
+  }
+
+  /* Legal */
+  .su-legal {
+    font-size: 12px;
+    color: #94A3B8;
+    line-height: 1.55;
+    margin: 4px 0 0;
+    text-align: center;
+  }
+  .su-legalLink {
+    color: #0504AA;
+    text-decoration: none;
+    font-weight: 700;
+    border-bottom: 1px dotted rgba(5,4,170,0.4);
+  }
+  .su-legalLink:hover {
+    border-bottom-style: solid;
+  }
+
+  /* Footer */
+  .su-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 28px;
+    padding-top: 22px;
+    border-top: 1px solid #EAECF3;
+  }
+  .su-footerText {
+    font-size: 13.5px;
+    color: #64748B;
+  }
+  .su-footerLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #0504AA;
+    text-decoration: none;
+    letter-spacing: -0.01em;
+  }
+  .su-footerLink:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+`;
