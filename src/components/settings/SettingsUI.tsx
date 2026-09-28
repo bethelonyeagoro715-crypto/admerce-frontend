@@ -16,20 +16,27 @@ export function SettingsShell({
   children: React.ReactNode;
 }) {
   return (
-    <main style={S.root}>
+    <main style={S.root} className="st-shell">
       <style>{`
+        .st-shell, .st-shell *, .st-shell *::before, .st-shell *::after {
+          box-sizing: border-box;
+        }
         .st-row + .st-row { border-top: 1px solid #F1F5F9; }
         .st-row:hover:not(:disabled) { background-color: #FAFBFF; }
         .st-row:active:not(:disabled) { background-color: #F4F5FB; }
       `}</style>
       <header style={S.header}>
-        <button onClick={onBack} style={S.iconBtn} aria-label="Back">
-          <MdArrowBack size={22} color="#0B0B1A" />
-        </button>
-        <h1 style={S.headerTitle}>{title}</h1>
-        <div style={S.headerRight}>{action}</div>
+        <div style={S.headerInner}>
+          <button onClick={onBack} style={S.iconBtn} aria-label="Back">
+            <MdArrowBack size={22} color="#0B0B1A" />
+          </button>
+          <h1 style={S.headerTitle}>{title}</h1>
+          <div style={S.headerRight}>{action}</div>
+        </div>
       </header>
-      <div style={S.body}>{children}</div>
+      <div style={S.body}>
+        <div style={S.bodyInner}>{children}</div>
+      </div>
     </main>
   );
 }
@@ -125,7 +132,10 @@ export function SettingsToggle({
   disabled?: boolean;
 }) {
   return (
-    <div className="st-row" style={{ ...S.row, cursor: 'default', opacity: disabled ? 0.6 : 1 }}>
+    <div
+      className="st-row"
+      style={{ ...S.row, cursor: 'default', opacity: disabled ? 0.6 : 1 }}
+    >
       {icon && (
         <span style={{ ...S.rowIconWrap, backgroundColor: iconBg }}>{icon}</span>
       )}
@@ -164,7 +174,9 @@ export function SettingsSlider({
     <div className="st-row" style={S.sliderWrap}>
       <div style={S.sliderHeader}>
         {icon && (
-          <span style={{ ...S.rowIconWrap, backgroundColor: iconBg }}>{icon}</span>
+          <span style={{ ...S.rowIconWrap, backgroundColor: iconBg }}>
+            {icon}
+          </span>
         )}
         <span style={S.rowLabel}>{label}</span>
         <span style={S.sliderValue}>
@@ -350,20 +362,27 @@ const S: Record<string, React.CSSProperties> = {
     minHeight: '100vh',
     backgroundColor: '#F4F5FB',
     overflowX: 'hidden',
+    width: '100%',
   },
   header: {
     position: 'sticky',
     top: 0,
     zIndex: 20,
+    backgroundColor: 'rgba(244,245,251,0.94)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    borderBottom: '1px solid #EAECF3',
+    width: '100%',
+  },
+  headerInner: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
     padding: '10px 14px',
-    backgroundColor: 'rgba(244,245,251,0.94)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    borderBottom: '1px solid #EAECF3',
+    maxWidth: 640,
+    margin: '0 auto',
+    width: '100%',
   },
   iconBtn: {
     width: 38,
@@ -376,6 +395,7 @@ const S: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     cursor: 'pointer',
     boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
+    flexShrink: 0,
   },
   headerTitle: {
     flex: 1,
@@ -385,6 +405,9 @@ const S: Record<string, React.CSSProperties> = {
     color: '#0B0B1A',
     margin: 0,
     letterSpacing: -0.2,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   headerRight: {
     minWidth: 38,
@@ -392,12 +415,19 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 6,
+    flexShrink: 0,
   },
   body: {
+    width: '100%',
     padding: '16px 16px 48px',
+  },
+  bodyInner: {
     display: 'flex',
     flexDirection: 'column',
     gap: 18,
+    maxWidth: 640,
+    margin: '0 auto',
+    width: '100%',
   },
   section: { display: 'flex', flexDirection: 'column', gap: 8 },
   sectionLabel: {
@@ -452,6 +482,7 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: '#0B0B1A',
     letterSpacing: -0.1,
+    lineHeight: 1.35,
   },
   rowSubtitle: { fontSize: 12, color: '#94A3B8', lineHeight: 1.35 },
   rowValue: {
@@ -462,6 +493,7 @@ const S: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    flexShrink: 0,
   },
   rowBadge: {
     minWidth: 22,
@@ -475,12 +507,14 @@ const S: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   sliderWrap: {
     padding: '14px 16px',
     display: 'flex',
     flexDirection: 'column',
     gap: 10,
+    width: '100%',
   },
   sliderHeader: { display: 'flex', alignItems: 'center', gap: 12 },
   sliderValue: {
@@ -489,6 +523,7 @@ const S: Record<string, React.CSSProperties> = {
     color: '#0504AA',
     marginLeft: 'auto',
     fontVariantNumeric: 'tabular-nums',
+    flexShrink: 0,
   },
   sliderInput: {
     width: '100%',
@@ -505,5 +540,7 @@ const S: Record<string, React.CSSProperties> = {
     padding: '6px 10px',
     cursor: 'pointer',
     fontFamily: 'inherit',
+    maxWidth: 160,
+    flexShrink: 0,
   },
 };
