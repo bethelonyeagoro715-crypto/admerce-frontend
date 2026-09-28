@@ -28,6 +28,31 @@ const SPOTLIGHT_INTERVAL_MS = 4200;
 
 const CONTENT_MAX_WIDTH = 1440;
 
+// Pinterest-style variable ratios, weighted toward portrait.
+// `weight` = h/w (inverse of aspect ratio) — used by shortest-column-first.
+const CARD_RATIOS: { w: number; h: number; weight: number }[] = [
+  { w: 4, h: 5, weight: 5 / 4 }, // 30% — classic tall portrait
+  { w: 5, h: 6, weight: 6 / 5 }, // 25% — slightly shorter
+  { w: 3, h: 4, weight: 4 / 3 }, // 20% — taller
+  { w: 1, h: 1, weight: 1 }, // 15% — square
+  { w: 9, h: 16, weight: 16 / 9 }, // 10% — reel-tall
+];
+
+function ratioForSeed(seed: string) {
+  // FNV-1a — deterministic per item so the same card shape renders every time.
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const n = (h >>> 0) % 100;
+  if (n < 30) return CARD_RATIOS[0];
+  if (n < 55) return CARD_RATIOS[1];
+  if (n < 75) return CARD_RATIOS[2];
+  if (n < 90) return CARD_RATIOS[3];
+  return CARD_RATIOS[4];
+}
+
 type FeedFilter = 'mixed' | 'items' | 'services';
 
 const FILTER_OPTIONS: { value: FeedFilter; label: string; hint: string }[] = [
@@ -170,6 +195,7 @@ function MasonryColumns<T>({
   const heights = new Array(columns).fill(0);
 
   for (const item of items) {
+    // Shortest-column-first with real weight (aspect-ratio-derived)
     let target = 0;
     for (let c = 1; c < columns; c++) {
       if (heights[c] < heights[target]) target = c;
@@ -437,18 +463,13 @@ function StoreSpotlight({
   );
 }
 
-// ─── ReelCard — shared portrait full-bleed card ────────────────────────────
-// Used by ItemCard / StoreCard / ProviderCard so the feed reads as one
-// continuous product. Every card:
-//   • fills a 4:5 portrait frame
-//   • lays a bottom gradient over the image for text contrast
-//   • overlays badge (top-left), optional search action (bottom-right),
-//     and text stack (store, title, price) at the bottom
+// ─── ReelCard — shared portrait full-bleed card with variable height ───────
 function ReelCard({
   image,
   placeholder,
   badge,
   badgeBg,
+  ratio,
   onPress,
   onSearch,
   store,
@@ -460,6 +481,7 @@ function ReelCard({
   placeholder: React.ReactNode;
   badge: string;
   badgeBg: string;
+  ratio: { w: number; h: number };
   onPress: () => void;
   onSearch?: () => void;
   store?: string;
@@ -471,8 +493,9 @@ function ReelCard({
     <button
       type="button"
       onClick={onPress}
-      style={styles.reelCard}
+      style={{ ...styles.reelCard, aspectRatio: `${ratio.w} / ${ratio.h}` }}
       aria-label={ariaLabel || title}
+      className="sh-reel"
     >
       {image ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -537,12 +560,15 @@ function ItemCard({
     );
   }
 
+  const ratio = ratioForSeed(item.id);
+
   return (
     <ReelCard
       image={item.image}
       placeholder={<MdImage size={40} color="#9e9e9e" />}
       badge="ITEM"
       badgeBg="rgba(15,23,42,0.78)"
+      ratio={ratio}
       onPress={() => onPress(item)}
       onSearch={() => onVisualSearch(item.image)}
       store={item.storeName}
@@ -560,12 +586,14 @@ function StoreCard({
   store: Store;
   onPress: (id: string) => void;
 }) {
+  const ratio = ratioForSeed(`store-${store.id}`);
   return (
     <ReelCard
       image={store.image}
       placeholder={<MdStorefront size={40} color="#9e9e9e" />}
       badge="STORE"
       badgeBg="rgba(5,4,170,0.88)"
+      ratio={ratio}
       onPress={() => onPress(store.id)}
       title={store.name}
     />
@@ -581,6 +609,7 @@ function ProviderCard({
   onPress: (id: string, name: string) => void;
 }) {
   const initials = (provider.name || '?')[0].toUpperCase();
+  const ratio = ratioForSeed(`provider-${provider.id}`);
   return (
     <ReelCard
       image={provider.image}
@@ -591,6 +620,7 @@ function ProviderCard({
       }
       badge="PROVIDER"
       badgeBg="rgba(126,34,206,0.88)"
+      ratio={ratio}
       onPress={() => onPress(provider.id, provider.name)}
       title={provider.name}
       price={`${provider.serviceCount} service${
@@ -1317,7 +1347,11 @@ export default function ShopperHomePage() {
                       columns={columns}
                       gap={10}
                       keyFor={(item) => `${item.kind}-${item.id}`}
-                      weightOf={() => 1}
+                      weightOf={(item) =>
+                        item.kind === 'service'
+                          ? CARD_RATIOS[0].weight
+                          : ratioForSeed(item.id).weight
+                      }
                       renderItem={(item) => (
                         <ItemCard
                           item={item}
@@ -1354,7 +1388,9 @@ export default function ShopperHomePage() {
                     columns={columns}
                     gap={10}
                     keyFor={(store) => store.id}
-                    weightOf={() => 1}
+                    weightOf={(store) =>
+                      ratioForSeed(`store-${store.id}`).weight
+                    }
                     renderItem={(store) => (
                       <StoreCard store={store} onPress={handleStorePress} />
                     )}
@@ -1383,7 +1419,9 @@ export default function ShopperHomePage() {
                     columns={columns}
                     gap={10}
                     keyFor={(provider) => provider.id}
-                    weightOf={() => 1}
+                    weightOf={(provider) =>
+                      ratioForSeed(`provider-${provider.id}`).weight
+                    }
                     renderItem={(provider) => (
                       <ProviderCard
                         provider={provider}
@@ -1425,7 +1463,6 @@ export default function ShopperHomePage() {
               </button>
             </div>
 
-            {/* Show */}
             <div style={styles.filterSection}>
               <div style={styles.filterSectionLabel}>Show</div>
               <div style={styles.filterOptions}>
@@ -1463,7 +1500,6 @@ export default function ShopperHomePage() {
               </div>
             </div>
 
-            {/* Product categories */}
             <div style={styles.filterSection}>
               <div style={styles.filterSectionLabel}>Products</div>
               <div style={styles.chipGrid}>
@@ -1507,7 +1543,6 @@ export default function ShopperHomePage() {
               </div>
             </div>
 
-            {/* Service categories */}
             <div style={styles.filterSection}>
               <div style={styles.filterSectionLabel}>Services</div>
               <div style={styles.chipGrid}>
@@ -1701,11 +1736,11 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
 
-  // ── Reel card (new unified look) ────────────────────────────
+  // ── Reel card ────────────────────────────────────────────────
+  // Note: aspectRatio is set dynamically per-card via inline style override.
   reelCard: {
     position: 'relative',
     width: '100%',
-    aspectRatio: '4 / 5',
     borderRadius: 16,
     overflow: 'hidden',
     border: 'none',
@@ -2054,11 +2089,9 @@ const CSS = `
     box-sizing: border-box;
   }
 
-  .sh-home .reel-hover {
-    transition: transform 0.15s ease;
-  }
-  .sh-home .reel-hover:hover {
-    transform: translateY(-2px);
+  /* Subtle tap feedback — no hover, matches Pinterest's mobile-first feel */
+  .sh-reel:active {
+    transform: scale(0.985);
   }
 
   .sh-panel-inner {
