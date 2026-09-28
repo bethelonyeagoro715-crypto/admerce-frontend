@@ -370,9 +370,9 @@ function SignupContent() {
 
         {/* Footer */}
         <div className="su-footer">
-          <span className="su-footerText">Already have an account?</span>
+          <span className="su-footerText">Already part of Admerce?</span>
           <Link href="/login" className="su-footerLink">
-            Sign in
+            Right this way
             <MdArrowForward size={14} color="#0504AA" />
           </Link>
         </div>
