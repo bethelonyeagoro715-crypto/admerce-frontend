@@ -207,7 +207,7 @@ function SignupContent() {
             id="su-username"
             label="Username"
             icon={<MdPersonOutline size={18} color="#64748B" />}
-            hint="This is how buyers and sellers see you"
+            hint="This is how sellers see you, must be name on your National ID"
             error={
               touched.username && !usernameValid
                 ? 'At least 3 characters'
@@ -218,7 +218,7 @@ function SignupContent() {
               id="su-username"
               type="text"
               autoComplete="username"
-              placeholder="e.g. bethel_o"
+              placeholder="e.g. Graham Bell"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onBlur={() => setTouched((t) => ({ ...t, username: true }))}
