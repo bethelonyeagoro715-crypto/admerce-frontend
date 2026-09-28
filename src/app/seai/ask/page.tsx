@@ -15,7 +15,6 @@ import {
   MdClose,
   MdAdd,
   MdMic,
-  MdMicOff,
   MdArrowUpward,
   MdContentCopy,
   MdRefresh,
@@ -111,7 +110,6 @@ interface Toast {
   text: string;
 }
 
-// ─── Time-based greeting ────────────────────────────────────────────
 function greetingForHour(h: number): string {
   if (h < 5) return 'Working late.';
   if (h < 12) return 'Good morning.';
@@ -120,7 +118,6 @@ function greetingForHour(h: number): string {
   return 'Good evening.';
 }
 
-// ─── Rotating thinking verbs ────────────────────────────────────────
 const THINKING_VERBS = [
   'Searching nearby stores',
   'Comparing prices',
@@ -173,11 +170,7 @@ function typeBadgeLabel(type: string | undefined): string {
   return 'ITEM';
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// Inline markdown renderer — handles **bold**, *italic*, `code`,
-// and auto-highlights ₦ prices. Splits on the small subset we need;
-// no full markdown lib for a chat bubble.
-// ═══════════════════════════════════════════════════════════════════
+// ─── Inline markdown renderer ───────────────────────────────────────
 interface MdToken {
   kind: 'text' | 'bold' | 'italic' | 'code' | 'price';
   value: string;
@@ -190,56 +183,31 @@ function tokenizeInline(input: string): MdToken[] {
   let keyCounter = 0;
   const nextKey = () => `t_${keyCounter++}`;
 
-  // Priority order: **bold** → `code` → *italic* → ₦price
-  // Simple scanner; no nested emphasis handling (chat doesn't need it).
   while (i < input.length) {
-    // Bold: **...**
     if (input[i] === '*' && input[i + 1] === '*') {
       const end = input.indexOf('**', i + 2);
       if (end !== -1) {
-        tokens.push({
-          kind: 'bold',
-          value: input.slice(i + 2, end),
-          key: nextKey(),
-        });
+        tokens.push({ kind: 'bold', value: input.slice(i + 2, end), key: nextKey() });
         i = end + 2;
         continue;
       }
     }
-
-    // Code: `...`
     if (input[i] === '`') {
       const end = input.indexOf('`', i + 1);
       if (end !== -1) {
-        tokens.push({
-          kind: 'code',
-          value: input.slice(i + 1, end),
-          key: nextKey(),
-        });
+        tokens.push({ kind: 'code', value: input.slice(i + 1, end), key: nextKey() });
         i = end + 1;
         continue;
       }
     }
-
-    // Italic: *...* (single star, not double)
-    if (
-      input[i] === '*' &&
-      input[i + 1] !== '*' &&
-      input[i - 1] !== '*'
-    ) {
+    if (input[i] === '*' && input[i + 1] !== '*' && input[i - 1] !== '*') {
       const end = input.indexOf('*', i + 1);
       if (end !== -1 && input[end + 1] !== '*') {
-        tokens.push({
-          kind: 'italic',
-          value: input.slice(i + 1, end),
-          key: nextKey(),
-        });
+        tokens.push({ kind: 'italic', value: input.slice(i + 1, end), key: nextKey() });
         i = end + 1;
         continue;
       }
     }
-
-    // Price: ₦ followed by digits/commas/dots
     if (input[i] === '₦') {
       const m = input.slice(i).match(/^₦\s?[\d,]+(?:\.\d+)?/);
       if (m) {
@@ -248,25 +216,13 @@ function tokenizeInline(input: string): MdToken[] {
         continue;
       }
     }
-
-    // Plain text until next special marker
     let j = i + 1;
-    while (
-      j < input.length &&
-      input[j] !== '*' &&
-      input[j] !== '`' &&
-      input[j] !== '₦'
-    ) {
+    while (j < input.length && input[j] !== '*' && input[j] !== '`' && input[j] !== '₦') {
       j++;
     }
-    tokens.push({
-      kind: 'text',
-      value: input.slice(i, j),
-      key: nextKey(),
-    });
+    tokens.push({ kind: 'text', value: input.slice(i, j), key: nextKey() });
     i = j;
   }
-
   return tokens;
 }
 
@@ -275,29 +231,13 @@ function renderInline(text: string): React.ReactNode {
   return tokens.map((tok) => {
     switch (tok.kind) {
       case 'bold':
-        return (
-          <strong key={tok.key} className="seai-md-bold">
-            {tok.value}
-          </strong>
-        );
+        return <strong key={tok.key} className="seai-md-bold">{tok.value}</strong>;
       case 'italic':
-        return (
-          <em key={tok.key} className="seai-md-italic">
-            {tok.value}
-          </em>
-        );
+        return <em key={tok.key} className="seai-md-italic">{tok.value}</em>;
       case 'code':
-        return (
-          <code key={tok.key} className="seai-md-code">
-            {tok.value}
-          </code>
-        );
+        return <code key={tok.key} className="seai-md-code">{tok.value}</code>;
       case 'price':
-        return (
-          <span key={tok.key} className="seai-md-price">
-            {tok.value}
-          </span>
-        );
+        return <span key={tok.key} className="seai-md-price">{tok.value}</span>;
       default:
         return <span key={tok.key}>{tok.value}</span>;
     }
@@ -310,14 +250,12 @@ function SeaiCursor() {
 
 function ThinkingIndicator() {
   const [verbIdx, setVerbIdx] = useState(0);
-
   useEffect(() => {
     const id = setInterval(() => {
       setVerbIdx((i) => (i + 1) % THINKING_VERBS.length);
     }, 1400);
     return () => clearInterval(id);
   }, []);
-
   return (
     <div className="seai-thinking">
       <span className="seai-thinking-orb" aria-hidden>
@@ -343,7 +281,6 @@ function SeaiResultCard({
 }) {
   const isService = card.type === 'service' || !!card.service_id;
   const isStore = card.type === 'store' || (!!card.store_id && !card.listing_id);
-
   const image = resolveImageUrl(
     (card.image_url as string | undefined) || card.provider_image_url,
   );
@@ -367,7 +304,6 @@ function SeaiResultCard({
     e.stopPropagation();
     if (directions) window.open(directions, '_blank', 'noopener,noreferrer');
   };
-
   const handleSave = (e: React.MouseEvent) => {
     e.stopPropagation();
     onSave();
@@ -375,34 +311,20 @@ function SeaiResultCard({
 
   return (
     <div className="seai-tile" style={styles.tile}>
-      <button
-        type="button"
-        onClick={onTap}
-        style={styles.tileTap}
-        aria-label={`Open ${card.title || 'result'}`}
-      >
+      <button type="button" onClick={onTap} style={styles.tileTap} aria-label={`Open ${card.title || 'result'}`}>
         <div style={styles.tileImageWrap}>
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={image} alt="" style={styles.tileImage} />
           ) : (
             <div style={styles.tilePlaceholder}>
-              {isStore ? (
-                <MdStore size={40} color="#C7D2FE" />
-              ) : isService ? (
-                <MdBuild size={40} color="#C7D2FE" />
-              ) : (
-                <MdImage size={40} color="#C7D2FE" />
-              )}
+              {isStore ? <MdStore size={40} color="#C7D2FE" />
+                : isService ? <MdBuild size={40} color="#C7D2FE" />
+                : <MdImage size={40} color="#C7D2FE" />}
             </div>
           )}
           <div style={styles.tileImageOverlay} />
-          <span
-            style={{
-              ...styles.tileBadge,
-              backgroundColor: typeBadgeColor(card.type),
-            }}
-          >
+          <span style={{ ...styles.tileBadge, backgroundColor: typeBadgeColor(card.type) }}>
             {typeBadgeLabel(card.type)}
           </span>
           {verified && (
@@ -424,9 +346,7 @@ function SeaiResultCard({
         </div>
 
         <div style={styles.tileBody}>
-          <div style={styles.tileTitle} title={card.title || ''}>
-            {card.title || 'Untitled'}
-          </div>
+          <div style={styles.tileTitle} title={card.title || ''}>{card.title || 'Untitled'}</div>
           {subtitle && (
             <div style={styles.tileSubtitle} title={subtitle}>
               <MdStore size={11} color="#94A3B8" />
@@ -444,22 +364,12 @@ function SeaiResultCard({
 
       <div style={styles.tileFooter}>
         {directions && (
-          <button
-            type="button"
-            onClick={handleDirections}
-            style={styles.tileFooterBtn}
-            aria-label="Directions"
-          >
+          <button type="button" onClick={handleDirections} style={styles.tileFooterBtn} aria-label="Directions">
             <MdNavigation size={14} color={Brand.accent} />
             <span>Directions</span>
           </button>
         )}
-        <button
-          type="button"
-          onClick={handleSave}
-          style={styles.tileFooterBtn}
-          aria-label={saved ? 'Remove from saved' : 'Save'}
-        >
+        <button type="button" onClick={handleSave} style={styles.tileFooterBtn} aria-label={saved ? 'Remove from saved' : 'Save'}>
           {saved ? (
             <>
               <MdBookmark size={14} color={Brand.accent} />
@@ -477,7 +387,6 @@ function SeaiResultCard({
   );
 }
 
-// ─── Main ───────────────────────────────────────────────────────────
 function SeaiAskContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -498,17 +407,11 @@ function SeaiAskContent() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [savedCards, setSavedCards] = useState<Set<string>>(new Set());
 
-  // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
-  const [editing, setEditing] = useState<{
-    index: number;
-    text: string;
-    role: Role;
-  } | null>(null);
-
+  const [editing, setEditing] = useState<{ index: number; text: string; role: Role } | null>(null);
   const [greeting, setGreeting] = useState('');
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -538,7 +441,6 @@ function SeaiAskContent() {
     return () => {
       isMountedRef.current = false;
       streamAbortRef.current?.abort();
-      // Stop any active recording on unmount
       if (mediaRecorderRef.current?.state === 'recording') {
         try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
       }
@@ -573,9 +475,7 @@ function SeaiAskContent() {
       try {
         const data = (await api.getRecentConversations()) as unknown as Conversation[];
         if (isMountedRef.current) setConversations(data);
-      } catch {
-        // ignore
-      } finally {
+      } catch { /* ignore */ } finally {
         if (isMountedRef.current) setIsLoadingRecents(false);
       }
     };
@@ -589,7 +489,6 @@ function SeaiAskContent() {
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
-  // Programmatically set the textarea value (used after voice transcribe)
   const setInputValue = (text: string) => {
     if (!inputRef.current) return;
     inputRef.current.value = text;
@@ -633,9 +532,7 @@ function SeaiAskContent() {
       setDrawerOpen(false);
       atBottomRef.current = true;
       setTimeout(() => scrollToBottom(true), 0);
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   };
 
   const copyText = useCallback(
@@ -657,35 +554,24 @@ function SeaiAskContent() {
   const toggleSave = useCallback((cardId: string) => {
     setSavedCards((prev) => {
       const next = new Set(prev);
-      if (next.has(cardId)) {
-        next.delete(cardId);
-      } else {
-        next.add(cardId);
-      }
+      if (next.has(cardId)) next.delete(cardId);
+      else next.add(cardId);
       return next;
     });
   }, []);
 
-  // ═════════════════════════════════════════════════════════════════
-  // Voice: start / stop recording → transcribe → fill input
-  // ═════════════════════════════════════════════════════════════════
+  // ── Voice ───────────────────────────────────────────────────────
   const startRecording = async () => {
     if (isRecording || isTranscribing) return;
-
-    if (
-      typeof navigator === 'undefined' ||
-      !navigator.mediaDevices?.getUserMedia
-    ) {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       pushToast('error', 'Recording not supported on this device');
       return;
     }
-
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordingStreamRef.current = stream;
       audioChunksRef.current = [];
 
-      // Prefer webm/opus; Safari uses mp4
       const mimeType =
         typeof MediaRecorder !== 'undefined' &&
         MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -705,17 +591,11 @@ function SeaiAskContent() {
       };
 
       recorder.onstop = async () => {
-        // Release the mic
         stream.getTracks().forEach((t) => t.stop());
         recordingStreamRef.current = null;
-
         const chunks = audioChunksRef.current;
         audioChunksRef.current = [];
-
-        if (!chunks.length) {
-          setIsRecording(false);
-          return;
-        }
+        if (!chunks.length) { setIsRecording(false); return; }
 
         const blobType = recorder.mimeType || 'audio/webm';
         const blob = new Blob(chunks, { type: blobType });
@@ -726,21 +606,13 @@ function SeaiAskContent() {
         setIsTranscribing(true);
 
         try {
-          const res = (await api.transcribeAudio(file)) as {
-            text?: string;
-            transcript?: string;
-          };
+          const res = (await api.transcribeAudio(file)) as { text?: string; transcript?: string };
           const text = (res?.text || res?.transcript || '').trim();
           if (!isMountedRef.current) return;
-          if (text) {
-            setInputValue(text);
-          } else {
-            pushToast('error', "Couldn't hear that. Try again.");
-          }
+          if (text) setInputValue(text);
+          else pushToast('error', "Couldn't hear that. Try again.");
         } catch {
-          if (isMountedRef.current) {
-            pushToast('error', 'Transcription failed. Try again.');
-          }
+          if (isMountedRef.current) pushToast('error', 'Transcription failed. Try again.');
         } finally {
           if (isMountedRef.current) setIsTranscribing(false);
         }
@@ -757,11 +629,7 @@ function SeaiAskContent() {
   const stopRecording = () => {
     const rec = mediaRecorderRef.current;
     if (rec && rec.state === 'recording') {
-      try {
-        rec.stop();
-      } catch {
-        // ignore
-      }
+      try { rec.stop(); } catch { /* ignore */ }
     } else {
       setIsRecording(false);
       recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -771,16 +639,11 @@ function SeaiAskContent() {
 
   const handleMicClick = () => {
     if (isTranscribing) return;
-    if (isRecording) {
-      stopRecording();
-    } else {
-      void startRecording();
-    }
+    if (isRecording) stopRecording();
+    else void startRecording();
   };
 
-  // ═════════════════════════════════════════════════════════════════
-  // Attach image → SEAI Lens → render as cards
-  // ═════════════════════════════════════════════════════════════════
+  // ── Attach ──────────────────────────────────────────────────────
   const handleAttachClick = () => {
     if (isUploadingImage) return;
     fileInputRef.current?.click();
@@ -788,7 +651,7 @@ function SeaiAskContent() {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    e.target.value = ''; // reset so the same file can be re-picked
+    e.target.value = '';
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -798,7 +661,6 @@ function SeaiAskContent() {
 
     setIsUploadingImage(true);
 
-    // Show the picked image as a user message immediately
     const localUrl = URL.createObjectURL(file);
     const userMsg: Message = {
       clientId: nextClientId(),
@@ -829,6 +691,10 @@ function SeaiAskContent() {
         items?: ResultCard[];
         message?: string;
         text?: string;
+        hint?: string;
+        description?: string;
+        method?: string;
+        diagnostics?: { description?: string };
       };
 
       if (!isMountedRef.current) return;
@@ -838,11 +704,25 @@ function SeaiAskContent() {
         (Array.isArray(res?.items) && res.items) ||
         [];
 
-      const intro =
-        (res?.message || res?.text || '').toString().trim() ||
-        (results.length > 0
-          ? 'Here\u2019s what I found:'
-          : "I couldn\u2019t identify anything useful in that photo.");
+      // Build the best possible intro message from whatever the
+      // backend returned. Priority order reflects how specific each
+      // field is.
+      const description = res?.description || res?.diagnostics?.description;
+
+      let intro = '';
+      if (res?.message) {
+        intro = res.message;
+      } else if (results.length > 0) {
+        intro = description
+          ? `That looks like ${description}. Here's what I found nearby:`
+          : "Here\u2019s what I found:";
+      } else if (res?.hint) {
+        intro = res.hint;
+      } else if (description) {
+        intro = `That looks like ${description}, but I couldn't find a close match nearby.`;
+      } else {
+        intro = "I couldn\u2019t identify anything useful in that photo.";
+      }
 
       setMessages((prev) => {
         const updated = [...prev];
@@ -858,7 +738,6 @@ function SeaiAskContent() {
         return updated;
       });
 
-      // Free the local URL after the message is set
       setTimeout(() => URL.revokeObjectURL(localUrl), 1000);
     } catch (err) {
       if (!isMountedRef.current) return;
@@ -901,10 +780,7 @@ function SeaiAskContent() {
   const saveEdit = () => {
     if (!editing) return;
     const { index, text, role } = editing;
-    if (role === 'seai') {
-      setEditing(null);
-      return;
-    }
+    if (role === 'seai') { setEditing(null); return; }
     const trimmed = text.trim();
     if (!trimmed) return;
     const truncated = messages.slice(0, index);
@@ -926,7 +802,6 @@ function SeaiAskContent() {
     }
 
     const baseMessages = overrideHistory ?? messagesRef.current;
-
     streamAbortRef.current?.abort();
     const controller = new AbortController();
     streamAbortRef.current = controller;
@@ -955,34 +830,22 @@ function SeaiAskContent() {
 
     const history: { role: string; content: string }[] = [];
     for (const m of [...baseMessages, userMsg]) {
-      if (m.role === 'user') {
-        history.push({ role: 'user', content: m.text });
-      } else if (!m.isThinking && m.text) {
-        history.push({ role: 'assistant', content: m.text });
-      }
+      if (m.role === 'user') history.push({ role: 'user', content: m.text });
+      else if (!m.isThinking && m.text) history.push({ role: 'assistant', content: m.text });
     }
 
     const idx = baseMessages.length + 1;
 
     try {
       const stream = api.seaiAsk(
-        text,
-        userLat,
-        userLng,
-        10,
-        history,
+        text, userLat, userLng, 10, history,
         isCortexMode ? 'agent' : 'gpt',
         controller.signal,
       );
 
       setMessages((prev) => {
         const updated = [...prev];
-        updated[idx] = {
-          ...updated[idx],
-          isThinking: false,
-          isStreaming: true,
-          text: '',
-        };
+        updated[idx] = { ...updated[idx], isThinking: false, isStreaming: true, text: '' };
         return updated;
       });
 
@@ -996,10 +859,7 @@ function SeaiAskContent() {
         for (const line of event.split('\n')) {
           if (!line.startsWith('data:')) continue;
           const payload = line.substring(5).trim();
-          if (payload === '[DONE]') {
-            done = true;
-            break;
-          }
+          if (payload === '[DONE]') { done = true; break; }
           try {
             const json = JSON.parse(payload);
 
@@ -1008,11 +868,7 @@ function SeaiAskContent() {
               setMessages((prev) => {
                 const updated = [...prev];
                 if (idx < updated.length) {
-                  updated[idx] = {
-                    ...updated[idx],
-                    text: full,
-                    isStreaming: true,
-                  };
+                  updated[idx] = { ...updated[idx], text: full, isStreaming: true };
                 }
                 return updated;
               });
@@ -1022,10 +878,7 @@ function SeaiAskContent() {
 
             if (json.type === 'action') {
               const data = (json.data || {}) as Record<string, unknown>;
-              const intent =
-                (json.intent as string | undefined) ||
-                (data.intent as string | undefined);
-
+              const intent = (json.intent as string | undefined) || (data.intent as string | undefined);
               const resultsArr = Array.isArray(data.results)
                 ? (data.results as ResultCard[])
                 : Array.isArray(data.items)
@@ -1039,12 +892,7 @@ function SeaiAskContent() {
                 setMessages((prev) => {
                   const updated = [...prev];
                   if (idx < updated.length) {
-                    updated[idx] = {
-                      ...updated[idx],
-                      text: full,
-                      isStreaming: false,
-                      cards: cardsReceived || [],
-                    };
+                    updated[idx] = { ...updated[idx], text: full, isStreaming: false, cards: cardsReceived || [] };
                   }
                   return updated;
                 });
@@ -1068,9 +916,7 @@ function SeaiAskContent() {
                 console.debug('[seai] unknown action', { intent, data, json });
               }
             }
-          } catch {
-            // ignore malformed JSON
-          }
+          } catch { /* ignore malformed JSON */ }
         }
         if (done) break;
       }
@@ -1082,9 +928,7 @@ function SeaiAskContent() {
           await api.saveSeaiExchange(text, full);
           const recents = (await api.getRecentConversations()) as unknown as Conversation[];
           if (isMountedRef.current) setConversations(recents);
-        } catch {
-          // best-effort
-        }
+        } catch { /* best-effort */ }
       }
 
       if (!isMountedRef.current) return;
@@ -1110,10 +954,7 @@ function SeaiAskContent() {
       setMessages((prev) => {
         const updated = [...prev];
         const lastIdx = updated.length - 1;
-        if (
-          lastIdx >= 0 &&
-          (updated[lastIdx].isThinking || updated[lastIdx].isStreaming)
-        ) {
+        if (lastIdx >= 0 && (updated[lastIdx].isThinking || updated[lastIdx].isStreaming)) {
           updated[lastIdx] = {
             ...updated[lastIdx],
             isThinking: false,
@@ -1142,13 +983,9 @@ function SeaiAskContent() {
   const inChat = messages.length > 0;
 
   const handleCardTap = (card: ResultCard) => {
-    if (card.service_id) {
-      router.push(`/service-detail/${card.service_id}`);
-    } else if (card.store_id && !card.listing_id) {
-      router.push(`/store-detail/${card.store_id}`);
-    } else if (card.listing_id) {
-      router.push(`/item-detail/${card.listing_id}`);
-    }
+    if (card.service_id) router.push(`/service-detail/${card.service_id}`);
+    else if (card.store_id && !card.listing_id) router.push(`/store-detail/${card.store_id}`);
+    else if (card.listing_id) router.push(`/item-detail/${card.listing_id}`);
   };
 
   const lastAiMessage = [...messages]
@@ -1167,20 +1004,12 @@ function SeaiAskContent() {
         <div style={styles.logoWrap}>
           <div className="seai-logo-glow" style={styles.logoGlow} aria-hidden />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/admerce_symbol.png"
-            alt="Admerce"
-            className="seai-logo-img"
-            style={styles.logoImg}
-          />
+          <img src="/admerce_symbol.png" alt="Admerce" className="seai-logo-img" style={styles.logoImg} />
         </div>
 
-        <h2 className="seai-greeting" style={styles.greeting}>
-          {greeting || 'Welcome.'}
-        </h2>
+        <h2 className="seai-greeting" style={styles.greeting}>{greeting || 'Welcome.'}</h2>
         <p style={styles.subGreeting}>
-          Ask me to find anything on Admerce — items, stores, or services near
-          you.
+          Ask me to find anything on Admerce — items, stores, or services near you.
         </p>
 
         <div className="seai-suggestions" style={styles.suggestionsGrid}>
@@ -1191,10 +1020,7 @@ function SeaiAskContent() {
                 key={i}
                 onClick={() => sendMessage(s.text)}
                 className="seai-chip"
-                style={{
-                  ...styles.suggestionChip,
-                  animationDelay: `${120 + i * 70}ms`,
-                }}
+                style={{ ...styles.suggestionChip, animationDelay: `${120 + i * 70}ms` }}
               >
                 <span style={styles.chipIconWrap}>
                   <Icon size={16} color={Brand.accent} />
@@ -1213,9 +1039,7 @@ function SeaiAskContent() {
     <div style={styles.editWrap}>
       <textarea
         value={editing?.text ?? ''}
-        onChange={(e) =>
-          setEditing((prev) => (prev ? { ...prev, text: e.target.value } : prev))
-        }
+        onChange={(e) => setEditing((prev) => (prev ? { ...prev, text: e.target.value } : prev))}
         style={styles.editTextarea}
         rows={3}
         autoFocus
@@ -1225,9 +1049,7 @@ function SeaiAskContent() {
         }}
       />
       <div style={styles.editActions}>
-        <button onClick={cancelEdit} style={styles.editCancel}>
-          Cancel
-        </button>
+        <button onClick={cancelEdit} style={styles.editCancel}>Cancel</button>
         <button onClick={saveEdit} style={styles.editSave}>
           <MdCheck size={16} color="#fff" />
           <span style={{ marginLeft: 4 }}>
@@ -1242,38 +1064,19 @@ function SeaiAskContent() {
     <div className="seai-chat-list" style={styles.chatList}>
       {messages.map((msg, i) => {
         const isEditing = editing?.index === i;
-
         return (
           <div key={msg.clientId} className="seai-msg-row" style={styles.msgRow}>
             {msg.role === 'user' ? (
               <div className="seai-user-wrap" style={styles.userWrap}>
-                {isEditing ? (
-                  renderEditable(msg)
-                ) : (
-                  <div className="seai-user-bubble" style={styles.userBubble}>
-                    {msg.text}
-                  </div>
+                {isEditing ? renderEditable(msg) : (
+                  <div className="seai-user-bubble" style={styles.userBubble}>{msg.text}</div>
                 )}
                 {!isEditing && !msg.isStreaming && msg.text && (
                   <div style={{ ...styles.actionBar, justifyContent: 'flex-end' }}>
-                    <button
-                      onClick={() => copyText(msg.text, i)}
-                      style={styles.actionBtn}
-                      title="Copy"
-                      aria-label="Copy message"
-                    >
-                      {copiedIndex === i ? (
-                        <MdCheck size={14} color={Brand.accent} />
-                      ) : (
-                        <MdContentCopy size={14} color="#666" />
-                      )}
+                    <button onClick={() => copyText(msg.text, i)} style={styles.actionBtn} title="Copy" aria-label="Copy message">
+                      {copiedIndex === i ? <MdCheck size={14} color={Brand.accent} /> : <MdContentCopy size={14} color="#666" />}
                     </button>
-                    <button
-                      onClick={() => startEdit(i)}
-                      style={styles.actionBtn}
-                      title="Edit"
-                      aria-label="Edit message"
-                    >
+                    <button onClick={() => startEdit(i)} style={styles.actionBtn} title="Edit" aria-label="Edit message">
                       <MdEdit size={14} color="#666" />
                     </button>
                   </div>
@@ -1288,9 +1091,7 @@ function SeaiAskContent() {
                   </div>
                 </div>
                 <div style={styles.aiBubble} aria-live="polite">
-                  {msg.isThinking ? (
-                    <ThinkingIndicator />
-                  ) : msg.text ? (
+                  {msg.isThinking ? <ThinkingIndicator /> : msg.text ? (
                     <div style={styles.aiText}>
                       {renderInline(msg.text)}
                       {msg.isStreaming && <SeaiCursor />}
@@ -1304,11 +1105,7 @@ function SeaiAskContent() {
                   {msg.cards && msg.cards.length > 0 && (
                     <div className="seai-card-stack" style={styles.cardStack}>
                       {msg.cards.map((card, cIdx) => {
-                        const cardId =
-                          card.listing_id ||
-                          card.service_id ||
-                          card.store_id ||
-                          `card-${i}-${cIdx}`;
+                        const cardId = card.listing_id || card.service_id || card.store_id || `card-${i}-${cIdx}`;
                         return (
                           <SeaiResultCard
                             key={cardId}
@@ -1324,33 +1121,16 @@ function SeaiAskContent() {
 
                   {!msg.isThinking && !msg.isStreaming && msg.text && !isEditing && (
                     <div style={styles.actionBar}>
-                      <button
-                        onClick={() => copyText(msg.text, i)}
-                        style={styles.actionBtn}
-                        title="Copy"
-                        aria-label="Copy response"
-                      >
-                        {copiedIndex === i ? (
-                          <MdCheck size={15} color={Brand.accent} />
-                        ) : (
-                          <MdContentCopy size={15} color="#666" />
-                        )}
+                      <button onClick={() => copyText(msg.text, i)} style={styles.actionBtn} title="Copy" aria-label="Copy response">
+                        {copiedIndex === i ? <MdCheck size={15} color={Brand.accent} /> : <MdContentCopy size={15} color="#666" />}
                       </button>
-                      <button
-                        onClick={() => retryMessage(i)}
-                        style={styles.actionBtn}
-                        title="Retry"
-                        aria-label="Retry"
-                      >
+                      <button onClick={() => retryMessage(i)} style={styles.actionBtn} title="Retry" aria-label="Retry">
                         <MdRefresh size={15} color="#666" />
                       </button>
                       <button
                         onClick={() => {
-                          if (navigator.share) {
-                            void navigator.share({ text: msg.text }).catch(() => {});
-                          } else {
-                            void copyText(msg.text, i);
-                          }
+                          if (navigator.share) void navigator.share({ text: msg.text }).catch(() => {});
+                          else void copyText(msg.text, i);
                         }}
                         style={styles.actionBtn}
                         title="Share"
@@ -1358,18 +1138,10 @@ function SeaiAskContent() {
                       >
                         <MdShare size={15} color="#666" />
                       </button>
-                      <button
-                        style={styles.actionBtn}
-                        title="Good response"
-                        aria-label="Good response"
-                      >
+                      <button style={styles.actionBtn} title="Good response" aria-label="Good response">
                         <MdThumbUp size={15} color="#666" />
                       </button>
-                      <button
-                        style={styles.actionBtn}
-                        title="Bad response"
-                        aria-label="Bad response"
-                      >
+                      <button style={styles.actionBtn} title="Bad response" aria-label="Bad response">
                         <MdThumbDown size={15} color="#666" />
                       </button>
                     </div>
@@ -1408,12 +1180,7 @@ function SeaiAskContent() {
 
   const renderInputArea = () => (
     <div className="seai-input-area" style={styles.inputArea}>
-      <div
-        style={{
-          ...styles.inputBox,
-          ...(inputFocused ? styles.inputBoxFocused : null),
-        }}
-      >
+      <div style={{ ...styles.inputBox, ...(inputFocused ? styles.inputBoxFocused : null) }}>
         <textarea
           ref={inputRef}
           onChange={handleInputChange}
@@ -1426,11 +1193,9 @@ function SeaiAskContent() {
             }
           }}
           placeholder={
-            isRecording
-              ? 'Listening…'
-              : isTranscribing
-                ? 'Transcribing…'
-                : `Ask ${isCortexMode ? 'SEAI Cortex' : 'SEAI'} anything…`
+            isRecording ? 'Listening…'
+              : isTranscribing ? 'Transcribing…'
+              : `Ask ${isCortexMode ? 'SEAI Cortex' : 'SEAI'} anything…`
           }
           style={styles.textarea}
           rows={1}
@@ -1444,36 +1209,17 @@ function SeaiAskContent() {
             title={isUploadingImage ? 'Analyzing…' : 'Attach an image'}
             aria-label="Attach an image"
           >
-            {isUploadingImage ? (
-              <span className="seai-mini-spinner" />
-            ) : (
-              <MdAdd size={20} color="#666" />
-            )}
+            {isUploadingImage ? <span className="seai-mini-spinner" /> : <MdAdd size={20} color="#666" />}
           </button>
 
           <button
-            style={{
-              ...styles.inputIconBtn,
-              ...(isRecording ? styles.inputIconBtnRecording : null),
-            }}
+            style={{ ...styles.inputIconBtn, ...(isRecording ? styles.inputIconBtnRecording : null) }}
             onClick={handleMicClick}
             disabled={isTranscribing}
-            title={
-              isTranscribing
-                ? 'Transcribing…'
-                : isRecording
-                  ? 'Stop recording'
-                  : 'Voice input'
-            }
+            title={isTranscribing ? 'Transcribing…' : isRecording ? 'Stop recording' : 'Voice input'}
             aria-label={isRecording ? 'Stop recording' : 'Start voice input'}
           >
-            {isTranscribing ? (
-              <span className="seai-mini-spinner" />
-            ) : isRecording ? (
-              <MdStop size={20} color="#fff" />
-            ) : (
-              <MdMic size={20} color="#666" />
-            )}
+            {isTranscribing ? <span className="seai-mini-spinner" /> : isRecording ? <MdStop size={20} color="#fff" /> : <MdMic size={20} color="#666" />}
           </button>
 
           <div style={{ flex: 1 }} />
@@ -1484,30 +1230,21 @@ function SeaiAskContent() {
             className="seai-send"
             style={{
               ...styles.sendBtn,
-              ...(inputHasText && !isStreaming
-                ? styles.sendBtnActive
-                : styles.sendBtnDisabled),
+              ...(inputHasText && !isStreaming ? styles.sendBtnActive : styles.sendBtnDisabled),
             }}
             aria-label="Send"
           >
-            <MdArrowUpward
-              size={18}
-              color={inputHasText && !isStreaming ? '#fff' : Brand.textMuted}
-            />
+            <MdArrowUpward size={18} color={inputHasText && !isStreaming ? '#fff' : Brand.textMuted} />
           </button>
         </div>
       </div>
       <p style={styles.disclaimer}>
-        {isRecording
-          ? 'Recording — tap the square to stop'
-          : isTranscribing
-            ? 'Transcribing your voice…'
-            : isUploadingImage
-              ? 'Analyzing image…'
-              : 'SEAI can make mistakes. Double-check important details.'}
+        {isRecording ? 'Recording — tap the square to stop'
+          : isTranscribing ? 'Transcribing your voice…'
+          : isUploadingImage ? 'Analyzing image…'
+          : 'SEAI can make mistakes. Double-check important details.'}
       </p>
 
-      {/* Hidden file input for attach */}
       <input
         ref={fileInputRef}
         type="file"
@@ -1521,44 +1258,23 @@ function SeaiAskContent() {
   const renderSidebar = () => (
     <>
       {drawerOpen && (
-        <div
-          className="seai-drawer-overlay"
-          style={styles.sidebarOverlay}
-          onClick={() => setDrawerOpen(false)}
-        />
+        <div className="seai-drawer-overlay" style={styles.sidebarOverlay} onClick={() => setDrawerOpen(false)} />
       )}
       <div
         className="seai-sidebar"
-        style={{
-          ...styles.sidebar,
-          transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
-        }}
+        style={{ ...styles.sidebar, transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)' }}
       >
         <div style={styles.sidebarHeader}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/admerce_symbol.png"
-            alt=""
-            className="seai-sidebar-logo"
-            style={styles.sidebarLogo}
-          />
-          <span style={{ fontWeight: 700, fontSize: 14, color: Brand.textPrimary }}>
-            SEAI
-          </span>
-          <button
-            onClick={() => setDrawerOpen(false)}
-            style={styles.closeBtn}
-            aria-label="Close drawer"
-          >
+          <img src="/admerce_symbol.png" alt="" className="seai-sidebar-logo" style={styles.sidebarLogo} />
+          <span style={{ fontWeight: 700, fontSize: 14, color: Brand.textPrimary }}>SEAI</span>
+          <button onClick={() => setDrawerOpen(false)} style={styles.closeBtn} aria-label="Close drawer">
             <MdClose size={20} color="#666" />
           </button>
         </div>
 
         <button
-          onClick={() => {
-            clearConversation();
-            setDrawerOpen(false);
-          }}
+          onClick={() => { clearConversation(); setDrawerOpen(false); }}
           style={styles.newChatBtn}
         >
           <MdEdit size={16} color={Brand.accent} style={{ marginRight: 8 }} />
@@ -1573,11 +1289,7 @@ function SeaiAskContent() {
           {isLoadingRecents ? (
             <div style={styles.skelStack}>
               {[0, 1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="seai-skel"
-                  style={{ height: 38, width: `${70 + (i % 3) * 10}%` }}
-                />
+                <div key={i} className="seai-skel" style={{ height: 38, width: `${70 + (i % 3) * 10}%` }} />
               ))}
             </div>
           ) : conversations.length === 0 ? (
@@ -1586,9 +1298,7 @@ function SeaiAskContent() {
                 <MdChatBubbleOutline size={18} color={Brand.accent} />
               </div>
               <div style={styles.emptyRecentsTitle}>No conversations yet</div>
-              <div style={styles.emptyRecentsSub}>
-                Your chat history will live here.
-              </div>
+              <div style={styles.emptyRecentsSub}>Your chat history will live here.</div>
             </div>
           ) : (
             conversations.map((c) => (
@@ -1598,14 +1308,8 @@ function SeaiAskContent() {
                 className="seai-recent-item"
                 style={styles.conversationItem}
               >
-                <MdChatBubbleOutline
-                  size={14}
-                  color={Brand.textMuted}
-                  style={{ flexShrink: 0, marginRight: 8 }}
-                />
-                <span style={styles.conversationItemText}>
-                  {c.title || `Conversation ${c.id}`}
-                </span>
+                <MdChatBubbleOutline size={14} color={Brand.textMuted} style={{ flexShrink: 0, marginRight: 8 }} />
+                <span style={styles.conversationItemText}>{c.title || `Conversation ${c.id}`}</span>
               </button>
             ))
           )}
@@ -1637,25 +1341,14 @@ function SeaiAskContent() {
 
       <div className="seai-main" style={styles.main}>
         <div className="seai-header" style={styles.header}>
-          <button
-            onClick={() => setDrawerOpen(!drawerOpen)}
-            style={styles.iconBtn}
-            aria-label="Open menu"
-          >
+          <button onClick={() => setDrawerOpen(!drawerOpen)} style={styles.iconBtn} aria-label="Open menu">
             <MdMenu size={22} color="#666" />
           </button>
 
           <div style={styles.headerBrand}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/admerce_symbol.png"
-              alt=""
-              className="seai-header-logo"
-              style={styles.headerBrandMark}
-            />
-            <span className="seai-header-brand-text" style={styles.headerBrandText}>
-              SEAI
-            </span>
+            <img src="/admerce_symbol.png" alt="" className="seai-header-logo" style={styles.headerBrandMark} />
+            <span className="seai-header-brand-text" style={styles.headerBrandText}>SEAI</span>
           </div>
 
           <div style={{ flex: 1 }} />
@@ -1681,12 +1374,7 @@ function SeaiAskContent() {
           </button>
 
           {inChat ? (
-            <button
-              onClick={clearConversation}
-              style={styles.iconBtn}
-              title="New chat"
-              aria-label="New chat"
-            >
+            <button onClick={clearConversation} style={styles.iconBtn} title="New chat" aria-label="New chat">
               <MdEdit size={20} color="#666" />
             </button>
           ) : (
@@ -1694,12 +1382,7 @@ function SeaiAskContent() {
           )}
         </div>
 
-        <div
-          className="seai-body"
-          style={styles.body}
-          onScroll={onScroll}
-          ref={scrollContainerRef}
-        >
+        <div className="seai-body" style={styles.body} onScroll={onScroll} ref={scrollContainerRef}>
           {inChat ? renderChat() : renderWelcome()}
         </div>
 
@@ -1761,13 +1444,9 @@ const styles: Record<string, React.CSSProperties> = {
     borderTopColor: Brand.accent,
     animation: 'seaiSpin 0.9s linear infinite',
   },
-
-  // ── Sidebar
   sidebar: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
+    top: 0, left: 0, bottom: 0,
     width: 300,
     backgroundColor: Brand.sidebarBg,
     padding: '16px',
@@ -1784,25 +1463,9 @@ const styles: Record<string, React.CSSProperties> = {
     zIndex: 15,
     animation: 'seaiFade 200ms ease-out both',
   },
-  sidebarHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 18,
-  },
-  sidebarLogo: {
-    width: 30,
-    height: 30,
-    display: 'block',
-    objectFit: 'contain',
-  },
-  closeBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 4,
-    marginLeft: 'auto',
-  },
+  sidebarHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 },
+  sidebarLogo: { width: 30, height: 30, display: 'block', objectFit: 'contain' },
+  closeBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, marginLeft: 'auto' },
   newChatBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -1831,13 +1494,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 8,
     paddingLeft: 4,
   },
-  conversationList: {
-    flex: 1,
-    overflowY: 'auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-  },
+  conversationList: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 },
   conversationItem: {
     display: 'flex',
     alignItems: 'center',
@@ -1853,57 +1510,18 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     fontFamily: 'inherit',
   },
-  conversationItemText: {
-    flex: 1,
-    minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  skelStack: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    padding: 4,
-  },
-  emptyRecents: {
-    padding: '24px 12px',
-    textAlign: 'center',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-  },
+  conversationItemText: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  skelStack: { display: 'flex', flexDirection: 'column', gap: 8, padding: 4 },
+  emptyRecents: { padding: '24px 12px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' },
   emptyRecentsIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 44, height: 44, borderRadius: 14,
     background: Brand.accentBg,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     marginBottom: 10,
   },
-  emptyRecentsTitle: {
-    fontSize: 13,
-    fontWeight: 700,
-    color: Brand.textPrimary,
-  },
-  emptyRecentsSub: {
-    fontSize: 11.5,
-    color: Brand.textMuted,
-    marginTop: 4,
-    lineHeight: 1.5,
-    maxWidth: 200,
-  },
-
-  // ── Main
-  main: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-    width: '100%',
-  },
+  emptyRecentsTitle: { fontSize: 13, fontWeight: 700, color: Brand.textPrimary },
+  emptyRecentsSub: { fontSize: 11.5, color: Brand.textMuted, marginTop: 4, lineHeight: 1.5, maxWidth: 200 },
+  main: { flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' },
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -1925,23 +1543,9 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     borderRadius: 10,
   },
-  headerBrand: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerBrandMark: {
-    width: 26,
-    height: 26,
-    display: 'block',
-    objectFit: 'contain',
-  },
-  headerBrandText: {
-    fontSize: 14,
-    fontWeight: 800,
-    color: Brand.textPrimary,
-    letterSpacing: -0.2,
-  },
+  headerBrand: { display: 'flex', alignItems: 'center', gap: 8 },
+  headerBrandMark: { width: 26, height: 26, display: 'block', objectFit: 'contain' },
+  headerBrandText: { fontSize: 14, fontWeight: 800, color: Brand.textPrimary, letterSpacing: -0.2 },
   modelToggle: {
     display: 'flex',
     alignItems: 'center',
@@ -1953,15 +1557,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
-  body: {
-    flex: 1,
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    minHeight: 0,
-    width: '100%',
-  },
-
-  // ── Welcome
+  body: { flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, width: '100%' },
   welcomeContainer: {
     position: 'relative',
     display: 'flex',
@@ -1984,28 +1580,18 @@ const styles: Record<string, React.CSSProperties> = {
   },
   logoWrap: {
     position: 'relative',
-    width: 108,
-    height: 108,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 108, height: 108,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     marginBottom: 24,
   },
   logoGlow: {
     position: 'absolute',
     inset: -12,
     borderRadius: '50%',
-    background:
-      'radial-gradient(circle, rgba(5,4,170,0.24) 0%, rgba(5,4,170,0.08) 45%, rgba(5,4,170,0) 72%)',
+    background: 'radial-gradient(circle, rgba(5,4,170,0.24) 0%, rgba(5,4,170,0.08) 45%, rgba(5,4,170,0) 72%)',
     pointerEvents: 'none',
   },
-  logoImg: {
-    position: 'relative',
-    width: 96,
-    height: 96,
-    display: 'block',
-    objectFit: 'contain',
-  },
+  logoImg: { position: 'relative', width: 96, height: 96, display: 'block', objectFit: 'contain' },
   greeting: {
     fontSize: 34,
     fontWeight: 600,
@@ -2022,13 +1608,7 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
     maxWidth: 400,
   },
-  suggestionsGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 10,
-    width: '100%',
-    maxWidth: 480,
-  },
+  suggestionsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, width: '100%', maxWidth: 480 },
   suggestionChip: {
     display: 'flex',
     alignItems: 'center',
@@ -2046,43 +1626,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
   chipIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
+    width: 28, height: 28, borderRadius: 9,
     backgroundColor: Brand.accentBg,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
   },
-  chipText: {
-    flex: 1,
-    minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-
-  // ── Chat list
-  chatList: {
-    padding: '20px 16px 8px',
-    maxWidth: 860,
-    margin: '0 auto',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  msgRow: {
-    width: '100%',
-    maxWidth: '100%',
-    marginBottom: 26,
-  },
-  userWrap: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    width: '100%',
-    maxWidth: '100%',
-  },
+  chipText: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  chatList: { padding: '20px 16px 8px', maxWidth: 860, margin: '0 auto', width: '100%', boxSizing: 'border-box' },
+  msgRow: { width: '100%', maxWidth: '100%', marginBottom: 26 },
+  userWrap: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: '100%', maxWidth: '100%' },
   userBubble: {
     maxWidth: '82%',
     padding: '12px 16px',
@@ -2092,44 +1644,27 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#FFFFFF',
     fontSize: 15,
     lineHeight: 1.55,
-    boxShadow:
-      '0 6px 16px rgba(5,4,170,0.22), inset 0 1px 0 rgba(255,255,255,0.14)',
+    boxShadow: '0 6px 16px rgba(5,4,170,0.22), inset 0 1px 0 rgba(255,255,255,0.14)',
     wordBreak: 'break-word',
     overflowWrap: 'anywhere',
     whiteSpace: 'pre-wrap',
     boxSizing: 'border-box',
   },
-  aiMessageRow: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-    width: '100%',
-    maxWidth: '100%',
-  },
-  aiAvatarWrap: {
-    position: 'relative',
-    width: 30,
-    height: 30,
-    flexShrink: 0,
-    marginTop: 2,
-  },
+  aiMessageRow: { display: 'flex', alignItems: 'flex-start', gap: 12, width: '100%', maxWidth: '100%' },
+  aiAvatarWrap: { position: 'relative', width: 30, height: 30, flexShrink: 0, marginTop: 2 },
   aiAvatarRing: {
     position: 'absolute',
     inset: -3,
     borderRadius: '50%',
-    background:
-      'radial-gradient(circle, rgba(5,4,170,0.24) 0%, rgba(5,4,170,0) 70%)',
+    background: 'radial-gradient(circle, rgba(5,4,170,0.24) 0%, rgba(5,4,170,0) 70%)',
     pointerEvents: 'none',
   },
   aiAvatar: {
     position: 'relative',
-    width: 30,
-    height: 30,
+    width: 30, height: 30,
     borderRadius: '50%',
     background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     boxShadow: '0 3px 8px rgba(5,4,170,0.28)',
   },
   aiBubble: {
@@ -2144,11 +1679,7 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     maxWidth: '100%',
   },
-  aiText: {
-    whiteSpace: 'pre-wrap',
-    overflowWrap: 'anywhere',
-    wordBreak: 'break-word',
-  },
+  aiText: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' },
   errorLine: {
     marginTop: 10,
     padding: '9px 12px',
@@ -2159,16 +1690,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontWeight: 500,
   },
-
-  // ── Edit
-  editWrap: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    width: '100%',
-    maxWidth: '100%',
-    boxSizing: 'border-box',
-  },
+  editWrap: { display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: '100%', boxSizing: 'border-box' },
   editTextarea: {
     width: '100%',
     padding: 12,
@@ -2184,12 +1706,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
     boxShadow: '0 0 0 4px rgba(5,4,170,0.08)',
   },
-  editActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
+  editActions: { display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' },
   editCancel: {
     padding: '8px 14px',
     borderRadius: 10,
@@ -2215,8 +1732,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     boxShadow: '0 4px 12px rgba(5,4,170,0.25)',
   },
-
-  // ── Result cards
   cardStack: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
@@ -2237,14 +1752,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms',
   },
   tileTap: {
-    display: 'flex',
-    flexDirection: 'column',
-    textAlign: 'left',
-    background: 'none',
-    border: 'none',
-    padding: 0,
-    cursor: 'pointer',
-    width: '100%',
+    display: 'flex', flexDirection: 'column', textAlign: 'left',
+    background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%',
     fontFamily: 'inherit',
   },
   tileImageWrap: {
@@ -2252,150 +1761,80 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     aspectRatio: '1 / 1',
     backgroundColor: '#EEF2FF',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
-  tileImage: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
+  tileImage: { width: '100%', height: '100%', objectFit: 'cover' },
   tileImageOverlay: {
-    position: 'absolute',
-    inset: 0,
-    background:
-      'linear-gradient(180deg, rgba(15,23,42,0) 45%, rgba(15,23,42,0.42) 100%)',
+    position: 'absolute', inset: 0,
+    background: 'linear-gradient(180deg, rgba(15,23,42,0) 45%, rgba(15,23,42,0.42) 100%)',
     pointerEvents: 'none',
   },
   tilePlaceholder: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: '100%', height: '100%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#EEF2FF',
   },
   tileBadge: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    fontSize: 9,
-    fontWeight: 800,
-    letterSpacing: 0.7,
-    color: '#fff',
-    padding: '4px 8px',
-    borderRadius: 7,
+    position: 'absolute', top: 10, left: 10,
+    fontSize: 9, fontWeight: 800, letterSpacing: 0.7,
+    color: '#fff', padding: '4px 8px', borderRadius: 7,
     textTransform: 'uppercase',
     boxShadow: '0 2px 6px rgba(15,23,42,0.15)',
   },
   tileVerified: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 24,
-    height: 24,
-    borderRadius: '50%',
+    position: 'absolute', top: 10, right: 10,
+    width: 24, height: 24, borderRadius: '50%',
     backgroundColor: 'rgba(255,255,255,0.94)',
     backdropFilter: 'blur(6px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     boxShadow: '0 2px 6px rgba(15,23,42,0.15)',
   },
   tilePriceChip: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    padding: '5px 10px',
-    borderRadius: 999,
+    position: 'absolute', bottom: 10, right: 10,
+    padding: '5px 10px', borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.96)',
     backdropFilter: 'blur(6px)',
-    color: Brand.accent,
-    fontSize: 12,
-    fontWeight: 800,
-    letterSpacing: -0.1,
+    color: Brand.accent, fontSize: 12, fontWeight: 800, letterSpacing: -0.1,
     boxShadow: '0 2px 8px rgba(15,23,42,0.12)',
   },
   tileDistancePill: {
-    position: 'absolute',
-    bottom: 10,
-    left: 10,
-    display: 'flex',
-    alignItems: 'center',
-    padding: '4px 8px',
-    borderRadius: 8,
+    position: 'absolute', bottom: 10, left: 10,
+    display: 'flex', alignItems: 'center',
+    padding: '4px 8px', borderRadius: 8,
     backgroundColor: 'rgba(15,23,42,0.72)',
     backdropFilter: 'blur(6px)',
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 700,
+    color: '#fff', fontSize: 10, fontWeight: 700,
   },
-  tileBody: {
-    padding: '12px 14px 10px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 5,
-  },
+  tileBody: { padding: '12px 14px 10px', display: 'flex', flexDirection: 'column', gap: 5 },
   tileTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    color: Brand.textPrimary,
-    lineHeight: 1.3,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
+    fontSize: 14, fontWeight: 700, color: Brand.textPrimary, lineHeight: 1.3,
+    overflow: 'hidden', textOverflow: 'ellipsis',
+    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
     letterSpacing: -0.1,
   },
   tileSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    display: 'flex',
-    alignItems: 'center',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    fontSize: 12, color: '#64748B',
+    display: 'flex', alignItems: 'center',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
     marginTop: 2,
   },
   tileTravel: {
-    fontSize: 11,
-    color: '#94A3B8',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
+    fontSize: 11, color: '#94A3B8', fontWeight: 600,
+    display: 'flex', alignItems: 'center', gap: 6, marginTop: 2,
   },
-  tileTravelDot: {
-    width: 5,
-    height: 5,
-    borderRadius: '50%',
-    backgroundColor: '#10B981',
-  },
-  tileFooter: {
-    display: 'flex',
-    borderTop: `1px solid ${Brand.borderSoft}`,
-  },
+  tileTravelDot: { width: 5, height: 5, borderRadius: '50%', backgroundColor: '#10B981' },
+  tileFooter: { display: 'flex', borderTop: `1px solid ${Brand.borderSoft}` },
   tileFooterBtn: {
     flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     gap: 4,
     padding: '10px 8px',
     backgroundColor: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 12,
-    fontWeight: 700,
-    color: Brand.accent,
+    border: 'none', cursor: 'pointer',
+    fontSize: 12, fontWeight: 700, color: Brand.accent,
     fontFamily: 'inherit',
   },
-
-  // ── Refine chips
   refineRow: {
     display: 'flex',
     gap: 8,
@@ -2419,26 +1858,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     boxShadow: Brand.shadowSm,
   },
-
-  // ── Action bar
-  actionBar: {
-    display: 'flex',
-    gap: 2,
-    marginTop: 8,
-    flexWrap: 'wrap',
-  },
+  actionBar: { display: 'flex', gap: 2, marginTop: 8, flexWrap: 'wrap' },
   actionBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 5,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    background: 'none', border: 'none', cursor: 'pointer', padding: 5,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     borderRadius: 6,
   },
-
-  // ── Input
   inputArea: {
     padding: '8px 16px 12px',
     backgroundColor: Brand.bg,
@@ -2456,10 +1881,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '4px 6px 0',
     transition: 'box-shadow 220ms, border-color 220ms',
   },
-  inputBoxFocused: {
-    borderColor: '#C7CCFF',
-    boxShadow: Brand.shadowBloom,
-  },
+  inputBoxFocused: { borderColor: '#C7CCFF', boxShadow: Brand.shadowBloom },
   textarea: {
     width: '100%',
     border: 'none',
@@ -2474,33 +1896,17 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
     maxHeight: 160,
   },
-  inputActions: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '4px 6px 6px',
-  },
+  inputActions: { display: 'flex', alignItems: 'center', padding: '4px 6px 6px' },
   inputIconBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 8,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    background: 'none', border: 'none', cursor: 'pointer', padding: 8,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     borderRadius: 10,
     transition: 'background 0.15s',
   },
-  inputIconBtnRecording: {
-    background: '#DC2626',
-  },
+  inputIconBtnRecording: { background: '#DC2626' },
   sendBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    border: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 38, height: 38, borderRadius: 12, border: 'none',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     transition: 'transform 160ms, box-shadow 200ms, background 200ms',
     cursor: 'pointer',
   },
@@ -2508,10 +1914,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
     boxShadow: '0 6px 16px rgba(5,4,170,0.30)',
   },
-  sendBtnDisabled: {
-    backgroundColor: '#E6E8F0',
-    cursor: 'not-allowed',
-  },
+  sendBtnDisabled: { backgroundColor: '#E6E8F0', cursor: 'not-allowed' },
   disclaimer: {
     fontSize: 11,
     color: Brand.textMuted,
@@ -2522,16 +1925,12 @@ const styles: Record<string, React.CSSProperties> = {
     marginLeft: 'auto',
     marginRight: 'auto',
   },
-
-  // ── Toasts
   toastStack: {
     position: 'fixed',
     top: 14,
     left: '50%',
     transform: 'translateX(-50%)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
+    display: 'flex', flexDirection: 'column', gap: 8,
     zIndex: 300,
     pointerEvents: 'none',
   },
@@ -2552,20 +1951,12 @@ const styles: Record<string, React.CSSProperties> = {
   toastError: { backgroundColor: '#FEF2F2', color: '#991B1B', borderColor: '#FECACA' },
 };
 
-// ─── Global keyframes + responsive rules ─────────────────────────────
+// ─── Global CSS ─────────────────────────────────────────────────────
 const GLOBAL_CSS = `
   html, body { overflow-x: hidden; max-width: 100vw; }
 
-  /* ── Inline markdown ─────────────────────────────────────── */
-  .seai-md-bold {
-    font-weight: 700;
-    color: #0A0A14;
-    letter-spacing: -0.01em;
-  }
-  .seai-md-italic {
-    font-style: italic;
-    color: #545B6E;
-  }
+  .seai-md-bold { font-weight: 700; color: #0A0A14; letter-spacing: -0.01em; }
+  .seai-md-italic { font-style: italic; color: #545B6E; }
   .seai-md-code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.92em;
@@ -2585,18 +1976,14 @@ const GLOBAL_CSS = `
     letter-spacing: -0.02em;
   }
 
-  /* ── Mini spinner for input buttons ─────────────────────── */
   .seai-mini-spinner {
     display: inline-block;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
+    width: 16px; height: 16px; border-radius: 50%;
     border: 2px solid #E2E8F0;
     border-top-color: #0504AA;
     animation: seaiSpin 0.7s linear infinite;
   }
 
-  /* ── Ambient orbs ────────────────────────────────────────── */
   .seai-orb {
     position: absolute;
     border-radius: 50%;
@@ -2607,14 +1994,12 @@ const GLOBAL_CSS = `
     z-index: 0;
   }
   .seai-orb-a {
-    width: 340px; height: 340px;
-    top: -100px; left: -100px;
+    width: 340px; height: 340px; top: -100px; left: -100px;
     background: radial-gradient(circle, rgba(5,4,170,0.22) 0%, rgba(5,4,170,0) 68%);
     animation: seaiFloatOrb 24s ease-in-out infinite;
   }
   .seai-orb-b {
-    width: 420px; height: 420px;
-    bottom: -140px; right: -140px;
+    width: 420px; height: 420px; bottom: -140px; right: -140px;
     background: radial-gradient(circle, rgba(61,59,255,0.18) 0%, rgba(61,59,255,0) 68%);
     animation: seaiFloatOrb 30s ease-in-out infinite reverse;
   }
@@ -2624,23 +2009,18 @@ const GLOBAL_CSS = `
     66%      { transform: translate(-22px, 26px) scale(0.96); }
   }
 
-  /* ── Logo glow ───────────────────────────────────────────── */
   .seai-logo-glow { animation: seaiLogoBreathe 3.6s ease-in-out infinite; }
   @keyframes seaiLogoBreathe {
     0%, 100% { transform: scale(1);    opacity: 0.5; }
     50%      { transform: scale(1.14); opacity: 0.9; }
   }
 
-  /* ── Welcome greeting ────────────────────────────────────── */
-  .seai-greeting {
-    animation: seaiGreet 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
+  .seai-greeting { animation: seaiGreet 700ms cubic-bezier(0.22, 1, 0.36, 1) both; }
   @keyframes seaiGreet {
     from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* ── Suggestion chips ────────────────────────────────────── */
   .seai-chip {
     animation: seaiChipIn 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
     transition: transform 220ms, box-shadow 220ms, border-color 220ms;
@@ -2656,35 +2036,25 @@ const GLOBAL_CSS = `
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* ── Message arrival ─────────────────────────────────────── */
-  .seai-msg-row {
-    animation: seaiMsgIn 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
+  .seai-msg-row { animation: seaiMsgIn 340ms cubic-bezier(0.22, 1, 0.36, 1) both; }
   @keyframes seaiMsgIn {
     from { opacity: 0; transform: translateY(12px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* ── Thinking indicator ──────────────────────────────────── */
   .seai-thinking {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    padding: 4px 0;
-    height: 28px;
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 4px 0; height: 28px;
   }
   .seai-thinking-orb {
     position: relative;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
+    width: 18px; height: 18px; border-radius: 50%;
     background: radial-gradient(circle at 30% 30%, #3D3BFF 0%, #0504AA 70%);
     box-shadow: 0 0 12px rgba(5,4,170,0.45);
     flex-shrink: 0;
   }
   .seai-thinking-orbInner {
-    position: absolute;
-    inset: -4px;
+    position: absolute; inset: -4px;
     border-radius: 50%;
     border: 1.5px solid rgba(5,4,170,0.35);
     animation: seaiOrbPulse 1.6s ease-out infinite;
@@ -2695,10 +2065,8 @@ const GLOBAL_CSS = `
   }
   .seai-thinking-text {
     display: inline-block;
-    font-size: 14px;
-    font-weight: 500;
-    color: #5A6178;
-    letter-spacing: 0.01em;
+    font-size: 14px; font-weight: 500;
+    color: #5A6178; letter-spacing: 0.01em;
     animation: seaiVerbSwap 420ms ease both;
   }
   @keyframes seaiVerbSwap {
@@ -2706,15 +2074,13 @@ const GLOBAL_CSS = `
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* ── Streaming cursor ────────────────────────────────────── */
   @keyframes seaiCursorPulse {
     0%, 100% { transform: scale(0.85); opacity: 0.7; }
     50%      { transform: scale(1.15); opacity: 1; }
   }
   .seai-cursor {
     display: inline-block;
-    width: 8px;
-    height: 18px;
+    width: 8px; height: 18px;
     border-radius: 3px;
     margin-left: 4px;
     vertical-align: text-bottom;
@@ -2723,7 +2089,6 @@ const GLOBAL_CSS = `
     animation: seaiCursorPulse 1.05s ease-in-out infinite;
   }
 
-  /* ── Tile cards ──────────────────────────────────────────── */
   .seai-tile:hover {
     transform: translateY(-3px);
     box-shadow: 0 12px 30px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06);
@@ -2731,22 +2096,18 @@ const GLOBAL_CSS = `
   }
   .seai-tile:active { transform: translateY(-1px); }
 
-  /* ── Refine chips ────────────────────────────────────────── */
   .seai-refine-chip { transition: background 150ms, border-color 150ms, transform 120ms; }
   .seai-refine-chip:hover { border-color: #C7CCFF; background: #FAFAFF; }
   .seai-refine-chip:active { transform: scale(0.97); }
   .seai-refine-chip:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* ── Send button ─────────────────────────────────────────── */
   .seai-send:hover:not(:disabled) { transform: scale(1.06); }
   .seai-send:active:not(:disabled) { transform: scale(0.96); }
 
-  /* ── Sidebar recents ─────────────────────────────────────── */
   .seai-recent-item { transition: background-color 140ms, color 140ms; }
   .seai-recent-item:hover { background-color: #EEEDFF; color: #0504AA; }
   .seai-recent-item:active { background-color: #E2E1FF; }
 
-  /* ── Skeleton ────────────────────────────────────────────── */
   .seai-skel {
     background: linear-gradient(90deg, #E9ECF3 25%, #F4F6FB 50%, #E9ECF3 75%);
     background-size: 200% 100%;
@@ -2758,14 +2119,12 @@ const GLOBAL_CSS = `
     100% { background-position: -200% 0; }
   }
 
-  /* ── Model dot ───────────────────────────────────────────── */
   .seai-model-dot { animation: seaiModelPulse 2.2s ease-in-out infinite; }
   @keyframes seaiModelPulse {
     0%, 100% { transform: scale(1);   opacity: 0.9; }
     50%      { transform: scale(1.2); opacity: 0.5; }
   }
 
-  /* ── Toast + fade + spinner ──────────────────────────────── */
   @keyframes seaiToastIn {
     from { opacity: 0; transform: translateY(-6px); }
     to   { opacity: 1; transform: none; }
@@ -2773,7 +2132,6 @@ const GLOBAL_CSS = `
   @keyframes seaiFade { from { opacity: 0; } to { opacity: 1; } }
   @keyframes seaiSpin { to { transform: rotate(360deg); } }
 
-  /* ── Mobile ──────────────────────────────────────────────── */
   @media (max-width: 640px) {
     .seai-chat-list { padding: 12px !important; }
     .seai-card-stack { grid-template-columns: 1fr !important; gap: 12px !important; }
