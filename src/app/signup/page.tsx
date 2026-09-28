@@ -20,7 +20,6 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// Human labels for the signup intent banner.
 const ROLE_LABELS: Record<string, string> = {
   shopper: 'Shopper',
   storekeeper: 'Storekeeper',
@@ -58,22 +57,16 @@ function evaluatePassword(pw: string): Strength {
 }
 
 // ─── Field validation ───────────────────────────────────────────────
-function normalizeNgPhone(raw: string): string {
-  const digits = raw.replace(/[^\d+]/g, '');
-  if (!digits) return '';
-  if (digits.startsWith('+')) return digits;
-  if (digits.startsWith('0')) return `+234${digits.slice(1)}`;
-  if (digits.startsWith('234')) return `+${digits}`;
-  return `+234${digits}`;
-}
-
 function isEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 }
 
+// Loose client-side gate. Real validation (any country, E.164) happens
+// on the backend via the `phonenumbers` library. We only reject inputs
+// that are obviously too short to be a phone number.
 function isPhone(s: string): boolean {
   const digits = s.replace(/[^\d]/g, '');
-  return digits.length >= 10 && digits.length <= 15;
+  return digits.length >= 7 && digits.length <= 15;
 }
 
 // ─── Component ──────────────────────────────────────────────────────
@@ -115,15 +108,20 @@ function SignupContent() {
     setLoading(true);
     setError('');
     try {
-      const normalizedPhone = normalizeNgPhone(phone);
+      const trimmedPhone = phone.trim();
+      const trimmedEmail = email.trim();
+
+      // Send raw — backend canonicalizes to E.164 for any country.
       await api.signup(
-        normalizedPhone,
+        trimmedPhone,
         password,
-        email.trim(),
+        trimmedEmail,
         username.trim(),
       );
+
       const params = new URLSearchParams();
-      params.set('phone', normalizedPhone);
+      params.set('phone', trimmedPhone);
+      params.set('email', trimmedEmail);
       if (intendedRole) params.set('intended_role', intendedRole);
       router.push(`/verify-otp?${params.toString()}`);
     } catch (err) {
@@ -145,15 +143,17 @@ function SignupContent() {
       <style>{CSS}</style>
 
       <div className="su-shell">
-        {/* Brand */}
+        {/* Brand — real Admerce symbol */}
         <header className="su-brandRow">
-          <div className="su-brandMark" aria-hidden>
-            <span className="su-brandDot" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/admerce_symbol.png"
+            alt="Admerce"
+            className="su-brandLogo"
+          />
           <span className="su-brandName">Admerce</span>
         </header>
 
-        {/* Intent banner — only when arriving with ?intended_role= */}
         {roleBanner && (
           <div className="su-intentBanner">
             <span className="su-intentIcon" aria-hidden>
@@ -169,19 +169,17 @@ function SignupContent() {
           </div>
         )}
 
-        {/* Heading */}
         <h1 className="su-heading">Let&rsquo;s get started</h1>
         <p className="su-subtitle">
           Create your Admerce account in under a minute.
         </p>
 
-        {/* Form */}
         <form onSubmit={handleSignup} className="su-form" noValidate>
           <Field
             id="su-phone"
             label="Phone number"
             icon={<MdPhoneIphone size={18} color="#64748B" />}
-            hint="We'll send a 6-digit code to this number"
+            hint="Include your country code if you're outside Nigeria"
             error={
               touched.phone && !phoneValid
                 ? 'Enter a valid phone number'
@@ -193,7 +191,7 @@ function SignupContent() {
               type="tel"
               inputMode="tel"
               autoComplete="tel"
-              placeholder="0803 123 4567"
+              placeholder="+234 803 123 4567"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
@@ -207,7 +205,7 @@ function SignupContent() {
             id="su-username"
             label="Username"
             icon={<MdPersonOutline size={18} color="#64748B" />}
-            hint="This is how sellers see you, must be name on your National ID"
+            hint="This is how buyers and sellers see you"
             error={
               touched.username && !usernameValid
                 ? 'At least 3 characters'
@@ -291,7 +289,6 @@ function SignupContent() {
               </button>
             </div>
 
-            {/* Strength meter — only once the user starts typing */}
             {password.length > 0 && (
               <div className="su-strengthWrap">
                 <div className="su-strengthBars" aria-hidden>
@@ -368,7 +365,6 @@ function SignupContent() {
           </p>
         </form>
 
-        {/* Footer */}
         <div className="su-footer">
           <span className="su-footerText">Already part of Admerce?</span>
           <Link href="/login" className="su-footerLink">
@@ -475,28 +471,18 @@ const CSS = `
   .su-brandRow {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     margin-bottom: 28px;
     padding-top: 4px;
   }
-  .su-brandMark {
-    width: 28px;
-    height: 28px;
-    border-radius: 9px;
-    background: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 6px 14px rgba(5,4,170,0.22);
-  }
-  .su-brandDot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #fff;
+  .su-brandLogo {
+    width: 34px;
+    height: 34px;
+    display: block;
+    object-fit: contain;
   }
   .su-brandName {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 800;
     color: #0B0B1A;
     letter-spacing: -0.02em;
