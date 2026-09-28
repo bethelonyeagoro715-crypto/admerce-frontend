@@ -174,15 +174,104 @@ const fmtDate = (s: string) => {
   }
 };
 
+// ─── Transaction type normalization ─────────────────────────────────
+// Accepts any casing and common aliases; returns null if unrecognized
+// so the caller can fall back to a description heuristic.
+function normalizeType(raw: unknown): 'credit' | 'debit' | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.toLowerCase().trim().replace(/[\s_-]/g, '');
+
+  if (
+    v === 'credit' ||
+    v === 'topup' ||
+    v === 'deposit' ||
+    v === 'refund' ||
+    v === 'reversal' ||
+    v === 'in' ||
+    v === 'inflow' ||
+    v === 'incoming' ||
+    v === 'received' ||
+    v === 'earn' ||
+    v === 'earning' ||
+    v === 'payout'
+  ) {
+    return 'credit';
+  }
+
+  if (
+    v === 'debit' ||
+    v === 'payment' ||
+    v === 'pay' ||
+    v === 'withdraw' ||
+    v === 'withdrawal' ||
+    v === 'purchase' ||
+    v === 'escrow' ||
+    v === 'out' ||
+    v === 'outflow' ||
+    v === 'outgoing' ||
+    v === 'spent'
+  ) {
+    return 'debit';
+  }
+
+  return null;
+}
+
+// Fallback for records where type is missing/unknown: read the
+// description. Explicit verb phrases win over generic terms.
+function inferTypeFromDescription(desc: string): 'credit' | 'debit' | null {
+  if (!desc) return null;
+  const d = desc.toLowerCase();
+
+  // Credits — top-up, deposit, refund, reversal, release, payout
+  if (
+    /\btop[\s-]?up\b/.test(d) ||
+    /\bdeposit(ed)?\b/.test(d) ||
+    /\brefund(ed)?\b/.test(d) ||
+    /\breversal\b/.test(d) ||
+    /\breversed\b/.test(d) ||
+    /\breleased\b/.test(d) ||
+    /\bcredited\b/.test(d) ||
+    /\breceived\b/.test(d) ||
+    /\bearnings?\b/.test(d) ||
+    /\bpayout\b/.test(d)
+  ) {
+    return 'credit';
+  }
+
+  // Debits — withdrawal, payment, purchase, escrow hold
+  if (
+    /\bwithdraw(al|n)?\b/.test(d) ||
+    /\bpayment\b/.test(d) ||
+    /\bpaid\b/.test(d) ||
+    /\bpurchase(d)?\b/.test(d) ||
+    /\bescrow\s+hold\b/.test(d) ||
+    /\bdebited\b/.test(d) ||
+    /\bcharged\b/.test(d)
+  ) {
+    return 'debit';
+  }
+
+  return null;
+}
+
 function normalizeTransactions(raw: unknown): Transaction[] {
   if (!Array.isArray(raw)) return [];
-  return (raw as RawTransaction[]).map((t) => ({
-    id: String(t.id),
-    type: t.type === 'credit' ? 'credit' : 'debit',
-    amount: Number(t.amount ?? 0),
-    description: t.description ?? (t.type === 'credit' ? 'Wallet top-up' : 'Payment'),
-    date: t.created_at ?? '',
-  }));
+  return (raw as RawTransaction[]).map((t) => {
+    const desc = t.description ?? '';
+    const explicit = normalizeType(t.type);
+    const inferred = explicit ?? inferTypeFromDescription(desc);
+    const type: 'credit' | 'debit' = inferred ?? 'debit';
+
+    return {
+      id: String(t.id),
+      type,
+      // Abs in case the backend encodes direction via sign.
+      amount: Math.abs(Number(t.amount ?? 0)),
+      description: desc || (type === 'credit' ? 'Wallet top-up' : 'Payment'),
+      date: t.created_at ?? '',
+    };
+  });
 }
 
 function formatAmountInput(raw: string): string {
