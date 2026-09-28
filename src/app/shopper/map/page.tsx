@@ -20,7 +20,6 @@ import {
   MdChevronRight,
   MdLocationOn,
   MdVerified,
-  MdImage,
 } from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
@@ -46,6 +45,8 @@ type FilterKey = 'all' | 'stores' | 'services' | 'in_stock';
 type MapModule = typeof import('leaflet');
 type ClusterGroup = ReturnType<MapModule['markerClusterGroup']>;
 
+// Owerri — matches where launch listings live. Users who grant
+// geolocation override this on first fix.
 const DEFAULT_LAT = 5.5103;
 const DEFAULT_LNG = 7.0265;
 const RADIUS_OPTIONS = [2, 5, 10, 25] as const;
@@ -89,16 +90,14 @@ function statusColor(status: string): { bg: string; fg: string; border: string; 
 // ─── SVG marker generator ───────────────────────────────────────────
 function markerSvg(type: 'store' | 'service', status: string): string {
   const isService = type === 'service';
-  const fill =
-    isService
-      ? '#7C3AED'
-      : status === 'in_stock'
-        ? '#0504AA'
-        : status === 'low_stock'
-          ? '#D97706'
-          : '#64748B';
+  const fill = isService
+    ? '#7C3AED'
+    : status === 'in_stock'
+      ? '#0504AA'
+      : status === 'low_stock'
+        ? '#D97706'
+        : '#64748B';
 
-  // Pin shape with an icon inside. 40×48 bounding box.
   const icon = isService
     ? '<path d="M14 15h12v3H14zm2 5h8v9h-8zm-2-8h12l-1.5-3h-9z" fill="#fff"/>'
     : '<path d="M13 16h14v3H13zm0 5h14v3H13zm0 5h14v3H13zm1-13h12l1 3v14a1 1 0 0 1-1 1H13a1 1 0 0 1-1-1V16z" fill="#fff"/>';
@@ -199,21 +198,19 @@ export default function ShopperMapPage() {
     });
     mapRef.current = map;
 
-    // Light CARTO basemap — matches the app's palette far better than
-    // the default OSM tiles and is production-friendly.
-    L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 19,
-      },
-    ).addTo(map);
+    // OpenStreetMap standard tiles — keyless, free, no vendor lock-in.
+    // Usage policy allows this traffic level at Admerce's launch scale.
+    // If you outgrow it, swap the URL for a paid provider (MapTiler,
+    // Stadia, or self-hosted tiles).
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
 
     // Cluster group
     const cluster = (L as unknown as {
-      markerClusterGroup: (options?: unknown) => ClusterGroup;
+      markerClusterGroup: (options: Record<string, unknown>) => ClusterGroup;
     })
       .markerClusterGroup({
         showCoverageOnHover: false,
@@ -242,7 +239,6 @@ export default function ShopperMapPage() {
     cluster.addTo(map);
     clusterRef.current = cluster;
 
-    // User location marker (updated when geolocation lands)
     return () => {
       map.remove();
       mapRef.current = null;
@@ -338,7 +334,6 @@ export default function ShopperMapPage() {
     }
   }, [visibleLocations]);
 
-  // ── Center-on-me ──────────────────────────────────────────────────
   const handleRecenter = () => {
     if (!mapRef.current) return;
     const target = userLocation ?? [DEFAULT_LAT, DEFAULT_LNG];
@@ -355,7 +350,6 @@ export default function ShopperMapPage() {
     <main className="ad-mapRoot">
       <style>{MAP_CSS}</style>
 
-      {/* ── Top controls ─────────────────────────────────────────── */}
       <div className="ad-mapTopBar">
         <div className="ad-mapSearch">
           <MdSearch size={18} color="#94A3B8" aria-hidden />
@@ -405,10 +399,8 @@ export default function ShopperMapPage() {
         </div>
       </div>
 
-      {/* ── Map canvas ───────────────────────────────────────────── */}
       <div ref={containerRef} className="ad-mapCanvas" />
 
-      {/* ── Loading overlay ──────────────────────────────────────── */}
       {loading && locations.length === 0 && (
         <div className="ad-mapLoading">
           <span className="ad-mapSpinner" />
@@ -416,7 +408,6 @@ export default function ShopperMapPage() {
         </div>
       )}
 
-      {/* ── Error card ───────────────────────────────────────────── */}
       {error && !loading && (
         <div className="ad-mapError" role="alert">
           <div className="ad-mapErrorIcon">
@@ -437,7 +428,6 @@ export default function ShopperMapPage() {
         </div>
       )}
 
-      {/* ── Empty (post-load, zero visible) ─────────────────────── */}
       {!loading && !error && visibleLocations.length === 0 && (
         <div className="ad-mapEmpty">
           <div className="ad-mapEmptyIcon">
@@ -454,7 +444,6 @@ export default function ShopperMapPage() {
         </div>
       )}
 
-      {/* ── Radius picker ────────────────────────────────────────── */}
       <div className="ad-mapRadiusBar" role="group" aria-label="Search radius">
         <span className="ad-mapRadiusLabel">Within</span>
         {RADIUS_OPTIONS.map((r) => (
@@ -471,7 +460,6 @@ export default function ShopperMapPage() {
         ))}
       </div>
 
-      {/* ── Recenter FAB ─────────────────────────────────────────── */}
       <button
         type="button"
         className="ad-mapFab"
@@ -482,7 +470,6 @@ export default function ShopperMapPage() {
         <MdMyLocation size={22} color="#0504AA" />
       </button>
 
-      {/* ── Selected place bottom sheet ──────────────────────────── */}
       {selected && (
         <div
           className="ad-mapSheetOverlay"
@@ -521,10 +508,7 @@ export default function ShopperMapPage() {
                   )}
                 </div>
               )}
-              <span
-                className="ad-mapSheetTypeBadge"
-                data-type={selected.type}
-              >
+              <span className="ad-mapSheetTypeBadge" data-type={selected.type}>
                 {selected.type === 'service' ? (
                   <>
                     <MdBuild size={11} color="#fff" /> Service
@@ -619,10 +603,8 @@ const MAP_CSS = `
   @keyframes adMapFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes adMapSheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
-  /* Kill Leaflet's default pin drop shadow wrapper */
   .ad-mapPin { background: none !important; border: none !important; }
 
-  /* Leaflet basemap tweaks */
   .leaflet-container {
     font-family: inherit;
     background: #F4F5FB;
@@ -651,7 +633,6 @@ const MAP_CSS = `
     background: #F1F5F9 !important;
   }
 
-  /* Page shell */
   .ad-mapRoot {
     position: relative;
     width: 100%;
@@ -665,7 +646,6 @@ const MAP_CSS = `
     z-index: 1;
   }
 
-  /* ── Top bar ─────────────────────────────────────────────── */
   .ad-mapTopBar {
     position: absolute;
     top: 0;
@@ -747,7 +727,6 @@ const MAP_CSS = `
   }
   .ad-mapPillOn:hover { color: #fff; }
 
-  /* ── Loading ─────────────────────────────────────────────── */
   .ad-mapLoading {
     position: absolute;
     top: 50%;
@@ -775,7 +754,6 @@ const MAP_CSS = `
     animation: adMapSpin 0.7s linear infinite;
   }
 
-  /* ── Error ──────────────────────────────────────────────── */
   .ad-mapError {
     position: absolute;
     top: 130px;
@@ -828,7 +806,6 @@ const MAP_CSS = `
     flex-shrink: 0;
   }
 
-  /* ── Empty ──────────────────────────────────────────────── */
   .ad-mapEmpty {
     position: absolute;
     top: 50%;
@@ -867,7 +844,6 @@ const MAP_CSS = `
     line-height: 1.5;
   }
 
-  /* ── Radius bar ─────────────────────────────────────────── */
   .ad-mapRadiusBar {
     position: absolute;
     bottom: 84px;
@@ -914,7 +890,6 @@ const MAP_CSS = `
     color: #0504AA;
   }
 
-  /* ── Recenter FAB ──────────────────────────────────────── */
   .ad-mapFab {
     position: absolute;
     right: 16px;
@@ -938,7 +913,6 @@ const MAP_CSS = `
   }
   .ad-mapFab:active { transform: translateY(0) scale(0.97); }
 
-  /* ── Bottom sheet ──────────────────────────────────────── */
   .ad-mapSheetOverlay {
     position: fixed;
     inset: 0;
