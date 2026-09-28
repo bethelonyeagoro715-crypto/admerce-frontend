@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PhoneInput, {
   getCountries,
   getCountryCallingCode,
+  parsePhoneNumber,
   type Country,
 } from 'react-phone-number-input';
 import flags from 'react-phone-number-input/flags';
@@ -37,7 +38,7 @@ interface CountrySelectProps {
   tabIndex?: number;
 }
 
-// ─── Country detection from browser locale ──────────────────────────
+// ─── Locale → country ───────────────────────────────────────────────
 function detectCountry(fallback: Country): Country {
   if (typeof navigator === 'undefined') return fallback;
   try {
@@ -46,6 +47,19 @@ function detectCountry(fallback: Country): Country {
       : [navigator.language];
     for (const tag of tags) {
       if (!tag) continue;
+      // Prefer Intl.Locale — returns the region correctly even for
+      // edge cases like "zh-Hans-CN".
+      try {
+        const loc = new Intl.Locale(tag);
+        const region = loc.region?.toUpperCase();
+        if (region && region.length === 2) {
+          const upper = region as Country;
+          if (getCountries().includes(upper)) return upper;
+        }
+      } catch {
+        /* fall through to string parsing */
+      }
+      // Fallback: parse "en-NG" → "NG"
       const parts = tag.split('-');
       const region = parts.length > 1 ? parts[parts.length - 1] : null;
       if (region && region.length === 2) {
@@ -60,9 +74,6 @@ function detectCountry(fallback: Country): Country {
 }
 
 // ─── Custom country picker ──────────────────────────────────────────
-// Renders inside the PhoneInput in place of the native <select>.
-// Renders as a compact flag + dial-code button that opens our own
-// styled popover.
 function CountrySelect({
   value,
   onChange,
@@ -80,7 +91,6 @@ function CountrySelect({
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  // Drop the empty "divider" entries the library injects.
   const realOptions = useMemo(
     () =>
       options.filter(
@@ -102,7 +112,6 @@ function CountrySelect({
     });
   }, [realOptions, query]);
 
-  // Close on click outside
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
@@ -114,7 +123,12 @@ function CountrySelect({
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
-  // Keep the highlighted row scrolled into view
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => searchRef.current?.focus(), 0);
+    return () => clearTimeout(t);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const el = listRef.current?.querySelector<HTMLElement>(
@@ -123,14 +137,21 @@ function CountrySelect({
     el?.scrollIntoView({ block: 'nearest' });
   }, [highlighted, open]);
 
-  const syncHighlightedToValue = () => {
-    const idx = realOptions.findIndex((o) => o.value === value);
-    setHighlighted(idx >= 0 ? idx : 0);
-  };
-
   const choose = (c: Country) => {
     onChange(c);
     setOpen(false);
+  };
+
+  const toggleOpen = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+
+    setQuery('');
+    const idx = realOptions.findIndex((o) => o.value === value);
+    setHighlighted(idx >= 0 ? idx : 0);
+    setOpen(true);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -164,21 +185,15 @@ function CountrySelect({
         ref={buttonRef}
         type="button"
         className="adp-countryBtn"
-        onClick={() => {
-          if (disabled) return;
-          if (!open) setQuery('');
-          setOpen((o) => !o);
-        }}
+        onClick={() => !disabled && toggleOpen()}
         disabled={disabled}
         tabIndex={tabIndex}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`Select country${
-          value ? `, currently ${value}` : ''
-        }`}
+        aria-label={`Select country${value ? `, currently ${value}` : ''}`}
       >
         <span className="adp-flag" aria-hidden>
-          {SelectedFlag ? <SelectedFlag title={value ?? ''} /> : null}
+          {SelectedFlag ? <SelectedFlag title={`Flag of ${value}`} /> : null}
         </span>
         <span className="adp-dial">+{dialCode}</span>
         <span className="adp-chev" aria-hidden />
@@ -228,7 +243,7 @@ function CountrySelect({
                   onClick={() => choose(o.value)}
                 >
                   <span className="adp-optionFlag" aria-hidden>
-                    {FlagComp ? <FlagComp title={o.label} /> : null}
+                    {FlagComp ? <FlagComp title={`Flag of ${o.value}`} /> : null}
                   </span>
                   <span className="adp-optionName">{o.label}</span>
                   <span className="adp-optionDial">
@@ -255,10 +270,31 @@ export default function PhoneField({
   fallbackCountry = 'NG',
   onBlur,
 }: PhoneFieldProps) {
-  const defaultCountry = detectCountry(fallbackCountry);
+  const [defaultCountry, setDefaultCountry] = useState<Country>(() =>
+    detectCountry(fallbackCountry),
+  );
 
+  // When the user types or pastes a full international number,
+  // react-phone-number-input updates `value` to E.164. If the parsed
+  // country differs from what we're displaying, adopt the parsed one
+  // so the flag matches the actual number.
   const handleChange = (next: string | undefined) => {
-    onChange(next ?? '');
+    const e164 = next ?? '';
+    if (e164) {
+      try {
+        const parsed = parsePhoneNumber(e164);
+        if (parsed?.country && parsed.country !== defaultCountry) {
+          // Only switch if the parsed number is a valid one for that
+          // country — avoids switching on partial input.
+          if (parsed.isValid()) {
+            setDefaultCountry(parsed.country);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    onChange(e164);
   };
 
   const memoFallback = useMemo(
@@ -270,7 +306,10 @@ export default function PhoneField({
     <div className="adp-phoneWrap" data-disabled={disabled || undefined}>
       <PhoneInput
         id={id}
-        international
+        // ← The key change. Without this, the input shows
+        //   "+234 802 224 0079" even though the country button
+        //   already shows "+234". With it removed, the input shows
+        //   only the national part: "802 224 0079".
         countryCallingCodeEditable={false}
         defaultCountry={memoFallback}
         value={value || undefined}
@@ -281,6 +320,7 @@ export default function PhoneField({
         onBlur={onBlur}
         countrySelectComponent={CountrySelect}
         className="adp-phoneInput"
+        smartCaret
       />
       <style>{PHONE_CSS}</style>
     </div>
@@ -291,7 +331,6 @@ export default function PhoneField({
 const PHONE_CSS = `
   .adp-phoneWrap { width: 100%; }
 
-  /* ── Outer field ──────────────────────────────────────────── */
   .adp-phoneInput.PhoneInput {
     display: flex;
     align-items: center;
@@ -536,7 +575,7 @@ const PHONE_CSS = `
     margin: 0;
   }
 
-  /* ── Kill the library's default country styling since we replace it ─ */
+  /* Kill the library's default country styling */
   .adp-phoneInput .PhoneInputCountry { display: none !important; }
 
   @media (prefers-reduced-motion: reduce) {
