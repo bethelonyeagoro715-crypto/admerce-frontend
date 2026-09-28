@@ -34,6 +34,7 @@ import {
   MdAccountBalanceWallet,
   MdErrorOutline,
   MdRefresh,
+  MdFeedback,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -64,8 +65,14 @@ interface Stats {
 // ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
-  const base = process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
+  if (
+    url.startsWith('http') ||
+    url.startsWith('blob:') ||
+    url.startsWith('data:')
+  )
+    return url;
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
   if (!base) return url;
   if (url.startsWith('/')) return `${base}${url}`;
   return `${base}/${url}`;
@@ -83,7 +90,10 @@ function fmtMemberSince(iso?: string): string {
   const t = parseAsUtc(iso);
   if (Number.isNaN(t)) return '';
   try {
-    return new Date(t).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+    return new Date(t).toLocaleDateString('en-GB', {
+      month: 'short',
+      year: 'numeric',
+    });
   } catch {
     return '';
   }
@@ -270,7 +280,6 @@ export default function ShopperProfilePage() {
     }
   };
 
-  // ── Loading skeleton ────────────────────────────────────────────
   if (loading) {
     return (
       <main style={css.root}>
@@ -303,7 +312,6 @@ export default function ShopperProfilePage() {
     );
   }
 
-  // ── Error ───────────────────────────────────────────────────────
   if (errored || !profile) {
     return (
       <main style={css.errorRoot}>
@@ -324,13 +332,13 @@ export default function ShopperProfilePage() {
     );
   }
 
-  // ── Main ────────────────────────────────────────────────────────
   const name = displayName(profile);
   const phone = profile.phone || '';
   const email = profile.email || '';
   const avatarUrl = resolveImageUrl(profile.avatar_url);
   const isVerified = profile.verified === true;
   const role = (profile.role || 'shopper').toLowerCase();
+  const roleSlug = role === 'service_provider' ? 'service-provider' : role;
   const memberSince = fmtMemberSince(profile.created_at);
   const initial = (name.charAt(0) || '?').toUpperCase();
 
@@ -345,7 +353,7 @@ export default function ShopperProfilePage() {
         <div style={css.topBar}>
           <span style={css.topTitle}>Profile</span>
           <button
-            onClick={() => router.push(`/settings/${role}`)}
+            onClick={() => router.push(`/settings/${roleSlug}`)}
             style={css.ghostBtn}
             aria-label="Settings"
           >
@@ -451,7 +459,7 @@ export default function ShopperProfilePage() {
             icon={<MdEdit size={18} color="#0504AA" />}
             iconBg="#EEF0FF"
             label="Edit Profile"
-            onClick={() => router.push(`/settings/${role}`)}
+            onClick={() => router.push('/shopper/profile/edit')}
           />
           <Row
             icon={<MdLock size={18} color="#0891B2" />}
@@ -469,8 +477,7 @@ export default function ShopperProfilePage() {
             icon={<MdLocationOn size={18} color="#D97706" />}
             iconBg="#FEF3C7"
             label="Delivery Addresses"
-            value="Coming soon"
-            disabled
+            onClick={() => router.push('/shopper/profile/addresses')}
           />
           <Row
             icon={<MdSwapHoriz size={18} color="#16A34A" />}
@@ -494,14 +501,13 @@ export default function ShopperProfilePage() {
             icon={<MdPalette size={18} color="#7E22CE" />}
             iconBg="#F3E8FF"
             label="Appearance"
-            value="System"
-            onClick={() => router.push(`/settings/${role}`)}
+            onClick={() => router.push(`/settings/${roleSlug}/appearance`)}
           />
           <Row
             icon={<MdShield size={18} color="#0891B2" />}
             iconBg="#E0F2FE"
             label="Privacy"
-            onClick={() => router.push(`/settings/${role}`)}
+            onClick={() => router.push(`/settings/${roleSlug}/privacy`)}
           />
         </div>
 
@@ -512,13 +518,19 @@ export default function ShopperProfilePage() {
             icon={<MdHelpOutline size={18} color="#0504AA" />}
             iconBg="#EEF0FF"
             label="Help Center"
-            onClick={() => {}}
+            onClick={() => router.push(`/settings/${roleSlug}/help`)}
           />
           <Row
             icon={<MdReportProblem size={18} color="#DC2626" />}
             iconBg="#FEE2E2"
             label="Report a Problem"
-            onClick={() => {}}
+            onClick={() => router.push(`/settings/${roleSlug}/report`)}
+          />
+          <Row
+            icon={<MdFeedback size={18} color="#0891B2" />}
+            iconBg="#E0F2FE"
+            label="Send Feedback"
+            onClick={() => router.push(`/settings/${roleSlug}/feedback`)}
           />
         </div>
 
@@ -529,20 +541,20 @@ export default function ShopperProfilePage() {
             icon={<MdDescription size={18} color="#475569" />}
             iconBg="#F1F5F9"
             label="Terms and Conditions"
-            onClick={() => {}}
+            onClick={() => router.push(`/settings/${roleSlug}/legal/terms`)}
           />
           <Row
             icon={<MdShield size={18} color="#475569" />}
             iconBg="#F1F5F9"
             label="Privacy Policy"
-            onClick={() => {}}
+            onClick={() => router.push(`/settings/${roleSlug}/legal/privacy`)}
           />
           <Row
             icon={<MdInfo size={18} color="#475569" />}
             iconBg="#F1F5F9"
             label="App Version"
             value="1.0.0"
-            disabled
+            onClick={() => router.push(`/settings/${roleSlug}/about`)}
           />
         </div>
 
@@ -1032,8 +1044,6 @@ const css: Record<string, React.CSSProperties> = {
     letterSpacing: -0.1,
     transition: 'background-color 0.15s, transform 0.12s',
   },
-
-  // Modal
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -1129,8 +1139,6 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     boxShadow: '0 10px 24px rgba(5,4,170,0.24)',
   },
-
-  // Skeleton
   avatarSkeleton: {
     width: 96,
     height: 96,
@@ -1160,8 +1168,6 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 18,
     animation: 'spShimmer 1.4s ease-in-out infinite',
   },
-
-  // Error
   errorRoot: {
     display: 'flex',
     flexDirection: 'column',
