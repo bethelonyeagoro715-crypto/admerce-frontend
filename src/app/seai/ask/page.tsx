@@ -15,6 +15,7 @@ import {
   MdClose,
   MdAdd,
   MdMic,
+  MdMicOff,
   MdArrowUpward,
   MdContentCopy,
   MdRefresh,
@@ -37,6 +38,7 @@ import {
   MdSchedule,
   MdVerified,
   MdHistory,
+  MdStop,
 } from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
@@ -109,7 +111,7 @@ interface Toast {
   text: string;
 }
 
-// ─── Time-based greeting (Claude-style) ─────────────────────────────
+// ─── Time-based greeting ────────────────────────────────────────────
 function greetingForHour(h: number): string {
   if (h < 5) return 'Working late.';
   if (h < 12) return 'Good morning.';
@@ -118,7 +120,7 @@ function greetingForHour(h: number): string {
   return 'Good evening.';
 }
 
-// ─── Rotating thinking verbs (Claude-style) ─────────────────────────
+// ─── Rotating thinking verbs ────────────────────────────────────────
 const THINKING_VERBS = [
   'Searching nearby stores',
   'Comparing prices',
@@ -128,7 +130,6 @@ const THINKING_VERBS = [
   'Reading descriptions',
 ];
 
-// ─── Refine suggestions after results land ──────────────────────────
 const REFINE_CHIPS = [
   { label: 'Cheaper options', icon: MdLocalOffer, query: 'Show me cheaper options' },
   { label: 'Within 2 km', icon: MdLocationOn, query: 'Only show results within 2 km' },
@@ -172,11 +173,141 @@ function typeBadgeLabel(type: string | undefined): string {
   return 'ITEM';
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Inline markdown renderer — handles **bold**, *italic*, `code`,
+// and auto-highlights ₦ prices. Splits on the small subset we need;
+// no full markdown lib for a chat bubble.
+// ═══════════════════════════════════════════════════════════════════
+interface MdToken {
+  kind: 'text' | 'bold' | 'italic' | 'code' | 'price';
+  value: string;
+  key: string;
+}
+
+function tokenizeInline(input: string): MdToken[] {
+  const tokens: MdToken[] = [];
+  let i = 0;
+  let keyCounter = 0;
+  const nextKey = () => `t_${keyCounter++}`;
+
+  // Priority order: **bold** → `code` → *italic* → ₦price
+  // Simple scanner; no nested emphasis handling (chat doesn't need it).
+  while (i < input.length) {
+    // Bold: **...**
+    if (input[i] === '*' && input[i + 1] === '*') {
+      const end = input.indexOf('**', i + 2);
+      if (end !== -1) {
+        tokens.push({
+          kind: 'bold',
+          value: input.slice(i + 2, end),
+          key: nextKey(),
+        });
+        i = end + 2;
+        continue;
+      }
+    }
+
+    // Code: `...`
+    if (input[i] === '`') {
+      const end = input.indexOf('`', i + 1);
+      if (end !== -1) {
+        tokens.push({
+          kind: 'code',
+          value: input.slice(i + 1, end),
+          key: nextKey(),
+        });
+        i = end + 1;
+        continue;
+      }
+    }
+
+    // Italic: *...* (single star, not double)
+    if (
+      input[i] === '*' &&
+      input[i + 1] !== '*' &&
+      input[i - 1] !== '*'
+    ) {
+      const end = input.indexOf('*', i + 1);
+      if (end !== -1 && input[end + 1] !== '*') {
+        tokens.push({
+          kind: 'italic',
+          value: input.slice(i + 1, end),
+          key: nextKey(),
+        });
+        i = end + 1;
+        continue;
+      }
+    }
+
+    // Price: ₦ followed by digits/commas/dots
+    if (input[i] === '₦') {
+      const m = input.slice(i).match(/^₦\s?[\d,]+(?:\.\d+)?/);
+      if (m) {
+        tokens.push({ kind: 'price', value: m[0], key: nextKey() });
+        i += m[0].length;
+        continue;
+      }
+    }
+
+    // Plain text until next special marker
+    let j = i + 1;
+    while (
+      j < input.length &&
+      input[j] !== '*' &&
+      input[j] !== '`' &&
+      input[j] !== '₦'
+    ) {
+      j++;
+    }
+    tokens.push({
+      kind: 'text',
+      value: input.slice(i, j),
+      key: nextKey(),
+    });
+    i = j;
+  }
+
+  return tokens;
+}
+
+function renderInline(text: string): React.ReactNode {
+  const tokens = tokenizeInline(text);
+  return tokens.map((tok) => {
+    switch (tok.kind) {
+      case 'bold':
+        return (
+          <strong key={tok.key} className="seai-md-bold">
+            {tok.value}
+          </strong>
+        );
+      case 'italic':
+        return (
+          <em key={tok.key} className="seai-md-italic">
+            {tok.value}
+          </em>
+        );
+      case 'code':
+        return (
+          <code key={tok.key} className="seai-md-code">
+            {tok.value}
+          </code>
+        );
+      case 'price':
+        return (
+          <span key={tok.key} className="seai-md-price">
+            {tok.value}
+          </span>
+        );
+      default:
+        return <span key={tok.key}>{tok.value}</span>;
+    }
+  });
+}
+
 function SeaiCursor() {
   return <span className="seai-cursor" aria-hidden />;
 }
 
-// ─── Thinking indicator ─────────────────────────────────────────────
 function ThinkingIndicator() {
   const [verbIdx, setVerbIdx] = useState(0);
 
@@ -199,7 +330,6 @@ function ThinkingIndicator() {
   );
 }
 
-// ─── Result card ────────────────────────────────────────────────────
 function SeaiResultCard({
   card,
   saved,
@@ -368,6 +498,11 @@ function SeaiAskContent() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [savedCards, setSavedCards] = useState<Set<string>>(new Set());
 
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
   const [editing, setEditing] = useState<{
     index: number;
     text: string;
@@ -379,6 +514,10 @@ function SeaiAskContent() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
   const messagesRef = useRef<Message[]>([]);
   const streamAbortRef = useRef<AbortController | null>(null);
@@ -399,6 +538,11 @@ function SeaiAskContent() {
     return () => {
       isMountedRef.current = false;
       streamAbortRef.current?.abort();
+      // Stop any active recording on unmount
+      if (mediaRecorderRef.current?.state === 'recording') {
+        try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+      }
+      recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
@@ -440,10 +584,20 @@ function SeaiAskContent() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputHasText(e.target.value.trim().length > 0);
-    // auto-grow
     const el = e.target;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  };
+
+  // Programmatically set the textarea value (used after voice transcribe)
+  const setInputValue = (text: string) => {
+    if (!inputRef.current) return;
+    inputRef.current.value = text;
+    inputRef.current.style.height = 'auto';
+    inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 160)}px`;
+    setInputHasText(text.trim().length > 0);
+    inputRef.current.focus();
+    setInputFocused(true);
   };
 
   const clearConversation = () => {
@@ -511,6 +665,222 @@ function SeaiAskContent() {
       return next;
     });
   }, []);
+
+  // ═════════════════════════════════════════════════════════════════
+  // Voice: start / stop recording → transcribe → fill input
+  // ═════════════════════════════════════════════════════════════════
+  const startRecording = async () => {
+    if (isRecording || isTranscribing) return;
+
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      pushToast('error', 'Recording not supported on this device');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      // Prefer webm/opus; Safari uses mp4
+      const mimeType =
+        typeof MediaRecorder !== 'undefined' &&
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : typeof MediaRecorder !== 'undefined' &&
+              MediaRecorder.isTypeSupported('audio/mp4')
+            ? 'audio/mp4'
+            : '';
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        // Release the mic
+        stream.getTracks().forEach((t) => t.stop());
+        recordingStreamRef.current = null;
+
+        const chunks = audioChunksRef.current;
+        audioChunksRef.current = [];
+
+        if (!chunks.length) {
+          setIsRecording(false);
+          return;
+        }
+
+        const blobType = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(chunks, { type: blobType });
+        const ext = blobType.includes('mp4') ? 'm4a' : 'webm';
+        const file = new File([blob], `voice.${ext}`, { type: blobType });
+
+        setIsRecording(false);
+        setIsTranscribing(true);
+
+        try {
+          const res = (await api.transcribeAudio(file)) as {
+            text?: string;
+            transcript?: string;
+          };
+          const text = (res?.text || res?.transcript || '').trim();
+          if (!isMountedRef.current) return;
+          if (text) {
+            setInputValue(text);
+          } else {
+            pushToast('error', "Couldn't hear that. Try again.");
+          }
+        } catch {
+          if (isMountedRef.current) {
+            pushToast('error', 'Transcription failed. Try again.');
+          }
+        } finally {
+          if (isMountedRef.current) setIsTranscribing(false);
+        }
+      };
+
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      pushToast('error', 'Microphone access denied');
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecording = () => {
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state === 'recording') {
+      try {
+        rec.stop();
+      } catch {
+        // ignore
+      }
+    } else {
+      setIsRecording(false);
+      recordingStreamRef.current?.getTracks().forEach((t) => t.stop());
+      recordingStreamRef.current = null;
+    }
+  };
+
+  const handleMicClick = () => {
+    if (isTranscribing) return;
+    if (isRecording) {
+      stopRecording();
+    } else {
+      void startRecording();
+    }
+  };
+
+  // ═════════════════════════════════════════════════════════════════
+  // Attach image → SEAI Lens → render as cards
+  // ═════════════════════════════════════════════════════════════════
+  const handleAttachClick = () => {
+    if (isUploadingImage) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so the same file can be re-picked
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      pushToast('error', 'Only images are supported');
+      return;
+    }
+
+    setIsUploadingImage(true);
+
+    // Show the picked image as a user message immediately
+    const localUrl = URL.createObjectURL(file);
+    const userMsg: Message = {
+      clientId: nextClientId(),
+      role: 'user',
+      text: `📷 Looking for what's in this photo…`,
+      isThinking: false,
+      isStreaming: false,
+      timestamp: new Date(),
+    };
+    const thinkingMsg: Message = {
+      clientId: nextClientId(),
+      role: 'seai',
+      text: '',
+      isThinking: true,
+      isStreaming: false,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMsg, thinkingMsg]);
+    atBottomRef.current = true;
+    scrollToBottom(true);
+
+    const idx = messagesRef.current.length + 1;
+
+    try {
+      const res = (await api.seaiLensWithFile(file, userLat, userLng, 10)) as {
+        results?: ResultCard[];
+        items?: ResultCard[];
+        message?: string;
+        text?: string;
+      };
+
+      if (!isMountedRef.current) return;
+
+      const results =
+        (Array.isArray(res?.results) && res.results) ||
+        (Array.isArray(res?.items) && res.items) ||
+        [];
+
+      const intro =
+        (res?.message || res?.text || '').toString().trim() ||
+        (results.length > 0
+          ? 'Here\u2019s what I found:'
+          : "I couldn\u2019t identify anything useful in that photo.");
+
+      setMessages((prev) => {
+        const updated = [...prev];
+        if (idx < updated.length) {
+          updated[idx] = {
+            ...updated[idx],
+            isThinking: false,
+            isStreaming: false,
+            text: intro,
+            cards: results.length > 0 ? results : undefined,
+          };
+        }
+        return updated;
+      });
+
+      // Free the local URL after the message is set
+      setTimeout(() => URL.revokeObjectURL(localUrl), 1000);
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      setMessages((prev) => {
+        const updated = [...prev];
+        if (idx < updated.length) {
+          updated[idx] = {
+            ...updated[idx],
+            isThinking: false,
+            isStreaming: false,
+            text: 'I couldn\u2019t read that image. Try another one.',
+            error: err instanceof Error ? err.message : 'Unknown error',
+          };
+        }
+        return updated;
+      });
+      URL.revokeObjectURL(localUrl);
+      pushToast('error', 'Image analysis failed');
+    } finally {
+      if (isMountedRef.current) setIsUploadingImage(false);
+    }
+  };
 
   const retryMessage = (index: number) => {
     if (index > 0 && messages[index - 1].role === 'user') {
@@ -652,13 +1022,10 @@ function SeaiAskContent() {
 
             if (json.type === 'action') {
               const data = (json.data || {}) as Record<string, unknown>;
-
               const intent =
                 (json.intent as string | undefined) ||
                 (data.intent as string | undefined);
 
-              // More tolerant result extraction: accept results, items, or
-              // data itself if it's an array.
               const resultsArr = Array.isArray(data.results)
                 ? (data.results as ResultCard[])
                 : Array.isArray(data.items)
@@ -697,8 +1064,6 @@ function SeaiAskContent() {
                 const storeId = data.store_id as string | undefined;
                 if (storeId) router.push(`/store-detail/${storeId}`);
               } else if (process.env.NODE_ENV !== 'production') {
-                // Dev-only: surface unknown intents so we can see what
-                // the backend is actually sending.
                 // eslint-disable-next-line no-console
                 console.debug('[seai] unknown action', { intent, data, json });
               }
@@ -718,7 +1083,7 @@ function SeaiAskContent() {
           const recents = (await api.getRecentConversations()) as unknown as Conversation[];
           if (isMountedRef.current) setConversations(recents);
         } catch {
-          // best-effort persistence
+          // best-effort
         }
       }
 
@@ -764,7 +1129,6 @@ function SeaiAskContent() {
     }
   };
 
-  // ── Fire the initial query once, once we have a stable mount ──────
   useEffect(() => {
     if (!initialQuery || initialQuerySentRef.current) return;
     initialQuerySentRef.current = true;
@@ -928,7 +1292,7 @@ function SeaiAskContent() {
                     <ThinkingIndicator />
                   ) : msg.text ? (
                     <div style={styles.aiText}>
-                      {msg.text}
+                      {renderInline(msg.text)}
                       {msg.isStreaming && <SeaiCursor />}
                     </div>
                   ) : null}
@@ -1061,21 +1425,62 @@ function SeaiAskContent() {
               sendMessage();
             }
           }}
-          placeholder={`Ask ${isCortexMode ? 'SEAI Cortex' : 'SEAI'} anything…`}
+          placeholder={
+            isRecording
+              ? 'Listening…'
+              : isTranscribing
+                ? 'Transcribing…'
+                : `Ask ${isCortexMode ? 'SEAI Cortex' : 'SEAI'} anything…`
+          }
           style={styles.textarea}
           rows={1}
+          disabled={isRecording || isTranscribing}
         />
         <div style={styles.inputActions}>
-          <button style={styles.inputIconBtn} title="Attach" aria-label="Attach">
-            <MdAdd size={20} color="#666" />
+          <button
+            style={styles.inputIconBtn}
+            onClick={handleAttachClick}
+            disabled={isUploadingImage || isRecording || isTranscribing}
+            title={isUploadingImage ? 'Analyzing…' : 'Attach an image'}
+            aria-label="Attach an image"
+          >
+            {isUploadingImage ? (
+              <span className="seai-mini-spinner" />
+            ) : (
+              <MdAdd size={20} color="#666" />
+            )}
           </button>
-          <button style={styles.inputIconBtn} title="Voice" aria-label="Voice">
-            <MdMic size={20} color="#666" />
+
+          <button
+            style={{
+              ...styles.inputIconBtn,
+              ...(isRecording ? styles.inputIconBtnRecording : null),
+            }}
+            onClick={handleMicClick}
+            disabled={isTranscribing}
+            title={
+              isTranscribing
+                ? 'Transcribing…'
+                : isRecording
+                  ? 'Stop recording'
+                  : 'Voice input'
+            }
+            aria-label={isRecording ? 'Stop recording' : 'Start voice input'}
+          >
+            {isTranscribing ? (
+              <span className="seai-mini-spinner" />
+            ) : isRecording ? (
+              <MdStop size={20} color="#fff" />
+            ) : (
+              <MdMic size={20} color="#666" />
+            )}
           </button>
+
           <div style={{ flex: 1 }} />
+
           <button
             onClick={() => sendMessage()}
-            disabled={!inputHasText || isStreaming}
+            disabled={!inputHasText || isStreaming || isRecording || isTranscribing}
             className="seai-send"
             style={{
               ...styles.sendBtn,
@@ -1093,8 +1498,23 @@ function SeaiAskContent() {
         </div>
       </div>
       <p style={styles.disclaimer}>
-        SEAI can make mistakes. Double-check important details.
+        {isRecording
+          ? 'Recording — tap the square to stop'
+          : isTranscribing
+            ? 'Transcribing your voice…'
+            : isUploadingImage
+              ? 'Analyzing image…'
+              : 'SEAI can make mistakes. Double-check important details.'}
       </p>
+
+      {/* Hidden file input for attach */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
     </div>
   );
 
@@ -2068,6 +2488,10 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 10,
+    transition: 'background 0.15s',
+  },
+  inputIconBtnRecording: {
+    background: '#DC2626',
   },
   sendBtn: {
     width: 38,
@@ -2131,6 +2555,46 @@ const styles: Record<string, React.CSSProperties> = {
 // ─── Global keyframes + responsive rules ─────────────────────────────
 const GLOBAL_CSS = `
   html, body { overflow-x: hidden; max-width: 100vw; }
+
+  /* ── Inline markdown ─────────────────────────────────────── */
+  .seai-md-bold {
+    font-weight: 700;
+    color: #0A0A14;
+    letter-spacing: -0.01em;
+  }
+  .seai-md-italic {
+    font-style: italic;
+    color: #545B6E;
+  }
+  .seai-md-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.92em;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: #F1F5F9;
+    color: #0504AA;
+    border: 1px solid #E2E8F0;
+  }
+  .seai-md-price {
+    font-weight: 800;
+    color: #0504AA;
+    background: linear-gradient(180deg, #EEEDFF 0%, #E0DFFF 100%);
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  /* ── Mini spinner for input buttons ─────────────────────── */
+  .seai-mini-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #E2E8F0;
+    border-top-color: #0504AA;
+    animation: seaiSpin 0.7s linear infinite;
+  }
 
   /* ── Ambient orbs ────────────────────────────────────────── */
   .seai-orb {
