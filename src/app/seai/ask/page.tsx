@@ -686,7 +686,7 @@ function SeaiAskContent() {
     const idx = messagesRef.current.length + 1;
 
     try {
-      const res = (await api.seaiLensWithFile(file, userLat, userLng, 10)) as {
+      const res = (await api.seaiLensWithFile(file, userLat, userLng, 50)) as {
         results?: ResultCard[];
         items?: ResultCard[];
         message?: string;
