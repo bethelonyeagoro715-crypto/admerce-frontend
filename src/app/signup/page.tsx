@@ -4,8 +4,8 @@ import { Suspense, useState, useMemo, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import api, { extractErrorDetail } from '../../services/api';
+import PhoneField from '../../components/ui/PhoneField';
 import {
-  MdPhoneIphone,
   MdPersonOutline,
   MdMailOutline,
   MdLockOutline,
@@ -56,17 +56,8 @@ function evaluatePassword(pw: string): Strength {
   return { score: 5, label: 'Excellent', color: '#065F46', bg: '#ECFDF5' };
 }
 
-// ─── Field validation ───────────────────────────────────────────────
 function isEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
-}
-
-// Loose client-side gate. Real validation (any country, E.164) happens
-// on the backend via the `phonenumbers` library. We only reject inputs
-// that are obviously too short to be a phone number.
-function isPhone(s: string): boolean {
-  const digits = s.replace(/[^\d]/g, '');
-  return digits.length >= 7 && digits.length <= 15;
 }
 
 // ─── Component ──────────────────────────────────────────────────────
@@ -75,7 +66,7 @@ function SignupContent() {
   const searchParams = useSearchParams();
   const intendedRole = searchParams.get('intended_role') ?? undefined;
 
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(''); // E.164 from PhoneField
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -86,7 +77,9 @@ function SignupContent() {
 
   const strength = useMemo(() => evaluatePassword(password), [password]);
 
-  const phoneValid = isPhone(phone);
+  // E.164 always starts with "+". The library only emits a valid value
+  // once the number parses, so this is a strong gate.
+  const phoneValid = phone.length >= 8 && phone.startsWith('+');
   const emailValid = isEmail(email);
   const usernameValid = username.trim().length >= 3;
   const passwordValid = password.length >= 8;
@@ -108,19 +101,13 @@ function SignupContent() {
     setLoading(true);
     setError('');
     try {
-      const trimmedPhone = phone.trim();
       const trimmedEmail = email.trim();
 
-      // Send raw — backend canonicalizes to E.164 for any country.
-      await api.signup(
-        trimmedPhone,
-        password,
-        trimmedEmail,
-        username.trim(),
-      );
+      // `phone` is already canonical E.164 from PhoneField.
+      await api.signup(phone, password, trimmedEmail, username.trim());
 
       const params = new URLSearchParams();
-      params.set('phone', trimmedPhone);
+      params.set('phone', phone);
       params.set('email', trimmedEmail);
       if (intendedRole) params.set('intended_role', intendedRole);
       router.push(`/verify-otp?${params.toString()}`);
@@ -143,7 +130,6 @@ function SignupContent() {
       <style>{CSS}</style>
 
       <div className="su-shell">
-        {/* Brand — real Admerce symbol */}
         <header className="su-brandRow">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -178,26 +164,20 @@ function SignupContent() {
           <Field
             id="su-phone"
             label="Phone number"
-            icon={<MdPhoneIphone size={18} color="#64748B" />}
-            hint="Include your country code if you're outside Nigeria"
+            hint="We'll text you a 6-digit code"
             error={
               touched.phone && !phoneValid
-                ? 'Enter a valid phone number'
+                ? 'Enter a valid phone number for your country'
                 : undefined
             }
           >
-            <input
+            <PhoneField
               id="su-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="+234 803 123 4567"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={setPhone}
               onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
-              className="su-input"
               disabled={loading}
-              required
+              placeholder="Phone number"
             />
           </Field>
 
@@ -388,7 +368,7 @@ function Field({
 }: {
   id: string;
   label: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   hint?: string;
   error?: string;
   children: React.ReactNode;
@@ -396,9 +376,11 @@ function Field({
   return (
     <div className="su-field">
       <label htmlFor={id} className="su-label">
-        <span className="su-labelIcon" aria-hidden>
-          {icon}
-        </span>
+        {icon && (
+          <span className="su-labelIcon" aria-hidden>
+            {icon}
+          </span>
+        )}
         <span>{label}</span>
       </label>
       {children}
