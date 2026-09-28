@@ -1,11 +1,16 @@
 'use client';
 
-import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Suspense,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../services/api';
 import {
   MdMenu,
-  MdAutoAwesome,
   MdEdit,
   MdClose,
   MdAdd,
@@ -23,18 +28,27 @@ import {
   MdNavigation,
   MdCheck,
   MdChatBubbleOutline,
+  MdBookmarkBorder,
+  MdBookmark,
+  MdShare,
+  MdSearch,
+  MdLocalOffer,
+  MdTrendingUp,
+  MdSchedule,
+  MdVerified,
+  MdHistory,
 } from 'react-icons/md';
 
 export const dynamic = 'force-dynamic';
 
 const Brand = {
-  bg: '#FAFAFA',
+  bg: '#FBFAF7',
   bgWarm: '#F8F9FC',
   cardBg: '#FFFFFF',
   sidebarBg: '#F6F7FB',
-  textPrimary: '#0F0F1A',
-  textSecondary: '#5A6178',
-  textMuted: '#9AA1B2',
+  textPrimary: '#0A0A14',
+  textSecondary: '#545B6E',
+  textMuted: '#8F96A8',
   accent: '#0504AA',
   accentLight: '#3D3BFF',
   accentBg: '#EEEDFF',
@@ -57,6 +71,7 @@ interface Message {
   timestamp: Date;
   error?: string;
   cards?: ResultCard[];
+  saved?: boolean;
 }
 
 interface ResultCard {
@@ -79,6 +94,7 @@ interface ResultCard {
   latitude?: number;
   longitude?: number;
   directions_url?: string;
+  verification_status?: string;
   [key: string]: unknown;
 }
 
@@ -93,11 +109,38 @@ interface Toast {
   text: string;
 }
 
-const suggestions = [
-  { emoji: '🛍️', text: 'Find items near me' },
-  { emoji: '🏪', text: 'Show stores in my area' },
-  { emoji: '⭐', text: "What's trending today?" },
-  { emoji: '📦', text: 'Track my recent order' },
+// ─── Time-based greeting (Claude-style) ─────────────────────────────
+function greetingForHour(h: number): string {
+  if (h < 5) return 'Working late.';
+  if (h < 12) return 'Good morning.';
+  if (h < 17) return 'Good afternoon.';
+  if (h < 21) return 'Good evening.';
+  return 'Good evening.';
+}
+
+// ─── Rotating thinking verbs (Claude-style) ─────────────────────────
+const THINKING_VERBS = [
+  'Searching nearby stores',
+  'Comparing prices',
+  'Checking stock',
+  'Looking at what\'s close',
+  'Finding the best match',
+  'Reading descriptions',
+];
+
+// ─── Refine suggestions after results land ──────────────────────────
+const REFINE_CHIPS = [
+  { label: 'Cheaper options', icon: MdLocalOffer, query: 'Show me cheaper options' },
+  { label: 'Within 2 km', icon: MdLocationOn, query: 'Only show results within 2 km' },
+  { label: 'Highest rated', icon: MdTrendingUp, query: 'Show the highest rated ones' },
+  { label: 'Open now', icon: MdSchedule, query: 'Which ones are open right now?' },
+];
+
+const welcomeSuggestions = [
+  { icon: MdSearch, text: 'Find items near me' },
+  { icon: MdStore, text: 'Show stores in my area' },
+  { icon: MdTrendingUp, text: "What's trending today?" },
+  { icon: MdSchedule, text: 'Track my recent order' },
 ];
 
 let _msgSeq = 0;
@@ -108,12 +151,13 @@ function nextClientId(): string {
 
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
+  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
   const base =
     process.env.NEXT_PUBLIC_API_BASE ||
     process.env.NEXT_PUBLIC_API_URL ||
     '';
-  return `${base}${url}`;
+  if (!base) return url;
+  return url.startsWith('/') ? `${base}${url}` : `${base}/${url}`;
 }
 
 function typeBadgeColor(type: string | undefined): string {
@@ -132,38 +176,71 @@ function SeaiCursor() {
   return <span className="seai-cursor" aria-hidden />;
 }
 
+// ─── Thinking indicator ─────────────────────────────────────────────
+function ThinkingIndicator() {
+  const [verbIdx, setVerbIdx] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setVerbIdx((i) => (i + 1) % THINKING_VERBS.length);
+    }, 1400);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="seai-thinking">
+      <span className="seai-thinking-orb" aria-hidden>
+        <span className="seai-thinking-orbInner" />
+      </span>
+      <span key={verbIdx} className="seai-thinking-text">
+        {THINKING_VERBS[verbIdx]}…
+      </span>
+    </div>
+  );
+}
+
+// ─── Result card ────────────────────────────────────────────────────
 function SeaiResultCard({
   card,
+  saved,
   onTap,
+  onSave,
 }: {
   card: ResultCard;
+  saved: boolean;
   onTap: () => void;
+  onSave: () => void;
 }) {
-  const isItem = card.type === 'item' || (!card.type && !!card.listing_id);
   const isService = card.type === 'service' || !!card.service_id;
   const isStore = card.type === 'store' || (!!card.store_id && !card.listing_id);
 
   const image = resolveImageUrl(
-    (card.image_url as string | undefined) || card.provider_image_url
+    (card.image_url as string | undefined) || card.provider_image_url,
   );
 
   let subtitle = '';
-  if (isItem) subtitle = (card.store_name as string) || '';
+  if (!isService && !isStore) subtitle = (card.store_name as string) || '';
   else if (isService) subtitle = (card.provider_name as string) || '';
-  else if (isStore) subtitle = (card.address as string) || (card.description as string) || '';
+  else if (isStore) subtitle = (card.address as string) || '';
 
   const showPrice =
-    (isItem || isService) &&
+    (isService || (!isStore && !!card.listing_id)) &&
     typeof card.price === 'number' &&
     card.price > 0;
 
   const travel = card.travel_minutes as number | undefined;
-  const directions = card.directions_url as string | undefined;
   const distance = card.distance_km as number | undefined;
+  const directions = card.directions_url as string | undefined;
+  const verified = card.verification_status === 'verified';
 
   const handleDirections = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (directions) window.open(directions, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleSave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSave();
   };
 
   return (
@@ -176,15 +253,16 @@ function SeaiResultCard({
       >
         <div style={styles.tileImageWrap}>
           {image ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={image} alt="" style={styles.tileImage} />
           ) : (
             <div style={styles.tilePlaceholder}>
               {isStore ? (
-                <MdStore size={48} color="#C7D2FE" />
+                <MdStore size={40} color="#C7D2FE" />
               ) : isService ? (
-                <MdBuild size={48} color="#C7D2FE" />
+                <MdBuild size={40} color="#C7D2FE" />
               ) : (
-                <MdImage size={48} color="#C7D2FE" />
+                <MdImage size={40} color="#C7D2FE" />
               )}
             </div>
           )}
@@ -197,6 +275,11 @@ function SeaiResultCard({
           >
             {typeBadgeLabel(card.type)}
           </span>
+          {verified && (
+            <span style={styles.tileVerified} title="Verified">
+              <MdVerified size={14} color="#0504AA" />
+            </span>
+          )}
           {showPrice && (
             <span style={styles.tilePriceChip}>
               ₦{Number(card.price).toLocaleString('en-NG')}
@@ -204,7 +287,7 @@ function SeaiResultCard({
           )}
           {typeof distance === 'number' && (
             <span style={styles.tileDistancePill}>
-              <MdLocationOn size={11} color="#fff" />
+              <MdLocationOn size={10} color="#fff" />
               <span style={{ marginLeft: 3 }}>{distance.toFixed(1)} km</span>
             </span>
           )}
@@ -216,7 +299,7 @@ function SeaiResultCard({
           </div>
           {subtitle && (
             <div style={styles.tileSubtitle} title={subtitle}>
-              <MdStore size={12} color="#94A3B8" />
+              <MdStore size={11} color="#94A3B8" />
               <span style={{ marginLeft: 4 }}>{subtitle}</span>
             </div>
           )}
@@ -229,16 +312,42 @@ function SeaiResultCard({
         </div>
       </button>
 
-      {directions && (
-        <button type="button" onClick={handleDirections} style={styles.directionsBtn}>
-          <MdNavigation size={14} color={Brand.accent} />
-          <span style={{ marginLeft: 4 }}>Directions</span>
+      <div style={styles.tileFooter}>
+        {directions && (
+          <button
+            type="button"
+            onClick={handleDirections}
+            style={styles.tileFooterBtn}
+            aria-label="Directions"
+          >
+            <MdNavigation size={14} color={Brand.accent} />
+            <span>Directions</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleSave}
+          style={styles.tileFooterBtn}
+          aria-label={saved ? 'Remove from saved' : 'Save'}
+        >
+          {saved ? (
+            <>
+              <MdBookmark size={14} color={Brand.accent} />
+              <span>Saved</span>
+            </>
+          ) : (
+            <>
+              <MdBookmarkBorder size={14} color={Brand.accent} />
+              <span>Save</span>
+            </>
+          )}
         </button>
-      )}
+      </div>
     </div>
   );
 }
 
+// ─── Main ───────────────────────────────────────────────────────────
 function SeaiAskContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -257,12 +366,15 @@ function SeaiAskContent() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [inputFocused, setInputFocused] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [savedCards, setSavedCards] = useState<Set<string>>(new Set());
 
   const [editing, setEditing] = useState<{
     index: number;
     text: string;
     role: Role;
   } | null>(null);
+
+  const [greeting, setGreeting] = useState('');
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -272,6 +384,11 @@ function SeaiAskContent() {
   const streamAbortRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const atBottomRef = useRef(true);
+  const initialQuerySentRef = useRef(false);
+
+  useEffect(() => {
+    setGreeting(greetingForHour(new Date().getHours()));
+  }, []);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -321,15 +438,12 @@ function SeaiAskContent() {
     loadConversations();
   }, []);
 
-  useEffect(() => {
-    if (initialQuery) {
-      sendMessage(initialQuery);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputHasText(e.target.value.trim().length > 0);
+    // auto-grow
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
   const clearConversation = () => {
@@ -338,7 +452,13 @@ function SeaiAskContent() {
     setIsStreaming(false);
     setEditing(null);
     atBottomRef.current = true;
-    if (inputRef.current) inputRef.current.focus();
+    initialQuerySentRef.current = false;
+    if (inputRef.current) {
+      inputRef.current.value = '';
+      inputRef.current.style.height = 'auto';
+      setInputHasText(false);
+      inputRef.current.focus();
+    }
   };
 
   const loadConversation = async (id: string) => {
@@ -369,6 +489,7 @@ function SeaiAskContent() {
       try {
         await navigator.clipboard.writeText(text);
         setCopiedIndex(index);
+        pushToast('success', 'Copied');
         setTimeout(() => {
           setCopiedIndex((curr) => (curr === index ? null : curr));
         }, 1600);
@@ -378,6 +499,18 @@ function SeaiAskContent() {
     },
     [pushToast],
   );
+
+  const toggleSave = useCallback((cardId: string) => {
+    setSavedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(cardId)) {
+        next.delete(cardId);
+      } else {
+        next.add(cardId);
+      }
+      return next;
+    });
+  }, []);
 
   const retryMessage = (index: number) => {
     if (index > 0 && messages[index - 1].role === 'user') {
@@ -398,12 +531,10 @@ function SeaiAskContent() {
   const saveEdit = () => {
     if (!editing) return;
     const { index, text, role } = editing;
-
     if (role === 'seai') {
       setEditing(null);
       return;
     }
-
     const trimmed = text.trim();
     if (!trimmed) return;
     const truncated = messages.slice(0, index);
@@ -418,6 +549,7 @@ function SeaiAskContent() {
 
     if (inputRef.current) {
       inputRef.current.value = '';
+      inputRef.current.style.height = 'auto';
       setInputHasText(false);
       inputRef.current.blur();
       setInputFocused(false);
@@ -524,12 +656,19 @@ function SeaiAskContent() {
               const intent =
                 (json.intent as string | undefined) ||
                 (data.intent as string | undefined);
-              const hasResults =
-                Array.isArray(data.results) &&
-                (data.results as unknown[]).length > 0;
 
-              if (intent === 'search_results' || hasResults) {
-                cardsReceived = (data.results as ResultCard[]) || [];
+              // More tolerant result extraction: accept results, items, or
+              // data itself if it's an array.
+              const resultsArr = Array.isArray(data.results)
+                ? (data.results as ResultCard[])
+                : Array.isArray(data.items)
+                  ? (data.items as ResultCard[])
+                  : Array.isArray(json.results)
+                    ? (json.results as ResultCard[])
+                    : null;
+
+              if (intent === 'search_results' || (resultsArr && resultsArr.length > 0)) {
+                cardsReceived = resultsArr || [];
                 setMessages((prev) => {
                   const updated = [...prev];
                   if (idx < updated.length) {
@@ -557,6 +696,11 @@ function SeaiAskContent() {
               } else if (intent === 'get_store_info') {
                 const storeId = data.store_id as string | undefined;
                 if (storeId) router.push(`/store-detail/${storeId}`);
+              } else if (process.env.NODE_ENV !== 'production') {
+                // Dev-only: surface unknown intents so we can see what
+                // the backend is actually sending.
+                // eslint-disable-next-line no-console
+                console.debug('[seai] unknown action', { intent, data, json });
               }
             }
           } catch {
@@ -574,7 +718,7 @@ function SeaiAskContent() {
           const recents = (await api.getRecentConversations()) as unknown as Conversation[];
           if (isMountedRef.current) setConversations(recents);
         } catch {
-          // ignore — persistence is best-effort
+          // best-effort persistence
         }
       }
 
@@ -609,7 +753,7 @@ function SeaiAskContent() {
             ...updated[lastIdx],
             isThinking: false,
             isStreaming: false,
-            text: 'Something went wrong. Tap retry to try again.',
+            text: 'I couldn\'t complete that. Tap retry to try again.',
             error: err instanceof Error ? err.message : 'Unknown error',
           };
         }
@@ -619,6 +763,17 @@ function SeaiAskContent() {
       pushToast('error', 'Response failed. Tap retry.');
     }
   };
+
+  // ── Fire the initial query once, once we have a stable mount ──────
+  useEffect(() => {
+    if (!initialQuery || initialQuerySentRef.current) return;
+    initialQuerySentRef.current = true;
+    const t = setTimeout(() => {
+      void sendMessage(initialQuery);
+    }, 60);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery]);
 
   const inChat = messages.length > 0;
 
@@ -632,40 +787,59 @@ function SeaiAskContent() {
     }
   };
 
+  const lastAiMessage = [...messages]
+    .reverse()
+    .find((m) => m.role === 'seai' && !m.isThinking && !m.isStreaming && m.text);
+
+  const showRefineChips =
+    !isStreaming && lastAiMessage && lastAiMessage.cards && lastAiMessage.cards.length > 0;
+
   const renderWelcome = () => (
-    <div style={styles.welcomeContainer}>
+    <div className="seai-welcome" style={styles.welcomeContainer}>
       <div className="seai-orb seai-orb-a" aria-hidden />
       <div className="seai-orb seai-orb-b" aria-hidden />
 
       <div style={styles.welcomeContent}>
         <div style={styles.logoWrap}>
           <div className="seai-logo-glow" style={styles.logoGlow} aria-hidden />
-          <div style={styles.logo}>
-            <MdAutoAwesome size={34} color="#FFFFFF" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/admerce_symbol.png"
+            alt="Admerce"
+            className="seai-logo-img"
+            style={styles.logoImg}
+          />
         </div>
 
-        <div style={styles.brandTag}>SEAI · Intelligent search</div>
-
-        <h2 style={styles.greeting}>Hi there.</h2>
-        <p style={styles.subGreeting}>What can I help you find today?</p>
+        <h2 className="seai-greeting" style={styles.greeting}>
+          {greeting || 'Welcome.'}
+        </h2>
+        <p style={styles.subGreeting}>
+          Ask me to find anything on Admerce — items, stores, or services near
+          you.
+        </p>
 
         <div className="seai-suggestions" style={styles.suggestionsGrid}>
-          {suggestions.map((s, i) => (
-            <button
-              key={i}
-              onClick={() => sendMessage(s.text)}
-              className="seai-chip"
-              style={{
-                ...styles.suggestionChip,
-                animationDelay: `${120 + i * 70}ms`,
-              }}
-            >
-              <span style={styles.chipEmoji}>{s.emoji}</span>
-              <span style={styles.chipText}>{s.text}</span>
-              <MdChevronRight size={16} color="#B6BCCB" />
-            </button>
-          ))}
+          {welcomeSuggestions.map((s, i) => {
+            const Icon = s.icon;
+            return (
+              <button
+                key={i}
+                onClick={() => sendMessage(s.text)}
+                className="seai-chip"
+                style={{
+                  ...styles.suggestionChip,
+                  animationDelay: `${120 + i * 70}ms`,
+                }}
+              >
+                <span style={styles.chipIconWrap}>
+                  <Icon size={16} color={Brand.accent} />
+                </span>
+                <span style={styles.chipText}>{s.text}</span>
+                <MdChevronRight size={16} color="#B6BCCB" />
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -746,15 +920,12 @@ function SeaiAskContent() {
                 <div style={styles.aiAvatarWrap}>
                   <div className="seai-ai-ring" style={styles.aiAvatarRing} aria-hidden />
                   <div style={styles.aiAvatar}>
-                    <MdAutoAwesome size={14} color="#FFFFFF" />
+                    <MdSearch size={14} color="#FFFFFF" />
                   </div>
                 </div>
                 <div style={styles.aiBubble} aria-live="polite">
                   {msg.isThinking ? (
-                    <div style={styles.thinkingWrap}>
-                      <span className="seai-thinking-dot" aria-hidden />
-                      <span style={styles.thinkingText}>Thinking</span>
-                    </div>
+                    <ThinkingIndicator />
                   ) : msg.text ? (
                     <div style={styles.aiText}>
                       {msg.text}
@@ -768,13 +939,22 @@ function SeaiAskContent() {
 
                   {msg.cards && msg.cards.length > 0 && (
                     <div className="seai-card-stack" style={styles.cardStack}>
-                      {msg.cards.map((card, cIdx) => (
-                        <SeaiResultCard
-                          key={cIdx}
-                          card={card}
-                          onTap={() => handleCardTap(card)}
-                        />
-                      ))}
+                      {msg.cards.map((card, cIdx) => {
+                        const cardId =
+                          card.listing_id ||
+                          card.service_id ||
+                          card.store_id ||
+                          `card-${i}-${cIdx}`;
+                        return (
+                          <SeaiResultCard
+                            key={cardId}
+                            card={card}
+                            saved={savedCards.has(cardId)}
+                            onTap={() => handleCardTap(card)}
+                            onSave={() => toggleSave(cardId)}
+                          />
+                        );
+                      })}
                     </div>
                   )}
 
@@ -801,6 +981,20 @@ function SeaiAskContent() {
                         <MdRefresh size={15} color="#666" />
                       </button>
                       <button
+                        onClick={() => {
+                          if (navigator.share) {
+                            void navigator.share({ text: msg.text }).catch(() => {});
+                          } else {
+                            void copyText(msg.text, i);
+                          }
+                        }}
+                        style={styles.actionBtn}
+                        title="Share"
+                        aria-label="Share response"
+                      >
+                        <MdShare size={15} color="#666" />
+                      </button>
+                      <button
                         style={styles.actionBtn}
                         title="Good response"
                         aria-label="Good response"
@@ -822,6 +1016,28 @@ function SeaiAskContent() {
           </div>
         );
       })}
+
+      {showRefineChips && (
+        <div className="seai-refine-row" style={styles.refineRow}>
+          {REFINE_CHIPS.map((r) => {
+            const Icon = r.icon;
+            return (
+              <button
+                key={r.label}
+                type="button"
+                className="seai-refine-chip"
+                style={styles.refineChip}
+                onClick={() => sendMessage(r.query)}
+                disabled={isStreaming}
+              >
+                <Icon size={13} color={Brand.accent} />
+                <span>{r.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div ref={messagesEndRef} />
     </div>
   );
@@ -845,7 +1061,7 @@ function SeaiAskContent() {
               sendMessage();
             }
           }}
-          placeholder={`Message ${isCortexMode ? 'SEAI Cortex' : 'SEAI'}...`}
+          placeholder={`Ask ${isCortexMode ? 'SEAI Cortex' : 'SEAI'} anything…`}
           style={styles.textarea}
           rows={1}
         />
@@ -869,12 +1085,15 @@ function SeaiAskContent() {
             }}
             aria-label="Send"
           >
-            <MdArrowUpward size={18} color={inputHasText ? '#fff' : Brand.textMuted} />
+            <MdArrowUpward
+              size={18}
+              color={inputHasText && !isStreaming ? '#fff' : Brand.textMuted}
+            />
           </button>
         </div>
       </div>
       <p style={styles.disclaimer}>
-        Admerce AI can make mistakes. Consider checking important info.
+        SEAI can make mistakes. Double-check important details.
       </p>
     </div>
   );
@@ -896,11 +1115,15 @@ function SeaiAskContent() {
         }}
       >
         <div style={styles.sidebarHeader}>
-          <div style={styles.sidebarLogo}>
-            <MdAutoAwesome size={14} color="#FFFFFF" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/admerce_symbol.png"
+            alt=""
+            className="seai-sidebar-logo"
+            style={styles.sidebarLogo}
+          />
           <span style={{ fontWeight: 700, fontSize: 14, color: Brand.textPrimary }}>
-            Admerce AI
+            SEAI
           </span>
           <button
             onClick={() => setDrawerOpen(false)}
@@ -922,7 +1145,10 @@ function SeaiAskContent() {
           New chat
         </button>
 
-        <div style={styles.recentLabel}>Recent</div>
+        <div style={styles.recentLabel}>
+          <MdHistory size={12} color={Brand.textMuted} />
+          <span style={{ marginLeft: 6 }}>Recent</span>
+        </div>
         <div style={styles.conversationList}>
           {isLoadingRecents ? (
             <div style={styles.skelStack}>
@@ -941,7 +1167,7 @@ function SeaiAskContent() {
               </div>
               <div style={styles.emptyRecentsTitle}>No conversations yet</div>
               <div style={styles.emptyRecentsSub}>
-                Start a chat and it&rsquo;ll show up here
+                Your chat history will live here.
               </div>
             </div>
           ) : (
@@ -1000,10 +1226,16 @@ function SeaiAskContent() {
           </button>
 
           <div style={styles.headerBrand}>
-            <div style={styles.headerBrandMark}>
-              <MdAutoAwesome size={12} color="#fff" />
-            </div>
-            <span style={styles.headerBrandText}>Admerce AI</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/admerce_symbol.png"
+              alt=""
+              className="seai-header-logo"
+              style={styles.headerBrandMark}
+            />
+            <span className="seai-header-brand-text" style={styles.headerBrandText}>
+              SEAI
+            </span>
           </div>
 
           <div style={{ flex: 1 }} />
@@ -1079,7 +1311,7 @@ export default function SeaiAskPage() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
+// ─── Styles ──────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -1139,14 +1371,10 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 18,
   },
   sidebarLogo: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 4px 10px rgba(5,4,170,0.28)',
+    width: 30,
+    height: 30,
+    display: 'block',
+    objectFit: 'contain',
   },
   closeBtn: {
     background: 'none',
@@ -1170,9 +1398,11 @@ const styles: Record<string, React.CSSProperties> = {
     color: Brand.textPrimary,
     width: '100%',
     marginBottom: 14,
-    transition: 'box-shadow 180ms, transform 180ms',
+    fontFamily: 'inherit',
   },
   recentLabel: {
+    display: 'flex',
+    alignItems: 'center',
     fontSize: 11,
     fontWeight: 700,
     color: Brand.textMuted,
@@ -1201,7 +1431,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     color: Brand.textSecondary,
     overflow: 'hidden',
-    transition: 'background-color 140ms',
+    fontFamily: 'inherit',
   },
   conversationItemText: {
     flex: 1,
@@ -1263,6 +1493,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     position: 'relative',
     zIndex: 10,
+    borderBottom: `1px solid ${Brand.borderSoft}`,
   },
   iconBtn: {
     background: 'none',
@@ -1278,23 +1509,18 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    padding: '4px 4px 4px 4px',
   },
   headerBrandMark: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 2px 6px rgba(5,4,170,0.28)',
+    width: 26,
+    height: 26,
+    display: 'block',
+    objectFit: 'contain',
   },
   headerBrandText: {
-    fontSize: 13.5,
-    fontWeight: 700,
+    fontSize: 14,
+    fontWeight: 800,
     color: Brand.textPrimary,
-    letterSpacing: -0.1,
+    letterSpacing: -0.2,
   },
   modelToggle: {
     display: 'flex',
@@ -1305,7 +1531,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 20,
     boxShadow: Brand.shadowSm,
     cursor: 'pointer',
-    transition: 'box-shadow 180ms',
+    fontFamily: 'inherit',
   },
   body: {
     flex: 1,
@@ -1338,58 +1564,43 @@ const styles: Record<string, React.CSSProperties> = {
   },
   logoWrap: {
     position: 'relative',
-    width: 96,
-    height: 96,
+    width: 108,
+    height: 108,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   logoGlow: {
     position: 'absolute',
-    inset: -8,
+    inset: -12,
     borderRadius: '50%',
     background:
-      'radial-gradient(circle, rgba(5,4,170,0.28) 0%, rgba(5,4,170,0.10) 40%, rgba(5,4,170,0) 70%)',
+      'radial-gradient(circle, rgba(5,4,170,0.24) 0%, rgba(5,4,170,0.08) 45%, rgba(5,4,170,0) 72%)',
     pointerEvents: 'none',
   },
-  logo: {
+  logoImg: {
     position: 'relative',
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    background: `linear-gradient(135deg, ${Brand.accent} 0%, ${Brand.accentLight} 100%)`,
-    boxShadow:
-      '0 12px 32px rgba(5,4,170,0.32), inset 0 1px 0 rgba(255,255,255,0.22)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandTag: {
-    fontSize: 11,
-    fontWeight: 700,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: Brand.accent,
-    background: Brand.accentBg,
-    padding: '5px 12px',
-    borderRadius: 999,
-    marginBottom: 18,
+    width: 96,
+    height: 96,
+    display: 'block',
+    objectFit: 'contain',
   },
   greeting: {
     fontSize: 34,
-    fontWeight: 700,
+    fontWeight: 600,
     color: Brand.textPrimary,
-    letterSpacing: -0.9,
+    letterSpacing: -1,
     margin: 0,
-    lineHeight: 1.05,
+    lineHeight: 1.1,
+    fontFamily: 'inherit',
   },
   subGreeting: {
-    fontSize: 17,
+    fontSize: 16,
     color: Brand.textSecondary,
-    margin: '10px 0 36px',
-    lineHeight: 1.4,
-    maxWidth: 380,
+    margin: '12px 0 40px',
+    lineHeight: 1.5,
+    maxWidth: 400,
   },
   suggestionsGrid: {
     display: 'grid',
@@ -1412,11 +1623,16 @@ const styles: Record<string, React.CSSProperties> = {
     color: Brand.textPrimary,
     textAlign: 'left',
     gap: 10,
-    transition: 'transform 200ms, box-shadow 200ms, border-color 200ms',
+    fontFamily: 'inherit',
   },
-  chipEmoji: {
-    fontSize: 18,
-    lineHeight: 1,
+  chipIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: Brand.accentBg,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     flexShrink: 0,
   },
   chipText: {
@@ -1429,8 +1645,8 @@ const styles: Record<string, React.CSSProperties> = {
 
   // ── Chat list
   chatList: {
-    padding: '16px',
-    maxWidth: 900,
+    padding: '20px 16px 8px',
+    maxWidth: 860,
     margin: '0 auto',
     width: '100%',
     boxSizing: 'border-box',
@@ -1438,7 +1654,7 @@ const styles: Record<string, React.CSSProperties> = {
   msgRow: {
     width: '100%',
     maxWidth: '100%',
-    marginBottom: 22,
+    marginBottom: 26,
   },
   userWrap: {
     display: 'flex',
@@ -1448,7 +1664,7 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '100%',
   },
   userBubble: {
-    maxWidth: '85%',
+    maxWidth: '82%',
     padding: '12px 16px',
     borderRadius: 18,
     borderTopRightRadius: 6,
@@ -1513,18 +1729,6 @@ const styles: Record<string, React.CSSProperties> = {
     overflowWrap: 'anywhere',
     wordBreak: 'break-word',
   },
-  thinkingWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    height: 26,
-  },
-  thinkingText: {
-    fontSize: 13,
-    color: Brand.textMuted,
-    fontWeight: 500,
-    letterSpacing: 0.1,
-  },
   errorLine: {
     marginTop: 10,
     padding: '9px 12px',
@@ -1575,6 +1779,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
+    fontFamily: 'inherit',
   },
   editSave: {
     display: 'flex',
@@ -1587,13 +1792,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
+    fontFamily: 'inherit',
     boxShadow: '0 4px 12px rgba(5,4,170,0.25)',
   },
 
   // ── Result cards
   cardStack: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
     gap: 14,
     marginTop: 16,
     width: '100%',
@@ -1619,6 +1825,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 0,
     cursor: 'pointer',
     width: '100%',
+    fontFamily: 'inherit',
   },
   tileImageWrap: {
     position: 'relative',
@@ -1663,6 +1870,20 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
     boxShadow: '0 2px 6px rgba(15,23,42,0.15)',
   },
+  tileVerified: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 24,
+    height: 24,
+    borderRadius: '50%',
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    backdropFilter: 'blur(6px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 2px 6px rgba(15,23,42,0.15)',
+  },
   tilePriceChip: {
     position: 'absolute',
     bottom: 10,
@@ -1692,7 +1913,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
   },
   tileBody: {
-    padding: '12px 14px 14px',
+    padding: '12px 14px 10px',
     display: 'flex',
     flexDirection: 'column',
     gap: 5,
@@ -1734,19 +1955,49 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     backgroundColor: '#10B981',
   },
-  directionsBtn: {
+  tileFooter: {
+    display: 'flex',
+    borderTop: `1px solid ${Brand.borderSoft}`,
+  },
+  tileFooterBtn: {
+    flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    padding: '10px 10px',
-    backgroundColor: '#F8FAFC',
+    padding: '10px 8px',
+    backgroundColor: 'transparent',
     border: 'none',
-    borderTop: `1px solid ${Brand.borderSoft}`,
     cursor: 'pointer',
     fontSize: 12,
     fontWeight: 700,
     color: Brand.accent,
+    fontFamily: 'inherit',
+  },
+
+  // ── Refine chips
+  refineRow: {
+    display: 'flex',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginTop: 4,
+    marginBottom: 8,
+    paddingLeft: 42,
+  },
+  refineChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '7px 12px',
+    borderRadius: 999,
+    border: `1px solid ${Brand.border}`,
+    backgroundColor: Brand.cardBg,
+    color: Brand.textPrimary,
+    fontSize: 12.5,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: Brand.shadowSm,
   },
 
   // ── Action bar
@@ -1765,7 +2016,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 6,
-    transition: 'background-color 140ms',
   },
 
   // ── Input
@@ -1777,6 +2027,8 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
   inputBox: {
+    maxWidth: 860,
+    margin: '0 auto',
     backgroundColor: Brand.cardBg,
     borderRadius: 22,
     border: `1px solid ${Brand.border}`,
@@ -1800,6 +2052,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'transparent',
     fontFamily: 'inherit',
     boxSizing: 'border-box',
+    maxHeight: 160,
   },
   inputActions: {
     display: 'flex',
@@ -1825,11 +2078,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     transition: 'transform 160ms, box-shadow 200ms, background 200ms',
+    cursor: 'pointer',
   },
   sendBtnActive: {
     background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
     boxShadow: '0 6px 16px rgba(5,4,170,0.30)',
-    cursor: 'pointer',
   },
   sendBtnDisabled: {
     backgroundColor: '#E6E8F0',
@@ -1841,6 +2094,9 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     marginTop: 10,
     letterSpacing: 0.1,
+    maxWidth: 860,
+    marginLeft: 'auto',
+    marginRight: 'auto',
   },
 
   // ── Toasts
@@ -1865,20 +2121,18 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: '0 6px 18px rgba(15,23,42,0.10)',
     cursor: 'pointer',
     maxWidth: 320,
+    fontFamily: 'inherit',
     animation: 'seaiToastIn 220ms ease-out both',
   },
   toastSuccess: { backgroundColor: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0' },
   toastError: { backgroundColor: '#FEF2F2', color: '#991B1B', borderColor: '#FECACA' },
 };
 
-// ─── Global keyframes + responsive rules ─────────────────────────
+// ─── Global keyframes + responsive rules ─────────────────────────────
 const GLOBAL_CSS = `
-  html, body {
-    overflow-x: hidden;
-    max-width: 100vw;
-  }
+  html, body { overflow-x: hidden; max-width: 100vw; }
 
-  /* ── Ambient orbs behind welcome state ─────────────────── */
+  /* ── Ambient orbs ────────────────────────────────────────── */
   .seai-orb {
     position: absolute;
     border-radius: 50%;
@@ -1889,18 +2143,14 @@ const GLOBAL_CSS = `
     z-index: 0;
   }
   .seai-orb-a {
-    width: 340px;
-    height: 340px;
-    top: -100px;
-    left: -100px;
+    width: 340px; height: 340px;
+    top: -100px; left: -100px;
     background: radial-gradient(circle, rgba(5,4,170,0.22) 0%, rgba(5,4,170,0) 68%);
     animation: seaiFloatOrb 24s ease-in-out infinite;
   }
   .seai-orb-b {
-    width: 420px;
-    height: 420px;
-    bottom: -140px;
-    right: -140px;
+    width: 420px; height: 420px;
+    bottom: -140px; right: -140px;
     background: radial-gradient(circle, rgba(61,59,255,0.18) 0%, rgba(61,59,255,0) 68%);
     animation: seaiFloatOrb 30s ease-in-out infinite reverse;
   }
@@ -1910,33 +2160,39 @@ const GLOBAL_CSS = `
     66%      { transform: translate(-22px, 26px) scale(0.96); }
   }
 
-  /* ── Logo glow breathing ───────────────────────────────── */
-  .seai-logo-glow {
-    animation: seaiLogoBreathe 3.4s ease-in-out infinite;
-  }
+  /* ── Logo glow ───────────────────────────────────────────── */
+  .seai-logo-glow { animation: seaiLogoBreathe 3.6s ease-in-out infinite; }
   @keyframes seaiLogoBreathe {
-    0%, 100% { transform: scale(1);    opacity: 0.55; }
-    50%      { transform: scale(1.18); opacity: 0.9; }
+    0%, 100% { transform: scale(1);    opacity: 0.5; }
+    50%      { transform: scale(1.14); opacity: 0.9; }
   }
 
-  /* ── Suggestion chips ──────────────────────────────────── */
+  /* ── Welcome greeting ────────────────────────────────────── */
+  .seai-greeting {
+    animation: seaiGreet 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes seaiGreet {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Suggestion chips ────────────────────────────────────── */
   .seai-chip {
     animation: seaiChipIn 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    transition: transform 220ms, box-shadow 220ms, border-color 220ms;
   }
   .seai-chip:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 26px rgba(5,4,170,0.10), 0 2px 6px rgba(15,23,42,0.05);
     border-color: #C7CCFF;
   }
-  .seai-chip:active {
-    transform: translateY(0) scale(0.985);
-  }
+  .seai-chip:active { transform: translateY(0) scale(0.985); }
   @keyframes seaiChipIn {
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* ── Message arrival ───────────────────────────────────── */
+  /* ── Message arrival ─────────────────────────────────────── */
   .seai-msg-row {
     animation: seaiMsgIn 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
@@ -1945,68 +2201,88 @@ const GLOBAL_CSS = `
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* ── AI thinking dot ───────────────────────────────────── */
-  .seai-thinking-dot {
-    display: inline-block;
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
-    box-shadow:
-      0 0 0 4px rgba(5,4,170,0.10),
-      0 0 12px rgba(5,4,170,0.45);
-    animation: seaiThinkPulse 1.5s ease-in-out infinite;
+  /* ── Thinking indicator ──────────────────────────────────── */
+  .seai-thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 0;
+    height: 28px;
   }
-  @keyframes seaiThinkPulse {
-    0%, 100% { transform: scale(0.8); opacity: 0.55; }
-    50%      { transform: scale(1.15); opacity: 1; }
+  .seai-thinking-orb {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #3D3BFF 0%, #0504AA 70%);
+    box-shadow: 0 0 12px rgba(5,4,170,0.45);
+    flex-shrink: 0;
+  }
+  .seai-thinking-orbInner {
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(5,4,170,0.35);
+    animation: seaiOrbPulse 1.6s ease-out infinite;
+  }
+  @keyframes seaiOrbPulse {
+    0%   { transform: scale(0.8); opacity: 0.8; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+  .seai-thinking-text {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #5A6178;
+    letter-spacing: 0.01em;
+    animation: seaiVerbSwap 420ms ease both;
+  }
+  @keyframes seaiVerbSwap {
+    from { opacity: 0; transform: translateY(3px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* ── Branded SEAI streaming cursor ─────────────────────── */
-  @keyframes seaiPulse {
-    0%, 100% { transform: scale(0.85) rotate(0deg); opacity: 0.7; }
-    50%      { transform: scale(1.15) rotate(45deg); opacity: 1; }
+  /* ── Streaming cursor ────────────────────────────────────── */
+  @keyframes seaiCursorPulse {
+    0%, 100% { transform: scale(0.85); opacity: 0.7; }
+    50%      { transform: scale(1.15); opacity: 1; }
   }
   .seai-cursor {
     display: inline-block;
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 18px;
     border-radius: 3px;
     margin-left: 4px;
-    vertical-align: middle;
-    background: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
-    box-shadow: 0 0 10px rgba(5,4,170,0.55), inset 0 0 4px rgba(255,255,255,0.35);
-    animation: seaiPulse 1.1s ease-in-out infinite;
+    vertical-align: text-bottom;
+    background: linear-gradient(180deg, #3D3BFF 0%, #0504AA 100%);
+    box-shadow: 0 0 10px rgba(5,4,170,0.5);
+    animation: seaiCursorPulse 1.05s ease-in-out infinite;
   }
 
-  /* ── Tile cards (hover lift on desktop) ────────────────── */
+  /* ── Tile cards ──────────────────────────────────────────── */
   .seai-tile:hover {
     transform: translateY(-3px);
     box-shadow: 0 12px 30px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06);
     border-color: #DDE3F5;
   }
-  .seai-tile:active {
-    transform: translateY(-1px);
-  }
+  .seai-tile:active { transform: translateY(-1px); }
 
-  /* ── Send button ───────────────────────────────────────── */
-  .seai-send:hover {
-    transform: scale(1.06);
-  }
-  .seai-send:active {
-    transform: scale(0.96);
-  }
+  /* ── Refine chips ────────────────────────────────────────── */
+  .seai-refine-chip { transition: background 150ms, border-color 150ms, transform 120ms; }
+  .seai-refine-chip:hover { border-color: #C7CCFF; background: #FAFAFF; }
+  .seai-refine-chip:active { transform: scale(0.97); }
+  .seai-refine-chip:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* ── Sidebar recents ───────────────────────────────────── */
-  .seai-recent-item:hover {
-    background-color: #EEEDFF;
-    color: #0504AA;
-  }
-  .seai-recent-item:active {
-    background-color: #E2E1FF;
-  }
+  /* ── Send button ─────────────────────────────────────────── */
+  .seai-send:hover:not(:disabled) { transform: scale(1.06); }
+  .seai-send:active:not(:disabled) { transform: scale(0.96); }
 
-  /* ── Skeleton shimmer ──────────────────────────────────── */
+  /* ── Sidebar recents ─────────────────────────────────────── */
+  .seai-recent-item { transition: background-color 140ms, color 140ms; }
+  .seai-recent-item:hover { background-color: #EEEDFF; color: #0504AA; }
+  .seai-recent-item:active { background-color: #E2E1FF; }
+
+  /* ── Skeleton ────────────────────────────────────────────── */
   .seai-skel {
     background: linear-gradient(90deg, #E9ECF3 25%, #F4F6FB 50%, #E9ECF3 75%);
     background-size: 200% 100%;
@@ -2018,88 +2294,39 @@ const GLOBAL_CSS = `
     100% { background-position: -200% 0; }
   }
 
-  /* ── Model dot pulse ───────────────────────────────────── */
-  .seai-model-dot {
-    animation: seaiModelPulse 2.2s ease-in-out infinite;
-  }
+  /* ── Model dot ───────────────────────────────────────────── */
+  .seai-model-dot { animation: seaiModelPulse 2.2s ease-in-out infinite; }
   @keyframes seaiModelPulse {
     0%, 100% { transform: scale(1);   opacity: 0.9; }
     50%      { transform: scale(1.2); opacity: 0.5; }
   }
 
-  /* ── Toast + fade + spinner ────────────────────────────── */
+  /* ── Toast + fade + spinner ──────────────────────────────── */
   @keyframes seaiToastIn {
     from { opacity: 0; transform: translateY(-6px); }
     to   { opacity: 1; transform: none; }
   }
-  @keyframes seaiFade {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
-  @keyframes seaiSpin {
-    to { transform: rotate(360deg); }
-  }
+  @keyframes seaiFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes seaiSpin { to { transform: rotate(360deg); } }
 
-  /* ─── Mobile responsiveness ─────────────────────────────── */
+  /* ── Mobile ──────────────────────────────────────────────── */
   @media (max-width: 640px) {
-    .seai-chat-list {
-      padding: 12px !important;
-    }
-
-    .seai-card-stack {
-      grid-template-columns: 1fr !important;
-      gap: 12px !important;
-    }
-
-    .seai-sidebar {
-      width: 82% !important;
-      max-width: 320px;
-    }
-
-    .seai-suggestions {
-      grid-template-columns: 1fr !important;
-      max-width: 100% !important;
-    }
-
-    .seai-header {
-      padding: 6px 8px !important;
-    }
-
-    .seai-header-brand-text {
-      display: none;
-    }
-
-    .seai-input-area {
-      padding: 6px 10px 10px !important;
-    }
-
-    .seai-container {
-      width: 100vw !important;
-      max-width: 100vw !important;
-    }
-
-    .seai-body {
-      width: 100% !important;
-      max-width: 100vw !important;
-      overflow-x: hidden !important;
-    }
-
-    .seai-msg-row,
-    .seai-user-wrap,
-    .seai-main {
-      width: 100% !important;
-      max-width: 100% !important;
-    }
-
-    .seai-user-bubble {
-      max-width: 88% !important;
-    }
+    .seai-chat-list { padding: 12px !important; }
+    .seai-card-stack { grid-template-columns: 1fr !important; gap: 12px !important; }
+    .seai-sidebar { width: 82% !important; max-width: 320px; }
+    .seai-suggestions { grid-template-columns: 1fr !important; max-width: 100% !important; }
+    .seai-header { padding: 6px 8px !important; }
+    .seai-header-brand-text { display: none; }
+    .seai-input-area { padding: 6px 10px 10px !important; }
+    .seai-container { width: 100vw !important; max-width: 100vw !important; }
+    .seai-body { width: 100% !important; max-width: 100vw !important; overflow-x: hidden !important; }
+    .seai-msg-row, .seai-user-wrap, .seai-main { width: 100% !important; max-width: 100% !important; }
+    .seai-user-bubble { max-width: 88% !important; }
+    .seai-refine-row { padding-left: 0 !important; }
   }
 
   @media (max-width: 380px) {
-    .seai-chat-list {
-      padding: 10px !important;
-    }
+    .seai-chat-list { padding: 10px !important; }
   }
 `;
 
