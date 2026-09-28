@@ -758,8 +758,22 @@ class ApiService {
   }
 
   // ======================== MAP ========================
-  public async getMapLocations(): Promise<JsonArray> {
-    const res = await this.axios.get('/map/locations');
+    public async getMapLocations(params?: {
+    lat?: number;
+    lng?: number;
+    radiusKm?: number;
+    includeStores?: boolean;
+    includeServices?: boolean;
+    onlyWithStock?: boolean;
+  }): Promise<JsonArray> {
+    const query: Record<string, string | number | boolean> = {};
+    if (params?.lat != null) query.lat = params.lat;
+    if (params?.lng != null) query.lng = params.lng;
+    if (params?.radiusKm != null) query.radius_km = params.radiusKm;
+    if (params?.includeStores != null) query.include_stores = params.includeStores;
+    if (params?.includeServices != null) query.include_services = params.includeServices;
+    if (params?.onlyWithStock != null) query.only_with_stock = params.onlyWithStock;
+    const res = await this.axios.get('/map/locations', { params: query });
     return res.data;
   }
 
