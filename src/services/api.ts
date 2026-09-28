@@ -32,6 +32,87 @@ export interface StoreVerificationStatus {
   events: JsonArray;
 }
 
+// ─── New types (settings screens) ─────────────────────────────
+export interface UserProfileUpdate {
+  first_name?: string | null;
+  last_name?: string | null;
+  nickname?: string | null;
+  real_name?: string | null;
+  bio?: string | null;
+}
+
+export interface Address {
+  id: string;
+  label?: string;
+  recipient_name?: string;
+  phone?: string;
+  line1: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postal_code?: string;
+  is_default?: boolean;
+  kind?: 'home' | 'work' | 'other';
+  latitude?: number;
+  longitude?: number;
+}
+
+export type AddressInput = Omit<Address, 'id'>;
+
+export interface Session {
+  id: string;
+  device_kind?: 'mobile' | 'tablet' | 'desktop' | 'other';
+  device_name?: string;
+  browser?: string;
+  os?: string;
+  ip?: string;
+  city?: string;
+  country?: string;
+  last_active_at?: string;
+  created_at?: string;
+  current?: boolean;
+}
+
+export interface LoginActivity {
+  id: string;
+  action:
+    | 'login'
+    | 'logout'
+    | 'password_change'
+    | 'email_change'
+    | 'phone_change'
+    | '2fa_enabled'
+    | '2fa_disabled';
+  device_kind?: 'mobile' | 'tablet' | 'desktop';
+  device_name?: string;
+  ip?: string;
+  city?: string;
+  country?: string;
+  created_at?: string;
+  success?: boolean;
+}
+
+export interface BlockedUser {
+  id: string;
+  user_id?: string;
+  nickname?: string;
+  real_name?: string;
+  phone?: string;
+  avatar_url?: string;
+  blocked_at?: string;
+}
+
+export interface ReportItem {
+  id: string;
+  category: string;
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  description?: string;
+  created_at?: string;
+}
+
+export type TwoFAMethod = 'sms' | 'email';
+
 export function extractErrorDetail(err: unknown, fallback = 'Something went wrong.'): string {
   if (err instanceof Error && err.message) {
     const ax = err as AxiosError;
@@ -69,6 +150,7 @@ class ApiService {
       timeout: 60_000,
     });
 
+    // Timeout retry interceptor — never retries uploads.
     this.axios.interceptors.response.use(
       (r) => r,
       async (err: AxiosError) => {
@@ -89,10 +171,18 @@ class ApiService {
       },
     );
 
+    // Auth-clearing interceptor — ONLY clears when the request actually
+    // carried an Authorization header. A 401 from an endpoint the user
+    // isn't allowed to call (no auth header sent) must not log them out.
     this.axios.interceptors.response.use(
       (r) => r,
       (err: AxiosError) => {
-        if (err.response?.status === 401) {
+        const hadAuth = !!(
+          err.config &&
+          err.config.headers &&
+          (err.config.headers as Record<string, unknown>)['Authorization']
+        );
+        if (err.response?.status === 401 && hadAuth) {
           this._token = null;
           delete this.axios.defaults.headers.common['Authorization'];
           clearToken();
@@ -193,10 +283,9 @@ class ApiService {
     return res.data;
   }
 
-  public async resetPasswordDirect(phone: string, newPassword: string): Promise<JsonObject> {
-    const res = await this.axios.post('/auth/reset-password-direct', { phone, new_password: newPassword });
-    return res.data;
-  }
+  // REMOVED: resetPasswordDirect() — endpoint /auth/reset-password-direct was
+  // an unauthenticated account-takeover vulnerability. Deleted on the backend.
+  // Do not re-add.
 
   public async socialLogin(provider: string, token: string, secret?: string): Promise<JsonObject> {
     const res = await this.axios.post('/auth/social', { provider, token, ...(secret ? { secret } : {}) });
@@ -223,6 +312,64 @@ class ApiService {
       new_password: newPassword,
     });
     return res.data;
+  }
+
+  // ── Contact change (phone / email) ─────────────────────────
+  public async requestPhoneChange(phone: string): Promise<JsonObject> {
+    const res = await this.axios.post('/auth/phone/change/request', { phone });
+    return res.data;
+  }
+
+  public async confirmPhoneChange(phone: string, code: string): Promise<JsonObject> {
+    const res = await this.axios.post('/auth/phone/change/verify', { phone, code });
+    return res.data;
+  }
+
+  public async requestEmailChange(email: string): Promise<JsonObject> {
+    const res = await this.axios.post('/auth/email/change/request', { email });
+    return res.data;
+  }
+
+  public async confirmEmailChange(email: string, code: string): Promise<JsonObject> {
+    const res = await this.axios.post('/auth/email/change/verify', { email, code });
+    return res.data;
+  }
+
+  // ── Two-factor authentication ──────────────────────────────
+  public async start2FA(method: TwoFAMethod, phone?: string): Promise<JsonObject> {
+    const res = await this.axios.post('/auth/2fa/start', {
+      method,
+      ...(phone ? { phone } : {}),
+    });
+    return res.data;
+  }
+
+  public async verify2FA(method: TwoFAMethod, code: string, phone?: string): Promise<JsonObject> {
+    const res = await this.axios.post('/auth/2fa/verify', {
+      method,
+      code,
+      ...(phone ? { phone } : {}),
+    });
+    return res.data;
+  }
+
+  public async disable2FA(): Promise<JsonObject> {
+    const res = await this.axios.post('/auth/2fa/disable');
+    return res.data;
+  }
+
+  // ── Active sessions ────────────────────────────────────────
+  public async getSessions(): Promise<Session[]> {
+    const res = await this.axios.get('/auth/sessions');
+    return Array.isArray(res.data) ? (res.data as Session[]) : [];
+  }
+
+  public async revokeSession(sessionId: string): Promise<void> {
+    await this.axios.delete(`/auth/sessions/${sessionId}`);
+  }
+
+  public async revokeAllOtherSessions(): Promise<void> {
+    await this.axios.delete('/auth/sessions/others');
   }
 
   // ======================== PROFILE & ONBOARDING ========================
@@ -280,6 +427,100 @@ class ApiService {
     const blob = new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' });
     const file = new File([blob], 'business.jpg', { type: 'image/jpeg' });
     return this.uploadBusinessImage(file);
+  }
+
+  // ======================== PROFILE — SELF-SERVICE ========================
+  // Backs the /settings/* screens. All routes live under /profile/* to match
+  // the existing self-service namespace (/profile/update, /profile/settings).
+  public async updateMyProfile(payload: UserProfileUpdate): Promise<void> {
+    await this.axios.patch('/profile/me', payload);
+  }
+
+  public async deleteAccount(payload?: {
+    reason?: string | null;
+    detail?: string | null;
+  }): Promise<void> {
+    await this.axios.delete('/profile/me', {
+      data: {
+        reason: payload?.reason ?? null,
+        detail: payload?.detail ?? null,
+      },
+    });
+  }
+
+  // ── Delivery addresses ─────────────────────────────────────
+  public async getAddresses(): Promise<Address[]> {
+    const res = await this.axios.get('/profile/addresses');
+    return Array.isArray(res.data) ? (res.data as Address[]) : [];
+  }
+
+  public async createAddress(payload: AddressInput): Promise<Address> {
+    const res = await this.axios.post('/profile/addresses', payload);
+    return res.data as Address;
+  }
+
+  public async updateAddress(id: string, payload: Partial<AddressInput>): Promise<Address> {
+    const res = await this.axios.patch(`/profile/addresses/${id}`, payload);
+    return res.data as Address;
+  }
+
+  public async deleteAddress(id: string): Promise<void> {
+    await this.axios.delete(`/profile/addresses/${id}`);
+  }
+
+  // ── Blocked users ──────────────────────────────────────────
+  public async getBlockedUsers(): Promise<BlockedUser[]> {
+    const res = await this.axios.get('/profile/blocked');
+    return Array.isArray(res.data) ? (res.data as BlockedUser[]) : [];
+  }
+
+  public async unblockUser(userId: string): Promise<void> {
+    await this.axios.delete(`/profile/blocked/${userId}`);
+  }
+
+  // ── Login activity ─────────────────────────────────────────
+  public async getLoginActivity(limit = 50): Promise<LoginActivity[]> {
+    const res = await this.axios.get('/profile/login-activity', {
+      params: { limit },
+    });
+    return Array.isArray(res.data) ? (res.data as LoginActivity[]) : [];
+  }
+
+  // ======================== FEEDBACK ========================
+  public async submitReport(payload: {
+    category: string;
+    area: string;
+    description: string;
+    image?: File | null;
+  }): Promise<ReportItem> {
+    const form = new FormData();
+    form.append('category', payload.category);
+    form.append('area', payload.area);
+    form.append('description', payload.description);
+    if (payload.image) {
+      form.append('image', payload.image, payload.image.name || 'report.jpg');
+    }
+    const res = await this.axios.post('/feedback/report', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data as ReportItem;
+  }
+
+  public async getMyReports(): Promise<ReportItem[]> {
+    const res = await this.axios.get('/feedback/my-reports');
+    return Array.isArray(res.data) ? (res.data as ReportItem[]) : [];
+  }
+
+  public async submitFeedback(payload: {
+    rating: number;
+    kind: string;
+    comment?: string | null;
+  }): Promise<void> {
+    await this.axios.post('/feedback', {
+      rating: payload.rating,
+      kind: payload.kind,
+      comment: payload.comment ?? null,
+    });
   }
 
   // ======================== WALLET & ESCROW ========================
@@ -569,8 +810,6 @@ class ApiService {
     }
   }
 
-  // ✅ UPDATED — added `mode` ('title' | 'description'). Backward
-  //    compatible: old callers omit it and get title behaviour.
   public async rewriteListing(
     text: string,
     category?: string,
@@ -584,9 +823,6 @@ class ApiService {
     return res.data;
   }
 
-  // ✅ NEW — sends the photo + any existing text to Groq's vision model.
-  //    Returns { item_identified, title, description, category_hint,
-  //    condition_hint, confidence }.
   public async rewriteListingVision(
     image: File,
     title = '',
@@ -758,7 +994,7 @@ class ApiService {
   }
 
   // ======================== MAP ========================
-    public async getMapLocations(params?: {
+  public async getMapLocations(params?: {
     lat?: number;
     lng?: number;
     radiusKm?: number;
