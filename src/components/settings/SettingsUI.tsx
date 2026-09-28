@@ -1,7 +1,26 @@
 'use client';
 
 import React from 'react';
-import { MdArrowBack, MdChevronRight } from 'react-icons/md';
+import { usePathname } from 'next/navigation';
+import {
+  MdArrowBack,
+  MdChevronRight,
+  MdPhone,
+  MdSecurity,
+  MdDevices,
+  MdNotifications,
+  MdShield,
+  MdPalette,
+  MdCreditCard,
+  MdLocationOn,
+  MdStarOutline,
+  MdHelpOutline,
+  MdGavel,
+  MdInfo,
+  MdDeleteForever,
+  MdSwapHoriz,
+  MdArrowForward,
+} from 'react-icons/md';
 
 // ─── Shell ─────────────────────────────────────────────────────
 export function SettingsShell({
@@ -15,30 +34,294 @@ export function SettingsShell({
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const pathname = usePathname() || '';
+  const roleSlug = detectRoleSlug(pathname);
+  const activeKey = detectActiveKey(pathname);
+
+  const goToProfile = () => {
+    if (typeof window === 'undefined') return;
+    const slug = roleSlug === 'service-provider' ? 'service-provider' : roleSlug;
+    window.location.href = `/${slug}/profile`;
+  };
+
   return (
-    <main style={S.root} className="st-shell">
-      <style>{`
-        .st-shell, .st-shell *, .st-shell *::before, .st-shell *::after {
-          box-sizing: border-box;
-        }
-        .st-row + .st-row { border-top: 1px solid #F1F5F9; }
-        .st-row:hover:not(:disabled) { background-color: #FAFBFF; }
-        .st-row:active:not(:disabled) { background-color: #F4F5FB; }
-      `}</style>
-      <header style={S.header}>
-        <div style={S.headerInner}>
-          <button onClick={onBack} style={S.iconBtn} aria-label="Back">
-            <MdArrowBack size={22} color="#0B0B1A" />
+    <main className="st-shell">
+      <style>{SHELL_CSS}</style>
+
+      <div className="st-layout">
+        {/* Desktop sidebar */}
+        <aside className="st-sidebar">
+          <div className="st-sidebar-head">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/admerce_symbol.png"
+              alt=""
+              className="st-sidebar-logo"
+            />
+            <div style={{ minWidth: 0 }}>
+              <div className="st-sidebar-title">Settings</div>
+              <div className="st-sidebar-role">
+                {roleLabelFromSlug(roleSlug)}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={goToProfile}
+            className="st-sidebar-back"
+          >
+            <MdArrowBack size={16} color="#64748B" />
+            <span>Back to profile</span>
           </button>
-          <h1 style={S.headerTitle}>{title}</h1>
-          <div style={S.headerRight}>{action}</div>
+
+          <nav className="st-nav">
+            {buildNav(roleSlug).map((group) => (
+              <div key={group.label} className="st-nav-group">
+                <div className="st-nav-label">{group.label}</div>
+                {group.items.map((item) => {
+                  const active = item.match
+                    ? item.match.some((m) => pathname.startsWith(m))
+                    : pathname === item.href ||
+                      pathname.startsWith(item.href + '/');
+                  return (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      className={`st-nav-item${active ? ' is-active' : ''}${
+                        item.danger ? ' is-danger' : ''
+                      }`}
+                    >
+                      <span className="st-nav-icon">{item.icon}</span>
+                      <span className="st-nav-text">{item.label}</span>
+                      {active && <MdChevronRight size={16} color="#0504AA" />}
+                    </a>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+        </aside>
+
+        {/* Main column */}
+        <div className="st-main">
+          <header className="st-header">
+            <div className="st-header-inner">
+              <button
+                onClick={onBack}
+                className="st-icon-btn st-back-mobile"
+                aria-label="Back"
+              >
+                <MdArrowBack size={22} color="#0B0B1A" />
+              </button>
+              <h1 className="st-title">{title}</h1>
+              <div className="st-action">{action}</div>
+            </div>
+          </header>
+
+          <div className="st-body">
+            <div className="st-body-inner">{children}</div>
+          </div>
         </div>
-      </header>
-      <div style={S.body}>
-        <div style={S.bodyInner}>{children}</div>
       </div>
     </main>
   );
+}
+
+// ─── Sidebar nav data ──────────────────────────────────────────
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  match?: string[];
+  danger?: boolean;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+function buildNav(roleSlug: string): NavGroup[] {
+  const base = `/settings/${roleSlug}`;
+  const groups: NavGroup[] = [
+    {
+      label: 'Account',
+      items: [
+        {
+          href: `${base}/account/contact`,
+          label: 'Phone & email',
+          icon: <MdPhone size={16} color="#0891B2" />,
+          match: [`${base}/account/contact`],
+        },
+        {
+          href: `${base}/account/2fa`,
+          label: 'Two-factor auth',
+          icon: <MdSecurity size={16} color="#16A34A" />,
+          match: [`${base}/account/2fa`],
+        },
+        {
+          href: `${base}/account/sessions`,
+          label: 'Active sessions',
+          icon: <MdDevices size={16} color="#D97706" />,
+          match: [`${base}/account/sessions`],
+        },
+      ],
+    },
+    {
+      label: 'Preferences',
+      items: [
+        {
+          href: `${base}/notifications`,
+          label: 'Notifications',
+          icon: <MdNotifications size={16} color="#0504AA" />,
+        },
+        {
+          href: `${base}/privacy`,
+          label: 'Privacy',
+          icon: <MdShield size={16} color="#0891B2" />,
+          match: [`${base}/privacy`],
+        },
+        {
+          href: `${base}/appearance`,
+          label: 'Appearance',
+          icon: <MdPalette size={16} color="#7E22CE" />,
+          match: [`${base}/appearance`],
+        },
+      ],
+    },
+    {
+      label: 'Payments',
+      items: [
+        {
+          href: `/${roleSlug}/wallet/cards`,
+          label: 'Payment methods',
+          icon: <MdCreditCard size={16} color="#7E22CE" />,
+        },
+        {
+          href: '/wallet-pin-setup',
+          label: 'Wallet PIN',
+          icon: <MdSecurity size={16} color="#16A34A" />,
+        },
+      ],
+    },
+  ];
+
+  if (roleSlug === 'shopper') {
+    groups.push({
+      label: 'Discovery',
+      items: [
+        {
+          href: `${base}/discovery`,
+          label: 'Discovery',
+          icon: <MdLocationOn size={16} color="#D97706" />,
+        },
+      ],
+    });
+  }
+
+  if (roleSlug === 'storekeeper' || roleSlug === 'service-provider') {
+    groups.push({
+      label: 'Business',
+      items: [
+        {
+          href: `${base}/preferences`,
+          label:
+            roleSlug === 'storekeeper'
+              ? 'Store preferences'
+              : 'Booking & availability',
+          icon: <MdStarOutline size={16} color="#D97706" />,
+        },
+      ],
+    });
+  }
+
+  groups.push({
+    label: 'Support',
+    items: [
+      {
+        href: `${base}/help`,
+        label: 'Help center',
+        icon: <MdHelpOutline size={16} color="#0504AA" />,
+      },
+    ],
+  });
+
+  groups.push({
+    label: 'Legal',
+    items: [
+      {
+        href: `${base}/legal/terms`,
+        label: 'Terms & conditions',
+        icon: <MdGavel size={16} color="#475569" />,
+        match: [`${base}/legal/terms`],
+      },
+      {
+        href: `${base}/legal/privacy`,
+        label: 'Privacy policy',
+        icon: <MdShield size={16} color="#475569" />,
+        match: [`${base}/legal/privacy`],
+      },
+      {
+        href: `${base}/legal/licenses`,
+        label: 'Licenses',
+        icon: <MdGavel size={16} color="#475569" />,
+        match: [`${base}/legal/licenses`],
+      },
+    ],
+  });
+
+  groups.push({
+    label: 'About',
+    items: [
+      {
+        href: `${base}/about`,
+        label: 'About Admerce',
+        icon: <MdInfo size={16} color="#475569" />,
+      },
+      {
+        href: '/onboarding?mode=switch',
+        label: 'Switch role',
+        icon: <MdSwapHoriz size={16} color="#16A34A" />,
+      },
+    ],
+  });
+
+  groups.push({
+    label: 'Danger zone',
+    items: [
+      {
+        href: `${base}/account/delete`,
+        label: 'Delete account',
+        icon: <MdDeleteForever size={16} color="#DC2626" />,
+        match: [`${base}/account/delete`],
+        danger: true,
+      },
+    ],
+  });
+
+  return groups;
+}
+
+function roleLabelFromSlug(slug: string): string {
+  const map: Record<string, string> = {
+    shopper: 'Shopper',
+    storekeeper: 'Storekeeper',
+    'service-provider': 'Service Provider',
+    courier: 'Courier',
+    flipper: 'Flipper',
+    admin: 'Admin',
+  };
+  return map[slug] || 'Settings';
+}
+
+function detectRoleSlug(pathname: string): string {
+  const m = pathname.match(/^\/settings\/([^/]+)/);
+  return m ? m[1] : 'shopper';
+}
+
+function detectActiveKey(pathname: string): string {
+  return pathname;
 }
 
 // ─── Section ───────────────────────────────────────────────────
@@ -354,81 +637,241 @@ function Switch({
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────
+// ─── Shell CSS (media queries + sidebar) ───────────────────────
+const SHELL_CSS = `
+  .st-shell, .st-shell *, .st-shell *::before, .st-shell *::after {
+    box-sizing: border-box;
+  }
+
+  .st-shell {
+    min-height: 100vh;
+    background-color: #F4F5FB;
+    width: 100%;
+  }
+
+  .st-layout {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+  }
+
+  /* Sidebar — hidden by default (mobile), shown on desktop */
+  .st-sidebar {
+    display: none;
+    width: 264px;
+    flex-shrink: 0;
+    background-color: #FFFFFF;
+    border-right: 1px solid #EAECF3;
+    padding: 18px 12px 32px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .st-sidebar-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px 16px;
+  }
+  .st-sidebar-logo {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .st-sidebar-title {
+    font-size: 14.5px;
+    font-weight: 800;
+    color: #0B0B1A;
+    letter-spacing: -0.2;
+    line-height: 1.2;
+  }
+  .st-sidebar-role {
+    font-size: 11.5px;
+    color: #94A3B8;
+    font-weight: 600;
+    margin-top: 1px;
+  }
+  .st-sidebar-back {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 10px;
+    border: none;
+    background-color: transparent;
+    color: #64748B;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    transition: background-color 0.15s;
+  }
+  .st-sidebar-back:hover {
+    background-color: #F4F5FB;
+  }
+
+  .st-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .st-nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .st-nav-label {
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: #94A3B8;
+    padding: 4px 10px 6px;
+  }
+  .st-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    color: #334155;
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color 0.15s, color 0.15s;
+    letter-spacing: -0.05;
+  }
+  .st-nav-item:hover {
+    background-color: #F4F5FB;
+    color: #0B0B1A;
+  }
+  .st-nav-item.is-active {
+    background-color: #EEF0FF;
+    color: #0504AA;
+  }
+  .st-nav-item.is-danger {
+    color: #DC2626;
+  }
+  .st-nav-item.is-danger:hover {
+    background-color: #FEF2F2;
+  }
+  .st-nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    flex-shrink: 0;
+  }
+  .st-nav-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Main column */
+  .st-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .st-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background-color: rgba(244,245,251,0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid #EAECF3;
+    width: 100%;
+  }
+  .st-header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    width: 100%;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .st-title {
+    flex: 1;
+    text-align: center;
+    font-size: 15.5px;
+    font-weight: 700;
+    color: #0B0B1A;
+    margin: 0;
+    letter-spacing: -0.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .st-action {
+    min-width: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .st-icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    border: none;
+    background-color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(15,23,42,0.06);
+    flex-shrink: 0;
+  }
+
+  /* Body */
+  .st-body {
+    width: 100%;
+    padding: 16px 16px 48px;
+  }
+  .st-body-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 880px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  /* Rows */
+  .st-row + .st-row {
+    border-top: 1px solid #F1F5F9;
+  }
+  .st-row:hover:not(:disabled) {
+    background-color: #FAFBFF;
+  }
+  .st-row:active:not(:disabled) {
+    background-color: #F4F5FB;
+  }
+
+  /* Desktop — show sidebar, hide mobile back arrow */
+  @media (min-width: 1024px) {
+    .st-sidebar { display: flex; flex-direction: column; }
+    .st-back-mobile { display: none; }
+    .st-header-inner { padding: 12px 32px; }
+    .st-body { padding: 24px 32px 64px; }
+  }
+`;
+
+// ─── Styles (inline, non-responsive) ───────────────────────────
 const S: Record<string, React.CSSProperties> = {
-  root: {
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
-    overflowX: 'hidden',
-    width: '100%',
-  },
-  header: {
-    position: 'sticky',
-    top: 0,
-    zIndex: 20,
-    backgroundColor: 'rgba(244,245,251,0.94)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    borderBottom: '1px solid #EAECF3',
-    width: '100%',
-  },
-  headerInner: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    padding: '10px 14px',
-    maxWidth: 640,
-    margin: '0 auto',
-    width: '100%',
-  },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    border: 'none',
-    backgroundColor: '#FFFFFF',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
-    flexShrink: 0,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 15.5,
-    fontWeight: 700,
-    color: '#0B0B1A',
-    margin: 0,
-    letterSpacing: -0.2,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  headerRight: {
-    minWidth: 38,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 6,
-    flexShrink: 0,
-  },
-  body: {
-    width: '100%',
-    padding: '16px 16px 48px',
-  },
-  bodyInner: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 18,
-    maxWidth: 640,
-    margin: '0 auto',
-    width: '100%',
-  },
   section: { display: 'flex', flexDirection: 'column', gap: 8 },
   sectionLabel: {
     fontSize: 11.5,
