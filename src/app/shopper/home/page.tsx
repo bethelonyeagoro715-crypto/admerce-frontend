@@ -29,6 +29,8 @@ const ITEM_WEIGHT = 1;
 
 const SPOTLIGHT_INTERVAL_MS = 4200;
 
+const CONTENT_MAX_WIDTH = 1440;
+
 type FeedFilter = 'mixed' | 'items' | 'services';
 
 const FILTER_OPTIONS: { value: FeedFilter; label: string; hint: string }[] = [
@@ -37,9 +39,6 @@ const FILTER_OPTIONS: { value: FeedFilter; label: string; hint: string }[] = [
   { value: 'services', label: 'Services only', hint: 'Hide item cards' },
 ];
 
-// ✅ RESTORED — category lists with real DB values as ids.
-//    Item categories come from `validate_product_category` in storekeeper.py.
-//    Service categories match `SERVICE_CATEGORIES` in add-service/page.tsx.
 const PRODUCT_CATEGORIES: { id: string; label: string; emoji: string }[] = [
   { id: 'tech_electronics', label: 'Tech', emoji: '🔌' },
   { id: 'food_beverage', label: 'Food', emoji: '🍏' },
@@ -287,10 +286,10 @@ function StoreSpotlight({
   const current = withImages[index] || withImages[0];
 
   return (
-    <div style={{ marginBottom: 10 }}>
+    <div style={{ marginBottom: 10 }} className="sh-spotlight-wrap">
       {!collapsed ? (
         <>
-          <div style={{ padding: '0 16px 6px' }}>
+          <div style={{ padding: '0 16px 6px' }} className="sh-spotlight-pad">
             <button
               type="button"
               onClick={() => onPress(current.id)}
@@ -402,7 +401,7 @@ function StoreSpotlight({
               )}
             </button>
           </div>
-          <div style={{ textAlign: 'right', paddingRight: 16 }}>
+          <div style={{ textAlign: 'right', paddingRight: 16 }} className="sh-spotlight-pad-r">
             <button
               type="button"
               onClick={onToggleCollapsed}
@@ -420,7 +419,7 @@ function StoreSpotlight({
           </div>
         </>
       ) : (
-        <div style={{ textAlign: 'right', paddingRight: 16 }}>
+        <div style={{ textAlign: 'right', paddingRight: 16 }} className="sh-spotlight-pad-r">
           <button
             type="button"
             onClick={onToggleCollapsed}
@@ -671,7 +670,6 @@ export default function ShopperHomePage() {
 
   const [showFilter, setShowFilter] = useState(false);
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('mixed');
-  // ✅ RESTORED — selected category id from the chip list, or null for All
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -714,13 +712,15 @@ export default function ShopperHomePage() {
     return panelTop <= 0 && windowTop <= 0;
   };
 
+  // ✅ UPDATED — 6 columns on very wide desktops
   useEffect(() => {
     const update = () => {
       const w = window.innerWidth;
       if (w < 500) setColumns(2);
       else if (w < 800) setColumns(3);
       else if (w < 1200) setColumns(4);
-      else setColumns(5);
+      else if (w < 1600) setColumns(5);
+      else setColumns(6);
     };
     update();
     window.addEventListener('resize', update);
@@ -834,7 +834,6 @@ export default function ShopperHomePage() {
           title: item.title ?? 'No Title',
           price: formatPrice(item.price),
           storeName: item.store_name ?? 'Unknown',
-          // ✅ NEW — carry category through
           category: item.category ?? null,
         }));
 
@@ -892,7 +891,6 @@ export default function ShopperHomePage() {
           title: s.title ?? 'Service',
           price: formatPrice(s.price),
           storeName: s.business_name ?? s.username ?? 'Service Provider',
-          // ✅ NEW — carry category through
           category: s.category ?? null,
         }));
       setServiceItems(svcItems);
@@ -941,7 +939,6 @@ export default function ShopperHomePage() {
     ]);
   };
 
-  // ✅ Applied filters: kind AND category, before interleave
   const filteredListingItems = useMemo(() => {
     if (feedFilter === 'services') return [];
     if (!selectedCategory) return listingItems;
@@ -1125,49 +1122,50 @@ export default function ShopperHomePage() {
     : null;
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="sh-home">
       <style>{CSS}</style>
 
       {/* App bar */}
       <div style={styles.appBar}>
-        <div style={styles.brand}>Admerce</div>
-        <div style={styles.appBarActions}>
-          <button
-            style={styles.iconBtn}
-            onClick={openSearch}
-            aria-label="Search"
-            title="Search"
-          >
-            <MdSearch size={22} color="#0504AA" />
-          </button>
-          <button
-            style={styles.iconBtn}
-            onClick={openBasket}
-            aria-label="Basket"
-            title="Basket"
-          >
-            <MdShoppingBasket size={22} color="#0504AA" />
-          </button>
-          <button
-            style={styles.iconBtn}
-            onClick={openNotifications}
-            aria-label="Notifications"
-            title="Notifications"
-          >
-            <MdNotificationsNone size={22} color="#0504AA" />
-          </button>
-          <button
-            style={{
-              ...styles.iconBtn,
-              // ✅ Highlight the tune icon when a filter is active
-              backgroundColor: hasActiveFilters ? '#EEF0FF' : 'transparent',
-            }}
-            onClick={openFilter}
-            aria-label="Feed options"
-            title="Feed options"
-          >
-            <MdTune size={22} color="#0504AA" />
-          </button>
+        <div style={styles.appBarInner}>
+          <div style={styles.brand}>Admerce</div>
+          <div style={styles.appBarActions}>
+            <button
+              style={styles.iconBtn}
+              onClick={openSearch}
+              aria-label="Search"
+              title="Search"
+            >
+              <MdSearch size={22} color="#0504AA" />
+            </button>
+            <button
+              style={styles.iconBtn}
+              onClick={openBasket}
+              aria-label="Basket"
+              title="Basket"
+            >
+              <MdShoppingBasket size={22} color="#0504AA" />
+            </button>
+            <button
+              style={styles.iconBtn}
+              onClick={openNotifications}
+              aria-label="Notifications"
+              title="Notifications"
+            >
+              <MdNotificationsNone size={22} color="#0504AA" />
+            </button>
+            <button
+              style={{
+                ...styles.iconBtn,
+                backgroundColor: hasActiveFilters ? '#EEF0FF' : 'transparent',
+              }}
+              onClick={openFilter}
+              aria-label="Feed options"
+              title="Feed options"
+            >
+              <MdTune size={22} color="#0504AA" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1176,212 +1174,216 @@ export default function ShopperHomePage() {
         onEnableLocation={requestLocationManually}
       />
 
-      {!loadingStores && (
-        <StoreSpotlight
-          stores={stores}
-          collapsed={isSpotlightCollapsed}
-          onToggleCollapsed={() => setIsSpotlightCollapsed((c) => !c)}
-          onPress={handleStorePress}
-        />
-      )}
+      <div style={styles.contentColumn}>
+        {!loadingStores && (
+          <StoreSpotlight
+            stores={stores}
+            collapsed={isSpotlightCollapsed}
+            onToggleCollapsed={() => setIsSpotlightCollapsed((c) => !c)}
+            onPress={handleStorePress}
+          />
+        )}
 
-      {/* Tabs */}
-      <div style={styles.tabsWrap} role="tablist">
-        {TAB_LABELS.map((label, i) => {
-          const active = currentTab === i;
-          return (
-            <button
-              key={i}
-              role="tab"
-              aria-selected={active}
-              onClick={() => setCurrentTab(i)}
-              style={{
-                ...styles.tabBtn,
-                background: active ? '#0504AA' : 'transparent',
-                color: active ? '#fff' : '#334155',
-                borderColor: active ? '#0504AA' : 'rgba(15,23,42,0.12)',
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Active filter chip strip */}
-      {currentTab === 0 && hasActiveFilters && (
-        <div style={styles.activeFilters}>
-          <span style={styles.activeFiltersLabel}>Showing:</span>
-          {feedFilter !== 'mixed' && (
-            <span style={styles.activeFilterChip}>
-              {feedFilter === 'items' ? 'Items' : 'Services'}
-              <button
-                type="button"
-                onClick={() => setFeedFilter('mixed')}
-                aria-label="Remove kind filter"
-                style={styles.activeFilterClose}
-              >
-                <MdClose size={12} color="#0504AA" />
-              </button>
-            </span>
-          )}
-          {activeCategoryLabel && (
-            <span style={styles.activeFilterChip}>
-              {activeCategoryLabel}
-              <button
-                type="button"
-                onClick={() => setSelectedCategory(null)}
-                aria-label="Remove category filter"
-                style={styles.activeFilterClose}
-              >
-                <MdClose size={12} color="#0504AA" />
-              </button>
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={clearAllFilters}
-            style={styles.activeFiltersClear}
-          >
-            Clear
-          </button>
+        {/* Tabs */}
+        <div style={styles.tabsWrap} role="tablist">
+          <div style={styles.tabsInner}>
+            {TAB_LABELS.map((label, i) => {
+              const active = currentTab === i;
+              return (
+                <button
+                  key={i}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setCurrentTab(i)}
+                  style={{
+                    ...styles.tabBtn,
+                    background: active ? '#0504AA' : 'transparent',
+                    color: active ? '#fff' : '#334155',
+                    borderColor: active ? '#0504AA' : 'rgba(15,23,42,0.12)',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      )}
 
-      {/* Panels */}
-      <div
-        style={styles.tabContent}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
-      >
-        {isRefreshing && (
-          <div style={styles.refreshIndicator}>
-            <div style={styles.spinner} />
+        {/* Active filter chip strip */}
+        {currentTab === 0 && hasActiveFilters && (
+          <div style={styles.activeFilters}>
+            <span style={styles.activeFiltersLabel}>Showing:</span>
+            {feedFilter !== 'mixed' && (
+              <span style={styles.activeFilterChip}>
+                {feedFilter === 'items' ? 'Items' : 'Services'}
+                <button
+                  type="button"
+                  onClick={() => setFeedFilter('mixed')}
+                  aria-label="Remove kind filter"
+                  style={styles.activeFilterClose}
+                >
+                  <MdClose size={12} color="#0504AA" />
+                </button>
+              </span>
+            )}
+            {activeCategoryLabel && (
+              <span style={styles.activeFilterChip}>
+                {activeCategoryLabel}
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory(null)}
+                  aria-label="Remove category filter"
+                  style={styles.activeFilterClose}
+                >
+                  <MdClose size={12} color="#0504AA" />
+                </button>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              style={styles.activeFiltersClear}
+            >
+              Clear
+            </button>
           </div>
         )}
 
+        {/* Panels */}
         <div
-          style={{
-            display: 'flex',
-            width: '300%',
-            height: '100%',
-            transform: trackTransform,
-            transition: isDragging
-              ? 'none'
-              : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)',
-            willChange: 'transform',
-            touchAction: 'pan-y',
-          }}
+          style={styles.tabContent}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
         >
-          {/* Tab 0 — feed */}
+          {isRefreshing && (
+            <div style={styles.refreshIndicator}>
+              <div style={styles.spinner} />
+            </div>
+          )}
+
           <div
-            ref={currentTab === 0 ? activePanelRef : null}
-            style={styles.panel}
+            style={{
+              display: 'flex',
+              width: '300%',
+              height: '100%',
+              transform: trackTransform,
+              transition: isDragging
+                ? 'none'
+                : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              willChange: 'transform',
+              touchAction: 'pan-y',
+            }}
           >
-            <div style={styles.panelInner}>
-              {loadingFeed ? (
-                <FeedSkeleton columns={columns} />
-              ) : feedItems.length === 0 ? (
-                hasActiveFilters ? (
+            {/* Tab 0 — feed */}
+            <div
+              ref={currentTab === 0 ? activePanelRef : null}
+              style={styles.panel}
+            >
+              <div style={styles.panelInner} className="sh-panel-inner">
+                {loadingFeed ? (
+                  <FeedSkeleton columns={columns} />
+                ) : feedItems.length === 0 ? (
+                  hasActiveFilters ? (
+                    <FeedEmpty
+                      icon={<MdTune size={40} color="#94a3b8" />}
+                      title="No matches"
+                      body="Try a different category or clear the filters."
+                      onClear={clearAllFilters}
+                    />
+                  ) : (
+                    <FeedEmpty
+                      icon={<MdImage size={40} color="#94a3b8" />}
+                      title="Nothing to show yet"
+                      body="Pull down to refresh, or check back soon."
+                    />
+                  )
+                ) : (
+                  <>
+                    <MasonryColumns
+                      items={displayedFeed}
+                      columns={columns}
+                      gap={10}
+                      keyFor={(item) => `${item.kind}-${item.id}`}
+                      weightOf={(item) =>
+                        item.kind === 'service' ? REEL_WEIGHT : ITEM_WEIGHT
+                      }
+                      renderItem={(item) => (
+                        <ItemCard
+                          item={item}
+                          onPress={handleItemPress}
+                          onVisualSearch={handleVisualSearch}
+                        />
+                      )}
+                    />
+                    {hasMoreToReveal && (
+                      <div ref={sentinelRef} style={{ height: 1 }} />
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Tab 1 — stores */}
+            <div
+              ref={currentTab === 1 ? activePanelRef : null}
+              style={styles.panel}
+            >
+              <div style={styles.panelInner} className="sh-panel-inner">
+                {loadingStores ? (
+                  <FeedSkeleton columns={columns} />
+                ) : stores.length === 0 ? (
                   <FeedEmpty
-                    icon={<MdTune size={40} color="#94a3b8" />}
-                    title="No matches"
-                    body="Try a different category or clear the filters."
-                    onClear={clearAllFilters}
+                    icon={<MdStorefront size={40} color="#94a3b8" />}
+                    title="No stores yet"
+                    body="Stores will appear here as storekeepers open them."
                   />
                 ) : (
-                  <FeedEmpty
-                    icon={<MdImage size={40} color="#94a3b8" />}
-                    title="Nothing to show yet"
-                    body="Pull down to refresh, or check back soon."
-                  />
-                )
-              ) : (
-                <>
                   <MasonryColumns
-                    items={displayedFeed}
+                    items={stores}
                     columns={columns}
                     gap={10}
-                    keyFor={(item) => `${item.kind}-${item.id}`}
-                    weightOf={(item) =>
-                      item.kind === 'service' ? REEL_WEIGHT : ITEM_WEIGHT
-                    }
-                    renderItem={(item) => (
-                      <ItemCard
-                        item={item}
-                        onPress={handleItemPress}
-                        onVisualSearch={handleVisualSearch}
+                    keyFor={(store) => store.id}
+                    weightOf={() => ITEM_WEIGHT}
+                    renderItem={(store) => (
+                      <StoreCard store={store} onPress={handleStorePress} />
+                    )}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Tab 2 — providers */}
+            <div
+              ref={currentTab === 2 ? activePanelRef : null}
+              style={styles.panel}
+            >
+              <div style={styles.panelInner} className="sh-panel-inner">
+                {loadingServices ? (
+                  <FeedSkeleton columns={columns} />
+                ) : providers.length === 0 ? (
+                  <FeedEmpty
+                    icon={<MdStorefront size={40} color="#94a3b8" />}
+                    title="No service providers yet"
+                    body="Providers will appear here as they list services."
+                  />
+                ) : (
+                  <MasonryColumns
+                    items={providers}
+                    columns={columns}
+                    gap={10}
+                    keyFor={(provider) => provider.id}
+                    weightOf={() => ITEM_WEIGHT}
+                    renderItem={(provider) => (
+                      <ProviderCard
+                        provider={provider}
+                        onPress={handleProviderPress}
                       />
                     )}
                   />
-                  {hasMoreToReveal && (
-                    <div ref={sentinelRef} style={{ height: 1 }} />
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Tab 1 — stores */}
-          <div
-            ref={currentTab === 1 ? activePanelRef : null}
-            style={styles.panel}
-          >
-            <div style={styles.panelInner}>
-              {loadingStores ? (
-                <FeedSkeleton columns={columns} />
-              ) : stores.length === 0 ? (
-                <FeedEmpty
-                  icon={<MdStorefront size={40} color="#94a3b8" />}
-                  title="No stores yet"
-                  body="Stores will appear here as storekeepers open them."
-                />
-              ) : (
-                <MasonryColumns
-                  items={stores}
-                  columns={columns}
-                  gap={10}
-                  keyFor={(store) => store.id}
-                  weightOf={() => ITEM_WEIGHT}
-                  renderItem={(store) => (
-                    <StoreCard store={store} onPress={handleStorePress} />
-                  )}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Tab 2 — providers */}
-          <div
-            ref={currentTab === 2 ? activePanelRef : null}
-            style={styles.panel}
-          >
-            <div style={styles.panelInner}>
-              {loadingServices ? (
-                <FeedSkeleton columns={columns} />
-              ) : providers.length === 0 ? (
-                <FeedEmpty
-                  icon={<MdStorefront size={40} color="#94a3b8" />}
-                  title="No service providers yet"
-                  body="Providers will appear here as they list services."
-                />
-              ) : (
-                <MasonryColumns
-                  items={providers}
-                  columns={columns}
-                  gap={10}
-                  keyFor={(provider) => provider.id}
-                  weightOf={() => ITEM_WEIGHT}
-                  renderItem={(provider) => (
-                    <ProviderCard
-                      provider={provider}
-                      onPress={handleProviderPress}
-                    />
-                  )}
-                />
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1389,9 +1391,14 @@ export default function ShopperHomePage() {
 
       {/* Feed options sheet */}
       {showFilter && (
-        <div style={styles.modalOverlay} onClick={closeFilter}>
+        <div
+          style={styles.modalOverlay}
+          className="sh-modal-overlay"
+          onClick={closeFilter}
+        >
           <div
             style={styles.filterSheet}
+            className="sh-filter-sheet"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-label="Feed options"
@@ -1555,12 +1562,18 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 0,
   },
   appBar: {
+    backgroundColor: '#fff',
+    borderBottom: '1px solid #EAECF3',
+  },
+  // ✅ NEW — inner column so brand + icons sit within a 1440px max on desktop
+  appBarInner: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '12px 16px',
-    backgroundColor: '#fff',
-    borderBottom: '1px solid #EAECF3',
+    maxWidth: CONTENT_MAX_WIDTH,
+    margin: '0 auto',
+    width: '100%',
   },
   brand: {
     fontWeight: 800,
@@ -1581,11 +1594,28 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background 0.15s',
     fontFamily: 'inherit',
   },
+  // ✅ NEW — content column wraps spotlight + tabs + panels for centered desktop layout
+  contentColumn: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    margin: '0 auto',
+    alignSelf: 'center',
+  },
   tabsWrap: {
+    backgroundColor: '#F4F5FB',
+  },
+  // ✅ NEW — narrower tabs inner gives segmented-control feel on desktop
+  tabsInner: {
     display: 'flex',
     gap: 6,
     padding: '12px 16px 10px',
-    backgroundColor: '#F4F5FB',
+    maxWidth: 720,
+    margin: '0 auto',
+    width: '100%',
   },
   tabBtn: {
     flex: 1,
@@ -1599,7 +1629,6 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.22s',
     fontFamily: 'inherit',
   },
-  // ✅ NEW — active filter strip shown when filters are on
   activeFilters: {
     display: 'flex',
     alignItems: 'center',
@@ -1652,6 +1681,7 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 0,
     position: 'relative',
     overflow: 'hidden',
+    width: '100%',
   },
   panel: {
     width: '33.3333%',
@@ -1663,9 +1693,9 @@ const styles: Record<string, React.CSSProperties> = {
     overflowX: 'hidden',
     WebkitOverflowScrolling: 'touch',
   },
+  // ✅ padding moved to CSS class `sh-panel-inner` for responsive
   panelInner: {
     width: '100%',
-    padding: '0 16px 16px',
     boxSizing: 'border-box',
   },
   card: {
@@ -1820,7 +1850,6 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'rgba(11,11,26,0.5)',
     display: 'flex',
     justifyContent: 'center',
-    alignItems: 'flex-end',
     zIndex: 1000,
     animation: 'fadeIn 0.18s ease-out',
   },
@@ -1828,10 +1857,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#fff',
     width: '100%',
     maxWidth: 500,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     padding: '10px 20px 24px',
-    maxHeight: '88vh',
     overflowY: 'auto',
   },
   sheetGrabber: {
@@ -1978,6 +2004,45 @@ const CSS = `
     from { opacity: 0; transform: scale(1.03); }
     to { opacity: 1; transform: scale(1); }
   }
+
+  /* Global box-sizing reset scoped to the shopper shell */
+  .sh-home,
+  .sh-home *,
+  .sh-home *::before,
+  .sh-home *::after {
+    box-sizing: border-box;
+  }
+
+  /* Panel padding — responsive */
+  .sh-panel-inner {
+    padding: 0 16px 16px;
+  }
+
+  /* Filter sheet — bottom sheet on mobile */
+  .sh-modal-overlay {
+    align-items: flex-end;
+  }
+  .sh-filter-sheet {
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+    max-height: 88vh;
+  }
+
+  /* Desktop treatment */
+  @media (min-width: 1024px) {
+    .sh-modal-overlay {
+      align-items: center;
+      padding: 24px;
+    }
+    .sh-filter-sheet {
+      border-radius: 24px;
+      max-height: 80vh;
+    }
+    .sh-panel-inner {
+      padding: 0 24px 24px;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * {
       animation-duration: 0.01ms !important;
