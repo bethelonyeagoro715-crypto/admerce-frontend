@@ -24,9 +24,6 @@ const PULL_DEAD_ZONE_PX = 25;
 const INITIAL_VISIBLE = 100;
 const BATCH_SIZE = 40;
 
-const REEL_WEIGHT = 1.78;
-const ITEM_WEIGHT = 1;
-
 const SPOTLIGHT_INTERVAL_MS = 4200;
 
 const CONTENT_MAX_WIDTH = 1440;
@@ -440,6 +437,80 @@ function StoreSpotlight({
   );
 }
 
+// ─── ReelCard — shared portrait full-bleed card ────────────────────────────
+// Used by ItemCard / StoreCard / ProviderCard so the feed reads as one
+// continuous product. Every card:
+//   • fills a 4:5 portrait frame
+//   • lays a bottom gradient over the image for text contrast
+//   • overlays badge (top-left), optional search action (bottom-right),
+//     and text stack (store, title, price) at the bottom
+function ReelCard({
+  image,
+  placeholder,
+  badge,
+  badgeBg,
+  onPress,
+  onSearch,
+  store,
+  title,
+  price,
+  ariaLabel,
+}: {
+  image: string | null;
+  placeholder: React.ReactNode;
+  badge: string;
+  badgeBg: string;
+  onPress: () => void;
+  onSearch?: () => void;
+  store?: string;
+  title: string;
+  price?: string;
+  ariaLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      style={styles.reelCard}
+      aria-label={ariaLabel || title}
+    >
+      {image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image} alt="" loading="lazy" style={styles.reelImage} />
+      ) : (
+        <div style={styles.reelPlaceholder}>{placeholder}</div>
+      )}
+
+      <div style={styles.reelGradient} aria-hidden />
+
+      <div style={{ ...styles.reelBadge, backgroundColor: badgeBg }}>
+        {badge}
+      </div>
+
+      {onSearch && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onSearch();
+          }}
+          role="button"
+          aria-label="Visual search"
+          title="Visual search"
+          style={styles.reelSearch}
+        >
+          <MdSearch size={18} color="#0504AA" />
+        </div>
+      )}
+
+      <div style={styles.reelBody}>
+        {store && <div style={styles.reelStore}>{store}</div>}
+        <div style={styles.reelTitle}>{title}</div>
+        {price && <div style={styles.reelPrice}>{price}</div>}
+      </div>
+    </button>
+  );
+}
+
 // ─── ItemCard ──────────────────────────────────────────────────────────────
 function ItemCard({
   item,
@@ -467,48 +538,17 @@ function ItemCard({
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => onPress(item)}
-      style={styles.card}
-    >
-      <div style={styles.imageWrap}>
-        {item.image ? (
-          <img src={item.image} alt="" loading="lazy" style={styles.image} />
-        ) : (
-          <div style={styles.imagePlaceholder}>
-            <MdImage size={36} color="#9e9e9e" />
-          </div>
-        )}
-
-        <div style={styles.kindBadge}>ITEM</div>
-
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onVisualSearch(item.image);
-          }}
-          role="button"
-          aria-label="Visual search"
-          title="Visual search"
-          style={styles.visualSearchBtn}
-        >
-          <MdSearch size={18} color="#0504AA" />
-        </div>
-      </div>
-
-      <div style={styles.cardBody}>
-        <div style={styles.cardTitle} title={item.title}>
-          {item.title}
-        </div>
-        <div style={styles.cardPrice}>{item.price}</div>
-        {item.storeName && (
-          <div style={styles.cardStore} title={item.storeName}>
-            {item.storeName}
-          </div>
-        )}
-      </div>
-    </button>
+    <ReelCard
+      image={item.image}
+      placeholder={<MdImage size={40} color="#9e9e9e" />}
+      badge="ITEM"
+      badgeBg="rgba(15,23,42,0.78)"
+      onPress={() => onPress(item)}
+      onSearch={() => onVisualSearch(item.image)}
+      store={item.storeName}
+      title={item.title}
+      price={item.price}
+    />
   );
 }
 
@@ -521,23 +561,14 @@ function StoreCard({
   onPress: (id: string) => void;
 }) {
   return (
-    <button type="button" onClick={() => onPress(store.id)} style={styles.card}>
-      <div style={styles.imageWrap}>
-        {store.image ? (
-          <img src={store.image} alt="" loading="lazy" style={styles.image} />
-        ) : (
-          <div style={styles.imagePlaceholder}>
-            <MdStorefront size={36} color="#9e9e9e" />
-          </div>
-        )}
-      </div>
-      <div style={styles.cardBody}>
-        <div style={styles.cardTitle} title={store.name}>
-          {store.name}
-        </div>
-        <div style={styles.cardStore}>Store</div>
-      </div>
-    </button>
+    <ReelCard
+      image={store.image}
+      placeholder={<MdStorefront size={40} color="#9e9e9e" />}
+      badge="STORE"
+      badgeBg="rgba(5,4,170,0.88)"
+      onPress={() => onPress(store.id)}
+      title={store.name}
+    />
   );
 }
 
@@ -551,34 +582,21 @@ function ProviderCard({
 }) {
   const initials = (provider.name || '?')[0].toUpperCase();
   return (
-    <button
-      type="button"
-      onClick={() => onPress(provider.id, provider.name)}
-      style={styles.card}
-    >
-      <div style={styles.imageWrap}>
-        {provider.image ? (
-          <img
-            src={provider.image}
-            alt=""
-            loading="lazy"
-            style={styles.image}
-          />
-        ) : (
-          <div style={styles.providerPlaceholder}>
-            <span style={styles.providerInitials}>{initials}</span>
-          </div>
-        )}
-      </div>
-      <div style={styles.cardBody}>
-        <div style={styles.cardTitle} title={provider.name}>
-          {provider.name}
+    <ReelCard
+      image={provider.image}
+      placeholder={
+        <div style={styles.reelProviderPlaceholder}>
+          <span style={styles.reelProviderInitials}>{initials}</span>
         </div>
-        <div style={styles.cardStore}>
-          {provider.serviceCount} service{provider.serviceCount > 1 ? 's' : ''}
-        </div>
-      </div>
-    </button>
+      }
+      badge="PROVIDER"
+      badgeBg="rgba(126,34,206,0.88)"
+      onPress={() => onPress(provider.id, provider.name)}
+      title={provider.name}
+      price={`${provider.serviceCount} service${
+        provider.serviceCount > 1 ? 's' : ''
+      }`}
+    />
   );
 }
 
@@ -633,12 +651,6 @@ function FeedSkeleton({ columns }: { columns: number }) {
           {Array.from({ length: Math.ceil(cards / columns) }).map((_, i) => (
             <div key={i} style={styles.skeletonCard}>
               <div style={styles.skeletonImage} />
-              <div style={{ padding: '10px 12px' }}>
-                <div style={styles.skeletonLine} />
-                <div
-                  style={{ ...styles.skeletonLine, width: '40%', marginTop: 6 }}
-                />
-              </div>
             </div>
           ))}
         </div>
@@ -712,7 +724,6 @@ export default function ShopperHomePage() {
     return panelTop <= 0 && windowTop <= 0;
   };
 
-  // ✅ UPDATED — 6 columns on very wide desktops
   useEffect(() => {
     const update = () => {
       const w = window.innerWidth;
@@ -1186,7 +1197,7 @@ export default function ShopperHomePage() {
 
         {/* Tabs */}
         <div style={styles.tabsWrap} role="tablist">
-          <div style={styles.tabsInner}>
+          <div style={styles.tabsInner} className="sh-tabs-inner">
             {TAB_LABELS.map((label, i) => {
               const active = currentTab === i;
               return (
@@ -1306,9 +1317,7 @@ export default function ShopperHomePage() {
                       columns={columns}
                       gap={10}
                       keyFor={(item) => `${item.kind}-${item.id}`}
-                      weightOf={(item) =>
-                        item.kind === 'service' ? REEL_WEIGHT : ITEM_WEIGHT
-                      }
+                      weightOf={() => 1}
                       renderItem={(item) => (
                         <ItemCard
                           item={item}
@@ -1345,7 +1354,7 @@ export default function ShopperHomePage() {
                     columns={columns}
                     gap={10}
                     keyFor={(store) => store.id}
-                    weightOf={() => ITEM_WEIGHT}
+                    weightOf={() => 1}
                     renderItem={(store) => (
                       <StoreCard store={store} onPress={handleStorePress} />
                     )}
@@ -1374,7 +1383,7 @@ export default function ShopperHomePage() {
                     columns={columns}
                     gap={10}
                     keyFor={(provider) => provider.id}
-                    weightOf={() => ITEM_WEIGHT}
+                    weightOf={() => 1}
                     renderItem={(provider) => (
                       <ProviderCard
                         provider={provider}
@@ -1565,7 +1574,6 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#fff',
     borderBottom: '1px solid #EAECF3',
   },
-  // ✅ NEW — inner column so brand + icons sit within a 1440px max on desktop
   appBarInner: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1594,7 +1602,6 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background 0.15s',
     fontFamily: 'inherit',
   },
-  // ✅ NEW — content column wraps spotlight + tabs + panels for centered desktop layout
   contentColumn: {
     flex: 1,
     minHeight: 0,
@@ -1608,13 +1615,9 @@ const styles: Record<string, React.CSSProperties> = {
   tabsWrap: {
     backgroundColor: '#F4F5FB',
   },
-  // ✅ NEW — narrower tabs inner gives segmented-control feel on desktop
   tabsInner: {
     display: 'flex',
     gap: 6,
-    padding: '12px 16px 10px',
-    maxWidth: 720,
-    margin: '0 auto',
     width: '100%',
   },
   tabBtn: {
@@ -1693,98 +1696,139 @@ const styles: Record<string, React.CSSProperties> = {
     overflowX: 'hidden',
     WebkitOverflowScrolling: 'touch',
   },
-  // ✅ padding moved to CSS class `sh-panel-inner` for responsive
   panelInner: {
     width: '100%',
     boxSizing: 'border-box',
   },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    boxShadow: '0 1px 3px rgba(11,11,26,0.04)',
-    overflow: 'hidden',
-    cursor: 'pointer',
-    width: '100%',
-    border: '1px solid #EAECF3',
-    padding: 0,
-    textAlign: 'left',
-    fontFamily: 'inherit',
-  },
-  imageWrap: {
+
+  // ── Reel card (new unified look) ────────────────────────────
+  reelCard: {
     position: 'relative',
     width: '100%',
-    backgroundColor: '#f0f0f0',
+    aspectRatio: '4 / 5',
+    borderRadius: 16,
+    overflow: 'hidden',
+    border: 'none',
+    padding: 0,
+    backgroundColor: '#0F172A',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    display: 'block',
+    transition: 'transform 0.12s ease',
   },
-  image: { display: 'block', width: '100%', height: 'auto' },
-  imagePlaceholder: {
+  reelImage: {
+    position: 'absolute',
+    inset: 0,
     width: '100%',
-    aspectRatio: '1 / 1',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  },
+  reelPlaceholder: {
+    position: 'absolute',
+    inset: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#e0e0e0',
   },
-  providerPlaceholder: {
-    width: '100%',
-    aspectRatio: '1 / 1',
+  reelProviderPlaceholder: {
+    position: 'absolute',
+    inset: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(135deg, #7B1FA2, #9C27B0)',
+    background: 'linear-gradient(135deg, #7B1FA2 0%, #9C27B0 100%)',
   },
-  providerInitials: { fontSize: 48, fontWeight: 700, color: '#fff' },
-  kindBadge: {
+  reelProviderInitials: {
+    fontSize: 56,
+    fontWeight: 800,
+    color: '#fff',
+    letterSpacing: -1,
+  },
+  reelGradient: {
+    position: 'absolute',
+    inset: 0,
+    background:
+      'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.42) 32%, rgba(0,0,0,0.05) 62%, transparent 100%)',
+    pointerEvents: 'none',
+  },
+  reelBadge: {
     position: 'absolute',
     top: 8,
     left: 8,
     padding: '3px 8px',
     borderRadius: 8,
     color: '#fff',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: 800,
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
-    backgroundColor: '#0F172A',
+    backdropFilter: 'blur(6px)',
+    WebkitBackdropFilter: 'blur(6px)',
+    pointerEvents: 'none',
   },
-  visualSearchBtn: {
+  reelSearch: {
     position: 'absolute',
-    bottom: 10,
-    right: 10,
-    width: 32,
-    height: 32,
+    bottom: 12,
+    right: 12,
+    width: 34,
+    height: 34,
     borderRadius: '50%',
     backgroundColor: 'rgba(255,255,255,0.95)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.28)',
   },
-  cardBody: {
-    padding: '10px 12px 12px',
+  reelBody: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: '14px 14px 16px',
+    paddingRight: 54,
     display: 'flex',
     flexDirection: 'column',
     gap: 3,
+    pointerEvents: 'none',
   },
-  cardTitle: {
+  reelStore: {
+    fontSize: 11,
     fontWeight: 600,
-    fontSize: 13,
-    lineHeight: 1.3,
-    color: '#0F172A',
+    color: 'rgba(255,255,255,0.78)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    letterSpacing: 0.1,
+    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+  },
+  reelTitle: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: '#fff',
+    lineHeight: 1.25,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     display: '-webkit-box',
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
+    letterSpacing: -0.2,
+    textShadow: '0 1px 3px rgba(0,0,0,0.55)',
   },
-  cardPrice: { color: '#0504AA', fontWeight: 700, fontSize: 13 },
-  cardStore: {
-    fontSize: 11,
-    color: '#64748B',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+  reelPrice: {
+    fontSize: 15.5,
+    fontWeight: 800,
+    color: '#C7D2FE',
+    letterSpacing: -0.2,
+    fontVariantNumeric: 'tabular-nums',
+    textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+    marginTop: 2,
   },
+
+  // ── Empty states ────────────────────────────────────────────
   emptyState: {
     display: 'flex',
     flexDirection: 'column',
@@ -1823,27 +1867,25 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
+
+  // ── Skeleton ────────────────────────────────────────────────
   skeletonCard: {
-    background: '#fff',
+    width: '100%',
+    aspectRatio: '4 / 5',
     borderRadius: 16,
     border: '1px solid #EAECF3',
     overflow: 'hidden',
+    background: '#fff',
   },
   skeletonImage: {
     width: '100%',
-    aspectRatio: '1 / 1',
+    height: '100%',
     background: 'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
     backgroundSize: '800px 100%',
     animation: 'shimmer 1.4s infinite linear',
   },
-  skeletonLine: {
-    height: 10,
-    borderRadius: 6,
-    background: 'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
-    backgroundSize: '800px 100%',
-    animation: 'shimmer 1.4s infinite linear',
-    width: '80%',
-  },
+
+  // ── Filter sheet ────────────────────────────────────────────
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -1999,13 +2041,12 @@ const CSS = `
     0% { background-position: -400px 0; }
     100% { background-position: 400px 0; }
   }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fadeIn { from { opacity: 1; } to { opacity: 1; } }
   @keyframes spotlightFade {
     from { opacity: 0; transform: scale(1.03); }
     to { opacity: 1; transform: scale(1); }
   }
 
-  /* Global box-sizing reset scoped to the shopper shell */
   .sh-home,
   .sh-home *,
   .sh-home *::before,
@@ -2013,12 +2054,20 @@ const CSS = `
     box-sizing: border-box;
   }
 
-  /* Panel padding — responsive */
+  .sh-home .reel-hover {
+    transition: transform 0.15s ease;
+  }
+  .sh-home .reel-hover:hover {
+    transform: translateY(-2px);
+  }
+
   .sh-panel-inner {
     padding: 0 16px 16px;
   }
+  .sh-tabs-inner {
+    padding: 12px 16px 10px;
+  }
 
-  /* Filter sheet — bottom sheet on mobile */
   .sh-modal-overlay {
     align-items: flex-end;
   }
@@ -2028,7 +2077,6 @@ const CSS = `
     max-height: 88vh;
   }
 
-  /* Desktop treatment */
   @media (min-width: 1024px) {
     .sh-modal-overlay {
       align-items: center;
@@ -2040,6 +2088,9 @@ const CSS = `
     }
     .sh-panel-inner {
       padding: 0 24px 24px;
+    }
+    .sh-tabs-inner {
+      padding: 14px 24px 12px;
     }
   }
 
