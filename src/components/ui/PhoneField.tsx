@@ -1,19 +1,24 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import PhoneInput, {
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import * as Flags from 'country-flag-icons/react/3x2';
+import {
+  AsYouType,
+  parsePhoneNumberFromString,
   getCountries,
   getCountryCallingCode,
-  parsePhoneNumber,
-  type Country,
-} from 'react-phone-number-input';
-import flags from 'react-phone-number-input/flags';
-import 'react-phone-number-input/style.css';
+  type CountryCode as Country,
+} from 'libphonenumber-js';
 
 // ─── Types ──────────────────────────────────────────────────────────
 interface PhoneFieldProps {
   id: string;
-  value: string;
+  value?: string; // E.164 or ''
   onChange: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
@@ -22,24 +27,23 @@ interface PhoneFieldProps {
   onBlur?: () => void;
 }
 
-interface CountryOption {
-  value: Country | '';
-  label: string;
-  divider?: boolean;
-}
+// ─── Config ─────────────────────────────────────────────────────────
+// Countries whose national trunk prefix ("0") we hide in the input.
+// The dial code is already shown in the country button.
+const STRIP_TRUNK_PREFIX: Set<Country> = new Set(['NG']);
 
-interface CountrySelectProps {
-  name?: string;
-  value?: Country;
-  onChange: (value: Country) => void;
-  options: CountryOption[];
-  disabled?: boolean;
-  className?: string;
-  tabIndex?: number;
-}
+// 3-digit prefixes that unambiguously identify a country.
+// Nigeria: 070 / 080 / 081 / 090 / 091 are mobile prefixes.
+const PREFIX_HINTS: Array<{ prefix: string; country: Country }> = [
+  { prefix: '070', country: 'NG' },
+  { prefix: '080', country: 'NG' },
+  { prefix: '081', country: 'NG' },
+  { prefix: '090', country: 'NG' },
+  { prefix: '091', country: 'NG' },
+];
 
-// ─── Locale → country ───────────────────────────────────────────────
-function detectCountry(fallback: Country): Country {
+// ─── Helpers ────────────────────────────────────────────────────────
+function detectLocaleCountry(fallback: Country): Country {
   if (typeof navigator === 'undefined') return fallback;
   try {
     const tags = navigator.languages?.length
@@ -47,19 +51,6 @@ function detectCountry(fallback: Country): Country {
       : [navigator.language];
     for (const tag of tags) {
       if (!tag) continue;
-      // Prefer Intl.Locale — returns the region correctly even for
-      // edge cases like "zh-Hans-CN".
-      try {
-        const loc = new Intl.Locale(tag);
-        const region = loc.region?.toUpperCase();
-        if (region && region.length === 2) {
-          const upper = region as Country;
-          if (getCountries().includes(upper)) return upper;
-        }
-      } catch {
-        /* fall through to string parsing */
-      }
-      // Fallback: parse "en-NG" → "NG"
       const parts = tag.split('-');
       const region = parts.length > 1 ? parts[parts.length - 1] : null;
       if (region && region.length === 2) {
@@ -68,195 +59,30 @@ function detectCountry(fallback: Country): Country {
       }
     }
   } catch {
-    /* fall through */
+    /* ignore */
   }
   return fallback;
 }
 
-// ─── Custom country picker ──────────────────────────────────────────
-function CountrySelect({
-  value,
-  onChange,
-  options,
-  disabled,
-  className,
-  tabIndex,
-}: CountrySelectProps) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [highlighted, setHighlighted] = useState(0);
+function guessCountryFromDigits(digits: string): Country | null {
+  if (digits.length < 3) return null;
+  const head = digits.slice(0, 3);
+  const hit = PREFIX_HINTS.find((h) => h.prefix === head);
+  return hit ? hit.country : null;
+}
 
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+function formatForDisplay(digits: string, c: Country): string {
+  if (!digits) return '';
+  const formatted = new AsYouType(c).input(digits);
+  if (STRIP_TRUNK_PREFIX.has(c) && formatted.startsWith('0')) {
+    return formatted.slice(1).replace(/^\s+/, '');
+  }
+  return formatted;
+}
 
-  const realOptions = useMemo(
-    () =>
-      options.filter(
-        (o): o is { value: Country; label: string } => !!o.value,
-      ),
-    [options],
-  );
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return realOptions;
-    return realOptions.filter((o) => {
-      const dial = `+${getCountryCallingCode(o.value)}`;
-      return (
-        o.label.toLowerCase().includes(q) ||
-        o.value.toLowerCase().includes(q) ||
-        dial.includes(q)
-      );
-    });
-  }, [realOptions, query]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(() => searchRef.current?.focus(), 0);
-    return () => clearTimeout(t);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const el = listRef.current?.querySelector<HTMLElement>(
-      `[data-idx="${highlighted}"]`,
-    );
-    el?.scrollIntoView({ block: 'nearest' });
-  }, [highlighted, open]);
-
-  const choose = (c: Country) => {
-    onChange(c);
-    setOpen(false);
-  };
-
-  const toggleOpen = () => {
-    if (open) {
-      setOpen(false);
-      return;
-    }
-
-    setQuery('');
-    const idx = realOptions.findIndex((o) => o.value === value);
-    setHighlighted(idx >= 0 ? idx : 0);
-    setOpen(true);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      setOpen(false);
-      buttonRef.current?.focus();
-      return;
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlighted((h) => Math.min(h + 1, filtered.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlighted((h) => Math.max(h - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const pick = filtered[highlighted];
-      if (pick) choose(pick.value);
-    } else if (e.key === 'Tab') {
-      setOpen(false);
-    }
-  };
-
-  const SelectedFlag = value ? flags[value] : null;
-  const dialCode = value ? getCountryCallingCode(value) : '';
-
-  return (
-    <div className={`adp-country ${className ?? ''}`} ref={wrapperRef}>
-      <button
-        ref={buttonRef}
-        type="button"
-        className="adp-countryBtn"
-        onClick={() => !disabled && toggleOpen()}
-        disabled={disabled}
-        tabIndex={tabIndex}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`Select country${value ? `, currently ${value}` : ''}`}
-      >
-        <span className="adp-flag" aria-hidden>
-          {SelectedFlag ? <SelectedFlag title={`Flag of ${value}`} /> : null}
-        </span>
-        <span className="adp-dial">+{dialCode}</span>
-        <span className="adp-chev" aria-hidden />
-      </button>
-
-      {open && (
-        <div className="adp-popover" role="dialog" aria-label="Country picker">
-          <div className="adp-searchWrap">
-            <input
-              ref={searchRef}
-              type="text"
-              className="adp-search"
-              placeholder="Search country or code"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setHighlighted(0);
-              }}
-              onKeyDown={onKeyDown}
-              aria-label="Search countries"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
-
-          <ul className="adp-list" ref={listRef} role="listbox">
-            {filtered.length === 0 && (
-              <li className="adp-empty">No matches</li>
-            )}
-            {filtered.map((o, idx) => {
-              const FlagComp = flags[o.value];
-              const isHi = idx === highlighted;
-              const isSel = o.value === value;
-              return (
-                <li
-                  key={o.value}
-                  data-idx={idx}
-                  role="option"
-                  aria-selected={isSel}
-                  className={
-                    'adp-option' +
-                    (isHi ? ' adp-optionHi' : '') +
-                    (isSel ? ' adp-optionSel' : '')
-                  }
-                  onMouseEnter={() => setHighlighted(idx)}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => choose(o.value)}
-                >
-                  <span className="adp-optionFlag" aria-hidden>
-                    {FlagComp ? <FlagComp title={`Flag of ${o.value}`} /> : null}
-                  </span>
-                  <span className="adp-optionName">{o.label}</span>
-                  <span className="adp-optionDial">
-                    +{getCountryCallingCode(o.value)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
+function buildE164(digits: string, c: Country): string {
+  if (!digits) return '';
+  return `+${getCountryCallingCode(c)}${digits}`;
 }
 
 // ─── Component ──────────────────────────────────────────────────────
@@ -270,68 +96,311 @@ export default function PhoneField({
   fallbackCountry = 'NG',
   onBlur,
 }: PhoneFieldProps) {
-  const [defaultCountry, setDefaultCountry] = useState<Country>(() =>
-    detectCountry(fallbackCountry),
+  const [country, setCountry] = useState<Country>(() =>
+    detectLocaleCountry(fallbackCountry),
+  );
+  // Subscriber digits WITHOUT the trunk prefix. This is the source of
+  // truth for what the user has entered.
+  const [digits, setDigits] = useState<string>('');
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlighted, setHighlighted] = useState(0);
+
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const lastEmittedRef = useRef<string>('');
+
+  // Adopt parent's value if it changes externally (e.g. loaded profile).
+  useEffect(() => {
+    const incoming = value ?? '';
+    if (incoming === lastEmittedRef.current) return;
+    let cancelled = false;
+
+    if (!incoming) {
+      queueMicrotask(() => {
+        if (!cancelled) setDigits('');
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const parsed = parsePhoneNumberFromString(incoming);
+    if (parsed?.country) {
+      const parsedCountry = parsed.country;
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setCountry(parsedCountry);
+        setDigits(parsed.nationalNumber);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [value]);
+
+  const display = useMemo(
+    () => formatForDisplay(digits, country),
+    [digits, country],
   );
 
-  // When the user types or pastes a full international number,
-  // react-phone-number-input updates `value` to E.164. If the parsed
-  // country differs from what we're displaying, adopt the parsed one
-  // so the flag matches the actual number.
-  const handleChange = (next: string | undefined) => {
-    const e164 = next ?? '';
-    if (e164) {
-      try {
-        const parsed = parsePhoneNumber(e164);
-        if (parsed?.country && parsed.country !== defaultCountry) {
-          // Only switch if the parsed number is a valid one for that
-          // country — avoids switching on partial input.
-          if (parsed.isValid()) {
-            setDefaultCountry(parsed.country);
-          }
-        }
-      } catch {
-        /* ignore */
+  // Handle typing.
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+
+    // Pasted/typed international format (leading +)
+    if (raw.trim().startsWith('+')) {
+      const parsed = parsePhoneNumberFromString(raw.trim());
+      if (parsed?.country) {
+        setCountry(parsed.country);
+        setDigits(parsed.nationalNumber);
+        const e164 = parsed.number;
+        lastEmittedRef.current = e164;
+        onChange(e164);
+        return;
       }
     }
+
+    // National format — extract digits only
+    let next = raw.replace(/\D/g, '');
+    let nextCountry = country;
+
+    // Auto-detect country from leading digits
+    if (next.length >= 3) {
+      const guess = guessCountryFromDigits(next);
+      if (guess) nextCountry = guess;
+    }
+
+    // Strip the trunk prefix for countries that use one
+    if (STRIP_TRUNK_PREFIX.has(nextCountry) && next.startsWith('0')) {
+      next = next.slice(1);
+    }
+
+    setCountry(nextCountry);
+    setDigits(next);
+    const e164 = buildE164(next, nextCountry);
+    lastEmittedRef.current = e164;
     onChange(e164);
   };
 
-  const memoFallback = useMemo(
-    () => (value ? undefined : defaultCountry),
-    [value, defaultCountry],
-  );
+  // Country picked from the popover.
+  const handleCountryPick = (c: Country) => {
+    setCountry(c);
+    setOpen(false);
+    const e164 = buildE164(digits, c);
+    lastEmittedRef.current = e164;
+    onChange(e164);
+  };
+
+  const handleCountryButtonClick = () => {
+    if (disabled) return;
+    setOpen((wasOpen) => {
+      if (!wasOpen) setQuery('');
+      return !wasOpen;
+    });
+  };
+
+  // Close on outside click.
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  // Reset search + focus the search input when opened.
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => searchRef.current?.focus(), 0);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  // All countries, sorted by English display name.
+  const allCountries = useMemo(() => {
+    let displayNames: Intl.DisplayNames | null = null;
+    try {
+      displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    } catch {
+      displayNames = null;
+    }
+    const opts = getCountries().map((c) => ({
+      value: c,
+      label: displayNames?.of(c) || c,
+      dial: getCountryCallingCode(c),
+    }));
+    opts.sort((a, b) => a.label.localeCompare(b.label));
+    return opts;
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allCountries;
+    const qDigits = q.replace(/\D/g, '');
+    return allCountries.filter(
+      (o) =>
+        o.label.toLowerCase().includes(q) ||
+        o.value.toLowerCase().includes(q) ||
+        `+${o.dial}`.includes(q) ||
+        (qDigits.length > 0 && o.dial.startsWith(qDigits)),
+    );
+  }, [allCountries, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    const idx = filtered.findIndex((o) => o.value === country);
+    const timer = setTimeout(() => {
+      setHighlighted(idx >= 0 ? idx : 0);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [open, filtered, country]);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = listRef.current?.querySelector<HTMLElement>(
+      `[data-idx="${highlighted}"]`,
+    );
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [highlighted, open]);
+
+  const onPopoverKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
+      buttonRef.current?.focus();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlighted((h) => Math.min(h + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlighted((h) => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const pick = filtered[highlighted];
+      if (pick) handleCountryPick(pick.value);
+    } else if (e.key === 'Tab') {
+      setOpen(false);
+    }
+  };
+
+  // Flag renderer with a text fallback.
+  type FlagComponent = React.ComponentType<{ className?: string; title?: string }>;
+  const renderFlag = (c: Country, className: string): React.ReactNode => {
+    const Comp = (Flags as unknown as Record<string, FlagComponent>)[c];
+    if (!Comp) {
+      return <span className="adp-flagFallback">{c}</span>;
+    }
+    return <Comp className={className} />;
+  };
+
+  const dialCode = getCountryCallingCode(country);
+  const flagForCountry = country; // readable alias
 
   return (
-    <div className="adp-phoneWrap" data-disabled={disabled || undefined}>
-      <PhoneInput
-        id={id}
-        // ← The key change. Without this, the input shows
-        //   "+234 802 224 0079" even though the country button
-        //   already shows "+234". With it removed, the input shows
-        //   only the national part: "802 224 0079".
-        countryCallingCodeEditable={false}
-        defaultCountry={memoFallback}
-        value={value || undefined}
-        onChange={handleChange}
-        disabled={disabled}
-        placeholder={placeholder}
-        autoFocus={autoFocus}
-        onBlur={onBlur}
-        countrySelectComponent={CountrySelect}
-        className="adp-phoneInput"
-        smartCaret
-      />
-      <style>{PHONE_CSS}</style>
+    <div className="adp-phoneWrap">
+      <style>{CSS}</style>
+
+      <div className="adp-phoneBox" data-disabled={disabled || undefined}>
+        <div className="adp-country" ref={wrapperRef}>
+          <button
+            ref={buttonRef}
+            type="button"
+            className="adp-countryBtn"
+            onClick={handleCountryButtonClick}
+            disabled={disabled}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-label={`Country code, ${country}, +${dialCode}`}
+          >
+            <span className="adp-flag" aria-hidden>
+              {renderFlag(flagForCountry, 'adp-flagSvg')}
+            </span>
+            <span className="adp-dial">+{dialCode}</span>
+            <span className="adp-chev" aria-hidden />
+          </button>
+
+          {open && (
+            <div className="adp-popover" role="dialog" aria-label="Country picker">
+              <div className="adp-searchWrap">
+                <input
+                  ref={searchRef}
+                  type="text"
+                  className="adp-search"
+                  placeholder="Search country or code"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setHighlighted(0);
+                  }}
+                  onKeyDown={onPopoverKeyDown}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-label="Search countries"
+                />
+              </div>
+
+              <ul className="adp-list" ref={listRef} role="listbox">
+                {filtered.length === 0 && (
+                  <li className="adp-empty">No matches</li>
+                )}
+                {filtered.map((o, idx) => {
+                  const isHi = idx === highlighted;
+                  const isSel = o.value === country;
+                  return (
+                    <li
+                      key={o.value}
+                      data-idx={idx}
+                      role="option"
+                      aria-selected={isSel}
+                      className={
+                        'adp-option' +
+                        (isHi ? ' adp-optionHi' : '') +
+                        (isSel ? ' adp-optionSel' : '')
+                      }
+                      onMouseEnter={() => setHighlighted(idx)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleCountryPick(o.value)}
+                    >
+                      <span className="adp-optionFlag" aria-hidden>
+                        {renderFlag(o.value, 'adp-flagSvg')}
+                      </span>
+                      <span className="adp-optionName">{o.label}</span>
+                      <span className="adp-optionDial">+{o.dial}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <input
+          ref={inputRef}
+          id={id}
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          className="adp-input"
+          placeholder={placeholder}
+          value={display}
+          onChange={handleInputChange}
+          onBlur={onBlur}
+          disabled={disabled}
+          autoFocus={autoFocus}
+        />
+      </div>
     </div>
   );
 }
 
 // ─── CSS ────────────────────────────────────────────────────────────
-const PHONE_CSS = `
+const CSS = `
   .adp-phoneWrap { width: 100%; }
 
-  .adp-phoneInput.PhoneInput {
+  .adp-phoneBox {
     display: flex;
     align-items: center;
     width: 100%;
@@ -345,24 +414,14 @@ const PHONE_CSS = `
     min-height: 52px;
     position: relative;
   }
-  .adp-phoneInput.PhoneInput:hover:not(.PhoneInput--disabled) {
-    border-color: #CBD5E1;
-  }
-  .adp-phoneInput.PhoneInput--focus,
-  .adp-phoneInput.PhoneInput:focus-within {
+  .adp-phoneBox:hover:not([data-disabled]) { border-color: #CBD5E1; }
+  .adp-phoneBox:focus-within {
     border-color: #0504AA;
     box-shadow: 0 0 0 4px rgba(5,4,170,0.10);
   }
-  .adp-phoneInput.PhoneInput--disabled {
-    background: #F8FAFC;
-    cursor: not-allowed;
-  }
+  .adp-phoneBox[data-disabled] { background: #F8FAFC; cursor: not-allowed; }
 
-  /* ── Country trigger ──────────────────────────────────────── */
-  .adp-country {
-    position: relative;
-    flex-shrink: 0;
-  }
+  .adp-country { position: relative; flex-shrink: 0; }
   .adp-countryBtn {
     display: inline-flex;
     align-items: center;
@@ -382,13 +441,12 @@ const PHONE_CSS = `
     outline: 2px solid #0504AA;
     outline-offset: 2px;
   }
-  .adp-countryBtn:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
+  .adp-countryBtn:disabled { cursor: not-allowed; opacity: 0.6; }
 
   .adp-flag {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 22px;
     height: 16px;
     border-radius: 3px;
@@ -397,10 +455,12 @@ const PHONE_CSS = `
     flex-shrink: 0;
     background: #F1F5F9;
   }
-  .adp-flag svg {
-    width: 100%;
-    height: 100%;
-    display: block;
+  .adp-flagSvg { width: 100%; height: 100%; display: block; }
+  .adp-flagFallback {
+    font-size: 9px;
+    font-weight: 800;
+    color: #64748B;
+    letter-spacing: 0.02em;
   }
 
   .adp-dial {
@@ -424,7 +484,6 @@ const PHONE_CSS = `
     transform: rotate(180deg);
   }
 
-  /* ── Popover ──────────────────────────────────────────────── */
   .adp-popover {
     position: absolute;
     top: calc(100% + 6px);
@@ -483,10 +542,7 @@ const PHONE_CSS = `
     scrollbar-color: #CBD5E1 transparent;
   }
   .adp-list::-webkit-scrollbar { width: 8px; }
-  .adp-list::-webkit-scrollbar-thumb {
-    background: #E2E8F0;
-    border-radius: 999px;
-  }
+  .adp-list::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 999px; }
   .adp-list::-webkit-scrollbar-track { background: transparent; }
 
   .adp-option {
@@ -502,13 +558,12 @@ const PHONE_CSS = `
   }
   .adp-optionHi { background: #F4F5FB; }
   .adp-optionSel { background: #EEF0FF; }
-  .adp-optionSel .adp-optionName {
-    color: #0504AA;
-    font-weight: 800;
-  }
+  .adp-optionSel .adp-optionName { color: #0504AA; font-weight: 800; }
 
   .adp-optionFlag {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 22px;
     height: 16px;
     border-radius: 3px;
@@ -516,11 +571,6 @@ const PHONE_CSS = `
     box-shadow: 0 0 0 1px rgba(15,23,42,0.08);
     flex-shrink: 0;
     background: #F1F5F9;
-  }
-  .adp-optionFlag svg {
-    width: 100%;
-    height: 100%;
-    display: block;
   }
 
   .adp-optionName {
@@ -550,8 +600,7 @@ const PHONE_CSS = `
     list-style: none;
   }
 
-  /* ── Number input ─────────────────────────────────────────── */
-  .adp-phoneInput .PhoneInputInput {
+  .adp-input {
     flex: 1;
     min-width: 0;
     border: none;
@@ -563,20 +612,15 @@ const PHONE_CSS = `
     padding: 12px 10px 12px 4px;
     -webkit-appearance: none;
     appearance: none;
+    font-variant-numeric: tabular-nums;
   }
-  .adp-phoneInput .PhoneInputInput::placeholder { color: #94A3B8; }
-  .adp-phoneInput .PhoneInputInput:disabled {
-    color: #94A3B8;
-    cursor: not-allowed;
-  }
-  .adp-phoneInput .PhoneInputInput::-webkit-outer-spin-button,
-  .adp-phoneInput .PhoneInputInput::-webkit-inner-spin-button {
+  .adp-input::placeholder { color: #94A3B8; }
+  .adp-input:disabled { color: #94A3B8; cursor: not-allowed; }
+  .adp-input::-webkit-outer-spin-button,
+  .adp-input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
   }
-
-  /* Kill the library's default country styling */
-  .adp-phoneInput .PhoneInputCountry { display: none !important; }
 
   @media (prefers-reduced-motion: reduce) {
     .adp-popover { animation: none !important; }
