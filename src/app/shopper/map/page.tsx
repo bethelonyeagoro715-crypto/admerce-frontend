@@ -46,8 +46,8 @@ type FilterKey = 'all' | 'stores' | 'services' | 'in_stock';
 type MapModule = typeof import('leaflet');
 type ClusterGroup = ReturnType<MapModule['markerClusterGroup']>;
 
-const DEFAULT_LAT = 6.5244;
-const DEFAULT_LNG = 3.3792;
+const DEFAULT_LAT = 5.5103;
+const DEFAULT_LNG = 7.0265;
 const RADIUS_OPTIONS = [2, 5, 10, 25] as const;
 
 // ─── Helpers ────────────────────────────────────────────────────────
