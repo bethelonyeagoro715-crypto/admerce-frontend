@@ -112,6 +112,59 @@ function interleave<T>(a: T[], b: T[]): T[] {
   return out;
 }
 
+// ─── Brand icon components ─────────────────────────────────────────────────
+// LensIcon — custom viewfinder icon used for the visual search button.
+// Rounded-square camera body + inner lens circle + small tab on the
+// right edge, matching the Admerce lens reference.
+function LensIcon({
+  size = 18,
+  color = '#0504AA',
+}: {
+  size?: number;
+  color?: string;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {/* Camera body — rounded square */}
+      <rect
+        x="2.25"
+        y="2.25"
+        width="17"
+        height="17"
+        rx="4.25"
+        stroke={color}
+        strokeWidth="2.2"
+      />
+      {/* Lens — inner circle */}
+      <circle
+        cx="10.75"
+        cy="10.75"
+        r="5"
+        stroke={color}
+        strokeWidth="2.2"
+      />
+      {/* Viewfinder tab — protrudes from right edge */}
+      <rect
+        x="18.25"
+        y="9.25"
+        width="3.5"
+        height="3"
+        rx="1.2"
+        stroke={color}
+        strokeWidth="2.2"
+      />
+    </svg>
+  );
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface RecallCandidate {
   listing_id: string | number;
@@ -518,10 +571,10 @@ function ReelCard({
           }}
           role="button"
           aria-label="Visual search"
-          title="Visual search"
+          title="Search by photo"
           style={styles.reelSearch}
         >
-          <MdSearch size={18} color="#0504AA" />
+          <LensIcon size={18} color="#0504AA" />
         </div>
       )}
 
@@ -1169,7 +1222,16 @@ export default function ShopperHomePage() {
       {/* App bar */}
       <div style={styles.appBar}>
         <div style={styles.appBarInner}>
-          <div style={styles.brand}>Admerce</div>
+          <div style={styles.brand}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/admerce_symbol.png"
+              alt=""
+              style={styles.brandLogo}
+              aria-hidden="true"
+            />
+            <span style={styles.brandName}>Admerce</span>
+          </div>
           <div style={styles.appBarActions}>
             <button
               style={styles.iconBtn}
@@ -1619,10 +1681,24 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
   },
   brand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
+  brandLogo: {
+    width: 28,
+    height: 28,
+    objectFit: 'contain',
+    display: 'block',
+    flexShrink: 0,
+  },
+  brandName: {
     fontWeight: 800,
     color: '#0504AA',
     fontSize: 18,
     letterSpacing: '-0.3px',
+    lineHeight: 1,
   },
   appBarActions: { display: 'flex', gap: 4 },
   iconBtn: {
@@ -1737,7 +1813,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   // ── Reel card ────────────────────────────────────────────────
-  // Note: aspectRatio is set dynamically per-card via inline style override.
   reelCard: {
     position: 'relative',
     width: '100%',
