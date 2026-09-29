@@ -134,17 +134,18 @@ export default function SettingsHubPage() {
     }
   };
 
-  const handleLogout = async () => {
+    const handleLogout = async () => {
     const ok = await confirmDialog({
       title: 'Log out?',
       body: 'You will need to sign in again to access your account.',
       kind: 'danger',
     });
     if (!ok) return;
+    await api.logout();
     clearLocalStorage();
     router.replace('/');
   };
-
+  
   const name = displayName(profile);
   const phone = profile?.phone || '';
   const email = profile?.email || '';

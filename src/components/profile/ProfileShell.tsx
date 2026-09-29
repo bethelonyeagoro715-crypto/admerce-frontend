@@ -331,13 +331,16 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
     await loadData(false);
   };
 
-  const handleLogout = async () => {
+    const handleLogout = async () => {
     const ok = await confirmDialog({
       title: 'Log out?',
       body: 'You will need to sign in again to access your account.',
       kind: 'danger',
     });
     if (!ok) return;
+    // Tell the server to drop this session row. Fire-and-forget —
+    // the api.logout() method swallows network errors.
+    await api.logout();
     clearLocalStorage();
     router.replace('/');
   };

@@ -306,13 +306,25 @@ class ApiService {
     return res.data;
   }
 
-  public async changePassword(currentPassword: string, newPassword: string): Promise<JsonObject> {
+    public async changePassword(currentPassword: string, newPassword: string): Promise<JsonObject> {
     const res = await this.axios.post('/auth/change-password', {
       current_password: currentPassword,
       new_password: newPassword,
     });
     return res.data;
   }
+
+  // ✅ NEW — call before clearing local state. Best-effort: if the
+  // network fails or the token is already invalid, local logout still
+  // proceeds. Never throws.
+  public async logout(): Promise<void> {
+    try {
+      await this.axios.post('/auth/logout');
+    } catch {
+      // Swallow — local logout proceeds regardless.
+    }
+  }
+  
 
   // ── Contact change (phone / email) ─────────────────────────
   public async requestPhoneChange(phone: string): Promise<JsonObject> {
