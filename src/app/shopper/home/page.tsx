@@ -351,7 +351,6 @@ function StoreSpotlight({
 
   const current = withImages[index] || withImages[0];
 
-  // Collapsed: single compact row with an expand chevron on the right.
   if (collapsed) {
     return (
       <div className="sh-spotlight-wrap">
@@ -2147,7 +2146,7 @@ const CSS = `
     transform: scale(0.985);
   }
 
-  /* ─── Pill tabs — flex + padding live here so desktop can override ── */
+  /* ─── Pill tabs — full-width equal thirds on every viewport ─────── */
   .sh-tab-pill {
     flex: 1;
     padding: 11px 10px;
@@ -2356,19 +2355,17 @@ const CSS = `
       font-size: 22px;
     }
 
-    /* Tab strip: left-aligned, compact, with subtle underline */
+    /* Tab strip: full-width pills, subtle underline below the row */
     .sh-tabs-wrap {
       border-bottom: 1px solid var(--border-default);
     }
     .sh-tabs-inner {
       padding: 14px 24px 12px;
-      justify-content: flex-start;
       gap: 10px;
     }
     .sh-tab-pill {
-      flex: 0 0 auto;
-      min-width: 150px;
-      padding: 11px 22px;
+      flex: 1;
+      padding: 12px 18px;
       font-size: 12.5px;
       letter-spacing: 0.7px;
     }
