@@ -131,8 +131,6 @@ function buildPreview(
   return isMine ? `You: ${body}` : body;
 }
 
-// Renders text with the first case-insensitive match of `query` wrapped in
-// a <mark>. Returns the raw string when there's no match — cheap and safe.
 function highlight(text: string, query: string): React.ReactNode {
   const q = query.trim().toLowerCase();
   if (!q) return text;
@@ -247,7 +245,6 @@ export default function InboxPage() {
     [],
   );
 
-  // Fetch current user id once, for "You:" previews.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -274,7 +271,6 @@ export default function InboxPage() {
     void loadConversations('refresh');
   };
 
-  // Escape clears search when focused.
   const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
       setQuery('');
@@ -287,7 +283,6 @@ export default function InboxPage() {
     [conversations],
   );
 
-  // Decorate → filter → sort → group.
   const decorated = useMemo<DecoratedConversation[]>(() => {
     const q = query.trim().toLowerCase();
     const list: DecoratedConversation[] = [];
@@ -318,7 +313,6 @@ export default function InboxPage() {
     return list;
   }, [conversations, query, filter, currentUserId]);
 
-  // Group into date buckets, preserving insertion order of first appearance.
   const grouped = useMemo(() => {
     const order: Bucket[] = ['today', 'yesterday', 'week', 'older'];
     const map = new Map<Bucket, DecoratedConversation[]>();
@@ -384,7 +378,7 @@ export default function InboxPage() {
         >
           <MdRefresh
             size={20}
-            color="#0504AA"
+            color="var(--brand-primary)"
             style={{
               animation: isRefreshing
                 ? 'ibxSpin 0.8s linear infinite'
@@ -398,7 +392,7 @@ export default function InboxPage() {
       {(hasAnyConversations || searching) && (
         <div className="ibx-controls">
           <div className="ibx-searchBox">
-            <MdSearch size={18} color="#94A3B8" aria-hidden />
+            <MdSearch size={18} color="var(--text-muted)" aria-hidden />
             <input
               ref={searchInputRef}
               type="text"
@@ -419,7 +413,7 @@ export default function InboxPage() {
                 }}
                 aria-label="Clear search"
               >
-                <MdClose size={14} color="#64748B" />
+                <MdClose size={14} color="var(--text-tertiary)" />
               </button>
             )}
           </div>
@@ -479,7 +473,7 @@ export default function InboxPage() {
         ) : error ? (
           <div className="ibx-center">
             <div className="ibx-stateIconError" aria-hidden>
-              <MdErrorOutline size={32} color="#DC2626" />
+              <MdErrorOutline size={32} color="var(--danger-fg)" />
             </div>
             <h2 className="ibx-stateTitle">Couldn&apos;t load your chats</h2>
             <p className="ibx-stateBody">{error}</p>
@@ -488,14 +482,14 @@ export default function InboxPage() {
               className="ibx-primaryBtn"
               onClick={handleRefresh}
             >
-              <MdRefresh size={16} color="#fff" />
+              <MdRefresh size={16} color="var(--brand-on-primary)" />
               Try again
             </button>
           </div>
         ) : !hasAnyConversations ? (
           <div className="ibx-center">
             <div className="ibx-stateIconInfo" aria-hidden>
-              <MdInbox size={34} color="#0504AA" />
+              <MdInbox size={34} color="var(--brand-primary)" />
             </div>
             <h2 className="ibx-stateTitle">No conversations yet</h2>
             <p className="ibx-stateBody">
@@ -507,14 +501,17 @@ export default function InboxPage() {
               className="ibx-primaryBtn"
               onClick={() => router.push('/shopper/home')}
             >
-              <MdStorefront size={16} color="#fff" />
+              <MdStorefront size={16} color="var(--brand-on-primary)" />
               Browse stores
             </button>
           </div>
         ) : !hasResults ? (
           <div className="ibx-center ibx-centerTight">
             <div className="ibx-stateIconMuted" aria-hidden>
-              <MdChatBubbleOutline size={30} color="#94A3B8" />
+              <MdChatBubbleOutline
+                size={30}
+                color="var(--text-muted)"
+              />
             </div>
             <h2 className="ibx-stateTitle">No matches</h2>
             <p className="ibx-stateBody">
@@ -663,7 +660,9 @@ const CSS = `
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background: #F4F5FB;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.18s ease, color 0.18s ease;
   }
 
   /* ── Header ─────────────────────────────────────────────── */
@@ -672,11 +671,16 @@ const CSS = `
     align-items: center;
     gap: 10px;
     padding: 16px 16px 14px;
-    background: #fff;
-    border-bottom: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-default);
     position: sticky;
     top: 0;
     z-index: 20;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .ibx-headerText {
     flex: 1;
@@ -688,14 +692,14 @@ const CSS = `
   .ibx-title {
     font-size: 22px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0;
     letter-spacing: -0.03em;
     line-height: 1.15;
   }
   .ibx-subtitle {
     font-size: 12.5px;
-    color: #64748B;
+    color: var(--text-tertiary);
     margin: 0;
     font-weight: 500;
     letter-spacing: 0.01em;
@@ -713,31 +717,36 @@ const CSS = `
     transition: background 0.15s;
     flex-shrink: 0;
   }
-  .ibx-iconBtn:hover:not(:disabled) { background: #F1F3FA; }
+  .ibx-iconBtn:hover:not(:disabled) { background: var(--bg-hover); }
   .ibx-iconBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* ── Controls ───────────────────────────────────────────── */
   .ibx-controls {
-    background: #fff;
+    background: var(--bg-secondary);
     padding: 0 16px 14px;
-    border-bottom: 1px solid #EAECF3;
+    border-bottom: 1px solid var(--border-default);
     position: sticky;
     top: 71px;
     z-index: 19;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .ibx-searchBox {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 10px 14px;
-    background: #F4F5FB;
+    background: var(--bg-tertiary);
     border: 1.5px solid transparent;
     border-radius: 14px;
     transition: border-color 0.15s, background 0.15s;
   }
   .ibx-searchBox:focus-within {
-    border-color: #C7CCFF;
-    background: #fff;
+    border-color: var(--brand-primary);
+    background: var(--bg-secondary);
   }
   .ibx-searchInput {
     flex: 1;
@@ -746,23 +755,24 @@ const CSS = `
     outline: none;
     background: transparent;
     font-size: 15px;
-    color: #0B0B1A;
+    color: var(--text-primary);
     font-family: inherit;
   }
-  .ibx-searchInput::placeholder { color: #94A3B8; }
+  .ibx-searchInput::placeholder { color: var(--text-muted); }
   .ibx-searchClear {
     width: 22px;
     height: 22px;
     border-radius: 50%;
     border: none;
-    background: #E2E8F0;
+    background: var(--border-default);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     flex-shrink: 0;
+    transition: background 0.15s;
   }
-  .ibx-searchClear:hover { background: #CBD5E1; }
+  .ibx-searchClear:hover { background: var(--border-strong); }
 
   .ibx-pillRow {
     display: flex;
@@ -778,9 +788,9 @@ const CSS = `
     gap: 6px;
     padding: 7px 14px;
     border-radius: 999px;
-    border: 1px solid #E6E8F0;
-    background: #fff;
-    color: #64748B;
+    border: 1px solid var(--border-default);
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
@@ -789,19 +799,19 @@ const CSS = `
     transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
   .ibx-pill:hover:not(:disabled) {
-    border-color: #C7CCFF;
-    color: #0504AA;
+    border-color: var(--brand-primary);
+    color: var(--brand-primary);
   }
   .ibx-pill:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
   .ibx-pillActive {
-    background: #0504AA;
-    border-color: #0504AA;
-    color: #fff;
+    background: var(--brand-primary);
+    border-color: var(--brand-primary);
+    color: var(--brand-on-primary);
   }
-  .ibx-pillActive:hover { color: #fff; }
+  .ibx-pillActive:hover { color: var(--brand-on-primary); }
   .ibx-pillCount {
     display: inline-flex;
     align-items: center;
@@ -810,19 +820,20 @@ const CSS = `
     height: 18px;
     padding: 0 5px;
     border-radius: 999px;
-    background: #F1F5F9;
-    color: #475569;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
     font-size: 10.5px;
     font-weight: 800;
     line-height: 1;
   }
-  .ibx-pillActive .ibx-pillCount {
-    background: rgba(255,255,255,0.2);
-    color: #fff;
-  }
+  .ibx-pillActive .ibx-pillCount,
   .ibx-pillCountOn {
-    background: rgba(255,255,255,0.2);
-    color: #fff;
+    background: color-mix(
+      in srgb,
+      var(--brand-on-primary) 18%,
+      transparent
+    );
+    color: var(--brand-on-primary);
   }
 
   /* ── Body ───────────────────────────────────────────────── */
@@ -832,6 +843,10 @@ const CSS = `
     display: flex;
     flex-direction: column;
     gap: 20px;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
   }
 
   /* ── Date group ─────────────────────────────────────────── */
@@ -845,7 +860,7 @@ const CSS = `
   .ibx-groupLabel {
     font-size: 11.5px;
     font-weight: 800;
-    color: #64748B;
+    color: var(--text-tertiary);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     flex-shrink: 0;
@@ -853,12 +868,12 @@ const CSS = `
   .ibx-groupRule {
     flex: 1;
     height: 1px;
-    background: #E2E8F0;
+    background: var(--border-default);
   }
   .ibx-groupCount {
     font-size: 11px;
     font-weight: 700;
-    color: #94A3B8;
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }
@@ -876,8 +891,8 @@ const CSS = `
     gap: 12px;
     width: 100%;
     padding: 12px 14px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 16px;
     cursor: pointer;
     text-align: left;
@@ -888,19 +903,29 @@ const CSS = `
       transform 0.1s,
       box-shadow 0.15s;
     animation: ibxFadeIn 0.22s ease both;
+    box-sizing: border-box;
   }
   .ibx-card:hover {
-    border-color: #C9CBFF;
-    box-shadow: 0 4px 14px rgba(5,4,170,0.06);
+    border-color: color-mix(
+      in srgb,
+      var(--brand-primary) 40%,
+      var(--border-default)
+    );
+    box-shadow: 0 4px 14px
+      color-mix(in srgb, var(--brand-primary) 10%, transparent);
   }
   .ibx-card:active { transform: scale(0.994); }
   .ibx-card:focus-visible {
-    outline: 2px solid #0504AA;
+    outline: 2px solid var(--brand-primary);
     outline-offset: 2px;
   }
   .ibx-cardUnread {
-    border-color: #DDDFFF;
-    background: linear-gradient(180deg, #FFFFFF 0%, #FCFCFF 100%);
+    border-color: color-mix(
+      in srgb,
+      var(--brand-primary) 35%,
+      var(--border-default)
+    );
+    background: var(--bg-secondary);
   }
   /* Left accent for unread — 3px bar on the card edge */
   .ibx-cardUnread::before {
@@ -911,7 +936,7 @@ const CSS = `
     bottom: 12px;
     width: 3px;
     border-radius: 0 3px 3px 0;
-    background: #0504AA;
+    background: var(--brand-primary);
   }
 
   /* ── Avatar ─────────────────────────────────────────────── */
@@ -921,14 +946,16 @@ const CSS = `
     flex: 0 0 50px;
     border-radius: 15px;
     overflow: hidden;
-    background: #EEF0FF;
+    background: var(--brand-soft);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     transition: box-shadow 0.15s;
   }
   .ibx-avatarWrapUnread {
-    box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #C7CCFF;
+    box-shadow:
+      0 0 0 2px var(--bg-secondary),
+      0 0 0 3.5px var(--brand-primary);
   }
   .ibx-avatarImg {
     width: 100%;
@@ -937,7 +964,7 @@ const CSS = `
     display: block;
   }
   .ibx-avatarInitials {
-    color: #0504AA;
+    color: var(--brand-primary);
     font-weight: 800;
     font-size: 18px;
     letter-spacing: 0.01em;
@@ -962,7 +989,7 @@ const CSS = `
     min-width: 0;
     font-size: 15px;
     font-weight: 600;
-    color: #0B0B1A;
+    color: var(--text-primary);
     letter-spacing: -0.01em;
     line-height: 1.25;
     overflow: hidden;
@@ -973,12 +1000,15 @@ const CSS = `
   .ibx-time {
     flex-shrink: 0;
     font-size: 11.5px;
-    color: #94A3B8;
+    color: var(--text-muted);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.01em;
   }
-  .ibx-timeUnread { color: #0504AA; font-weight: 800; }
+  .ibx-timeUnread {
+    color: var(--brand-primary);
+    font-weight: 800;
+  }
 
   .ibx-previewRow {
     display: flex;
@@ -990,13 +1020,16 @@ const CSS = `
     flex: 1;
     min-width: 0;
     font-size: 13.5px;
-    color: #64748B;
+    color: var(--text-secondary);
     line-height: 1.4;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .ibx-previewUnread { color: #334155; font-weight: 600; }
+  .ibx-previewUnread {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
 
   .ibx-badge {
     flex-shrink: 0;
@@ -1004,21 +1037,22 @@ const CSS = `
     height: 20px;
     padding: 0 6px;
     border-radius: 10px;
-    background: #0504AA;
-    color: #fff;
+    background: var(--brand-primary);
+    color: var(--brand-on-primary);
     font-size: 11px;
     font-weight: 800;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     letter-spacing: 0.02em;
-    box-shadow: 0 2px 6px rgba(5,4,170,0.24);
+    box-shadow: 0 2px 6px
+      color-mix(in srgb, var(--brand-primary) 30%, transparent);
   }
 
   .ibx-mark {
-    background: #FFF4B8;
-    color: inherit;
-    padding: 0 1px;
+    background: var(--warning-bg);
+    color: var(--warning-fg);
+    padding: 0 2px;
     border-radius: 3px;
   }
 
@@ -1046,21 +1080,22 @@ const CSS = `
     margin-bottom: 14px;
   }
   .ibx-stateIconInfo {
-    background: linear-gradient(135deg, #EEF0FF 0%, #E0E7FF 100%);
-    box-shadow: 0 10px 28px rgba(5,4,170,0.08);
+    background: var(--brand-soft);
+    box-shadow: 0 10px 28px
+      color-mix(in srgb, var(--brand-primary) 10%, transparent);
   }
-  .ibx-stateIconError { background: #FEF2F2; }
-  .ibx-stateIconMuted { background: #F1F5F9; }
+  .ibx-stateIconError { background: var(--danger-bg); }
+  .ibx-stateIconMuted { background: var(--bg-tertiary); }
   .ibx-stateTitle {
     font-size: 18px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0;
     letter-spacing: -0.02em;
   }
   .ibx-stateBody {
     font-size: 13.5px;
-    color: #64748B;
+    color: var(--text-tertiary);
     margin: 6px 0 20px;
     max-width: 340px;
     line-height: 1.55;
@@ -1070,8 +1105,8 @@ const CSS = `
     align-items: center;
     gap: 6px;
     padding: 11px 22px;
-    background: #0504AA;
-    color: #fff;
+    background: var(--brand-primary);
+    color: var(--brand-on-primary);
     border: none;
     border-radius: 14px;
     font-weight: 700;
@@ -1079,15 +1114,16 @@ const CSS = `
     cursor: pointer;
     font-family: inherit;
     transition: opacity 0.15s, transform 0.1s;
-    box-shadow: 0 8px 20px rgba(5,4,170,0.24);
+    box-shadow: var(--shadow-brand);
   }
   .ibx-primaryBtn:hover { opacity: 0.92; }
   .ibx-primaryBtn:active { transform: scale(0.98); }
   .ibx-ghostBtn {
     padding: 10px 18px;
     background: transparent;
-    color: #0504AA;
-    border: 1.5px solid #C7CCFF;
+    color: var(--brand-primary);
+    border: 1.5px solid
+      color-mix(in srgb, var(--brand-primary) 40%, transparent);
     border-radius: 12px;
     font-weight: 700;
     font-size: 13px;
@@ -1095,7 +1131,7 @@ const CSS = `
     font-family: inherit;
     transition: background 0.15s;
   }
-  .ibx-ghostBtn:hover { background: #F4F5FF; }
+  .ibx-ghostBtn:hover { background: var(--brand-soft); }
 
   /* ── Skeleton ───────────────────────────────────────────── */
   .ibx-skeletonGroup {
@@ -1108,13 +1144,14 @@ const CSS = `
     align-items: center;
     gap: 12px;
     padding: 12px 14px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 16px;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .ibx-skeletonBody { flex: 1; min-width: 0; }
   .ibx-skel {
-    background: linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%);
+    background: var(--skeleton);
     background-size: 800px 100%;
     animation: ibxShimmer 1.4s infinite linear;
     border-radius: 8px;
