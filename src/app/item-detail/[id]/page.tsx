@@ -141,10 +141,20 @@ function buildConversationId(myUserId: string, otherUserId: string): string {
 
 function deriveStock(
   raw: number | null | undefined,
-): { known: boolean; count: number; label: string; tone: 'ok' | 'low' | 'out' | 'unknown' } {
+): {
+  known: boolean;
+  count: number;
+  label: string;
+  tone: 'ok' | 'low' | 'out' | 'unknown';
+} {
   const isKnown = typeof raw === 'number' && Number.isFinite(raw);
   if (!isKnown) {
-    return { known: false, count: UNKNOWN_STOCK_MAX, label: 'In stock', tone: 'unknown' };
+    return {
+      known: false,
+      count: UNKNOWN_STOCK_MAX,
+      label: 'In stock',
+      tone: 'unknown',
+    };
   }
   const n = Math.max(0, Math.floor(raw as number));
   if (n === 0) {
@@ -271,9 +281,11 @@ function FullscreenViewer({
 // ─── Skeleton ───────────────────────────────────────────────────────
 function DetailSkeleton() {
   return (
-    <div style={{ padding: '16px' }}>
-      <div style={skeletonBlock({ aspectRatio: '1 / 1', borderRadius: 20 })} />
-      <div style={{ marginTop: 16 }}>
+    <div className="idt-grid">
+      <div className="idt-heroCol">
+        <div style={skeletonBlock({ aspectRatio: '1 / 1', borderRadius: 20 })} />
+      </div>
+      <div className="idt-infoCol">
         <div style={skeletonBlock({ height: 24, width: '70%' })} />
         <div
           style={{
@@ -707,18 +719,22 @@ export default function ItemDetailPage() {
     return (
       <main className="idt-root">
         <style>{CSS}</style>
-        <header className="idt-header">
-          <button
-            className="idt-iconBtn"
-            onClick={() => router.back()}
-            aria-label="Back"
-          >
-            <MdArrowBack size={22} color="currentColor" />
-          </button>
-          <h1 className="idt-title">Item</h1>
-          <div style={{ width: 36 }} />
-        </header>
-        <DetailSkeleton />
+        <div className="idt-shell">
+          <header className="idt-header">
+            <button
+              className="idt-iconBtn"
+              onClick={() => router.back()}
+              aria-label="Back"
+            >
+              <MdArrowBack size={22} color="currentColor" />
+            </button>
+            <h1 className="idt-title">Item</h1>
+            <div style={{ width: 36 }} />
+          </header>
+          <div className="idt-scroll">
+            <DetailSkeleton />
+          </div>
+        </div>
       </main>
     );
   }
@@ -727,38 +743,42 @@ export default function ItemDetailPage() {
     return (
       <main className="idt-root">
         <style>{CSS}</style>
-        <header className="idt-header">
-          <button
-            className="idt-iconBtn"
-            onClick={() => router.back()}
-            aria-label="Back"
-          >
-            <MdArrowBack size={22} color="currentColor" />
-          </button>
-          <h1 className="idt-title">Item</h1>
-          <div style={{ width: 36 }} />
-        </header>
-        <div className="idt-center">
-          <div className="idt-stateIcon" aria-hidden="true">
-            <MdErrorOutline size={32} color="var(--danger-fg)" />
+        <div className="idt-shell">
+          <header className="idt-header">
+            <button
+              className="idt-iconBtn"
+              onClick={() => router.back()}
+              aria-label="Back"
+            >
+              <MdArrowBack size={22} color="currentColor" />
+            </button>
+            <h1 className="idt-title">Item</h1>
+            <div style={{ width: 36 }} />
+          </header>
+          <div className="idt-scroll">
+            <div className="idt-center">
+              <div className="idt-stateIcon" aria-hidden="true">
+                <MdErrorOutline size={32} color="var(--danger-fg)" />
+              </div>
+              <h2 className="idt-stateTitle">Something went wrong</h2>
+              <p className="idt-stateBody">
+                {loadError || 'This item is no longer available.'}
+              </p>
+              <button
+                className="idt-primaryBtn"
+                onClick={() => setRetryKey((k) => k + 1)}
+              >
+                <MdRefresh size={18} color="currentColor" />
+                Try again
+              </button>
+              <button
+                className="idt-ghostBtn"
+                onClick={() => router.push('/shopper/home')}
+              >
+                Back to home
+              </button>
+            </div>
           </div>
-          <h2 className="idt-stateTitle">Something went wrong</h2>
-          <p className="idt-stateBody">
-            {loadError || 'This item is no longer available.'}
-          </p>
-          <button
-            className="idt-primaryBtn"
-            onClick={() => setRetryKey((k) => k + 1)}
-          >
-            <MdRefresh size={18} color="#fff" />
-            Try again
-          </button>
-          <button
-            className="idt-ghostBtn"
-            onClick={() => router.push('/shopper/home')}
-          >
-            Back to home
-          </button>
         </div>
       </main>
     );
@@ -789,323 +809,352 @@ export default function ItemDetailPage() {
         />
       )}
 
-      <header className="idt-header">
-        <button
-          className="idt-iconBtn"
-          onClick={() => router.back()}
-          aria-label="Back"
-        >
-          <MdArrowBack size={22} color="currentColor" />
-        </button>
-        <h1 className="idt-title">Item</h1>
-        <div className="idt-actions">
+      <div className="idt-shell">
+        <header className="idt-header">
           <button
             className="idt-iconBtn"
-            onClick={shareListing}
-            aria-label="Share"
-            title="Share"
+            onClick={() => router.back()}
+            aria-label="Back"
           >
-            <MdShare size={20} color="currentColor" />
+            <MdArrowBack size={22} color="currentColor" />
           </button>
+          <h1 className="idt-title">Item</h1>
+          <div className="idt-actions">
+            <button
+              className="idt-iconBtn"
+              onClick={shareListing}
+              aria-label="Share"
+              title="Share"
+            >
+              <MdShare size={20} color="currentColor" />
+            </button>
+            <button
+              className="idt-iconBtn"
+              onClick={toggleSave}
+              disabled={isSaveLoading}
+              aria-label={isSaved ? 'Unsave' : 'Save'}
+              title={isSaved ? 'Unsave' : 'Save'}
+            >
+              {isSaved ? (
+                <MdFavorite size={20} color="var(--brand-primary)" />
+              ) : (
+                <MdFavoriteBorder size={20} color="currentColor" />
+              )}
+            </button>
+          </div>
+        </header>
+
+        <div className="idt-scroll">
+          <div className="idt-grid">
+            <div className="idt-heroCol">
+              <button
+                type="button"
+                className="idt-hero idt-heroButton"
+                onClick={() => {
+                  if (imageUrl) setViewerOpen(true);
+                }}
+                aria-label={
+                  imageUrl ? 'View full image' : 'No image available'
+                }
+                disabled={!imageUrl}
+              >
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={listing.title}
+                    className="idt-heroImg"
+                  />
+                ) : (
+                  <div className="idt-heroFallback" aria-hidden="true">
+                    <MdImage size={48} color="var(--text-muted)" />
+                  </div>
+                )}
+
+                {imageUrl && (
+                  <div
+                    className="idt-lensBtn"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(
+                        `/seai-lens?image=${encodeURIComponent(imageUrl)}`,
+                      );
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        router.push(
+                          `/seai-lens?image=${encodeURIComponent(imageUrl)}`,
+                        );
+                      }
+                    }}
+                    aria-label="Visual search"
+                    title="Search by photo"
+                  >
+                    <LensIcon size={20} color="#0504AA" />
+                  </div>
+                )}
+              </button>
+            </div>
+
+            <div className="idt-infoCol">
+              <h2 className="idt-itemTitle">{listing.title}</h2>
+              <div className="idt-priceBlock">
+                <div className="idt-priceValue">{formatNaira(totalPrice)}</div>
+                {quantity > 1 && (
+                  <div className="idt-priceMeta">
+                    {quantity} × {formatNaira(listing.price)}
+                  </div>
+                )}
+              </div>
+
+              <div className="idt-storeRow">
+                <button
+                  type="button"
+                  className="idt-storeTapArea"
+                  onClick={openStore}
+                  aria-label={`Open ${store?.name ?? 'store'}`}
+                >
+                  <div className="idt-avatarWrap">
+                    {storeImage ? (
+                      <img src={storeImage} alt="" className="idt-avatarImg" />
+                    ) : (
+                      <span className="idt-avatarText">
+                        {store?.name?.charAt(0) ?? '?'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="idt-storeMeta">
+                    <div className="idt-storeName" title={store?.name}>
+                      {store?.name ?? 'Unknown Store'}
+                    </div>
+                    <div className="idt-storeRating">
+                      {rating > 0 ? (
+                        <>
+                          <MdStar size={13} color="#FFA000" />
+                          <span>{rating.toFixed(1)}</span>
+                          <span className="idt-storeReviews">
+                            ({reviewCount})
+                          </span>
+                        </>
+                      ) : (
+                        <span className="idt-storeReviews">New seller</span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="idt-iconBtn idt-iconBtnFilled"
+                  onClick={openChatWithStore}
+                  aria-label="Message store"
+                  title="Message store"
+                >
+                  <MdChatBubbleOutline
+                    size={20}
+                    color="var(--brand-on-soft)"
+                  />
+                </button>
+              </div>
+
+              {store?.address && (
+                <div className="idt-addressRow">
+                  <MdLocationOn size={16} color="var(--text-tertiary)" />
+                  <span className="idt-addressText" title={store.address}>
+                    {store.address}
+                  </span>
+                  <button
+                    type="button"
+                    className="idt-mapLink"
+                    onClick={() =>
+                      router.push(
+                        `/map?lat=${store.latitude}&lng=${
+                          store.longitude
+                        }&destination=${encodeURIComponent(store.name)}`,
+                      )
+                    }
+                  >
+                    View on map
+                  </button>
+                </div>
+              )}
+
+              <section className="idt-qtySection">
+                <div className="idt-qtyText">
+                  <span className="idt-qtyLabel">Quantity</span>
+                  <span
+                    className={
+                      stock.tone === 'out'
+                        ? 'idt-stockLine idt-stockOut'
+                        : stock.tone === 'low'
+                        ? 'idt-stockLine idt-stockLow'
+                        : 'idt-stockLine'
+                    }
+                  >
+                    {stock.label}
+                  </span>
+                </div>
+
+                <div className="idt-qtyControl">
+                  <button
+                    type="button"
+                    className="idt-qtyBtn"
+                    onClick={() => quantity > 1 && setQuantity((q) => q - 1)}
+                    disabled={quantity <= 1 || outOfStock}
+                    aria-label="Decrease quantity"
+                  >
+                    <MdRemove
+                      size={18}
+                      color={
+                        quantity <= 1 || outOfStock
+                          ? 'var(--text-muted)'
+                          : 'currentColor'
+                      }
+                    />
+                  </button>
+                  <span className="idt-qtyValue">{quantity}</span>
+                  <button
+                    type="button"
+                    className="idt-qtyBtn"
+                    onClick={() =>
+                      quantity < maxQty && setQuantity((q) => q + 1)
+                    }
+                    disabled={quantity >= maxQty || outOfStock}
+                    aria-label="Increase quantity"
+                  >
+                    <MdAdd
+                      size={18}
+                      color={
+                        quantity >= maxQty || outOfStock
+                          ? 'var(--text-muted)'
+                          : 'currentColor'
+                      }
+                    />
+                  </button>
+                </div>
+              </section>
+
+              <section className="idt-section">
+                <span className="idt-sectionLabel">How would you like it?</span>
+
+                <div className="idt-segment">
+                  <button
+                    type="button"
+                    className={
+                      fulfillmentType === 'pickup'
+                        ? 'idt-segBtn idt-segBtnActive'
+                        : 'idt-segBtn'
+                    }
+                    onClick={() => setFulfillmentType('pickup')}
+                    disabled={outOfStock}
+                  >
+                    <MdStorefront size={18} />
+                    Pickup
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      fulfillmentType === 'delivery'
+                        ? 'idt-segBtn idt-segBtnActive'
+                        : 'idt-segBtn'
+                    }
+                    onClick={() => setFulfillmentType('delivery')}
+                    disabled={!enableDelivery || outOfStock}
+                  >
+                    <MdLocalShipping size={18} />
+                    Delivery
+                  </button>
+                </div>
+
+                {fulfillmentType === 'pickup' && (
+                  <div className="idt-chipRow">
+                    {(['now', 'reserve', 'basket'] as PickupTiming[]).map(
+                      (t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          className={
+                            pickupTiming === t
+                              ? 'idt-chip idt-chipActive'
+                              : 'idt-chip'
+                          }
+                          onClick={() => setPickupTiming(t)}
+                          disabled={outOfStock}
+                        >
+                          {t === 'now'
+                            ? 'Get it now'
+                            : t === 'reserve'
+                            ? 'Reserve Now'
+                            : 'Add to Basket'}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                )}
+
+                {deliveryDisabled && !outOfStock && (
+                  <p className="idt-hint idt-hintWarn">
+                    Delivery is temporarily unavailable. Pickup works as
+                    normal.
+                  </p>
+                )}
+              </section>
+
+              <section className="idt-summary">
+                <div className="idt-summaryRow">
+                  <span className="idt-summaryLabel">Subtotal</span>
+                  <span className="idt-summaryValue">
+                    {formatNaira(totalPrice)}
+                  </span>
+                </div>
+                {fulfillmentType === 'delivery' &&
+                  enableDelivery &&
+                  !outOfStock && (
+                    <div className="idt-summaryRow">
+                      <span className="idt-summaryLabel">Delivery</span>
+                      <span className="idt-summaryValue">
+                        Calculated on confirm
+                      </span>
+                    </div>
+                  )}
+                <div className="idt-summaryRow idt-summaryTotal">
+                  <span className="idt-summaryLabel">Total</span>
+                  <span className="idt-summaryValue idt-summaryGrand">
+                    {formatNaira(totalPrice)}
+                  </span>
+                </div>
+              </section>
+
+              {listing.description && (
+                <section className="idt-section">
+                  <span className="idt-sectionLabel">Description</span>
+                  <p className="idt-description">{listing.description}</p>
+                </section>
+              )}
+            </div>
+          </div>
+          <div className="idt-scrollSpacer" />
+        </div>
+
+        <div className="idt-ctaWrap">
           <button
-            className="idt-iconBtn"
-            onClick={toggleSave}
-            disabled={isSaveLoading}
-            aria-label={isSaved ? 'Unsave' : 'Save'}
-            title={isSaved ? 'Unsave' : 'Save'}
+            type="button"
+            className={
+              ctaDisabled ? 'idt-ctaBtn idt-ctaBtnDisabled' : 'idt-ctaBtn'
+            }
+            onClick={handleCTAClick}
+            disabled={ctaDisabled}
           >
-            {isSaved ? (
-              <MdFavorite size={20} color="var(--brand-primary)" />
+            {isLoading ? (
+              <span className="idt-ctaSpinner" aria-hidden="true" />
             ) : (
-              <MdFavoriteBorder size={20} color="currentColor" />
+              ctaLabel
             )}
           </button>
         </div>
-      </header>
-
-      <div className="idt-scroll">
-        <button
-          type="button"
-          className="idt-hero idt-heroButton"
-          onClick={() => {
-            if (imageUrl) setViewerOpen(true);
-          }}
-          aria-label={imageUrl ? 'View full image' : 'No image available'}
-          disabled={!imageUrl}
-        >
-          {imageUrl ? (
-            <img src={imageUrl} alt={listing.title} className="idt-heroImg" />
-          ) : (
-            <div className="idt-heroFallback" aria-hidden="true">
-              <MdImage size={48} color="var(--text-muted)" />
-            </div>
-          )}
-
-          {imageUrl && (
-            <div
-              className="idt-lensBtn"
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.stopPropagation();
-                router.push(
-                  `/seai-lens?image=${encodeURIComponent(imageUrl)}`,
-                );
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  router.push(
-                    `/seai-lens?image=${encodeURIComponent(imageUrl)}`,
-                  );
-                }
-              }}
-              aria-label="Visual search"
-              title="Search by photo"
-            >
-              <LensIcon size={20} color="#0504AA" />
-            </div>
-          )}
-        </button>
-
-        <h2 className="idt-itemTitle">{listing.title}</h2>
-        <div className="idt-priceBlock">
-          <div className="idt-priceValue">{formatNaira(totalPrice)}</div>
-          {quantity > 1 && (
-            <div className="idt-priceMeta">
-              {quantity} × {formatNaira(listing.price)}
-            </div>
-          )}
-        </div>
-
-        <div className="idt-storeRow">
-          <button
-            type="button"
-            className="idt-storeTapArea"
-            onClick={openStore}
-            aria-label={`Open ${store?.name ?? 'store'}`}
-          >
-            <div className="idt-avatarWrap">
-              {storeImage ? (
-                <img src={storeImage} alt="" className="idt-avatarImg" />
-              ) : (
-                <span className="idt-avatarText">
-                  {store?.name?.charAt(0) ?? '?'}
-                </span>
-              )}
-            </div>
-            <div className="idt-storeMeta">
-              <div className="idt-storeName" title={store?.name}>
-                {store?.name ?? 'Unknown Store'}
-              </div>
-              <div className="idt-storeRating">
-                {rating > 0 ? (
-                  <>
-                    <MdStar size={13} color="#FFA000" />
-                    <span>{rating.toFixed(1)}</span>
-                    <span className="idt-storeReviews">({reviewCount})</span>
-                  </>
-                ) : (
-                  <span className="idt-storeReviews">New seller</span>
-                )}
-              </div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            className="idt-iconBtn idt-iconBtnFilled"
-            onClick={openChatWithStore}
-            aria-label="Message store"
-            title="Message store"
-          >
-            <MdChatBubbleOutline size={20} color="var(--brand-on-soft)" />
-          </button>
-        </div>
-
-        {store?.address && (
-          <div className="idt-addressRow">
-            <MdLocationOn size={16} color="var(--text-tertiary)" />
-            <span className="idt-addressText" title={store.address}>
-              {store.address}
-            </span>
-            <button
-              type="button"
-              className="idt-mapLink"
-              onClick={() =>
-                router.push(
-                  `/map?lat=${store.latitude}&lng=${store.longitude}&destination=${encodeURIComponent(
-                    store.name,
-                  )}`,
-                )
-              }
-            >
-              View on map
-            </button>
-          </div>
-        )}
-
-        <section className="idt-qtySection">
-          <div className="idt-qtyText">
-            <span className="idt-qtyLabel">Quantity</span>
-            <span
-              className={
-                stock.tone === 'out'
-                  ? 'idt-stockLine idt-stockOut'
-                  : stock.tone === 'low'
-                  ? 'idt-stockLine idt-stockLow'
-                  : 'idt-stockLine'
-              }
-            >
-              {stock.label}
-            </span>
-          </div>
-
-          <div className="idt-qtyControl">
-            <button
-              type="button"
-              className="idt-qtyBtn"
-              onClick={() => quantity > 1 && setQuantity((q) => q - 1)}
-              disabled={quantity <= 1 || outOfStock}
-              aria-label="Decrease quantity"
-            >
-              <MdRemove
-                size={18}
-                color={
-                  quantity <= 1 || outOfStock
-                    ? 'var(--text-muted)'
-                    : 'currentColor'
-                }
-              />
-            </button>
-            <span className="idt-qtyValue">{quantity}</span>
-            <button
-              type="button"
-              className="idt-qtyBtn"
-              onClick={() =>
-                quantity < maxQty && setQuantity((q) => q + 1)
-              }
-              disabled={quantity >= maxQty || outOfStock}
-              aria-label="Increase quantity"
-            >
-              <MdAdd
-                size={18}
-                color={
-                  quantity >= maxQty || outOfStock
-                    ? 'var(--text-muted)'
-                    : 'currentColor'
-                }
-              />
-            </button>
-          </div>
-        </section>
-
-        <section className="idt-section">
-          <span className="idt-sectionLabel">How would you like it?</span>
-
-          <div className="idt-segment">
-            <button
-              type="button"
-              className={
-                fulfillmentType === 'pickup'
-                  ? 'idt-segBtn idt-segBtnActive'
-                  : 'idt-segBtn'
-              }
-              onClick={() => setFulfillmentType('pickup')}
-              disabled={outOfStock}
-            >
-              <MdStorefront size={18} />
-              Pickup
-            </button>
-            <button
-              type="button"
-              className={
-                fulfillmentType === 'delivery'
-                  ? 'idt-segBtn idt-segBtnActive'
-                  : 'idt-segBtn'
-              }
-              onClick={() => setFulfillmentType('delivery')}
-              disabled={!enableDelivery || outOfStock}
-            >
-              <MdLocalShipping size={18} />
-              Delivery
-            </button>
-          </div>
-
-          {fulfillmentType === 'pickup' && (
-            <div className="idt-chipRow">
-              {(['now', 'reserve', 'basket'] as PickupTiming[]).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className={
-                    pickupTiming === t
-                      ? 'idt-chip idt-chipActive'
-                      : 'idt-chip'
-                  }
-                  onClick={() => setPickupTiming(t)}
-                  disabled={outOfStock}
-                >
-                  {t === 'now'
-                    ? 'Get it now'
-                    : t === 'reserve'
-                    ? 'Reserve Now'
-                    : 'Add to Basket'}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {deliveryDisabled && !outOfStock && (
-            <p className="idt-hint idt-hintWarn">
-              Delivery is temporarily unavailable. Pickup works as normal.
-            </p>
-          )}
-        </section>
-
-        <section className="idt-summary">
-          <div className="idt-summaryRow">
-            <span className="idt-summaryLabel">Subtotal</span>
-            <span className="idt-summaryValue">{formatNaira(totalPrice)}</span>
-          </div>
-          {fulfillmentType === 'delivery' && enableDelivery && !outOfStock && (
-            <div className="idt-summaryRow">
-              <span className="idt-summaryLabel">Delivery</span>
-              <span className="idt-summaryValue">Calculated on confirm</span>
-            </div>
-          )}
-          <div className="idt-summaryRow idt-summaryTotal">
-            <span className="idt-summaryLabel">Total</span>
-            <span className="idt-summaryValue idt-summaryGrand">
-              {formatNaira(totalPrice)}
-            </span>
-          </div>
-        </section>
-
-        {listing.description && (
-          <section className="idt-section">
-            <span className="idt-sectionLabel">Description</span>
-            <p className="idt-description">{listing.description}</p>
-          </section>
-        )}
-
-        <div style={{ height: 120 }} />
-      </div>
-
-      <div className="idt-ctaWrap">
-        <button
-          type="button"
-          className={ctaDisabled ? 'idt-ctaBtn idt-ctaBtnDisabled' : 'idt-ctaBtn'}
-          onClick={handleCTAClick}
-          disabled={ctaDisabled}
-        >
-          {isLoading ? (
-            <span className="idt-ctaSpinner" aria-hidden="true" />
-          ) : (
-            ctaLabel
-          )}
-        </button>
       </div>
 
       {confirmKind === 'pickup-now' && (
@@ -1190,6 +1239,17 @@ const CSS = `
     transition: background-color 0.18s ease, color 0.18s ease;
   }
 
+  /* Constrains everything to a desktop-friendly column, centered */
+  .idt-shell {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+
   .idt-toastStack {
     position: fixed;
     top: 12px;
@@ -1210,8 +1270,6 @@ const CSS = `
     background: var(--bg-secondary);
     color: var(--text-primary);
     border-bottom: 1px solid var(--border-default);
-    position: sticky;
-    top: 0;
     z-index: 10;
     transition: background-color 0.18s ease, border-color 0.18s ease;
   }
@@ -1246,10 +1304,19 @@ const CSS = `
 
   .idt-scroll {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 16px 16px 0;
-    WebkitOverflowScrolling: touch;
+    -webkit-overflow-scrolling: touch;
   }
+
+  /* ─── Layout grid: stacked on mobile, two-column on desktop ─── */
+  .idt-grid {
+    display: flex;
+    flex-direction: column;
+  }
+  .idt-heroCol { width: 100%; }
+  .idt-infoCol { width: 100%; min-width: 0; }
 
   .idt-hero {
     position: relative;
@@ -1305,7 +1372,7 @@ const CSS = `
     z-index: 2;
   }
   .idt-lensBtn:focus-visible {
-    outline: 3px solid #0504AA;
+    outline: 3px solid var(--brand-primary);
     outline-offset: 3px;
   }
 
@@ -1366,6 +1433,7 @@ const CSS = `
     font-weight: 800;
     color: var(--brand-primary);
     letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
   }
   .idt-priceMeta {
     font-size: 13.5px;
@@ -1602,7 +1670,7 @@ const CSS = `
   .idt-chipActive {
     background: var(--brand-primary);
     border-color: var(--brand-primary);
-    color: #fff;
+    color: var(--brand-on-primary);
   }
 
   .idt-hint {
@@ -1629,7 +1697,11 @@ const CSS = `
     font-size: 13.5px;
   }
   .idt-summaryLabel { color: var(--text-tertiary); font-weight: 600; }
-  .idt-summaryValue { color: var(--text-primary); font-weight: 700; }
+  .idt-summaryValue {
+    color: var(--text-primary);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
   .idt-summaryTotal {
     padding-top: 12px;
     margin-top: 8px;
@@ -1650,9 +1722,9 @@ const CSS = `
     white-space: pre-wrap;
   }
 
+  .idt-scrollSpacer { height: 24px; }
+
   .idt-ctaWrap {
-    position: sticky;
-    bottom: 0;
     padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
     background: linear-gradient(to top, var(--bg-primary) 65%, transparent);
   }
@@ -1661,8 +1733,8 @@ const CSS = `
     padding: 16px;
     border-radius: 14px;
     border: none;
-    background: var(--brand-primary);
-    color: #fff;
+    background: var(--brand-gradient);
+    color: var(--brand-on-gradient);
     font-size: 15.5px;
     font-weight: 800;
     letter-spacing: -0.01em;
@@ -1678,17 +1750,18 @@ const CSS = `
   .idt-ctaBtn:hover:not(:disabled) { opacity: 0.94; }
   .idt-ctaBtn:disabled { cursor: not-allowed; opacity: 0.6; }
   .idt-ctaBtnDisabled {
-    background: var(--border-strong);
+    background: var(--bg-tertiary);
     color: var(--text-muted);
     box-shadow: none;
   }
   .idt-ctaSpinner {
     width: 20px;
     height: 20px;
-    border: 2.5px solid rgba(255,255,255,0.35);
-    border-top-color: #fff;
+    border: 2.5px solid currentColor;
+    border-right-color: transparent;
     border-radius: 50%;
     animation: idSpin 0.7s linear infinite;
+    opacity: 0.85;
   }
 
   .idt-modalOverlay {
@@ -1758,8 +1831,8 @@ const CSS = `
     padding: 14px;
     border-radius: 12px;
     border: none;
-    background: var(--brand-primary);
-    color: #fff;
+    background: var(--brand-gradient);
+    color: var(--brand-on-gradient);
     font-size: 14px;
     font-weight: 800;
     cursor: pointer;
@@ -1811,8 +1884,8 @@ const CSS = `
     align-items: center;
     gap: 8px;
     padding: 12px 22px;
-    background: var(--brand-primary);
-    color: #fff;
+    background: var(--brand-gradient);
+    color: var(--brand-on-gradient);
     border: none;
     border-radius: 12px;
     font-weight: 800;
@@ -1834,6 +1907,51 @@ const CSS = `
     text-underline-offset: 3px;
     cursor: pointer;
     font-family: inherit;
+  }
+
+  /* ─── Desktop (≥ 900px) ───────────────────────────────────── */
+  @media (min-width: 900px) {
+    .idt-scroll {
+      padding: 28px 28px 0;
+    }
+    .idt-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+      gap: 40px;
+      align-items: start;
+    }
+    .idt-heroCol {
+      position: sticky;
+      top: 0;
+    }
+    .idt-hero {
+      aspect-ratio: 1 / 1;
+      margin-bottom: 0;
+    }
+    .idt-itemTitle {
+      font-size: 28px;
+      line-height: 1.2;
+      margin-bottom: 12px;
+    }
+    .idt-priceBlock { margin-bottom: 22px; }
+    .idt-priceValue { font-size: 32px; }
+    .idt-priceMeta { font-size: 14px; }
+    .idt-storeRow { padding: 10px 14px 10px 10px; border-radius: 16px; }
+    .idt-qtySection { padding: 16px 18px; }
+    .idt-summary { padding: 18px 20px; }
+    .idt-segBtn { padding: 14px 16px; font-size: 14.5px; }
+    .idt-chip { padding: 9px 16px; font-size: 13.5px; }
+    .idt-description { font-size: 15px; line-height: 1.7; }
+
+    .idt-ctaWrap {
+      padding: 18px 28px calc(22px + env(safe-area-inset-bottom));
+      background: var(--bg-primary);
+      border-top: 1px solid var(--border-default);
+    }
+    .idt-ctaBtn {
+      max-width: 520px;
+      margin: 0 auto;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
