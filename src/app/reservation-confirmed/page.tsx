@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import {
   MdCheckCircle,
-  MdCancel,
   MdArrowForward,
   MdDirections,
   MdCancelPresentation,
@@ -62,10 +61,10 @@ const RING_CIRC = 2 * Math.PI * RING_RADIUS; // ≈ 578
 
 // ─── Helpers ──────────────────────────────────────────────────────
 function ringColor(progress: number, expired: boolean): string {
-  if (expired || progress <= 0) return '#94A3B8';
-  if (progress <= 0.2) return '#DC2626';
-  if (progress <= 0.5) return '#D97706';
-  return '#0504AA';
+  if (expired || progress <= 0) return 'var(--text-muted)';
+  if (progress <= 0.2) return 'var(--danger-fg)';
+  if (progress <= 0.5) return 'var(--warning-fg)';
+  return 'var(--brand-primary)';
 }
 
 function formatTime(seconds: number): string {
@@ -86,13 +85,11 @@ function formatTime(seconds: number): string {
 function parseAsUtc(iso: string | null | undefined): number {
   if (!iso) return NaN;
   const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
-  // Trim > 3 fractional digits (microseconds → milliseconds)
   const trimmed = iso.replace(/(\.\d{3})\d+/, '$1');
   const final = hasTz ? trimmed : `${trimmed}Z`;
   return new Date(final).getTime();
 }
 
-// Human-readable duration from a span in seconds.
 function formatDurationShort(seconds: number): string {
   if (seconds <= 0) return '0 minutes';
   const hours = seconds / 3600;
@@ -142,7 +139,7 @@ function CountdownRing({
           cy={RING_SIZE / 2}
           r={RING_RADIUS}
           fill="none"
-          stroke="#EEF0F7"
+          stroke="var(--border-subtle)"
           strokeWidth="11"
         />
         <circle
@@ -163,7 +160,7 @@ function CountdownRing({
         <span
           style={{
             ...styles.ringTime,
-            color: expired ? '#94A3B8' : '#0F0F1A',
+            color: expired ? 'var(--text-muted)' : 'var(--text-primary)',
           }}
         >
           {expired ? 'EXPIRED' : formatTime(remaining)}
@@ -227,18 +224,12 @@ function ReservationConfirmedContent() {
     };
   }, []);
 
-  // ── Toasts ──
   const pushToast = useCallback((kind: Toast['kind'], text: string) => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, kind, text }].slice(-3));
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
 
-  // ── Enrichment — ALWAYS fetch, even when the URL carries everything.
-  //    The URL params are just an optimistic preview; the backend is the
-  //    only source of truth for `expires_at` and `created_at`, and the
-  //    countdown depends on those. Skipping this call was causing the
-  //    timer to run off `pickup_time` from the URL instead.
   useEffect(() => {
     let cancelled = false;
 
@@ -252,22 +243,21 @@ function ReservationConfirmedContent() {
         const raw = (await api.getOrderDetail(orderId)) as OrderDetail;
         if (cancelled) return;
 
-        // Backend values win when present — the URL is a preview, but if
-        // the backend has the record, its values are authoritative.
         if (raw.customer_name) setCustomerName(raw.customer_name);
         if (raw.store_name) setStoreName(raw.store_name);
         if (raw.total_amount != null) setTotal(Number(raw.total_amount));
         if (raw.expires_at) setExpiresAt(String(raw.expires_at));
         if (raw.created_at) setCreatedAt(String(raw.created_at));
 
-        // Store location fallback — only fetched when the URL is missing it.
         if (
           (!urlStoreName && !raw.store_name) ||
           (!urlStoreLat && !urlStoreLng)
         ) {
           if (raw.store_id) {
             try {
-              const store = (await api.getStoreById(String(raw.store_id))) as StoreDetail;
+              const store = (await api.getStoreById(
+                String(raw.store_id)
+              )) as StoreDetail;
               if (cancelled) return;
               if (store?.name && !raw.store_name) setStoreName(store.name);
               if (store?.latitude != null && store?.longitude != null) {
@@ -281,10 +271,12 @@ function ReservationConfirmedContent() {
         }
       } catch (e) {
         if (cancelled) return;
-        // Only surface a hard error when we have no fallback data at all.
         const hasFallback = !!(urlStoreName || urlCustomerName);
         if (!hasFallback) {
-          const msg = e instanceof Error ? e.message : 'Could not load reservation details.';
+          const msg =
+            e instanceof Error
+              ? e.message
+              : 'Could not load reservation details.';
           setEnrichError(msg);
         }
       } finally {
@@ -299,10 +291,6 @@ function ReservationConfirmedContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
-  // ── Countdown ──
-  // The deadline is computed once per dependency change, then every tick
-  // is a pure subtraction against Date.now() — so tab-throttling and
-  // clock jitter self-correct.
   useEffect(() => {
     let deadlineMs: number | null = null;
 
@@ -314,7 +302,6 @@ function ReservationConfirmedContent() {
     }
 
     if (deadlineMs === null) {
-      // No usable expires_at — derive from pickup_time + created_at.
       const numeric = (pickupTime || '').replace(/\D/g, '');
       const hours = numeric ? parseInt(numeric, 10) : 3;
 
@@ -322,8 +309,6 @@ function ReservationConfirmedContent() {
       if (!Number.isNaN(start)) {
         deadlineMs = start + hours * 3600 * 1000;
       } else {
-        // Last resort — anchor to page load. Countdown resets on refresh
-        // in this branch; that's honest best-effort without a real deadline.
         deadlineMs = Date.now() + hours * 3600 * 1000;
       }
     }
@@ -350,9 +335,6 @@ function ReservationConfirmedContent() {
             return Math.max(1, Math.floor((end - start) / 1000));
           }
         }
-        // Keep render pure when no creation timestamp is available. The live
-        // countdown is updated by the effect above; use the pickup window as
-        // the stable progress denominator in this fallback case.
         const numeric = (pickupTime || '').replace(/\D/g, '');
         const hours = numeric ? parseInt(numeric, 10) : 3;
         return Math.max(1, hours * 3600);
@@ -364,7 +346,6 @@ function ReservationConfirmedContent() {
     return Math.max(1, hours * 3600);
   })();
 
-  // ── Actions ──
   const handlePickUpComplete = async () => {
     if (completing || droppedOrCompletedRef.current) return;
     setCompleting(true);
@@ -393,7 +374,8 @@ function ReservationConfirmedContent() {
     } catch (error) {
       if (!isMountedRef.current) return;
       const msg =
-        (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        (error as { response?: { data?: { detail?: string } } })?.response
+          ?.data?.detail ||
         (error instanceof Error ? error.message : null) ||
         'Failed to complete order. Please try again.';
       pushToast('error', msg);
@@ -419,7 +401,8 @@ function ReservationConfirmedContent() {
     } catch (error) {
       if (!isMountedRef.current) return;
       const msg =
-        (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        (error as { response?: { data?: { detail?: string } } })?.response
+          ?.data?.detail ||
         (error instanceof Error ? error.message : null) ||
         'Failed to drop order. Please try again.';
       pushToast('error', msg);
@@ -449,14 +432,11 @@ function ReservationConfirmedContent() {
     }
   };
 
-  // ── Derived ──
   const displayStore = storeName || 'Store';
   const displayCustomer = customerName || 'Customer';
   const shortOrder = orderId.length > 8 ? orderId.substring(0, 8) : orderId;
   const expired = remaining <= 0;
 
-  // Pickup window pill — prefer the real span the backend stored. Falls
-  // back to the URL string only when we couldn't load the order.
   const displayPickupWindow = (() => {
     if (createdAt && expiresAt) {
       const start = parseAsUtc(createdAt);
@@ -470,7 +450,6 @@ function ReservationConfirmedContent() {
 
   const progress = Math.max(0, Math.min(1, remaining / totalSeconds));
 
-  // ── Loading ──
   if (enriching && !storeName && !customerName && !justCompleted) {
     return (
       <main style={styles.container}>
@@ -483,16 +462,17 @@ function ReservationConfirmedContent() {
     );
   }
 
-  // ── Hard error ──
   if (enrichError && !storeName && !customerName) {
     return (
       <main style={styles.container}>
         <AmbientBackground />
         <div style={styles.loadingWrap}>
           <div style={styles.errorHalo}>
-            <MdErrorOutline size={44} color="#B91C1C" />
+            <MdErrorOutline size={44} color="var(--danger-fg)" />
           </div>
-          <h2 style={styles.errorHeading}>We couldn&apos;t load this reservation</h2>
+          <h2 style={styles.errorHeading}>
+            We couldn&apos;t load this reservation
+          </h2>
           <p style={styles.errorBody}>{enrichError}</p>
           <button
             onClick={() => router.push('/shopper/home')}
@@ -509,15 +489,18 @@ function ReservationConfirmedContent() {
     <main style={styles.container}>
       <AmbientBackground />
 
-      {/* Toasts */}
       <div style={styles.toastStack}>
         {toasts.map((t) => (
           <button
             key={t.id}
-            onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+            onClick={() =>
+              setToasts((prev) => prev.filter((x) => x.id !== t.id))
+            }
             style={{
               ...styles.toast,
-              ...(t.kind === 'success' ? styles.toastSuccess : styles.toastError),
+              ...(t.kind === 'success'
+                ? styles.toastSuccess
+                : styles.toastError),
             }}
           >
             {t.text}
@@ -526,22 +509,19 @@ function ReservationConfirmedContent() {
       </div>
 
       <div style={styles.content}>
-        {/* Eyebrow */}
         <div style={styles.eyebrowRow}>
           <div style={styles.eyebrowIcon}>
-            <MdCheckCircle size={16} color="#16A34A" />
+            <MdCheckCircle size={16} color="var(--success-fg)" />
           </div>
           <span style={styles.eyebrowText}>Reservation Confirmed</span>
         </div>
 
-        {/* Hero — countdown ring */}
         <CountdownRing
           remaining={remaining}
           progress={progress}
           expired={expired}
         />
 
-        {/* Heading */}
         <h1 style={styles.heading}>
           {justCompleted ? 'Order Complete!' : "You're all set"}
         </h1>
@@ -553,15 +533,13 @@ function ReservationConfirmedContent() {
               : 'Head to the store before the timer runs out'}
         </p>
 
-        {/* Pickup time pill */}
         <div style={styles.pickupPill}>
-          <MdAccessTime size={16} color="#0504AA" />
+          <MdAccessTime size={16} color="var(--brand-primary)" />
           <span style={styles.pickupPillText}>
             Pickup window: {displayPickupWindow}
           </span>
         </div>
 
-        {/* Order detail card */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -570,12 +548,12 @@ function ReservationConfirmedContent() {
         >
           <div style={styles.cardSection}>
             <div style={styles.cardSectionHeader}>
-              <MdPersonOutline size={16} color="#0504AA" />
+              <MdPersonOutline size={16} color="var(--brand-primary)" />
               <span style={styles.cardSectionLabel}>Pickup for</span>
             </div>
             <p style={styles.customerName}>{displayCustomer}</p>
             <div style={styles.storeRow}>
-              <MdStore size={14} color="#64748B" />
+              <MdStore size={14} color="var(--text-tertiary)" />
               <span style={styles.storeName}>
                 {enriching && !storeName ? 'Loading…' : displayStore}
               </span>
@@ -594,9 +572,9 @@ function ReservationConfirmedContent() {
             >
               <code style={styles.idCode}>#{shortOrder}</code>
               {copied ? (
-                <MdCheck size={13} color="#16A34A" />
+                <MdCheck size={13} color="var(--success-fg)" />
               ) : (
-                <MdContentCopy size={13} color="#94A3B8" />
+                <MdContentCopy size={13} color="var(--text-muted)" />
               )}
             </button>
           </div>
@@ -605,7 +583,9 @@ function ReservationConfirmedContent() {
             <span style={styles.rowLabel}>Total paid</span>
             <span style={styles.rowValue}>
               {total > 0
-                ? `₦${total.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`
+                ? `₦${total.toLocaleString('en-NG', {
+                    maximumFractionDigits: 0,
+                  })}`
                 : enriching
                   ? '—'
                   : '₦0'}
@@ -613,7 +593,6 @@ function ReservationConfirmedContent() {
           </div>
         </motion.div>
 
-        {/* Actions */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -626,12 +605,15 @@ function ReservationConfirmedContent() {
             className="rc-primary"
             style={{
               ...styles.primaryBtn,
-              opacity: completing || enriching || justCompleted ? 0.6 : 1,
+              opacity:
+                completing || enriching || justCompleted ? 0.6 : 1,
               cursor:
-                completing || enriching || justCompleted ? 'not-allowed' : 'pointer',
+                completing || enriching || justCompleted
+                  ? 'not-allowed'
+                  : 'pointer',
             }}
           >
-            <MdArrowForward size={20} color="#fff" />
+            <MdArrowForward size={20} color="var(--brand-on-gradient)" />
             <span>
               {completing
                 ? 'Processing…'
@@ -648,12 +630,15 @@ function ReservationConfirmedContent() {
               className="rc-secondary"
               style={{
                 ...styles.secondaryBtn,
-                opacity: storeLat === null || storeLng === null ? 0.5 : 1,
+                opacity:
+                  storeLat === null || storeLng === null ? 0.5 : 1,
                 cursor:
-                  storeLat === null || storeLng === null ? 'not-allowed' : 'pointer',
+                  storeLat === null || storeLng === null
+                    ? 'not-allowed'
+                    : 'pointer',
               }}
             >
-              <MdDirections size={18} color="#0504AA" />
+              <MdDirections size={18} color="var(--brand-primary)" />
               <span>Navigate</span>
             </button>
             <button
@@ -665,18 +650,21 @@ function ReservationConfirmedContent() {
                 opacity: justCompleted ? 0.5 : 1,
               }}
             >
-              <MdCancelPresentation size={18} color="#991B1B" />
+              <MdCancelPresentation
+                size={18}
+                color="var(--danger-fg)"
+              />
               <span>Drop order</span>
             </button>
           </div>
         </motion.div>
 
         <p style={styles.footerNote}>
-          Dropping releases your payment back to your wallet. The store is notified.
+          Dropping releases your payment back to your wallet. The store is
+          notified.
         </p>
       </div>
 
-      {/* ── Drop confirmation modal ── */}
       <AnimatePresence>
         {showDropModal && (
           <motion.div
@@ -693,12 +681,16 @@ function ReservationConfirmedContent() {
               initial={{ y: 24, opacity: 0, scale: 0.97 }}
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ y: 16, opacity: 0, scale: 0.98 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+              transition={{
+                type: 'spring',
+                stiffness: 320,
+                damping: 28,
+              }}
               style={styles.modalCard}
               onClick={(e) => e.stopPropagation()}
             >
               <div style={styles.modalIconWrap}>
-                <MdWarning size={26} color="#B45309" />
+                <MdWarning size={26} color="var(--warning-fg)" />
               </div>
 
               <h3 style={styles.modalTitle}>Drop this order?</h3>
@@ -706,11 +698,13 @@ function ReservationConfirmedContent() {
                 Your payment of{' '}
                 <strong style={styles.modalAmount}>
                   {total > 0
-                    ? `₦${total.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`
+                    ? `₦${total.toLocaleString('en-NG', {
+                        maximumFractionDigits: 0,
+                      })}`
                     : 'the held amount'}
                 </strong>{' '}
-                will be released back to your wallet. The store will be notified.
-                You can reserve again anytime.
+                will be released back to your wallet. The store will be
+                notified. You can reserve again anytime.
               </p>
 
               <div style={styles.modalActions}>
@@ -779,9 +773,11 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     minHeight: '100vh',
-    backgroundColor: '#FAFAFC',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: '24px 20px 40px',
     overflow: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   bgWrap: {
     position: 'absolute',
@@ -811,14 +807,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   loadingText: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 500,
   },
   spinner: {
     width: 36,
     height: 36,
-    border: '3px solid #E6E8F0',
-    borderTopColor: '#0504AA',
+    border: '3px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'rcSpin 0.9s linear infinite',
   },
@@ -826,8 +822,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-block',
     width: 14,
     height: 14,
-    border: '2px solid rgba(153,27,27,0.3)',
-    borderTopColor: '#991B1B',
+    border: '2px solid color-mix(in srgb, var(--danger-fg) 30%, transparent)',
+    borderTopColor: 'var(--danger-fg)',
     borderRadius: '50%',
     animation: 'rcSpin 0.7s linear infinite',
     marginRight: 8,
@@ -838,8 +834,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 8,
     padding: '6px 14px',
-    backgroundColor: '#ECFDF5',
-    border: '1px solid #A7F3D0',
+    backgroundColor: 'var(--success-bg)',
+    border: '1px solid var(--success-strong)',
     borderRadius: 999,
     marginBottom: 20,
   },
@@ -847,7 +843,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 18,
     height: 18,
     borderRadius: '50%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -857,7 +853,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
-    color: '#065F46',
+    color: 'var(--success-fg)',
   },
 
   ringWrap: {
@@ -892,20 +888,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
   },
 
   heading: {
     fontSize: 28,
     fontWeight: 800,
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.8,
     textAlign: 'center',
   },
   subheading: {
     fontSize: 14.5,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 1.5,
@@ -917,25 +913,26 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 8,
     padding: '8px 14px',
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7CCFF',
+    backgroundColor: 'var(--brand-soft)',
+    border: '1px solid var(--brand-primary)',
     borderRadius: 999,
     marginTop: 16,
   },
   pickupPillText: {
     fontSize: 12.5,
     fontWeight: 700,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
   },
 
   card: {
     width: '100%',
     marginTop: 22,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 22,
-    border: '1px solid #EEF0F7',
-    boxShadow: '0 1px 2px rgba(15,23,42,0.03), 0 8px 28px rgba(15,23,42,0.06)',
+    border: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-md)',
     padding: '18px 20px',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   cardSection: {
     display: 'flex',
@@ -953,12 +950,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
   },
   customerName: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.4,
   },
@@ -971,11 +968,11 @@ const styles: Record<string, React.CSSProperties> = {
   storeName: {
     fontSize: 14,
     fontWeight: 600,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
   },
   divider: {
     height: 1,
-    backgroundColor: '#F1F3F9',
+    backgroundColor: 'var(--border-subtle)',
     margin: '18px 0',
   },
   cardRow: {
@@ -987,30 +984,32 @@ const styles: Record<string, React.CSSProperties> = {
   },
   rowLabel: {
     fontSize: 13,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     fontWeight: 600,
   },
   rowValue: {
     fontSize: 14,
     fontWeight: 800,
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
+    fontVariantNumeric: 'tabular-nums',
   },
   idBtn: {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
-    background: '#F6F7FB',
-    border: '1px solid #EEF0F7',
+    background: 'var(--bg-tertiary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 10,
     padding: '5px 10px',
     cursor: 'pointer',
     transition: 'background-color 160ms, border-color 160ms',
   },
   idCode: {
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    fontFamily:
+      'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     fontSize: 12.5,
     fontWeight: 700,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     letterSpacing: 0.2,
   },
 
@@ -1032,9 +1031,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 16,
     fontWeight: 700,
     letterSpacing: -0.1,
-    color: '#fff',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    boxShadow: '0 10px 24px rgba(5,4,170,0.28)',
+    color: 'var(--brand-on-gradient)',
+    background: 'var(--brand-gradient)',
+    boxShadow: 'var(--shadow-brand)',
     cursor: 'pointer',
     transition: 'transform 160ms, box-shadow 200ms',
   },
@@ -1047,9 +1046,9 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     fontSize: 15,
     fontWeight: 700,
-    color: '#fff',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    color: 'var(--brand-on-gradient)',
+    background: 'var(--brand-gradient)',
+    boxShadow: 'var(--shadow-brand)',
     cursor: 'pointer',
     marginTop: 20,
   },
@@ -1065,9 +1064,9 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '13px 12px',
     borderRadius: 14,
-    border: '1.5px solid #0504AA',
-    backgroundColor: '#FFFFFF',
-    color: '#0504AA',
+    border: '1.5px solid var(--brand-primary)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--brand-primary)',
     fontSize: 13.5,
     fontWeight: 700,
     cursor: 'pointer',
@@ -1081,9 +1080,10 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '13px 12px',
     borderRadius: 14,
-    border: '1.5px solid #FCA5A5',
-    backgroundColor: '#FFFFFF',
-    color: '#991B1B',
+    border:
+      '1.5px solid color-mix(in srgb, var(--danger-fg) 40%, transparent)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--danger-fg)',
     fontSize: 13.5,
     fontWeight: 700,
     cursor: 'pointer',
@@ -1091,7 +1091,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   footerNote: {
     fontSize: 11.5,
-    color: '#9AA1B2',
+    color: 'var(--text-tertiary)',
     textAlign: 'center',
     marginTop: 20,
     maxWidth: 320,
@@ -1102,8 +1102,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1112,14 +1112,14 @@ const styles: Record<string, React.CSSProperties> = {
   errorHeading: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     margin: 0,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   errorBody: {
     fontSize: 14,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     marginTop: 8,
     textAlign: 'center',
     maxWidth: 320,
@@ -1129,31 +1129,35 @@ const styles: Record<string, React.CSSProperties> = {
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(15,23,42,0.48)',
+    backgroundColor: 'var(--overlay)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
     zIndex: 400,
+    backdropFilter: 'blur(4px)',
+    WebkitBackdropFilter: 'blur(4px)',
   },
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-elevated)',
+    color: 'var(--text-primary)',
     borderRadius: 22,
     padding: '28px 24px 22px',
-    boxShadow: '0 24px 60px rgba(15,23,42,0.24)',
+    boxShadow: 'var(--shadow-lg)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   modalIconWrap: {
     width: 60,
     height: 60,
     borderRadius: 18,
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #FDE68A',
+    backgroundColor: 'var(--warning-bg)',
+    border: '1px solid var(--warning-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1162,19 +1166,19 @@ const styles: Record<string, React.CSSProperties> = {
   modalTitle: {
     fontSize: 19,
     fontWeight: 800,
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   modalBody: {
     fontSize: 14,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     marginTop: 10,
     lineHeight: 1.55,
     maxWidth: 300,
   },
   modalAmount: {
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     fontWeight: 800,
   },
   modalActions: {
@@ -1188,12 +1192,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '13px 16px',
     borderRadius: 14,
     border: 'none',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 13.5,
     fontWeight: 700,
     cursor: 'pointer',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
     fontFamily: 'inherit',
   },
   modalDropBtn: {
@@ -1203,9 +1207,10 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     padding: '13px 16px',
     borderRadius: 14,
-    border: '1.5px solid #FCA5A5',
-    backgroundColor: '#FFFFFF',
-    color: '#991B1B',
+    border:
+      '1.5px solid color-mix(in srgb, var(--danger-fg) 40%, transparent)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--danger-fg)',
     fontSize: 13.5,
     fontWeight: 700,
     cursor: 'pointer',
@@ -1230,20 +1235,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     border: '1px solid transparent',
-    boxShadow: '0 6px 18px rgba(15,23,42,0.10)',
+    boxShadow: 'var(--shadow-md)',
     cursor: 'pointer',
     maxWidth: 320,
     animation: 'rcToastIn 220ms ease-out both',
+    fontFamily: 'inherit',
   },
   toastSuccess: {
-    backgroundColor: '#ECFDF5',
-    color: '#065F46',
-    borderColor: '#A7F3D0',
+    backgroundColor: 'var(--success-bg)',
+    color: 'var(--success-fg)',
+    borderColor: 'var(--success-strong)',
   },
   toastError: {
-    backgroundColor: '#FEF2F2',
-    color: '#991B1B',
-    borderColor: '#FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    color: 'var(--danger-fg)',
+    borderColor: 'var(--danger-strong)',
   },
 };
 
@@ -1253,7 +1259,11 @@ const GLOBAL_CSS = `
     position: absolute;
     inset: 0;
     background-image:
-      radial-gradient(circle, rgba(15,23,42,0.06) 1px, transparent 1px);
+      radial-gradient(
+        circle,
+        color-mix(in srgb, var(--text-primary) 7%, transparent) 1px,
+        transparent 1px
+      );
     background-size: 22px 22px;
     mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 40%, transparent 100%);
     -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 40%, transparent 100%);
@@ -1271,7 +1281,11 @@ const GLOBAL_CSS = `
     height: 340px;
     top: -120px;
     left: -120px;
-    background: radial-gradient(circle, rgba(5,4,170,0.20) 0%, rgba(5,4,170,0) 70%);
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--brand-primary) 18%, transparent) 0%,
+      transparent 70%
+    );
     animation: rcFloatA 22s ease-in-out infinite;
   }
   .rc-orb-b {
@@ -1279,7 +1293,11 @@ const GLOBAL_CSS = `
     height: 400px;
     bottom: -140px;
     right: -140px;
-    background: radial-gradient(circle, rgba(61,59,255,0.16) 0%, rgba(61,59,255,0) 70%);
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--brand-primary) 12%, transparent) 0%,
+      transparent 70%
+    );
     animation: rcFloatB 28s ease-in-out infinite;
   }
   @keyframes rcFloatA {
@@ -1304,7 +1322,7 @@ const GLOBAL_CSS = `
     margin-left: -95px;
     margin-top: -95px;
     border-radius: 50%;
-    border: 2px solid rgba(5,4,170,0.18);
+    border: 2px solid color-mix(in srgb, var(--brand-primary) 18%, transparent);
     pointer-events: none;
   }
   .rc-ring-pulse-1 { animation: rcPulse 2.8s ease-out infinite; }
@@ -1316,31 +1334,50 @@ const GLOBAL_CSS = `
 
   .rc-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 14px 30px rgba(5,4,170,0.32);
+    box-shadow: var(--shadow-brand);
   }
   .rc-primary:active {
     transform: translateY(0) scale(0.985);
   }
-  .rc-secondary:hover { background-color: #EEF0FF; }
-  .rc-secondary:active { background-color: #E2E1FF; }
-  .rc-danger:hover { background-color: #FEF2F2; }
-  .rc-danger:active { background-color: #FEE2E2; }
+  .rc-secondary:hover {
+    background-color: var(--brand-soft);
+  }
+  .rc-secondary:active {
+    background-color: var(--bg-tertiary);
+  }
+  .rc-danger:hover {
+    background-color: var(--danger-bg);
+  }
+  .rc-danger:active {
+    background-color: var(--danger-bg);
+  }
   .rc-copy:hover {
-    background-color: #EEF0FF;
-    border-color: #C7CCFF;
+    background-color: var(--brand-soft);
+    border-color: var(--brand-primary);
   }
   .rc-modal-keep:hover {
     transform: translateY(-1px);
-    box-shadow: 0 10px 24px rgba(5,4,170,0.30);
   }
-  .rc-modal-keep:active { transform: translateY(0) scale(0.985); }
-  .rc-modal-drop:hover { background-color: #FEF2F2; }
-  .rc-modal-drop:active { background-color: #FEE2E2; }
+  .rc-modal-keep:active {
+    transform: translateY(0) scale(0.985);
+  }
+  .rc-modal-drop:hover {
+    background-color: var(--danger-bg);
+  }
+  .rc-modal-drop:active {
+    background-color: var(--danger-bg);
+  }
 
   @keyframes rcSpin { to { transform: rotate(360deg); } }
   @keyframes rcToastIn {
     from { opacity: 0; transform: translateY(-6px); }
     to   { opacity: 1; transform: none; }
+  }
+
+  @media (min-width: 1024px) {
+    .rc-page-content {
+      max-width: 500px;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -1349,7 +1386,10 @@ const GLOBAL_CSS = `
   }
 `;
 
-if (typeof document !== 'undefined' && !document.getElementById('rc-global-css')) {
+if (
+  typeof document !== 'undefined' &&
+  !document.getElementById('rc-global-css')
+) {
   const s = document.createElement('style');
   s.id = 'rc-global-css';
   s.textContent = GLOBAL_CSS;
