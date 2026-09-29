@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useReducer, useEffect, useCallback, useMemo } from 'react';
+import {
+  useState,
+  useReducer,
+  useEffect,
+  useCallback,
+  useMemo,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
 import { initializePaystack } from '../../../services/paymentService';
@@ -30,8 +36,12 @@ import {
 } from 'react-icons/md';
 
 // ─── API response shapes ────────────────────────────────────────────
-interface BalanceResponse { balance?: number }
-interface ProfileResponse { email?: string }
+interface BalanceResponse {
+  balance?: number;
+}
+interface ProfileResponse {
+  email?: string;
+}
 interface RawTransaction {
   id: string | number;
   type?: string;
@@ -144,7 +154,8 @@ const MAX_TOPUP = 100_000_000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 const fmt = (v: number) =>
-  '₦' + v.toLocaleString('en-NG', {
+  '₦' +
+  v.toLocaleString('en-NG', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -174,9 +185,6 @@ const fmtDate = (s: string) => {
   }
 };
 
-// ─── Transaction type normalization ─────────────────────────────────
-// Accepts any casing and common aliases; returns null if unrecognized
-// so the caller can fall back to a description heuristic.
 function normalizeType(raw: unknown): 'credit' | 'debit' | null {
   if (typeof raw !== 'string') return null;
   const v = raw.toLowerCase().trim().replace(/[\s_-]/g, '');
@@ -217,13 +225,12 @@ function normalizeType(raw: unknown): 'credit' | 'debit' | null {
   return null;
 }
 
-// Fallback for records where type is missing/unknown: read the
-// description. Explicit verb phrases win over generic terms.
-function inferTypeFromDescription(desc: string): 'credit' | 'debit' | null {
+function inferTypeFromDescription(
+  desc: string,
+): 'credit' | 'debit' | null {
   if (!desc) return null;
   const d = desc.toLowerCase();
 
-  // Credits — top-up, deposit, refund, reversal, release, payout
   if (
     /\btop[\s-]?up\b/.test(d) ||
     /\bdeposit(ed)?\b/.test(d) ||
@@ -239,7 +246,6 @@ function inferTypeFromDescription(desc: string): 'credit' | 'debit' | null {
     return 'credit';
   }
 
-  // Debits — withdrawal, payment, purchase, escrow hold
   if (
     /\bwithdraw(al|n)?\b/.test(d) ||
     /\bpayment\b/.test(d) ||
@@ -266,9 +272,9 @@ function normalizeTransactions(raw: unknown): Transaction[] {
     return {
       id: String(t.id),
       type,
-      // Abs in case the backend encodes direction via sign.
       amount: Math.abs(Number(t.amount ?? 0)),
-      description: desc || (type === 'credit' ? 'Wallet top-up' : 'Payment'),
+      description:
+        desc || (type === 'credit' ? 'Wallet top-up' : 'Payment'),
       date: t.created_at ?? '',
     };
   });
@@ -316,7 +322,15 @@ export default function WalletPage() {
   const router = useRouter();
 
   const [state, dispatch] = useReducer(walletReducer, initialState);
-  const { balance, email, transactions, escrows, bookings, loading, errored } = state;
+  const {
+    balance,
+    email,
+    transactions,
+    escrows,
+    bookings,
+    loading,
+    errored,
+  } = state;
 
   const [refreshing, setRefreshing] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
@@ -333,7 +347,6 @@ export default function WalletPage() {
     return () => clearInterval(id);
   }, []);
 
-  // ── Data ────────────────────────────────────────────────────────
   const loadData = useCallback(async (showSpinner = true) => {
     if (showSpinner) dispatch({ type: 'FETCH_START' });
     try {
@@ -350,8 +363,12 @@ export default function WalletPage() {
         balance: balData.balance ?? 0,
         email: profileData.email ?? '',
         transactions: normalizeTransactions(txnData),
-        escrows: Array.isArray(escrowData) ? (escrowData as RawEscrow[]) : [],
-        bookings: Array.isArray(bookingData) ? (bookingData as RawBooking[]) : [],
+        escrows: Array.isArray(escrowData)
+          ? (escrowData as RawEscrow[])
+          : [],
+        bookings: Array.isArray(bookingData)
+          ? (bookingData as RawBooking[])
+          : [],
       });
       setUpdatedAt(Date.now());
     } catch {
@@ -372,7 +389,6 @@ export default function WalletPage() {
     setRefreshing(false);
   };
 
-  // ── Top-up ──────────────────────────────────────────────────────
   const amountNum = useMemo(
     () => Number(amount.replace(/,/g, '')) || 0,
     [amount],
@@ -407,7 +423,6 @@ export default function WalletPage() {
     setAmountTouched(false);
   };
 
-  // ── Copy balance ────────────────────────────────────────────────
   const handleCopyBalance = async () => {
     if (!balance) return;
     try {
@@ -419,7 +434,6 @@ export default function WalletPage() {
     }
   };
 
-  // ── Derived ─────────────────────────────────────────────────────
   const weekIn = useMemo(() => {
     const cutoff = nowTick - 7 * 86_400_000;
     return transactions
@@ -442,7 +456,6 @@ export default function WalletPage() {
       .reduce((s, t) => s + t.amount, 0);
   }, [transactions, nowTick]);
 
-  // Active escrows: any status that means money is still held.
   const activeEscrows = useMemo(
     () =>
       escrows.filter((e) => {
@@ -452,7 +465,6 @@ export default function WalletPage() {
     [escrows],
   );
 
-  // Active bookings: money held in escrow until completion or cancellation.
   const activeBookings = useMemo(
     () =>
       bookings.filter((b) => {
@@ -481,7 +493,9 @@ export default function WalletPage() {
 
     for (const b of activeBookings) {
       const title =
-        (b.service_title as string) || (b.title as string) || 'Service booking';
+        (b.service_title as string) ||
+        (b.title as string) ||
+        'Service booking';
       const subtitle = (b.provider_name as string) || 'Provider';
       const routeId = b.booking_id || b.service_id || '';
       items.push({
@@ -507,114 +521,122 @@ export default function WalletPage() {
 
   const isEmptyWallet = transactions.length === 0 && balance === 0;
 
-  // ── Loading skeleton ────────────────────────────────────────────
   if (loading) {
     return (
       <div style={css.root}>
         <style>{KF}</style>
-        <div style={css.hero}>
-          <div style={css.topBar}>
-            <div style={{ width: 38 }} />
-            <span style={css.heroTitle}>My Wallet</span>
-            <div style={{ width: 38 }} />
+        <style>{CSS}</style>
+        <div className="wallet-shell">
+          <div style={css.hero}>
+            <div style={css.topBar}>
+              <div style={{ width: 38 }} />
+              <span style={css.heroTitle}>My Wallet</span>
+              <div style={{ width: 38 }} />
+            </div>
+            <div style={{ padding: '8px 0 26px' }}>
+              <div
+                style={{
+                  width: 140,
+                  height: 10,
+                  borderRadius: 6,
+                  background:
+                    'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
+                }}
+              />
+              <div
+                style={{
+                  width: 220,
+                  height: 42,
+                  borderRadius: 6,
+                  background:
+                    'color-mix(in srgb, var(--brand-on-gradient) 24%, transparent)',
+                  marginTop: 18,
+                }}
+              />
+              <div
+                style={{
+                  width: 180,
+                  height: 12,
+                  borderRadius: 6,
+                  background:
+                    'color-mix(in srgb, var(--brand-on-gradient) 14%, transparent)',
+                  marginTop: 16,
+                }}
+              />
+            </div>
           </div>
-          <div style={{ padding: '8px 0 26px' }}>
+          <div style={css.sheet}>
+            <div style={css.actionsGrid}>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{ ...css.actionBtn, pointerEvents: 'none' }}
+                >
+                  <div
+                    style={{
+                      ...css.actionIcon,
+                      background: 'var(--skeleton)',
+                      animation: 'skelPulse 1.4s ease-in-out infinite',
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: 40,
+                      height: 10,
+                      borderRadius: 4,
+                      background: 'var(--skeleton)',
+                      marginTop: 4,
+                      animation: 'skelPulse 1.4s ease-in-out infinite',
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={css.divider} />
             <div
               style={{
-                width: 140,
-                height: 10,
-                borderRadius: 6,
-                background: 'rgba(255,255,255,0.18)',
-              }}
-            />
-            <div
-              style={{
-                width: 220,
-                height: 42,
-                borderRadius: 6,
-                background: 'rgba(255,255,255,0.24)',
-                marginTop: 18,
-              }}
-            />
-            <div
-              style={{
-                width: 180,
+                width: 100,
                 height: 12,
-                borderRadius: 6,
-                background: 'rgba(255,255,255,0.14)',
-                marginTop: 16,
-              }}
-            />
-          </div>
-        </div>
-        <div style={css.sheet}>
-          <div style={css.actionsGrid}>
-            {[0, 1, 2].map((i) => (
-              <div key={i} style={{ ...css.actionBtn, pointerEvents: 'none' }}>
-                <div
-                  style={{
-                    ...css.actionIcon,
-                    background: '#EEF2FF',
-                    animation: 'skelPulse 1.4s ease-in-out infinite',
-                  }}
-                />
-                <div
-                  style={{
-                    width: 40,
-                    height: 10,
-                    borderRadius: 4,
-                    background: '#EEF2FF',
-                    marginTop: 4,
-                    animation: 'skelPulse 1.4s ease-in-out infinite',
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-          <div style={css.divider} />
-          <div
-            style={{
-              width: 100,
-              height: 12,
-              borderRadius: 4,
-              background: '#EEF2FF',
-              marginBottom: 18,
-              animation: 'skelPulse 1.4s ease-in-out infinite',
-            }}
-          />
-          {[0, 1].map((i) => (
-            <div
-              key={i}
-              style={{
-                height: 74,
-                borderRadius: 14,
-                backgroundColor: '#FAFBFF',
-                border: '1px solid #EEF2FF',
-                marginBottom: 10,
+                borderRadius: 4,
+                background: 'var(--skeleton)',
+                marginBottom: 18,
                 animation: 'skelPulse 1.4s ease-in-out infinite',
               }}
             />
-          ))}
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                style={{
+                  height: 74,
+                  borderRadius: 14,
+                  backgroundColor: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-default)',
+                  marginBottom: 10,
+                  animation: 'skelPulse 1.4s ease-in-out infinite',
+                }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
-  // ── Error state ─────────────────────────────────────────────────
   if (errored) {
     return (
       <div style={css.errorRoot}>
         <style>{KF}</style>
+        <style>{CSS}</style>
         <div style={css.errorHalo}>
-          <MdErrorOutline size={44} color="#B91C1C" />
+          <MdErrorOutline size={44} color="var(--danger-fg)" />
         </div>
         <h2 style={css.errorHeading}>Couldn&apos;t load your wallet</h2>
         <p style={css.errorBody}>
-          Check your connection and try again. If this keeps happening, sign
-          out and back in.
+          Check your connection and try again. If this keeps happening,
+          sign out and back in.
         </p>
         <button onClick={handleRefresh} style={css.errorRetry}>
-          <MdRefresh size={18} color="#fff" />
+          <MdRefresh size={18} color="var(--brand-on-gradient)" />
           <span>Retry</span>
         </button>
         <button onClick={() => router.back()} style={css.errorBack}>
@@ -624,269 +646,315 @@ export default function WalletPage() {
     );
   }
 
-  // ── Render ──────────────────────────────────────────────────────
   return (
     <div style={css.root}>
       <style>{KF}</style>
+      <style>{CSS}</style>
 
-      {/* ═══ HERO ════════════════════════════════════════════════ */}
-      <div style={css.hero}>
-        <div style={css.heroGlow} aria-hidden />
+      <div className="wallet-shell">
+        {/* ═══ HERO ════════════════════════════════════════════════ */}
+        <div style={css.hero}>
+          <div style={css.heroGlow} aria-hidden />
 
-        <div style={css.topBar}>
-          <button
-            style={css.ghostBtn}
-            onClick={() => router.back()}
-            aria-label="Back"
-          >
-            <MdArrowBack size={22} color="#fff" />
-          </button>
-          <span style={css.heroTitle}>My Wallet</span>
-          <button
-            style={css.ghostBtn}
-            onClick={handleRefresh}
-            disabled={refreshing}
-            aria-label="Refresh"
-          >
-            <MdRefresh
-              size={22}
-              color="#fff"
-              style={{
-                animation: refreshing ? 'spin 0.8s linear infinite' : 'none',
-              }}
-            />
-          </button>
-        </div>
-
-        <div style={css.statusChip}>
-          <MdShield size={12} color="rgba(255,255,255,0.9)" />
-          <span style={css.statusChipText}>Admerce Wallet · Secured</span>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleCopyBalance}
-          style={css.balanceBlock}
-          aria-label="Copy balance"
-        >
-          <span style={css.balLabel}>
-            Available balance
+          <div style={css.topBar}>
             <button
-              type="button"
-              style={css.eyeBtn}
-              onClick={(e) => {
-                e.stopPropagation();
-                setBalanceVisible((v) => !v);
-              }}
-              aria-label={balanceVisible ? 'Hide balance' : 'Show balance'}
+              style={css.ghostBtn}
+              onClick={() => router.back()}
+              aria-label="Back"
             >
-              {balanceVisible ? (
-                <MdVisibility size={16} color="rgba(255,255,255,0.75)" />
-              ) : (
-                <MdVisibilityOff size={16} color="rgba(255,255,255,0.75)" />
-              )}
+              <MdArrowBack size={22} color="var(--brand-on-gradient)" />
             </button>
-          </span>
+            <span style={css.heroTitle}>My Wallet</span>
+            <button
+              style={css.ghostBtn}
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="Refresh"
+            >
+              <MdRefresh
+                size={22}
+                color="var(--brand-on-gradient)"
+                style={{
+                  animation: refreshing
+                    ? 'spin 0.8s linear infinite'
+                    : 'none',
+                }}
+              />
+            </button>
+          </div>
 
-          <span style={css.balValue} className="tnum">
-            {balanceVisible ? fmt(balance) : '₦ ••••••'}
-          </span>
+          <div style={css.statusChip}>
+            <MdShield
+              size={12}
+              color="color-mix(in srgb, var(--brand-on-gradient) 90%, transparent)"
+            />
+            <span style={css.statusChipText}>
+              Admerce Wallet · Secured
+            </span>
+          </div>
 
-          <span style={css.copyHint}>
-            {copied ? (
+          <button
+            type="button"
+            onClick={handleCopyBalance}
+            style={css.balanceBlock}
+            aria-label="Copy balance"
+          >
+            <span style={css.balLabel}>
+              Available balance
+              <button
+                type="button"
+                style={css.eyeBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBalanceVisible((v) => !v);
+                }}
+                aria-label={
+                  balanceVisible ? 'Hide balance' : 'Show balance'
+                }
+              >
+                {balanceVisible ? (
+                  <MdVisibility
+                    size={16}
+                    color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)"
+                  />
+                ) : (
+                  <MdVisibilityOff
+                    size={16}
+                    color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)"
+                  />
+                )}
+              </button>
+            </span>
+
+            <span style={css.balValue} className="tnum">
+              {balanceVisible ? fmt(balance) : '₦ ••••••'}
+            </span>
+
+            <span style={css.copyHint}>
+              {copied ? (
+                <>
+                  <MdCheck size={13} color="var(--success-fg)" />
+                  <span style={{ color: 'var(--success-fg)' }}>
+                    Copied
+                  </span>
+                </>
+              ) : (
+                <>
+                  <MdContentCopy
+                    size={13}
+                    color="color-mix(in srgb, var(--brand-on-gradient) 55%, transparent)"
+                  />
+                  <span>Tap to copy</span>
+                </>
+              )}
+            </span>
+          </button>
+
+          <div style={css.insight}>
+            {weekIn > 0 || weekOut > 0 ? (
               <>
-                <MdCheck size={13} color="#4CDE80" />
-                <span style={{ color: '#4CDE80' }}>Copied</span>
+                <MdTrendingUp size={14} color="var(--success-fg)" />
+                <span style={css.insightText}>
+                  <strong>+{fmtShort(weekIn)}</strong> in
+                </span>
+                <span style={css.insightDivider}>·</span>
+                <MdTrendingDown size={14} color="var(--danger-fg)" />
+                <span style={css.insightText}>
+                  <strong>−{fmtShort(weekOut)}</strong> out
+                </span>
+                <span style={css.insightDivider}>·</span>
+                <span style={css.insightTextMuted}>this week</span>
               </>
             ) : (
-              <>
-                <MdContentCopy size={13} color="rgba(255,255,255,0.55)" />
-                <span>Tap to copy</span>
-              </>
+              <span style={css.insightTextMuted}>
+                No activity this week · Updated{' '}
+                {relativeFrom(updatedAt, nowTick)}
+              </span>
             )}
-          </span>
-        </button>
+          </div>
+        </div>
 
-        {/* This-week in/out — non-interactive, informational */}
-        <div style={css.insight}>
-          {weekIn > 0 || weekOut > 0 ? (
-            <>
-              <MdTrendingUp size={14} color="#4CDE80" />
-              <span style={css.insightText}>
-                <strong>+{fmtShort(weekIn)}</strong> in
-              </span>
-              <span style={css.insightDivider}>·</span>
-              <MdTrendingDown size={14} color="#FF9C9C" />
-              <span style={css.insightText}>
-                <strong>−{fmtShort(weekOut)}</strong> out
-              </span>
-              <span style={css.insightDivider}>·</span>
-              <span style={css.insightTextMuted}>this week</span>
-            </>
-          ) : (
-            <span style={css.insightTextMuted}>
-              No activity this week · Updated {relativeFrom(updatedAt, nowTick)}
+        {/* ═══ SHEET ═══════════════════════════════════════════════ */}
+        <div style={css.sheet}>
+          <div style={css.actionsGrid}>
+            <ActionButton
+              icon={<MdAdd size={20} color="#FFFFFF" />}
+              label="Top Up"
+              bg="linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)"
+              onClick={() => setShowTopUp(true)}
+            />
+            <ActionButton
+              icon={<MdArrowOutward size={20} color="#FFFFFF" />}
+              label="Withdraw"
+              bg="linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)"
+              onClick={() => router.push('/shopper/wallet/withdraw')}
+            />
+            <ActionButton
+              icon={<MdHistory size={20} color="#FFFFFF" />}
+              label="History"
+              bg="linear-gradient(135deg, #0891B2 0%, #06B6D4 100%)"
+              onClick={() => router.push('/shopper/wallet/history')}
+            />
+          </div>
+
+          <div style={css.divider} />
+
+          {!hasEmail && (
+            <button
+              type="button"
+              onClick={() => router.push('/shopper/profile')}
+              style={css.nudge}
+            >
+              <div style={css.nudgeIcon}>
+                <MdMailOutline size={18} color="var(--warning-fg)" />
+              </div>
+              <div style={css.nudgeBody}>
+                <span style={css.nudgeTitle}>
+                  Add an email to unlock top-ups
+                </span>
+                <span style={css.nudgeSub}>
+                  Paystack needs it for receipts and payment confirmation.
+                </span>
+              </div>
+              <MdChevronRight size={20} color="var(--warning-fg)" />
+            </button>
+          )}
+
+          <div style={css.secHead}>
+            <span style={css.secTitle}>
+              In flight
+              {inFlightItems.length > 0
+                ? ` · ${fmtShort(inFlightTotal)}`
+                : ''}
             </span>
+            <button
+              style={css.seeAll}
+              onClick={() => router.push('/shopper/wallet/history')}
+            >
+              See all →
+            </button>
+          </div>
+
+          {inFlightItems.length === 0 ? (
+            isEmptyWallet ? (
+              <div style={css.empty}>
+                <div style={css.emptyHalo}>
+                  <MdAccountBalanceWallet
+                    size={34}
+                    color="var(--brand-primary)"
+                  />
+                </div>
+                <h3 style={css.emptyTitle}>Start your wallet</h3>
+                <p style={css.emptyBody}>
+                  Top up to pay for pickups, reservations, and services
+                  — all in one place.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowTopUp(true)}
+                  style={css.emptyCta}
+                >
+                  <MdAdd size={18} color="var(--brand-on-gradient)" />
+                  <span>Top up now</span>
+                </button>
+              </div>
+            ) : (
+              <div style={css.emptyMuted}>
+                <div style={css.emptyHaloMuted}>
+                  <MdCheck size={26} color="var(--success-fg)" />
+                </div>
+                <h3 style={css.emptyTitle}>Nothing in flight</h3>
+                <p style={css.emptyBody}>
+                  Your wallet is settled. Reservations and bookings you
+                  make will show up here while their funds are held.
+                </p>
+              </div>
+            )
+          ) : (
+            <div style={css.inFlightList}>
+              {inFlightItems.map((item) => {
+                const expiresMs = item.expiresAt
+                  ? parseAsUtc(item.expiresAt)
+                  : NaN;
+                const expiryText = Number.isFinite(expiresMs)
+                  ? formatTimeRemaining(expiresMs, nowTick)
+                  : null;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => router.push(item.routeTo)}
+                    style={css.inFlightCard}
+                  >
+                    <div style={css.inFlightIconWrap}>
+                      {item.kind === 'reservation' ? (
+                        <MdEventNote
+                          size={18}
+                          color="var(--brand-primary)"
+                        />
+                      ) : (
+                        <MdBuild size={18} color="var(--purple-fg)" />
+                      )}
+                    </div>
+                    <div style={css.inFlightMeta}>
+                      <span
+                        style={css.inFlightTitle}
+                        title={item.title}
+                      >
+                        {item.title}
+                      </span>
+                      <span
+                        style={css.inFlightSub}
+                        title={item.subtitle}
+                      >
+                        {item.subtitle} ·{' '}
+                        {item.status === 'accepted'
+                          ? 'Held for pickup'
+                          : item.status === 'dispatched'
+                            ? 'Out for delivery'
+                            : 'Awaiting confirmation'}
+                      </span>
+                    </div>
+                    <div style={css.inFlightRight}>
+                      <span style={css.inFlightAmount}>
+                        {fmtShort(item.amount)}
+                      </span>
+                      {expiryText && (
+                        <span style={css.inFlightExpiry}>
+                          <MdAccessTime size={11} />
+                          <span>{expiryText}</span>
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+
+              <p style={css.inFlightNote}>
+                <MdLock size={12} color="var(--text-tertiary)" />
+                <span>
+                  Held funds release to the store when you confirm
+                  pickup.
+                </span>
+              </p>
+            </div>
           )}
         </div>
       </div>
 
-      {/* ═══ SHEET ═══════════════════════════════════════════════ */}
-      <div style={css.sheet}>
-        {/* Actions — 3 buttons now, Cards removed */}
-        <div style={css.actionsGrid}>
-          <ActionButton
-            icon={<MdAdd size={20} color="#fff" />}
-            label="Top Up"
-            bg="linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)"
-            onClick={() => setShowTopUp(true)}
-          />
-          <ActionButton
-            icon={<MdArrowOutward size={20} color="#fff" />}
-            label="Withdraw"
-            bg="linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)"
-            onClick={() => router.push('/shopper/wallet/withdraw')}
-          />
-          <ActionButton
-            icon={<MdHistory size={20} color="#fff" />}
-            label="History"
-            bg="linear-gradient(135deg, #0891B2 0%, #06B6D4 100%)"
-            onClick={() => router.push('/shopper/wallet/history')}
-          />
-        </div>
-
-        <div style={css.divider} />
-
-        {/* Setup nudge — only if email missing */}
-        {!hasEmail && (
-          <button
-            type="button"
-            onClick={() => router.push('/shopper/profile')}
-            style={css.nudge}
-          >
-            <div style={css.nudgeIcon}>
-              <MdMailOutline size={18} color="#B45309" />
-            </div>
-            <div style={css.nudgeBody}>
-              <span style={css.nudgeTitle}>Add an email to unlock top-ups</span>
-              <span style={css.nudgeSub}>
-                Paystack needs it for receipts and payment confirmation.
-              </span>
-            </div>
-            <MdChevronRight size={20} color="#B45309" />
-          </button>
-        )}
-
-        {/* In-flight section */}
-        <div style={css.secHead}>
-          <span style={css.secTitle}>
-            In flight{inFlightItems.length > 0 ? ` · ${fmtShort(inFlightTotal)}` : ''}
-          </span>
-          <button
-            style={css.seeAll}
-            onClick={() => router.push('/shopper/wallet/history')}
-          >
-            See all →
-          </button>
-        </div>
-
-        {inFlightItems.length === 0 ? (
-          isEmptyWallet ? (
-            <div style={css.empty}>
-              <div style={css.emptyHalo}>
-                <MdAccountBalanceWallet size={34} color="#0504AA" />
-              </div>
-              <h3 style={css.emptyTitle}>Start your wallet</h3>
-              <p style={css.emptyBody}>
-                Top up to pay for pickups, reservations, and services — all in
-                one place.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowTopUp(true)}
-                style={css.emptyCta}
-              >
-                <MdAdd size={18} color="#fff" />
-                <span>Top up now</span>
-              </button>
-            </div>
-          ) : (
-            <div style={css.emptyMuted}>
-              <div style={css.emptyHaloMuted}>
-                <MdCheck size={26} color="#16A34A" />
-              </div>
-              <h3 style={css.emptyTitle}>Nothing in flight</h3>
-              <p style={css.emptyBody}>
-                Your wallet is settled. Reservations and bookings you make will
-                show up here while their funds are held.
-              </p>
-            </div>
-          )
-        ) : (
-          <div style={css.inFlightList}>
-            {inFlightItems.map((item) => {
-              const expiresMs = item.expiresAt
-                ? parseAsUtc(item.expiresAt)
-                : NaN;
-              const expiryText = Number.isFinite(expiresMs)
-                ? formatTimeRemaining(expiresMs, nowTick)
-                : null;
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => router.push(item.routeTo)}
-                  style={css.inFlightCard}
-                >
-                  <div style={css.inFlightIconWrap}>
-                    {item.kind === 'reservation' ? (
-                      <MdEventNote size={18} color="#0504AA" />
-                    ) : (
-                      <MdBuild size={18} color="#7C3AED" />
-                    )}
-                  </div>
-                  <div style={css.inFlightMeta}>
-                    <span style={css.inFlightTitle} title={item.title}>
-                      {item.title}
-                    </span>
-                    <span style={css.inFlightSub} title={item.subtitle}>
-                      {item.subtitle} · {item.status === 'accepted'
-                        ? 'Held for pickup'
-                        : item.status === 'dispatched'
-                          ? 'Out for delivery'
-                          : 'Awaiting confirmation'}
-                    </span>
-                  </div>
-                  <div style={css.inFlightRight}>
-                    <span style={css.inFlightAmount}>
-                      {fmtShort(item.amount)}
-                    </span>
-                    {expiryText && (
-                      <span style={css.inFlightExpiry}>
-                        <MdAccessTime size={11} />
-                        <span>{expiryText}</span>
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-
-            <p style={css.inFlightNote}>
-              <MdLock size={12} color="#64748B" />
-              <span>
-                Held funds release to the store when you confirm pickup.
-              </span>
-            </p>
-          </div>
-        )}
-      </div>
-
       {/* ═══ TOP-UP BOTTOM SHEET ════════════════════════════════ */}
       {showTopUp && (
-        <div style={css.overlay} onClick={closeTopUp}>
-          <div style={css.bottomSheet} onClick={(e) => e.stopPropagation()}>
+        <div
+          style={css.overlay}
+          className="wallet-overlay"
+          onClick={closeTopUp}
+        >
+          <div
+            style={css.bottomSheet}
+            className="wallet-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={css.sheetHandle} />
 
             <h2 style={css.modalTitle}>Add money</h2>
@@ -896,10 +964,11 @@ export default function WalletPage() {
 
             {!hasEmail && (
               <div style={css.warnBox}>
-                <MdWarning size={16} color="#B45309" />
+                <MdWarning size={16} color="var(--warning-fg)" />
                 <div style={css.warnText}>
-                  <strong>Email required.</strong> Add an email to your profile
-                  to receive a Paystack receipt and unlock top-ups.
+                  <strong>Email required.</strong> Add an email to your
+                  profile to receive a Paystack receipt and unlock
+                  top-ups.
                 </div>
               </div>
             )}
@@ -913,8 +982,12 @@ export default function WalletPage() {
                     type="button"
                     style={{
                       ...css.preset,
-                      backgroundColor: active ? '#0504AA' : '#EEF2FF',
-                      color: active ? '#fff' : '#0504AA',
+                      background: active
+                        ? 'var(--brand-gradient)'
+                        : 'var(--brand-soft)',
+                      color: active
+                        ? 'var(--brand-on-gradient)'
+                        : 'var(--brand-primary)',
                     }}
                     onClick={() => {
                       setAmount(p.toLocaleString('en-NG'));
@@ -932,8 +1005,8 @@ export default function WalletPage() {
                 ...css.inputWrap,
                 borderColor:
                   belowMin || (amountTouched && !amountNum)
-                    ? '#FCA5A5'
-                    : '#E2E8F0',
+                    ? 'var(--danger-fg)'
+                    : 'var(--border-default)',
               }}
             >
               <span style={css.inputPrefix}>₦</span>
@@ -954,13 +1027,13 @@ export default function WalletPage() {
 
             {hasEmail && belowMin && (
               <div style={css.inlineError}>
-                <MdWarning size={13} color="#B91C1C" />
+                <MdWarning size={13} color="var(--danger-fg)" />
                 <span>Minimum top-up is {fmtShort(MIN_TOPUP)}</span>
               </div>
             )}
             {hasEmail && amountTouched && !amountNum && (
               <div style={css.inlineError}>
-                <MdWarning size={13} color="#B91C1C" />
+                <MdWarning size={13} color="var(--danger-fg)" />
                 <span>Enter an amount to continue</span>
               </div>
             )}
@@ -987,8 +1060,8 @@ export default function WalletPage() {
             </button>
 
             <p style={css.paystackNote}>
-              Payments are processed securely by Paystack. You&apos;ll be
-              redirected to complete the payment.
+              Payments are processed securely by Paystack. You&apos;ll
+              be redirected to complete the payment.
             </p>
 
             <button style={css.cancelBtn} onClick={closeTopUp}>
@@ -1030,24 +1103,55 @@ const KF = `
   .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 `;
 
+// ─── Responsive CSS ───────────────────────────────────────────────────
+const CSS = `
+  /* Wallet shell: caps content column, centered */
+  .wallet-shell {
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .wallet-overlay {
+    align-items: flex-end;
+  }
+
+  @media (min-width: 1024px) {
+    .wallet-overlay {
+      align-items: center !important;
+      padding: 24px;
+    }
+    .wallet-sheet {
+      border-radius: 24px !important;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+  }
+`;
+
 // ─── Styles ───────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F0F4FF',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
   // ── Hero
   hero: {
     position: 'relative',
-    backgroundColor: '#0504AA',
-    backgroundImage:
-      'radial-gradient(ellipse at 80% 0%, #1A0FB8 0%, #0504AA 55%, #03037A 100%)',
+    background: 'var(--brand-gradient)',
     padding: '0 20px 30px',
     overflow: 'hidden',
+    transition: 'background 0.18s ease',
   },
   heroGlow: {
     position: 'absolute',
@@ -1057,7 +1161,7 @@ const css: Record<string, React.CSSProperties> = {
     height: 260,
     borderRadius: '50%',
     background:
-      'radial-gradient(circle, rgba(61,59,255,0.35) 0%, rgba(61,59,255,0) 70%)',
+      'radial-gradient(circle, color-mix(in srgb, var(--brand-on-gradient) 20%, transparent) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   topBar: {
@@ -1068,7 +1172,8 @@ const css: Record<string, React.CSSProperties> = {
     paddingBottom: 18,
   },
   ghostBtn: {
-    background: 'rgba(255,255,255,0.08)',
+    background:
+      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
     border: 'none',
     cursor: 'pointer',
     padding: 8,
@@ -1082,7 +1187,7 @@ const css: Record<string, React.CSSProperties> = {
   heroTitle: {
     fontSize: 15,
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: 0.3,
   },
 
@@ -1092,15 +1197,18 @@ const css: Record<string, React.CSSProperties> = {
     gap: 6,
     padding: '5px 12px',
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    border: '1px solid rgba(255,255,255,0.14)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 10%, transparent)',
+    border:
+      '1px solid color-mix(in srgb, var(--brand-on-gradient) 14%, transparent)',
     marginBottom: 16,
   },
   statusChipText: {
     fontSize: 11,
     fontWeight: 700,
     letterSpacing: 0.6,
-    color: 'rgba(255,255,255,0.9)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 90%, transparent)',
     textTransform: 'uppercase',
   },
 
@@ -1118,7 +1226,8 @@ const css: Record<string, React.CSSProperties> = {
   },
   balLabel: {
     fontSize: 11.5,
-    color: 'rgba(255,255,255,0.65)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 65%, transparent)',
     letterSpacing: 1,
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -1139,7 +1248,7 @@ const css: Record<string, React.CSSProperties> = {
   balValue: {
     fontSize: 40,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: -1,
     lineHeight: 1.1,
   },
@@ -1149,7 +1258,8 @@ const css: Record<string, React.CSSProperties> = {
     gap: 5,
     fontSize: 11.5,
     fontWeight: 600,
-    color: 'rgba(255,255,255,0.55)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 55%, transparent)',
     marginTop: 8,
     letterSpacing: 0.2,
   },
@@ -1160,35 +1270,40 @@ const css: Record<string, React.CSSProperties> = {
     gap: 6,
     padding: '7px 14px',
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
     maxWidth: '100%',
     flexWrap: 'wrap',
   },
   insightText: {
     fontSize: 12,
     fontWeight: 600,
-    color: 'rgba(255,255,255,0.9)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 90%, transparent)',
   },
   insightTextMuted: {
     fontSize: 12,
     fontWeight: 500,
-    color: 'rgba(255,255,255,0.55)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 55%, transparent)',
   },
   insightDivider: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.35)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 35%, transparent)',
     margin: '0 2px',
   },
 
   // ── Sheet
   sheet: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: '24px 24px 0 0',
     marginTop: -16,
     padding: '24px 20px 120px',
-    boxShadow: '0 -4px 30px rgba(5,4,170,0.08)',
+    boxShadow: 'var(--shadow-sm)',
     position: 'relative',
+    transition: 'background-color 0.18s ease',
   },
 
   actionsGrid: {
@@ -1220,13 +1335,13 @@ const css: Record<string, React.CSSProperties> = {
   actionLabel: {
     fontSize: 12,
     fontWeight: 600,
-    color: '#374151',
+    color: 'var(--text-secondary)',
     letterSpacing: 0.2,
   },
 
   divider: {
     height: 1,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--border-subtle)',
     margin: '20px 0',
   },
 
@@ -1237,8 +1352,8 @@ const css: Record<string, React.CSSProperties> = {
     gap: 12,
     padding: '14px 14px',
     borderRadius: 14,
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #FDE68A',
+    backgroundColor: 'var(--warning-bg)',
+    border: '1px solid var(--warning-strong)',
     marginBottom: 20,
     cursor: 'pointer',
     fontFamily: 'inherit',
@@ -1249,7 +1364,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: '#FFF7E6',
+    backgroundColor:
+      'color-mix(in srgb, var(--warning-fg) 12%, transparent)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1265,13 +1381,13 @@ const css: Record<string, React.CSSProperties> = {
   nudgeTitle: {
     fontSize: 13.5,
     fontWeight: 700,
-    color: '#92400E',
+    color: 'var(--warning-fg)',
     letterSpacing: -0.1,
   },
   nudgeSub: {
     fontSize: 12,
-    color: '#92400E',
-    opacity: 0.75,
+    color: 'var(--warning-fg)',
+    opacity: 0.85,
     lineHeight: 1.4,
   },
 
@@ -1285,7 +1401,7 @@ const css: Record<string, React.CSSProperties> = {
   secTitle: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0F172A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.2,
   },
   seeAll: {
@@ -1293,7 +1409,7 @@ const css: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     fontSize: 13,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontWeight: 700,
     fontFamily: 'inherit',
     padding: 4,
@@ -1310,20 +1426,21 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 12,
     padding: '14px 14px 14px 14px',
-    backgroundColor: '#FAFBFF',
-    border: '1px solid #EEF2FF',
+    backgroundColor: 'var(--bg-tertiary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 14,
     cursor: 'pointer',
     textAlign: 'left',
     fontFamily: 'inherit',
     width: '100%',
-    transition: 'border-color 0.15s, background-color 0.15s',
+    transition:
+      'border-color 0.15s, background-color 0.15s, box-shadow 0.15s',
   },
   inFlightIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1339,7 +1456,7 @@ const css: Record<string, React.CSSProperties> = {
   inFlightTitle: {
     fontSize: 14,
     fontWeight: 700,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1347,7 +1464,7 @@ const css: Record<string, React.CSSProperties> = {
   },
   inFlightSub: {
     fontSize: 12,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1363,7 +1480,7 @@ const css: Record<string, React.CSSProperties> = {
   inFlightAmount: {
     fontSize: 14,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontVariantNumeric: 'tabular-nums',
     letterSpacing: -0.2,
   },
@@ -1373,14 +1490,14 @@ const css: Record<string, React.CSSProperties> = {
     gap: 4,
     fontSize: 11,
     fontWeight: 600,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
   },
   inFlightNote: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 6,
     fontSize: 11.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 12,
     marginBottom: 0,
     paddingLeft: 4,
@@ -1408,19 +1525,20 @@ const css: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 24,
-    background: 'linear-gradient(135deg, #EEF0FF 0%, #E0E7FF 100%)',
+    background: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    boxShadow: '0 10px 28px rgba(5,4,170,0.08)',
+    boxShadow:
+      '0 10px 28px color-mix(in srgb, var(--brand-primary) 10%, transparent)',
   },
   emptyHaloMuted: {
     width: 68,
     height: 68,
     borderRadius: 22,
-    background: '#ECFDF5',
-    border: '1px solid #A7F3D0',
+    background: 'var(--success-bg)',
+    border: '1px solid var(--success-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1429,13 +1547,13 @@ const css: Record<string, React.CSSProperties> = {
   emptyTitle: {
     fontSize: 16,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.2,
   },
   emptyBody: {
     fontSize: 13.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 6,
     marginBottom: 0,
     maxWidth: 300,
@@ -1448,14 +1566,14 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 20,
     padding: '12px 22px',
     borderRadius: 14,
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 700,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.28)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
   // ── Error state
@@ -1465,16 +1583,18 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F0F4FF',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   errorHalo: {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1483,13 +1603,13 @@ const css: Record<string, React.CSSProperties> = {
   errorHeading: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   errorBody: {
     fontSize: 14,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     marginTop: 8,
     maxWidth: 320,
     lineHeight: 1.5,
@@ -1501,21 +1621,21 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 700,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
   errorBack: {
     marginTop: 12,
     padding: 10,
     background: 'none',
     border: 'none',
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontWeight: 700,
     fontSize: 13.5,
     textDecoration: 'underline',
@@ -1528,7 +1648,7 @@ const css: Record<string, React.CSSProperties> = {
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(3,3,90,0.5)',
+    backgroundColor: 'var(--overlay)',
     backdropFilter: 'blur(6px)',
     WebkitBackdropFilter: 'blur(6px)',
     zIndex: 200,
@@ -1539,29 +1659,31 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     maxWidth: 520,
     margin: '0 auto',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-primary)',
     borderRadius: '24px 24px 0 0',
     padding: '12px 24px calc(32px + env(safe-area-inset-bottom))',
-    boxShadow: '0 -8px 40px rgba(5,4,170,0.2)',
+    boxShadow: 'var(--shadow-lg)',
     animation: 'sheetUp 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   sheetHandle: {
     width: 40,
     height: 4,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: 'var(--border-default)',
     borderRadius: 2,
     margin: '0 auto 20px',
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#0F172A',
+    color: 'var(--text-primary)',
     margin: '0 0 4px',
     letterSpacing: -0.3,
   },
   modalSub: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     margin: '0 0 20px',
   },
 
@@ -1571,14 +1693,14 @@ const css: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '12px 14px',
     borderRadius: 12,
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #FDE68A',
+    backgroundColor: 'var(--warning-bg)',
+    border: '1px solid var(--warning-strong)',
     marginBottom: 18,
   },
   warnText: {
     flex: 1,
     fontSize: 12.5,
-    color: '#92400E',
+    color: 'var(--warning-fg)',
     lineHeight: 1.5,
     fontWeight: 500,
   },
@@ -1603,17 +1725,17 @@ const css: Record<string, React.CSSProperties> = {
   inputWrap: {
     display: 'flex',
     alignItems: 'center',
-    border: '1.5px solid #E2E8F0',
+    border: '1.5px solid var(--border-default)',
     borderRadius: 14,
     padding: '0 16px',
     marginBottom: 8,
-    backgroundColor: '#F8FAFF',
-    transition: 'border-color 0.15s',
+    backgroundColor: 'var(--bg-tertiary)',
+    transition: 'border-color 0.15s, background-color 0.18s ease',
   },
   inputPrefix: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     marginRight: 8,
   },
   amtInput: {
@@ -1624,7 +1746,7 @@ const css: Record<string, React.CSSProperties> = {
     border: 'none',
     outline: 'none',
     backgroundColor: 'transparent',
-    color: '#0F172A',
+    color: 'var(--text-primary)',
     fontFamily: 'inherit',
     fontVariantNumeric: 'tabular-nums',
     letterSpacing: -0.3,
@@ -1635,7 +1757,7 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 5,
     fontSize: 12,
-    color: '#B91C1C',
+    color: 'var(--danger-fg)',
     fontWeight: 600,
     marginBottom: 14,
     paddingLeft: 4,
@@ -1645,8 +1767,8 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: 16,
     marginTop: 8,
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 14,
     fontSize: 15,
@@ -1654,12 +1776,12 @@ const css: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
     letterSpacing: 0.2,
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
     transition: 'opacity 0.15s, transform 0.15s',
   },
   paystackNote: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     textAlign: 'center',
     lineHeight: 1.5,
     margin: '14px 0 8px',
@@ -1670,7 +1792,7 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: 14,
     backgroundColor: 'transparent',
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     border: 'none',
     borderRadius: 14,
     fontSize: 14,
