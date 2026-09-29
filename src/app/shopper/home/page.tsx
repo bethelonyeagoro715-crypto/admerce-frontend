@@ -351,157 +351,85 @@ function StoreSpotlight({
 
   const current = withImages[index] || withImages[0];
 
-  return (
-    <div style={{ marginBottom: 10 }} className="sh-spotlight-wrap">
-      {!collapsed ? (
-        <>
-          <div style={{ padding: '0 16px 6px' }} className="sh-spotlight-pad">
-            <button
-              type="button"
-              onClick={() => onPress(current.id)}
-              onTouchStart={() => {
-                touchPaused.current = true;
-              }}
-              onTouchEnd={() => {
-                setTimeout(() => {
-                  touchPaused.current = false;
-                }, 300);
-              }}
-              className="sh-spotlight-btn"
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: 0,
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                borderRadius: 20,
-                overflow: 'hidden',
-                position: 'relative',
-                textAlign: 'left',
-                fontFamily: 'inherit',
-              }}
-              aria-label={`Featured store: ${current.name}`}
-            >
-              <img
-                key={current.id}
-                src={current.image!}
-                alt=""
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                  animation: 'spotlightFade 0.9s ease',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background:
-                    'linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.05) 55%, transparent 100%)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  padding: '14px 16px',
-                  color: '#fff',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    letterSpacing: 1.5,
-                    opacity: 0.75,
-                    marginBottom: 4,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Featured store
-                </div>
-                <div
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 800,
-                    letterSpacing: '-0.3px',
-                    textShadow: '0 1px 4px rgba(0,0,0,0.35)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {current.name}
-                </div>
-              </div>
-              {withImages.length > 1 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: 12,
-                    right: 14,
-                    display: 'flex',
-                    gap: 5,
-                  }}
-                  aria-hidden="true"
-                >
-                  {withImages.map((_, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        width: i === index ? 16 : 6,
-                        height: 4,
-                        borderRadius: 2,
-                        background:
-                          i === index ? '#fff' : 'rgba(255,255,255,0.45)',
-                        transition: 'width 0.25s, background 0.25s',
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </button>
-          </div>
-          <div style={{ textAlign: 'right', paddingRight: 16 }} className="sh-spotlight-pad-r">
+  // Collapsed: single compact row with an expand chevron on the right.
+  if (collapsed) {
+    return (
+      <div className="sh-spotlight-wrap">
+        <div className="sh-spotlight-pad">
+          <div className="sh-spotlight-collapsed">
             <button
               type="button"
               onClick={onToggleCollapsed}
-              aria-label="Collapse featured stores"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--brand-primary)',
-                cursor: 'pointer',
-                padding: 4,
-              }}
+              className="sh-spotlight-collapsed-btn"
+              aria-label="Expand featured stores"
             >
-              <MdExpandLess size={22} />
+              <span className="sh-spotlight-collapsed-label">
+                Featured stores
+              </span>
+              <MdExpandMore size={20} />
             </button>
           </div>
-        </>
-      ) : (
-        <div style={{ textAlign: 'right', paddingRight: 16 }} className="sh-spotlight-pad-r">
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sh-spotlight-wrap">
+      <div className="sh-spotlight-pad">
+        <div className="sh-spotlight-rel">
+          <button
+            type="button"
+            onClick={() => onPress(current.id)}
+            onTouchStart={() => {
+              touchPaused.current = true;
+            }}
+            onTouchEnd={() => {
+              setTimeout(() => {
+                touchPaused.current = false;
+              }, 300);
+            }}
+            className="sh-spotlight-btn"
+            aria-label={`Featured store: ${current.name}`}
+          >
+            <img
+              key={current.id}
+              src={current.image!}
+              alt=""
+              className="sh-spotlight-img"
+            />
+            <div className="sh-spotlight-overlay" aria-hidden />
+            <div className="sh-spotlight-text">
+              <div className="sh-spotlight-eyebrow">Featured store</div>
+              <div className="sh-spotlight-title">{current.name}</div>
+            </div>
+            {withImages.length > 1 && (
+              <div className="sh-spotlight-dots" aria-hidden="true">
+                {withImages.map((_, i) => (
+                  <span
+                    key={i}
+                    className={
+                      i === index
+                        ? 'sh-spotlight-dot sh-spotlight-dot-active'
+                        : 'sh-spotlight-dot'
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </button>
+
           <button
             type="button"
             onClick={onToggleCollapsed}
-            aria-label="Expand featured stores"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--brand-primary)',
-              cursor: 'pointer',
-              padding: 4,
-            }}
+            className="sh-spotlight-collapse"
+            aria-label="Collapse featured stores"
+            title="Collapse featured stores"
           >
-            <MdExpandMore size={22} />
+            <MdExpandLess size={20} />
           </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -1282,7 +1210,11 @@ export default function ShopperHomePage() {
         {/* ── PILL TABS ────────────────────────────────────────
             Only BUYTEMS / SHOPNSTORE / SERVOOKS use this pill
             treatment. Other buttons elsewhere stay rectangular. */}
-        <div style={styles.tabsWrap} role="tablist">
+        <div
+          style={styles.tabsWrap}
+          className="sh-tabs-wrap"
+          role="tablist"
+        >
           <div style={styles.tabsInner} className="sh-tabs-inner">
             {TAB_LABELS.map((label, i) => {
               const active = currentTab === i;
@@ -1760,10 +1692,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tabsWrap: {
     backgroundColor: 'var(--bg-primary)',
-    transition: 'background-color 0.18s ease',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
-  // NOTE: flex + padding on the pill live in CSS (.sh-tab-pill) so the
-  // desktop media query can override them without !important.
+  // flex + padding live in CSS (.sh-tab-pill) so the desktop media query
+  // can override them without !important.
   tabsInner: {
     display: 'flex',
     gap: 8,
@@ -2221,12 +2153,152 @@ const CSS = `
     padding: 11px 10px;
   }
 
-  /* ─── Spotlight height: mobile vs desktop ─────────────── */
+  /* ─── Spotlight ──────────────────────────────────────── */
+  .sh-spotlight-wrap {
+    margin-bottom: 6px;
+  }
+  .sh-spotlight-pad {
+    padding: 0 16px;
+  }
+  .sh-spotlight-rel {
+    position: relative;
+    border-radius: 20px;
+    overflow: hidden;
+  }
   .sh-spotlight-btn {
+    display: block;
+    width: 100%;
     height: 160px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    text-align: left;
+    font-family: inherit;
+  }
+  .sh-spotlight-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    animation: spotlightFade 0.9s ease;
+  }
+  .sh-spotlight-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.72) 0%,
+      rgba(0, 0, 0, 0.05) 55%,
+      transparent 100%
+    );
+    pointer-events: none;
+  }
+  .sh-spotlight-text {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 14px 16px;
+    color: #fff;
+    pointer-events: none;
+  }
+  .sh-spotlight-eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    opacity: 0.75;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .sh-spotlight-title {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sh-spotlight-dots {
+    position: absolute;
+    bottom: 12px;
+    right: 14px;
+    display: flex;
+    gap: 5px;
+    pointer-events: none;
+  }
+  .sh-spotlight-dot {
+    width: 6px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.45);
+    transition: width 0.25s, background 0.25s;
+  }
+  .sh-spotlight-dot-active {
+    width: 16px;
+    background: #fff;
+  }
+  .sh-spotlight-collapse {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 3;
+    transition: background 0.15s;
+  }
+  .sh-spotlight-collapse:hover {
+    background: rgba(0, 0, 0, 0.72);
+  }
+  .sh-spotlight-collapse:focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
   }
 
-  /* Pill tab hover — subtle lift, silver shine peek */
+  /* ─── Spotlight: collapsed state ─────────────────────── */
+  .sh-spotlight-collapsed {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .sh-spotlight-collapsed-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border-default);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-weight: 700;
+    font-size: 12.5px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .sh-spotlight-collapsed-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+  }
+  .sh-spotlight-collapsed-label {
+    letter-spacing: 0.2px;
+  }
+
+  /* ─── Pill tab hover ─────────────────────────────────── */
   .sh-tab-pill:hover:not([aria-selected="true"]) {
     background-color: var(--bg-hover) !important;
     border-color: var(--border-strong) !important;
@@ -2243,7 +2315,7 @@ const CSS = `
     padding: 0 16px 16px;
   }
   .sh-tabs-inner {
-    padding: 12px 16px 10px;
+    padding: 10px 16px 8px;
   }
 
   .sh-modal-overlay {
@@ -2255,6 +2327,7 @@ const CSS = `
     max-height: 88vh;
   }
 
+  /* ─── Desktop ────────────────────────────────────────── */
   @media (min-width: 1024px) {
     .sh-modal-overlay {
       align-items: center;
@@ -2268,24 +2341,36 @@ const CSS = `
       padding: 0 24px 24px;
     }
 
-    /* ── Pill tabs on desktop: content-width, centered ────── */
+    /* Spotlight: shorter, tighter padding */
+    .sh-spotlight-pad {
+      padding: 0 24px;
+    }
+    .sh-spotlight-btn {
+      height: 180px;
+      border-radius: 18px;
+    }
+    .sh-spotlight-rel {
+      border-radius: 18px;
+    }
+    .sh-spotlight-title {
+      font-size: 22px;
+    }
+
+    /* Tab strip: left-aligned, compact, with subtle underline */
+    .sh-tabs-wrap {
+      border-bottom: 1px solid var(--border-default);
+    }
     .sh-tabs-inner {
-      padding: 18px 24px 14px;
-      max-width: 640px;
-      margin: 0 auto;
-      justify-content: center;
+      padding: 14px 24px 12px;
+      justify-content: flex-start;
       gap: 10px;
     }
     .sh-tab-pill {
       flex: 0 0 auto;
-      min-width: 170px;
-      padding: 12px 26px;
-      font-size: 13px;
-      letter-spacing: 0.8px;
-    }
-
-    .sh-spotlight-btn {
-      height: 220px;
+      min-width: 150px;
+      padding: 11px 22px;
+      font-size: 12.5px;
+      letter-spacing: 0.7px;
     }
 
     /* Desktop hover lift on reel cards */
