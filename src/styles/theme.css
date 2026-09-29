@@ -2,22 +2,24 @@
  *
  * Theme palette + global surface styles.
  *
- * Usage: import this once in `app/layout.tsx`. Every component then
- * references colors via `var(--token)` instead of hardcoded hex.
+ * Theme is set via `data-theme="dark|light"` on `<html>`. ThemeProvider
+ * handles the attribute; the inline script in layout.tsx prevents FOUC.
  *
- * Theme is set via `data-theme="dark|light"` on `<html>`. The ThemeProvider
- * handles that attribute; the inline script in layout.tsx prevents FOUC.
+ * Dark palette — Sept 2026 redesign:
+ *   • Thick neutral charcoal (#0A0A0A page, #141414 cards)
+ *   • Pure white primary text (#FFFFFF)
+ *   • Brand CTA blue (#0504AA) for buttons + toggles
  */
 
 :root {
   /* ── Surfaces ──────────────────────────────────────────────── */
-  --bg-primary: #F4F5FB;          /* page background */
-  --bg-secondary: #FFFFFF;        /* card, header */
-  --bg-tertiary: #F8FAFC;         /* nested rows, muted areas */
-  --bg-elevated: #FFFFFF;         /* modals, popovers */
-  --bg-hover: #FAFBFF;            /* hover on rows */
-  --bg-pressed: #F4F5FB;          /* press */
-  --bg-inverse: #0B0B1A;          /* dark tile that stays dark */
+  --bg-primary: #F4F5FB;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #F8FAFC;
+  --bg-elevated: #FFFFFF;
+  --bg-hover: #FAFBFF;
+  --bg-pressed: #F4F5FB;
+  --bg-inverse: #0B0B1A;
 
   /* ── Text ──────────────────────────────────────────────────── */
   --text-primary: #0B0B1A;
@@ -39,7 +41,7 @@
   --brand-on-soft: #0504AA;
   --brand-gradient: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
 
-  /* ── Status (bg + fg pairs) ────────────────────────────────── */
+  /* ── Status ────────────────────────────────────────────────── */
   --success-bg: #DCFCE7;
   --success-fg: #166534;
   --success-strong: #16A34A;
@@ -69,78 +71,72 @@
   --overlay: rgba(15,23,42,0.48);
   --skeleton: linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%);
 
-  /* ── Radius / spacing (unchanged across themes) ────────────── */
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  --radius-lg: 20px;
-  --radius-xl: 24px;
-
   color-scheme: light;
 }
 
 [data-theme='dark'] {
-  /* ── Surfaces ──────────────────────────────────────────────── */
-  --bg-primary: #0B0B14;
-  --bg-secondary: #14141F;
-  --bg-tertiary: #1A1A28;
-  --bg-elevated: #1A1A28;
-  --bg-hover: #1E1E2E;
-  --bg-pressed: #23233A;
-  --bg-inverse: #F8FAFC;
+  /* ── Surfaces — thick charcoal, zero blue tint ─────────────── */
+  --bg-primary: #0A0A0A;          /* page — dense charcoal */
+  --bg-secondary: #141414;        /* cards, sidebar */
+  --bg-tertiary: #1C1C1C;         /* nested rows, muted areas */
+  --bg-elevated: #1A1A1A;         /* modals, popovers */
+  --bg-hover: #1F1F1F;            /* hover on rows */
+  --bg-pressed: #262626;          /* press */
+  --bg-inverse: #FAFAFA;          /* surfaces that stay light in dark mode */
 
-  /* ── Text ──────────────────────────────────────────────────── */
-  --text-primary: #F8FAFC;
-  --text-secondary: #CBD5E1;
-  --text-tertiary: #94A3B8;
-  --text-muted: #64748B;
-  --text-inverse: #0B0B1A;
+  /* ── Text — pure white primary ─────────────────────────────── */
+  --text-primary: #FFFFFF;        /* PURE WHITE */
+  --text-secondary: #D4D4D4;
+  --text-tertiary: #A3A3A3;
+  --text-muted: #737373;
+  --text-inverse: #0A0A0A;
 
-  /* ── Borders ───────────────────────────────────────────────── */
-  --border-default: #23233A;
-  --border-subtle: #1C1C2E;
-  --border-strong: #3D3D5A;
+  /* ── Borders — neutral grey, no blue ───────────────────────── */
+  --border-default: #262626;
+  --border-subtle: #1A1A1A;
+  --border-strong: #404040;
 
-  /* ── Brand ─────────────────────────────────────────────────── */
-  --brand-primary: #7C7CFF;
-  --brand-hover: #9B9BFF;
-  --brand-soft: rgba(124,124,255,0.14);
-  --brand-soft-strong: rgba(124,124,255,0.22);
-  --brand-on-soft: #A5A5FF;
+  /* ── Brand — the CTA color, unchanged ──────────────────────── */
+  --brand-primary: #0504AA;
+  --brand-hover: #2E2CFF;
+  --brand-soft: rgba(5, 4, 170, 0.24);
+  --brand-soft-strong: rgba(5, 4, 170, 0.36);
+  --brand-on-soft: #8B8BFF;       /* text on soft — lighter so it reads */
   --brand-gradient: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
 
-  /* ── Status (bg becomes translucent, fg becomes lighter) ───── */
-  --success-bg: rgba(34,197,94,0.15);
+  /* ── Status — translucent fills + brighter text ────────────── */
+  --success-bg: rgba(34, 197, 94, 0.15);
   --success-fg: #4ADE80;
   --success-strong: #22C55E;
 
-  --danger-bg: rgba(239,68,68,0.15);
+  --danger-bg: rgba(239, 68, 68, 0.15);
   --danger-fg: #F87171;
   --danger-strong: #EF4444;
 
-  --warning-bg: rgba(251,191,36,0.15);
+  --warning-bg: rgba(251, 191, 36, 0.15);
   --warning-fg: #FBBF24;
   --warning-strong: #F59E0B;
 
-  --info-bg: rgba(14,165,233,0.15);
-  --info-fg: #38BDF8;
-  --info-strong: #0EA5E9;
+  --info-bg: rgba(6, 182, 212, 0.15);
+  --info-fg: #22D3EE;
+  --info-strong: #06B6D4;
 
-  --purple-bg: rgba(168,85,247,0.15);
+  --purple-bg: rgba(168, 85, 247, 0.15);
   --purple-fg: #C084FC;
 
-  /* ── Shadows (deeper, less colorful) ───────────────────────── */
-  --shadow-sm: 0 2px 6px rgba(0,0,0,0.35);
-  --shadow-md: 0 10px 24px rgba(0,0,0,0.45);
-  --shadow-lg: 0 20px 40px rgba(0,0,0,0.55);
-  --shadow-brand: 0 12px 28px rgba(124,124,255,0.28);
+  /* ── Shadows — deeper for charcoal, still subtle ───────────── */
+  --shadow-sm: 0 2px 6px rgba(0,0,0,0.45);
+  --shadow-md: 0 10px 24px rgba(0,0,0,0.55);
+  --shadow-lg: 0 20px 40px rgba(0,0,0,0.65);
+  --shadow-brand: 0 12px 28px rgba(5, 4, 170, 0.45);
 
   /* ── Overlays ──────────────────────────────────────────────── */
-  --overlay: rgba(0,0,0,0.72);
+  --overlay: rgba(0,0,0,0.78);
   --skeleton: linear-gradient(
     90deg,
-    #1A1A28 0%,
-    #23233A 50%,
-    #1A1A28 100%
+    #141414 0%,
+    #1F1F1F 50%,
+    #141414 100%
   );
 
   color-scheme: dark;
@@ -156,7 +152,6 @@ body {
     color 0.18s ease;
 }
 
-/* ── Reduced-motion users skip the transition ───────────────── */
 @media (prefers-reduced-motion: reduce) {
   html,
   body {

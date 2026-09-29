@@ -184,18 +184,18 @@ export default function SessionsPage() {
           style={{ ...css.refreshBtn, opacity: refreshing ? 0.5 : 1 }}
           aria-label="Refresh"
         >
-          <MdRefresh size={20} color="#0504AA" />
+          <MdRefresh size={20} color="var(--brand-on-soft)" />
         </button>
       }
     >
       <style>{`
-        .ss-device:active { background-color: #F8FAFF; }
+        .ss-device:active { background-color: var(--bg-hover); }
       `}</style>
 
       {sessions.length === 0 ? (
         <div style={css.empty}>
           <div style={css.emptyIcon}>
-            <MdDevices size={40} color="#0504AA" />
+            <MdDevices size={40} color="var(--brand-on-soft)" />
           </div>
           <h2 style={css.emptyTitle}>No active sessions</h2>
           <p style={css.emptyBody}>
@@ -211,11 +211,11 @@ export default function SessionsPage() {
             <div key={s.id} className="ss-device" style={css.deviceRow}>
               <span style={css.deviceIcon}>
                 {s.device_kind === 'mobile' ? (
-                  <MdPhoneIphone size={20} color="#0504AA" />
+                  <MdPhoneIphone size={20} color="var(--brand-on-soft)" />
                 ) : s.device_kind === 'tablet' ? (
-                  <MdTabletMac size={20} color="#0504AA" />
+                  <MdTabletMac size={20} color="var(--brand-on-soft)" />
                 ) : (
-                  <MdComputer size={20} color="#0504AA" />
+                  <MdComputer size={20} color="var(--brand-on-soft)" />
                 )}
               </span>
               <div style={css.deviceBody}>
@@ -234,7 +234,7 @@ export default function SessionsPage() {
                 )}
                 {(s.city || s.country || s.ip) && (
                   <div style={css.deviceMetaRow}>
-                    <MdLocationOn size={12} color="#94A3B8" />
+                    <MdLocationOn size={12} color="var(--text-muted)" />
                     <span style={css.deviceMeta}>
                       {[s.city, s.country].filter(Boolean).join(', ') ||
                         s.ip}
@@ -251,7 +251,7 @@ export default function SessionsPage() {
                   style={css.revokeBtn}
                   aria-label="Sign out this device"
                 >
-                  <MdLogout size={18} color="#DC2626" />
+                  <MdLogout size={18} color="var(--danger-fg)" />
                 </button>
               )}
             </div>
@@ -261,7 +261,7 @@ export default function SessionsPage() {
 
       {others.length > 0 && (
         <button onClick={revokeAllOthers} style={css.dangerBtn}>
-          <MdLogout size={18} color="#DC2626" />
+          <MdLogout size={18} color="var(--danger-fg)" />
           <span>
             Sign out all other devices ({others.length})
           </span>
@@ -277,7 +277,7 @@ const css: Record<string, React.CSSProperties> = {
     height: 38,
     borderRadius: 12,
     border: 'none',
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -294,7 +294,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 92,
     height: 92,
     borderRadius: 28,
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -303,13 +303,13 @@ const css: Record<string, React.CSSProperties> = {
   emptyTitle: {
     fontSize: 19,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   emptyBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     margin: '8px 0 0',
     maxWidth: 300,
     lineHeight: 1.55,
@@ -319,37 +319,54 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'flex-start',
     gap: 12,
     padding: '14px 16px',
-    borderBottom: '1px solid #F1F5F9',
+    borderBottom: '1px solid var(--border-subtle)',
     transition: 'background-color 0.15s',
   },
   deviceIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  deviceBody: { flex: 1, display: 'flex', flexDirection: 'column', gap: 3 },
-  deviceTop: { display: 'flex', alignItems: 'center', gap: 8 },
+  deviceBody: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 3,
+    minWidth: 0,
+  },
+  deviceTop: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   deviceName: {
     fontSize: 14.5,
     fontWeight: 700,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
+    lineHeight: 1.35,
+    wordBreak: 'break-word',
   },
   currentChip: {
-    padding: '2px 8px',
+    padding: '3px 9px',
     borderRadius: 999,
-    backgroundColor: '#DCFCE7',
-    color: '#166534',
-    fontSize: 10,
+    backgroundColor: 'var(--success-bg)',
+    color: 'var(--success-fg)',
+    fontSize: 10.5,
     fontWeight: 800,
     letterSpacing: 0.3,
+    flexShrink: 0,
   },
-  deviceMeta: { fontSize: 12, color: '#94A3B8' },
+  deviceMeta: {
+    fontSize: 12,
+    color: 'var(--text-muted)',
+  },
   deviceMetaRow: {
     display: 'flex',
     alignItems: 'center',
@@ -374,9 +391,9 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '14px 20px',
     borderRadius: 16,
-    border: '1.5px solid #FECACA',
-    backgroundColor: '#FFFFFF',
-    color: '#DC2626',
+    border: '1.5px solid var(--danger-bg)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--danger-fg)',
     fontSize: 14.5,
     fontWeight: 700,
     cursor: 'pointer',
@@ -385,7 +402,8 @@ const css: Record<string, React.CSSProperties> = {
   skeleton: {
     height: 88,
     borderRadius: 18,
-    backgroundColor: '#EAECF3',
-    animation: 'pulse 1.4s ease-in-out infinite',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
+    opacity: 0.5,
   },
 };
