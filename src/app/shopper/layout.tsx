@@ -12,13 +12,12 @@ import {
 } from 'react-icons/md';
 import type { IconType } from 'react-icons';
 
-// ─── Colors ─────────────────────────────────────────────────────────
-// Flat light nav palette — matches "image 1" layout with a white surface.
-const NAV_BG = '#FFFFFF';
-const NAV_BORDER = '#E5E5E5';
-const ACTIVE_COLOR = '#0504AA';
-const INACTIVE_COLOR = 'rgba(26, 26, 26, 0.55)';
-const ACTIVE_AVATAR_RING = '#0504AA';
+// ─── Nav palette (all values resolve through CSS vars) ──────────────
+const NAV_BG = 'var(--bg-secondary)';
+const NAV_BORDER = 'var(--border-default)';
+const ACTIVE_COLOR = 'var(--brand-primary)';
+const INACTIVE_COLOR = 'var(--text-muted)';
+const ACTIVE_AVATAR_RING = 'var(--brand-primary)';
 
 function UserAvatar({
   imageUrl,
@@ -37,14 +36,17 @@ function UserAvatar({
         height: 28,
         borderRadius: '50%',
         overflow: 'hidden',
-        backgroundColor: '#F0F0F0',
+        backgroundColor: 'var(--bg-tertiary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: 12,
-        color: '#0504AA',
-        border: active ? `2px solid ${ACTIVE_AVATAR_RING}` : '2px solid transparent',
+        color: 'var(--brand-on-soft)',
+        border: active
+          ? `2px solid ${ACTIVE_AVATAR_RING}`
+          : '2px solid transparent',
         boxSizing: 'border-box',
+        transition: 'background-color 0.18s ease, border-color 0.18s ease',
       }}
     >
       {imageUrl ? (
@@ -60,7 +62,11 @@ function UserAvatar({
   );
 }
 
-export default function ShopperLayout({ children }: { children: React.ReactNode }) {
+export default function ShopperLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [profile, setProfile] = useState<{
@@ -87,19 +93,39 @@ export default function ShopperLayout({ children }: { children: React.ReactNode 
 
   const navigate = (index: number) => {
     switch (index) {
-      case 0: router.replace('/shopper/home'); break;
-      case 1: router.replace('/shopper/map'); break;
-      case 2: router.replace('/shopper/saved'); break;
-      case 3: router.replace('/shopper/inbox'); break;
-      case 4: router.replace('/shopper/wallet'); break;
-      case 5: router.replace('/shopper/profile'); break;
+      case 0:
+        router.replace('/shopper/home');
+        break;
+      case 1:
+        router.replace('/shopper/map');
+        break;
+      case 2:
+        router.replace('/shopper/saved');
+        break;
+      case 3:
+        router.replace('/shopper/inbox');
+        break;
+      case 4:
+        router.replace('/shopper/wallet');
+        break;
+      case 5:
+        router.replace('/shopper/profile');
+        break;
     }
   };
 
   const avatarName = profile?.nickname || profile?.phone || '';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        backgroundColor: 'var(--bg-primary)',
+        transition: 'background-color 0.18s ease',
+      }}
+    >
       {/* Content area — padded at the bottom so it doesn't hide behind
           the fixed nav bar. 64px is the nav height. */}
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 64 }}>
@@ -149,6 +175,8 @@ export default function ShopperLayout({ children }: { children: React.ReactNode 
             cursor: 'pointer',
             flex: 1,
             gap: 2,
+            padding: '4px 0',
+            WebkitTapHighlightColor: 'transparent',
           }}
         >
           <UserAvatar
@@ -160,7 +188,8 @@ export default function ShopperLayout({ children }: { children: React.ReactNode 
             style={{
               fontSize: 10,
               fontWeight: currentIndex === 5 ? 600 : 400,
-              color: currentIndex === 5 ? ACTIVE_COLOR : INACTIVE_COLOR,
+              color:
+                currentIndex === 5 ? ACTIVE_COLOR : INACTIVE_COLOR,
               lineHeight: 1,
             }}
           >
@@ -232,5 +261,6 @@ const styles = {
     paddingLeft: 'env(safe-area-inset-left)',
     paddingRight: 'env(safe-area-inset-right)',
     zIndex: 100,
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   } as React.CSSProperties,
 };
