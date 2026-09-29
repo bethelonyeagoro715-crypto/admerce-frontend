@@ -10,11 +10,8 @@ import {
   MdCheck,
   MdClose,
   MdErrorOutline,
-  MdImage,
   MdVideocam,
   MdLocationOn,
-  MdPhotoLibrary,
-  MdCameraAlt,
   MdInsertDriveFile,
   MdAccessTime,
   MdOutlineAttachMoney,
@@ -41,7 +38,6 @@ const SERVICE_CATEGORIES: ServiceCategory[] = [
 ];
 
 const MAX_VIDEO_BYTES = 30 * 1024 * 1024; // 30 MB
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB
 
 // ─── Component ──────────────────────────────────────────────────────
 export default function CreateServicePage() {
@@ -58,8 +54,6 @@ export default function CreateServicePage() {
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lat, setLat] = useState(5.5103);
@@ -67,7 +61,6 @@ export default function CreateServicePage() {
   const [locationReady, setLocationReady] = useState(false);
 
   const videoInputRef = useRef<HTMLInputElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const reqSeq = useRef(0);
   const isMountedRef = useRef(true);
 
@@ -99,19 +92,16 @@ export default function CreateServicePage() {
     );
   }, []);
 
-  // Revoke blob URLs on unmount
+  // Revoke blob URL on unmount
   useEffect(() => {
     return () => {
       if (videoPreview && videoPreview.startsWith('blob:')) {
         URL.revokeObjectURL(videoPreview);
       }
-      if (imagePreview && imagePreview.startsWith('blob:')) {
-        URL.revokeObjectURL(imagePreview);
-      }
     };
-  }, [videoPreview, imagePreview]);
+  }, [videoPreview]);
 
-  // ── File handlers ──────────────────────────────────────────────
+  // ── Video handlers ─────────────────────────────────────────────
   const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -141,37 +131,6 @@ export default function CreateServicePage() {
     setVideoFile(null);
     setVideoPreview(null);
     if (videoInputRef.current) videoInputRef.current.value = '';
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > MAX_IMAGE_BYTES) {
-      void alertDialog({
-        title: 'Image too large',
-        body: 'Please pick an image under 8 MB.',
-        kind: 'warning',
-      });
-      return;
-    }
-    if (imagePreview && imagePreview.startsWith('blob:')) {
-      URL.revokeObjectURL(imagePreview);
-    }
-    setImageFile(file);
-    try {
-      setImagePreview(URL.createObjectURL(file));
-    } catch {
-      setImagePreview(null);
-    }
-  };
-
-  const removeImage = () => {
-    if (imagePreview && imagePreview.startsWith('blob:')) {
-      URL.revokeObjectURL(imagePreview);
-    }
-    setImageFile(null);
-    setImagePreview(null);
-    if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
   // ── Validation ─────────────────────────────────────────────────
@@ -218,32 +177,20 @@ export default function CreateServicePage() {
       const serviceId = result.service_id;
       if (!serviceId) throw new Error('Service created but no ID returned');
 
-      // Media uploads are best-effort — the service already exists.
-      const warnings: string[] = [];
-
-      if (imageFile) {
-        try {
-          await api.uploadServiceImage(serviceId, imageFile);
-        } catch (err) {
-          warnings.push(`image (${extractErrorDetail(err, 'unknown error')})`);
-        }
-      }
-
+      // Video upload is best-effort — the service already exists.
+      let videoWarning: string | null = null;
       if (videoFile) {
         try {
           await api.uploadServiceVideo(serviceId, videoFile);
         } catch (err) {
-          warnings.push(`video (${extractErrorDetail(err, 'unknown error')})`);
+          videoWarning = extractErrorDetail(err, 'Unknown error');
         }
       }
 
-      if (warnings.length > 0) {
+      if (videoWarning) {
         await alertDialog({
-          title: 'Service live, some media failed',
-          body:
-            `Your service was created but ${warnings.join(
-              ' and ',
-            )} didn't upload. You can add them later from Edit Service.`,
+          title: 'Service live, video failed',
+          body: `Your service was created but the video didn't upload: ${videoWarning}. You can add it later from Edit Service.`,
           kind: 'warning',
           confirmLabel: 'Got it',
         });
@@ -305,10 +252,9 @@ export default function CreateServicePage() {
       </div>
 
       <div style={css.sheet}>
-        {/* MEDIA */}
-        <h3 style={css.sectionLabel}>Media</h3>
+        {/* VIDEO HERO */}
+        <h3 style={css.sectionLabel}>Service reel</h3>
 
-        {/* Video hero — the reel */}
         <div style={css.videoCard} className="sp-video-card">
           {videoPreview ? (
             <>
@@ -344,13 +290,13 @@ export default function CreateServicePage() {
                 Add a vertical video
               </div>
               <div style={css.videoPlaceholderHint}>
-                What shoppers see in the feed · 9:16 · under 30 MB
+                This is what shoppers see in the feed · 9:16 · under 30 MB
               </div>
             </button>
           )}
         </div>
 
-        {/* Media controls */}
+        {/* Video controls */}
         <div style={css.mediaControls}>
           <button
             type="button"
@@ -361,27 +307,15 @@ export default function CreateServicePage() {
             <MdVideocam size={16} color="#0504AA" />
             <span>{videoFile ? 'Change video' : 'Add video'}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => imageInputRef.current?.click()}
-            style={css.mediaBtn}
-            className="sp-media-btn"
-          >
-            <MdImage size={16} color="#7E22CE" />
-            <span>{imageFile ? 'Change image' : 'Add image'}</span>
-          </button>
-          {(videoFile || imageFile) && (
+          {videoFile && (
             <button
               type="button"
-              onClick={() => {
-                removeVideo();
-                removeImage();
-              }}
+              onClick={removeVideo}
               style={{ ...css.mediaBtn, ...css.mediaBtnDanger }}
               className="sp-media-btn"
             >
               <MdClose size={16} color="#DC2626" />
-              <span>Clear all</span>
+              <span>Remove</span>
             </button>
           )}
         </div>
@@ -393,37 +327,6 @@ export default function CreateServicePage() {
           style={{ display: 'none' }}
           onChange={handleVideoChange}
         />
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: 'none' }}
-          onChange={handleImageChange}
-        />
-
-        {/* Image preview + filename chip */}
-        {imagePreview && (
-          <div style={css.imagePreviewRow}>
-            <div style={css.imageThumb}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imagePreview} alt="" style={css.imageThumbImg} />
-            </div>
-            <div style={css.imageMeta}>
-              <div style={css.imageMetaLabel}>Service photo</div>
-              <div style={css.imageMetaHint}>
-                {imageFile?.name || 'image.jpg'}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={removeImage}
-              style={css.imageRemoveBtn}
-              aria-label="Remove image"
-            >
-              <MdClose size={14} color="#64748B" />
-            </button>
-          </div>
-        )}
 
         {videoFile && (
           <div style={css.fileChip}>
@@ -581,7 +484,10 @@ export default function CreateServicePage() {
 
         {/* LOCATION PILL */}
         <div style={css.locationPill}>
-          <MdLocationOn size={16} color={locationReady ? '#16A34A' : '#94A3B8'} />
+          <MdLocationOn
+            size={16}
+            color={locationReady ? '#16A34A' : '#94A3B8'}
+          />
           <div style={css.locationText}>
             <div style={css.locationTitle}>
               {locationReady ? 'Location set' : 'Fetching location…'}
@@ -665,9 +571,6 @@ const CSS = `
   @media (min-width: 1024px) {
     .sp-add-sheet {
       max-width: 880px;
-    }
-    .sp-add-video {
-      max-width: 340px;
     }
   }
 `;
@@ -812,8 +715,7 @@ const css: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     padding: 24,
     gap: 8,
-    background:
-      'linear-gradient(135deg, #0B0B1A 0%, #0504AA 100%)',
+    background: 'linear-gradient(135deg, #0B0B1A 0%, #0504AA 100%)',
     border: 'none',
     cursor: 'pointer',
     fontFamily: 'inherit',
@@ -869,63 +771,6 @@ const css: Record<string, React.CSSProperties> = {
     borderColor: '#FECACA',
     backgroundColor: '#FEF2F2',
     color: '#DC2626',
-  },
-
-  // IMAGE PREVIEW
-  imagePreviewRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '10px 12px',
-    marginTop: 12,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
-    borderRadius: 14,
-  },
-  imageThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#F4F5FB',
-    flexShrink: 0,
-  },
-  imageThumbImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    display: 'block',
-  },
-  imageMeta: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-  },
-  imageMetaLabel: {
-    fontSize: 13.5,
-    fontWeight: 800,
-    color: '#0B0B1A',
-  },
-  imageMetaHint: {
-    fontSize: 11.5,
-    color: '#94A3B8',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  imageRemoveBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    border: 'none',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
   },
 
   // FILE CHIP
