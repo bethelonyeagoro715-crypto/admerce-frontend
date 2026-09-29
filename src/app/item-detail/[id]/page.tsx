@@ -12,7 +12,6 @@ import {
   MdShare,
   MdFavorite,
   MdFavoriteBorder,
-  MdSearch,
   MdRemove,
   MdAdd,
   MdLocationOn,
@@ -26,6 +25,53 @@ import {
   MdClose,
   MdRefresh,
 } from 'react-icons/md';
+
+// ─── Lens icon (matches shopper home) ───────────────────────────────
+function LensIcon({
+  size = 18,
+  color = 'currentColor',
+}: {
+  size?: number;
+  color?: string;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect
+        x="2.25"
+        y="2.25"
+        width="17"
+        height="17"
+        rx="4.25"
+        stroke={color}
+        strokeWidth="2.2"
+      />
+      <circle
+        cx="10.75"
+        cy="10.75"
+        r="5"
+        stroke={color}
+        strokeWidth="2.2"
+      />
+      <rect
+        x="18.25"
+        y="9.25"
+        width="3.5"
+        height="3"
+        rx="1.2"
+        stroke={color}
+        strokeWidth="2.2"
+      />
+    </svg>
+  );
+}
 
 // ─── Types ──────────────────────────────────────────────────────────
 type FulfillmentType = 'pickup' | 'delivery';
@@ -120,10 +166,25 @@ function Toast({
 }) {
   const color =
     toast.kind === 'success'
-      ? { bg: '#ECFDF5', border: '#A7F3D0', text: '#065F46', icon: '#16A34A' }
+      ? {
+          bg: 'var(--success-bg)',
+          border: 'var(--success-strong)',
+          text: 'var(--success-fg)',
+          icon: 'var(--success-fg)',
+        }
       : toast.kind === 'error'
-      ? { bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', icon: '#DC2626' }
-      : { bg: '#EEF0FF', border: '#C9CBFF', text: '#0504AA', icon: '#0504AA' };
+      ? {
+          bg: 'var(--danger-bg)',
+          border: 'var(--danger-strong)',
+          text: 'var(--danger-fg)',
+          icon: 'var(--danger-fg)',
+        }
+      : {
+          bg: 'var(--brand-soft)',
+          border: 'var(--brand-primary)',
+          text: 'var(--brand-on-soft)',
+          icon: 'var(--brand-on-soft)',
+        };
 
   return (
     <div
@@ -144,7 +205,7 @@ function Toast({
         fontWeight: 600,
         lineHeight: 1.4,
         cursor: 'pointer',
-        boxShadow: '0 10px 30px rgba(11, 11, 26, 0.10)',
+        boxShadow: 'var(--shadow-md)',
         animation: 'idToastIn 0.2s ease',
       }}
     >
@@ -239,8 +300,7 @@ function DetailSkeleton() {
 
 function skeletonBlock(extra: React.CSSProperties): React.CSSProperties {
   return {
-    background:
-      'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
+    background: 'var(--skeleton)',
     backgroundSize: '800px 100%',
     animation: 'idShimmer 1.4s infinite linear',
     ...extra,
@@ -379,7 +439,6 @@ export default function ItemDetailPage() {
     }
   }, [listing, store, quantity, showToast]);
 
-  // ✅ FIX — translate the picked preset string to hours and send it.
   const reserveNow = useCallback(
     async (pickupTime: string) => {
       if (!listing || !store) return;
@@ -444,7 +503,6 @@ export default function ItemDetailPage() {
     }
   }, [listing, quantity, showToast]);
 
-  // ✅ FIX — delivery gets the minimum 3-hour window.
   const proceedToDelivery = useCallback(async () => {
     if (!listing || !store) return;
     setIsLoading(true);
@@ -655,7 +713,7 @@ export default function ItemDetailPage() {
             onClick={() => router.back()}
             aria-label="Back"
           >
-            <MdArrowBack size={22} color="#0B0B1A" />
+            <MdArrowBack size={22} color="currentColor" />
           </button>
           <h1 className="idt-title">Item</h1>
           <div style={{ width: 36 }} />
@@ -675,14 +733,14 @@ export default function ItemDetailPage() {
             onClick={() => router.back()}
             aria-label="Back"
           >
-            <MdArrowBack size={22} color="#0B0B1A" />
+            <MdArrowBack size={22} color="currentColor" />
           </button>
           <h1 className="idt-title">Item</h1>
           <div style={{ width: 36 }} />
         </header>
         <div className="idt-center">
           <div className="idt-stateIcon" aria-hidden="true">
-            <MdErrorOutline size={32} color="#DC2626" />
+            <MdErrorOutline size={32} color="var(--danger-fg)" />
           </div>
           <h2 className="idt-stateTitle">Something went wrong</h2>
           <p className="idt-stateBody">
@@ -737,7 +795,7 @@ export default function ItemDetailPage() {
           onClick={() => router.back()}
           aria-label="Back"
         >
-          <MdArrowBack size={22} color="#0B0B1A" />
+          <MdArrowBack size={22} color="currentColor" />
         </button>
         <h1 className="idt-title">Item</h1>
         <div className="idt-actions">
@@ -747,7 +805,7 @@ export default function ItemDetailPage() {
             aria-label="Share"
             title="Share"
           >
-            <MdShare size={20} color="#0B0B1A" />
+            <MdShare size={20} color="currentColor" />
           </button>
           <button
             className="idt-iconBtn"
@@ -757,9 +815,9 @@ export default function ItemDetailPage() {
             title={isSaved ? 'Unsave' : 'Save'}
           >
             {isSaved ? (
-              <MdFavorite size={20} color="#0504AA" />
+              <MdFavorite size={20} color="var(--brand-primary)" />
             ) : (
-              <MdFavoriteBorder size={20} color="#0B0B1A" />
+              <MdFavoriteBorder size={20} color="currentColor" />
             )}
           </button>
         </div>
@@ -779,7 +837,7 @@ export default function ItemDetailPage() {
             <img src={imageUrl} alt={listing.title} className="idt-heroImg" />
           ) : (
             <div className="idt-heroFallback" aria-hidden="true">
-              <MdImage size={48} color="#94a3b8" />
+              <MdImage size={48} color="var(--text-muted)" />
             </div>
           )}
 
@@ -804,9 +862,9 @@ export default function ItemDetailPage() {
                 }
               }}
               aria-label="Visual search"
-              title="Visual search"
+              title="Search by photo"
             >
-              <MdSearch size={20} color="#0504AA" />
+              <LensIcon size={20} color="#0504AA" />
             </div>
           )}
         </button>
@@ -862,13 +920,13 @@ export default function ItemDetailPage() {
             aria-label="Message store"
             title="Message store"
           >
-            <MdChatBubbleOutline size={20} color="#0504AA" />
+            <MdChatBubbleOutline size={20} color="var(--brand-on-soft)" />
           </button>
         </div>
 
         {store?.address && (
           <div className="idt-addressRow">
-            <MdLocationOn size={16} color="#64748B" />
+            <MdLocationOn size={16} color="var(--text-tertiary)" />
             <span className="idt-addressText" title={store.address}>
               {store.address}
             </span>
@@ -914,7 +972,11 @@ export default function ItemDetailPage() {
             >
               <MdRemove
                 size={18}
-                color={quantity <= 1 || outOfStock ? '#cbd5e1' : '#0B0B1A'}
+                color={
+                  quantity <= 1 || outOfStock
+                    ? 'var(--text-muted)'
+                    : 'currentColor'
+                }
               />
             </button>
             <span className="idt-qtyValue">{quantity}</span>
@@ -930,7 +992,9 @@ export default function ItemDetailPage() {
               <MdAdd
                 size={18}
                 color={
-                  quantity >= maxQty || outOfStock ? '#cbd5e1' : '#0B0B1A'
+                  quantity >= maxQty || outOfStock
+                    ? 'var(--text-muted)'
+                    : 'currentColor'
                 }
               />
             </button>
@@ -1053,7 +1117,7 @@ export default function ItemDetailPage() {
         >
           <div className="idt-modal" onClick={(e) => e.stopPropagation()}>
             <div className="idt-modalIcon">
-              <MdStorefront size={28} color="#0504AA" />
+              <MdStorefront size={28} color="var(--brand-on-soft)" />
             </div>
             <h3 className="idt-modalTitle">Are you at the store?</h3>
             <p className="idt-modalBody">
@@ -1120,8 +1184,10 @@ const CSS = `
     display: flex;
     flex-direction: column;
     height: 100dvh;
-    background: #F4F5FB;
+    background: var(--bg-primary);
+    color: var(--text-primary);
     position: relative;
+    transition: background-color 0.18s ease, color 0.18s ease;
   }
 
   .idt-toastStack {
@@ -1141,17 +1207,19 @@ const CSS = `
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    background: #fff;
-    border-bottom: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-default);
     position: sticky;
     top: 0;
     z-index: 10;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .idt-title {
     flex: 1;
     font-size: 16px;
     font-weight: 700;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0;
     text-align: center;
     letter-spacing: -0.01em;
@@ -1163,6 +1231,7 @@ const CSS = `
     border-radius: 10px;
     border: none;
     background: transparent;
+    color: var(--text-primary);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -1170,10 +1239,10 @@ const CSS = `
     transition: background 0.15s;
     font-family: inherit;
   }
-  .idt-iconBtn:hover:not(:disabled) { background: #F1F3FA; }
+  .idt-iconBtn:hover:not(:disabled) { background: var(--bg-hover); }
   .idt-iconBtn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .idt-iconBtnFilled { background: #EEF0FF; }
-  .idt-iconBtnFilled:hover { background: #DDE2FF; }
+  .idt-iconBtnFilled { background: var(--brand-soft); }
+  .idt-iconBtnFilled:hover { background: var(--brand-soft-strong); }
 
   .idt-scroll {
     flex: 1;
@@ -1188,7 +1257,7 @@ const CSS = `
     aspect-ratio: 1 / 1;
     border-radius: 20px;
     overflow: hidden;
-    background: #E8EAF0;
+    background: var(--bg-tertiary);
     margin-bottom: 18px;
     display: block;
   }
@@ -1215,7 +1284,7 @@ const CSS = `
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #E8EAF0;
+    background: var(--bg-tertiary);
   }
   .idt-lensBtn {
     position: absolute;
@@ -1281,7 +1350,7 @@ const CSS = `
   .idt-itemTitle {
     font-size: 22px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     line-height: 1.25;
     letter-spacing: -0.02em;
     margin: 0 0 10px;
@@ -1295,12 +1364,12 @@ const CSS = `
   .idt-priceValue {
     font-size: 26px;
     font-weight: 800;
-    color: #0504AA;
+    color: var(--brand-primary);
     letter-spacing: -0.02em;
   }
   .idt-priceMeta {
     font-size: 13.5px;
-    color: #64748B;
+    color: var(--text-tertiary);
     font-weight: 600;
   }
 
@@ -1309,10 +1378,11 @@ const CSS = `
     align-items: center;
     gap: 12px;
     padding: 8px 12px 8px 8px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 14px;
     margin-bottom: 10px;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .idt-storeTapArea {
     flex: 1;
@@ -1329,21 +1399,21 @@ const CSS = `
     border-radius: 10px;
     transition: background 0.15s;
   }
-  .idt-storeTapArea:hover { background: #F7F9FF; }
+  .idt-storeTapArea:hover { background: var(--bg-hover); }
   .idt-avatarWrap {
     width: 44px;
     height: 44px;
     flex: 0 0 44px;
     border-radius: 12px;
     overflow: hidden;
-    background: #EEF0FF;
+    background: var(--brand-soft);
     display: flex;
     align-items: center;
     justify-content: center;
   }
   .idt-avatarImg { width: 100%; height: 100%; object-fit: cover; }
   .idt-avatarText {
-    color: #0504AA;
+    color: var(--brand-on-soft);
     font-weight: 800;
     font-size: 18px;
   }
@@ -1351,7 +1421,7 @@ const CSS = `
   .idt-storeName {
     font-size: 14.5px;
     font-weight: 700;
-    color: #0B0B1A;
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1362,26 +1432,27 @@ const CSS = `
     gap: 4px;
     margin-top: 2px;
     font-size: 12.5px;
-    color: #475569;
+    color: var(--text-secondary);
     font-weight: 700;
   }
-  .idt-storeReviews { color: #94A3B8; font-weight: 500; }
+  .idt-storeReviews { color: var(--text-muted); font-weight: 500; }
 
   .idt-addressRow {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 14px;
     margin-bottom: 18px;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .idt-addressText {
     flex: 1;
     min-width: 0;
     font-size: 13.5px;
-    color: #475569;
+    color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1389,7 +1460,7 @@ const CSS = `
   .idt-mapLink {
     background: none;
     border: none;
-    color: #0504AA;
+    color: var(--brand-primary);
     font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
@@ -1405,10 +1476,11 @@ const CSS = `
     justify-content: space-between;
     gap: 12px;
     padding: 14px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 14px;
     margin-bottom: 20px;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .idt-qtyText {
     display: flex;
@@ -1420,17 +1492,17 @@ const CSS = `
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 1px;
-    color: #94A3B8;
+    color: var(--text-muted);
     text-transform: uppercase;
   }
   .idt-stockLine {
     font-size: 13px;
     font-weight: 700;
-    color: #475569;
+    color: var(--text-secondary);
     line-height: 1.35;
   }
-  .idt-stockLow { color: #B45309; }
-  .idt-stockOut { color: #DC2626; }
+  .idt-stockLow { color: var(--warning-fg); }
+  .idt-stockOut { color: var(--danger-fg); }
 
   .idt-section { margin-bottom: 20px; }
   .idt-sectionLabel {
@@ -1438,7 +1510,7 @@ const CSS = `
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 1px;
-    color: #94A3B8;
+    color: var(--text-muted);
     text-transform: uppercase;
     margin-bottom: 10px;
   }
@@ -1448,9 +1520,9 @@ const CSS = `
     align-items: center;
     gap: 4px;
     padding: 4px;
-    border: 1px solid #E2E8F0;
+    border: 1px solid var(--border-default);
     border-radius: 12px;
-    background: #F8FAFC;
+    background: var(--bg-tertiary);
     flex: 0 0 auto;
   }
   .idt-qtyBtn {
@@ -1458,21 +1530,22 @@ const CSS = `
     height: 34px;
     border-radius: 9px;
     border: none;
-    background: #fff;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     transition: background 0.15s;
   }
-  .idt-qtyBtn:hover:not(:disabled) { background: #EEF0FF; }
+  .idt-qtyBtn:hover:not(:disabled) { background: var(--brand-soft); }
   .idt-qtyBtn:disabled { cursor: not-allowed; }
   .idt-qtyValue {
     min-width: 36px;
     text-align: center;
     font-weight: 800;
     font-size: 15px;
-    color: #0B0B1A;
+    color: var(--text-primary);
     font-variant-numeric: tabular-nums;
   }
 
@@ -1485,9 +1558,9 @@ const CSS = `
     flex: 1;
     padding: 12px 10px;
     border-radius: 12px;
-    border: 1px solid #E2E8F0;
-    background: #fff;
-    color: #334155;
+    border: 1px solid var(--border-default);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
     font-weight: 700;
     font-size: 13.5px;
     cursor: pointer;
@@ -1498,12 +1571,12 @@ const CSS = `
     font-family: inherit;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
-  .idt-segBtn:hover:not(:disabled) { border-color: #C9CBFF; }
+  .idt-segBtn:hover:not(:disabled) { border-color: var(--brand-primary); }
   .idt-segBtn:disabled { opacity: 0.5; cursor: not-allowed; }
   .idt-segBtnActive {
-    background: #EEF0FF;
-    border-color: #0504AA;
-    color: #0504AA;
+    background: var(--brand-soft);
+    border-color: var(--brand-primary);
+    color: var(--brand-primary);
   }
 
   .idt-chipRow {
@@ -1515,20 +1588,20 @@ const CSS = `
   .idt-chip {
     padding: 8px 14px;
     border-radius: 999px;
-    border: 1px solid #E2E8F0;
-    background: #fff;
-    color: #334155;
+    border: 1px solid var(--border-default);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
     font-weight: 700;
     font-size: 13px;
     cursor: pointer;
     font-family: inherit;
     transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
-  .idt-chip:hover:not(:disabled) { border-color: #C9CBFF; }
+  .idt-chip:hover:not(:disabled) { border-color: var(--brand-primary); }
   .idt-chip:disabled { opacity: 0.5; cursor: not-allowed; }
   .idt-chipActive {
-    background: #0504AA;
-    border-color: #0504AA;
+    background: var(--brand-primary);
+    border-color: var(--brand-primary);
     color: #fff;
   }
 
@@ -1537,16 +1610,17 @@ const CSS = `
     font-size: 12.5px;
     font-weight: 600;
     line-height: 1.5;
-    color: #64748B;
+    color: var(--text-tertiary);
   }
-  .idt-hintWarn { color: #B45309; }
+  .idt-hintWarn { color: var(--warning-fg); }
 
   .idt-summary {
     padding: 14px 16px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 14px;
     margin-bottom: 20px;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .idt-summaryRow {
     display: flex;
@@ -1554,15 +1628,15 @@ const CSS = `
     padding: 6px 0;
     font-size: 13.5px;
   }
-  .idt-summaryLabel { color: #64748B; font-weight: 600; }
-  .idt-summaryValue { color: #0B0B1A; font-weight: 700; }
+  .idt-summaryLabel { color: var(--text-tertiary); font-weight: 600; }
+  .idt-summaryValue { color: var(--text-primary); font-weight: 700; }
   .idt-summaryTotal {
     padding-top: 12px;
     margin-top: 8px;
-    border-top: 1px solid #F1F5F9;
+    border-top: 1px solid var(--border-subtle);
   }
   .idt-summaryGrand {
-    color: #0504AA;
+    color: var(--brand-primary);
     font-size: 17px;
     font-weight: 800;
     letter-spacing: -0.01em;
@@ -1570,7 +1644,7 @@ const CSS = `
 
   .idt-description {
     font-size: 14px;
-    color: #475569;
+    color: var(--text-secondary);
     line-height: 1.6;
     margin: 0;
     white-space: pre-wrap;
@@ -1580,21 +1654,21 @@ const CSS = `
     position: sticky;
     bottom: 0;
     padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
-    background: linear-gradient(to top, #F4F5FB 65%, transparent);
+    background: linear-gradient(to top, var(--bg-primary) 65%, transparent);
   }
   .idt-ctaBtn {
     width: 100%;
     padding: 16px;
     border-radius: 14px;
     border: none;
-    background: #0504AA;
+    background: var(--brand-primary);
     color: #fff;
     font-size: 15.5px;
     font-weight: 800;
     letter-spacing: -0.01em;
     cursor: pointer;
     font-family: inherit;
-    box-shadow: 0 10px 30px rgba(5, 4, 170, 0.25);
+    box-shadow: var(--shadow-brand);
     transition: opacity 0.15s, transform 0.15s;
     display: flex;
     align-items: center;
@@ -1604,7 +1678,8 @@ const CSS = `
   .idt-ctaBtn:hover:not(:disabled) { opacity: 0.94; }
   .idt-ctaBtn:disabled { cursor: not-allowed; opacity: 0.6; }
   .idt-ctaBtnDisabled {
-    background: #cbd5e1;
+    background: var(--border-strong);
+    color: var(--text-muted);
     box-shadow: none;
   }
   .idt-ctaSpinner {
@@ -1619,7 +1694,7 @@ const CSS = `
   .idt-modalOverlay {
     position: fixed;
     inset: 0;
-    background: rgba(11, 11, 26, 0.55);
+    background: var(--overlay);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1628,19 +1703,21 @@ const CSS = `
     animation: idToastIn 0.15s ease;
   }
   .idt-modal {
-    background: #fff;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
     border-radius: 20px;
     padding: 24px 22px;
     max-width: 400px;
     width: 100%;
-    box-shadow: 0 24px 70px rgba(11, 11, 26, 0.35);
+    box-shadow: var(--shadow-lg);
     text-align: center;
+    transition: background-color 0.18s ease, color 0.18s ease;
   }
   .idt-modalIcon {
     width: 60px;
     height: 60px;
     border-radius: 20px;
-    background: #EEF0FF;
+    background: var(--brand-soft);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1649,13 +1726,13 @@ const CSS = `
   .idt-modalTitle {
     font-size: 19px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0 0 8px;
     letter-spacing: -0.01em;
   }
   .idt-modalBody {
     font-size: 14px;
-    color: #475569;
+    color: var(--text-secondary);
     line-height: 1.55;
     margin: 0 0 22px;
   }
@@ -1667,21 +1744,21 @@ const CSS = `
     flex: 1;
     padding: 14px;
     border-radius: 12px;
-    border: 1px solid #E2E8F0;
-    background: #fff;
-    color: #334155;
+    border: 1px solid var(--border-default);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
     font-size: 14px;
     font-weight: 700;
     cursor: pointer;
     font-family: inherit;
   }
-  .idt-modalCancel:hover:not(:disabled) { background: #F8FAFC; }
+  .idt-modalCancel:hover:not(:disabled) { background: var(--bg-hover); }
   .idt-modalConfirm {
     flex: 2;
     padding: 14px;
     border-radius: 12px;
     border: none;
-    background: #0504AA;
+    background: var(--brand-primary);
     color: #fff;
     font-size: 14px;
     font-weight: 800;
@@ -1709,7 +1786,7 @@ const CSS = `
     width: 72px;
     height: 72px;
     border-radius: 24px;
-    background: #FEF2F2;
+    background: var(--danger-bg);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1718,13 +1795,13 @@ const CSS = `
   .idt-stateTitle {
     font-size: 18px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0;
     letter-spacing: -0.01em;
   }
   .idt-stateBody {
     font-size: 13.5px;
-    color: #64748B;
+    color: var(--text-tertiary);
     margin: 4px 0 18px;
     max-width: 340px;
     line-height: 1.55;
@@ -1734,7 +1811,7 @@ const CSS = `
     align-items: center;
     gap: 8px;
     padding: 12px 22px;
-    background: #0504AA;
+    background: var(--brand-primary);
     color: #fff;
     border: none;
     border-radius: 12px;
@@ -1750,7 +1827,7 @@ const CSS = `
     padding: 10px 18px;
     background: transparent;
     border: none;
-    color: #0504AA;
+    color: var(--brand-primary);
     font-weight: 700;
     font-size: 13.5px;
     text-decoration: underline;
