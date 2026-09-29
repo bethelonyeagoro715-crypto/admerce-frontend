@@ -14,19 +14,27 @@ export type ThemePreference = 'system' | 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';
 
 interface ThemeContextValue {
-  /** What the user chose — system | light | dark */
   theme: ThemePreference;
-  /** What's actually rendering right now — light | dark */
   resolvedTheme: ResolvedTheme;
-  /** Change the preference. Persists to localStorage + <html data-theme>. */
   setTheme: (theme: ThemePreference) => void;
-  /** Toggle between light and dark (ignores system). */
   toggle: () => void;
 }
 
 const STORAGE_KEY = 'admerce_theme';
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+// ✅ SAFE DEFAULT — used when the hook is called outside a provider.
+// The `setTheme`/`toggle` are no-ops; the theme just falls back to
+// reading from <html data-theme> so nothing crashes. This prevents the
+// "must be used inside <ThemeProvider>" 500 during SSR if the provider
+// ever gets dropped from the tree.
+const DEFAULT_CONTEXT: ThemeContextValue = {
+  theme: 'system',
+  resolvedTheme: 'light',
+  setTheme: () => {},
+  toggle: () => {},
+};
+
+const ThemeContext = createContext<ThemeContextValue>(DEFAULT_CONTEXT);
 
 // ─── Helpers ───────────────────────────────────────────────────────
 function readStoredTheme(): ThemePreference {
@@ -58,55 +66,50 @@ function applyTheme(resolved: ResolvedTheme) {
 
 // ─── Provider ──────────────────────────────────────────────────────
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemePreference>(() =>
-    readStoredTheme(),
-  );
-  const [systemPreference, setSystemPreference] = useState<ResolvedTheme>(() =>
-    systemPrefers(),
-  );
-
-  const resolvedTheme: ResolvedTheme =
-    theme === 'system' ? systemPreference : theme;
+  // Initialize from localStorage on first render. Server render uses
+  // 'system' → 'light' as a safe default; the anti-FOUC inline script
+  // in layout.tsx already set the correct `data-theme` before hydration.
+  const [theme, setThemeState] = useState<ThemePreference>(() => readStoredTheme());
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
+    const initialTheme = readStoredTheme();
+    return initialTheme === 'system' ? systemPrefers() : initialTheme;
+  });
 
   // React to system preference changes when theme === 'system'
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (theme !== 'system') return;
-
     let mql: MediaQueryList;
     try {
       mql = window.matchMedia('(prefers-color-scheme: dark)');
     } catch {
       return;
     }
-
     const handler = () => {
-      const next: ResolvedTheme = mql.matches ? 'dark' : 'light';
-      setSystemPreference(next);
-      applyTheme(next);
+      const resolved: ResolvedTheme = mql.matches ? 'dark' : 'light';
+      setResolvedTheme(resolved);
+      applyTheme(resolved);
     };
-
-    handler();
-
-    // Attach listener across browsers
     if (typeof mql.addEventListener === 'function') {
       mql.addEventListener('change', handler);
       return () => mql.removeEventListener('change', handler);
     } else if (typeof mql.addListener === 'function') {
-      // Safari < 14 fallback
       mql.addListener(handler);
       return () => mql.removeListener(handler);
     }
     return undefined;
   }, [theme]);
 
-  // Apply `data-theme` whenever the effective theme changes.
+  // Apply `data-theme` whenever theme changes
   useEffect(() => {
-    applyTheme(resolvedTheme);
-  }, [resolvedTheme]);
+    const resolved: ResolvedTheme =
+      theme === 'system' ? systemPrefers() : theme;
+    applyTheme(resolved);
+  }, [theme]);
 
   const setTheme = useCallback((next: ThemePreference) => {
     setThemeState(next);
+    setResolvedTheme(next === 'system' ? systemPrefers() : next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
@@ -115,12 +118,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggle = useCallback(() => {
-    // Toggle ignores 'system'. Snap to the opposite of what's rendering now.
     const current: ResolvedTheme =
-      theme === 'system' ? systemPreference : theme;
+      theme === 'system' ? systemPrefers() : theme;
     const next: ResolvedTheme = current === 'dark' ? 'light' : 'dark';
     setTheme(next);
-  }, [systemPreference, theme, setTheme]);
+  }, [theme, setTheme]);
 
   return (
     <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme, toggle }}>
@@ -130,10 +132,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 }
 
 // ─── Hook ──────────────────────────────────────────────────────────
+// ✅ NON-THROWING. Returns DEFAULT_CONTEXT if no provider is mounted
+// so a missing provider never 500s a page. When the provider IS
+// mounted, it returns the live context.
 export function useTheme(): ThemeContextValue {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) {
-    throw new Error('useTheme must be used inside a <ThemeProvider>');
-  }
-  return ctx;
+  return useContext(ThemeContext);
 }

@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/google-sans-flex";
 import "./globals.css";
+import "../styles/theme.css";
 import NotificationInitializer from "../components/NotificationInitializer";
 import InstallAppPrompt from "../components/InstallAppPrompt";
+import { ThemeProvider } from "../contexts/ThemeContext";
 
 export const metadata: Metadata = {
   title: "Admerce",
@@ -46,11 +48,42 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html
+      lang="en"
+      className="h-full antialiased"
+      suppressHydrationWarning
+    >
+      <head>
+        {/* Anti-FOUC — set data-theme before React hydrates so the first
+            paint already matches the user's stored preference. Do not
+            remove; without this, dark-mode users see a white flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var t = localStorage.getItem('admerce_theme');
+                  var resolved = 'light';
+                  if (t === 'dark') resolved = 'dark';
+                  else if (t === 'light') resolved = 'light';
+                  else {
+                    resolved = window.matchMedia('(prefers-color-scheme: dark)').matches
+                      ? 'dark'
+                      : 'light';
+                  }
+                  document.documentElement.setAttribute('data-theme', resolved);
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
-        <NotificationInitializer />
-        <InstallAppPrompt />
-        {children}
+        <ThemeProvider>
+          <NotificationInitializer />
+          <InstallAppPrompt />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
