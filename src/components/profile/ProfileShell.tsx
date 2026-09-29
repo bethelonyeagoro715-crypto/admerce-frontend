@@ -126,7 +126,9 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   )
     return url;
   const base =
-    process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    '';
   if (!base) return url;
   if (url.startsWith('/')) return `${base}${url}`;
   return `${base}/${url}`;
@@ -163,7 +165,9 @@ function fmtBalance(v: number): string {
 function displayName(p: Profile | null): string {
   if (!p) return 'User';
   const full = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
-  return p.nickname || full || p.real_name || p.username || p.phone || 'User';
+  return (
+    p.nickname || full || p.real_name || p.username || p.phone || 'User'
+  );
 }
 
 function isNumberArray(v: unknown): v is unknown[] {
@@ -203,7 +207,9 @@ async function loadShopperStats(): Promise<ShopperStats> {
 async function loadStorekeeperStats(): Promise<StorekeeperStats> {
   let storeId: string | null = null;
   try {
-    const store = (await api.getMyStore()) as { store_id?: string } | null;
+    const store = (await api.getMyStore()) as {
+      store_id?: string;
+    } | null;
     storeId = store?.store_id ?? null;
   } catch {
     storeId = null;
@@ -314,9 +320,11 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         if (seq !== reqSeq.current || !isMountedRef.current) return;
         setStats(roleStats);
       } catch {
-        if (seq === reqSeq.current && isMountedRef.current) setErrored(true);
+        if (seq === reqSeq.current && isMountedRef.current)
+          setErrored(true);
       } finally {
-        if (seq === reqSeq.current && isMountedRef.current) setLoading(false);
+        if (seq === reqSeq.current && isMountedRef.current)
+          setLoading(false);
       }
     },
     [role],
@@ -331,15 +339,13 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
     await loadData(false);
   };
 
-    const handleLogout = async () => {
+  const handleLogout = async () => {
     const ok = await confirmDialog({
       title: 'Log out?',
       body: 'You will need to sign in again to access your account.',
       kind: 'danger',
     });
     if (!ok) return;
-    // Tell the server to drop this session row. Fire-and-forget —
-    // the api.logout() method swallows network errors.
     await api.logout();
     clearLocalStorage();
     router.replace('/');
@@ -352,7 +358,9 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
     setAvatarPreview(null);
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setAvatarFile(file);
@@ -387,29 +395,38 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
     return (
       <main style={css.root}>
         <style>{KF}</style>
-        <div style={css.hero}>
-          <div style={css.topBar}>
-            <span style={css.topTitle}>Profile</span>
-            <div style={{ width: 38 }} />
+        <style>{CSS}</style>
+        <div className="ps-shell">
+          <div style={css.hero}>
+            <div style={css.topBar}>
+              <span style={css.topTitle}>Profile</span>
+              <div style={{ width: 38 }} />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                paddingTop: 8,
+              }}
+            >
+              <div style={css.avatarSkeleton} />
+              <div style={css.skelLine} />
+              <div
+                style={{
+                  ...css.skelLine,
+                  width: 140,
+                  marginTop: 10,
+                }}
+              />
+            </div>
           </div>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              paddingTop: 8,
-            }}
-          >
-            <div style={css.avatarSkeleton} />
-            <div style={css.skelLine} />
-            <div style={{ ...css.skelLine, width: 140, marginTop: 10 }} />
+          <div style={css.sheet}>
+            <div style={css.statsSkeleton} />
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={css.sectionSkeleton} />
+            ))}
           </div>
-        </div>
-        <div style={css.sheet}>
-          <div style={css.statsSkeleton} />
-          {[0, 1, 2].map((i) => (
-            <div key={i} style={css.sectionSkeleton} />
-          ))}
         </div>
       </main>
     );
@@ -420,16 +437,19 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
     return (
       <main style={css.errorRoot}>
         <style>{KF}</style>
+        <style>{CSS}</style>
         <div style={css.errorHalo}>
-          <MdErrorOutline size={40} color="#B91C1C" />
+          <MdErrorOutline size={40} color="var(--danger-fg)" />
         </div>
-        <h2 style={css.errorHeading}>Couldn&apos;t load your profile</h2>
+        <h2 style={css.errorHeading}>
+          Couldn&apos;t load your profile
+        </h2>
         <p style={css.errorBody}>
-          Check your connection and try again. If this keeps happening, sign
-          out and back in.
+          Check your connection and try again. If this keeps happening,
+          sign out and back in.
         </p>
         <button onClick={handleRefresh} style={css.errorRetry}>
-          <MdRefresh size={18} color="#fff" />
+          <MdRefresh size={18} color="var(--brand-on-gradient)" />
           <span>Retry</span>
         </button>
       </main>
@@ -456,196 +476,220 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
   return (
     <main style={css.root}>
       <style>{KF}</style>
+      <style>{CSS}</style>
 
-      {/* HERO */}
-      <div style={css.hero}>
-        <div style={css.heroGlow} aria-hidden />
+      <div className="ps-shell">
+        {/* HERO */}
+        <div style={css.hero}>
+          <div style={css.heroGlow} aria-hidden />
 
-        <div style={css.topBar}>
-          <span style={css.topTitle}>Profile</span>
-          <button
-            onClick={() => router.push(`/settings/${roleSlug}`)}
-            style={css.ghostBtn}
-            aria-label="Settings"
-          >
-            <MdSettings size={22} color="#fff" />
-          </button>
-        </div>
-
-        <div style={css.heroBody}>
-          <div style={css.avatarContainer}>
+          <div style={css.topBar}>
+            <span style={css.topTitle}>Profile</span>
             <button
-              type="button"
-              onClick={openAvatarModal}
-              style={css.avatarWrap}
-              aria-label="Change profile photo"
+              onClick={() => router.push(`/settings/${roleSlug}`)}
+              style={css.ghostBtn}
+              aria-label="Settings"
             >
-              {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarUrl} alt="" style={css.avatarImg} />
-              ) : (
-                <div style={css.avatarFallback}>{initial}</div>
-              )}
+              <MdSettings size={22} color="var(--brand-on-gradient)" />
             </button>
-            <span style={css.cameraBadge} aria-hidden>
-              <MdCameraAlt size={14} color="#0504AA" />
-            </span>
           </div>
 
-          <div style={css.nameRow}>
-            <h1 style={css.name}>{name}</h1>
-            {isVerified && (
-              <span title="Verified" style={css.verifiedWrap}>
-                <MdVerified size={18} color="#7DD3FC" />
+          <div style={css.heroBody}>
+            <div style={css.avatarContainer}>
+              <button
+                type="button"
+                onClick={openAvatarModal}
+                style={css.avatarWrap}
+                aria-label="Change profile photo"
+              >
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrl} alt="" style={css.avatarImg} />
+                ) : (
+                  <div style={css.avatarFallback}>{initial}</div>
+                )}
+              </button>
+              <span style={css.cameraBadge} aria-hidden>
+                <MdCameraAlt size={14} color="var(--brand-primary)" />
               </span>
-            )}
-          </div>
+            </div>
 
-          {(phone || email) && (
-            <div style={css.contactRow}>
-              {phone && (
-                <span style={css.contactItem}>
-                  <MdPhone size={12} color="rgba(255,255,255,0.7)" />
-                  <span>{phone}</span>
-                </span>
-              )}
-              {email && (
-                <span style={css.contactItem}>
-                  <MdEmail size={12} color="rgba(255,255,255,0.7)" />
-                  <span>{email}</span>
+            <div style={css.nameRow}>
+              <h1 style={css.name}>{name}</h1>
+              {isVerified && (
+                <span title="Verified" style={css.verifiedWrap}>
+                  <MdVerified size={18} color="var(--info-fg)" />
                 </span>
               )}
             </div>
-          )}
 
-          <div style={css.metaRow}>
-            <span style={css.roleChip}>{ROLE_LABEL[role].toUpperCase()}</span>
-            {memberSince && (
-              <>
-                <span style={css.metaDot}>·</span>
-                <span style={css.metaText}>Since {memberSince}</span>
-              </>
+            {(phone || email) && (
+              <div style={css.contactRow}>
+                {phone && (
+                  <span style={css.contactItem}>
+                    <MdPhone
+                      size={12}
+                      color="color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)"
+                    />
+                    <span>{phone}</span>
+                  </span>
+                )}
+                {email && (
+                  <span style={css.contactItem}>
+                    <MdEmail
+                      size={12}
+                      color="color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)"
+                    />
+                    <span>{email}</span>
+                  </span>
+                )}
+              </div>
             )}
+
+            <div style={css.metaRow}>
+              <span style={css.roleChip}>
+                {ROLE_LABEL[role].toUpperCase()}
+              </span>
+              {memberSince && (
+                <>
+                  <span style={css.metaDot}>·</span>
+                  <span style={css.metaText}>Since {memberSince}</span>
+                </>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => router.push(`/${roleSlug}/profile/edit`)}
+              style={css.editBtn}
+              className="ps-edit"
+            >
+              <MdEdit size={16} color="var(--brand-primary)" />
+              <span>Edit profile</span>
+            </button>
+          </div>
+        </div>
+
+        {/* SHEET */}
+        <div style={css.sheet}>
+          {/* STATS — role-specific */}
+          <div style={css.statsCard}>
+            {tiles.map((tile, i) => (
+              <div key={i} style={{ display: 'contents' }}>
+                {i > 0 && <div style={css.statDivider} />}
+                <button
+                  onClick={tile.onClick}
+                  style={css.statTile}
+                  className="ps-stat-tile"
+                >
+                  <div style={css.statIconWrap}>{tile.icon}</div>
+                  <div style={css.statValue}>{tile.value}</div>
+                  <div style={css.statLabel}>{tile.label}</div>
+                </button>
+              </div>
+            ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => router.push(`/${roleSlug}/profile/edit`)}
-            style={css.editBtn}
-            className="ps-edit"
-          >
-            <MdEdit size={16} color="#0504AA" />
-            <span>Edit profile</span>
-          </button>
-        </div>
-      </div>
+          {/* ACTIVITY — role-specific */}
+          <h3 style={css.sectionLabel}>{activity.title}</h3>
+          <div style={css.section}>
+            {activity.rows.map((row, i) => (
+              <Row key={i} {...row} />
+            ))}
+          </div>
 
-      {/* SHEET */}
-      <div style={css.sheet}>
-        {/* STATS — role-specific */}
-        <div style={css.statsCard}>
-          {tiles.map((tile, i) => (
-            <div key={i} style={{ display: 'contents' }}>
-              {i > 0 && <div style={css.statDivider} />}
+          {/* WALLET */}
+          <h3 style={css.sectionLabel}>{walletTitle}</h3>
+          <div style={css.walletCard}>
+            <div style={css.walletTop}>
+              <div style={css.walletLabelRow}>
+                <MdAccountBalanceWallet
+                  size={16}
+                  color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)"
+                />
+                <span style={css.walletLabel}>Available balance</span>
+              </div>
+              <div style={css.walletBalance}>
+                {fmtBalance(stats?.walletBalance ?? 0)}
+              </div>
+            </div>
+            <div style={css.walletActions}>
               <button
-                onClick={tile.onClick}
-                style={css.statTile}
-                className="ps-stat-tile"
+                type="button"
+                onClick={() => router.push(`/${roleSlug}/wallet`)}
+                style={css.walletPrimary}
+                className="ps-wallet-btn"
               >
-                <div style={css.statIconWrap}>{tile.icon}</div>
-                <div style={css.statValue}>{tile.value}</div>
-                <div style={css.statLabel}>{tile.label}</div>
+                {role === 'shopper' ? (
+                  <>
+                    <MdAdd size={16} color="var(--brand-primary)" />
+                    <span>Top up</span>
+                  </>
+                ) : (
+                  <span>Withdraw</span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(`/${roleSlug}/wallet`)}
+                style={css.walletSecondary}
+                className="ps-wallet-btn2"
+              >
+                <span>View wallet</span>
+                <MdArrowForward
+                  size={16}
+                  color="var(--brand-on-gradient)"
+                />
               </button>
             </div>
-          ))}
-        </div>
-
-        {/* ACTIVITY — role-specific */}
-        <h3 style={css.sectionLabel}>{activity.title}</h3>
-        <div style={css.section}>
-          {activity.rows.map((row, i) => (
-            <Row key={i} {...row} />
-          ))}
-        </div>
-
-        {/* WALLET */}
-        <h3 style={css.sectionLabel}>{walletTitle}</h3>
-        <div style={css.walletCard}>
-          <div style={css.walletTop}>
-            <div style={css.walletLabelRow}>
-              <MdAccountBalanceWallet
-                size={16}
-                color="rgba(255,255,255,0.75)"
-              />
-              <span style={css.walletLabel}>Available balance</span>
-            </div>
-            <div style={css.walletBalance}>
-              {fmtBalance(stats?.walletBalance ?? 0)}
-            </div>
           </div>
-          <div style={css.walletActions}>
-            <button
-              type="button"
-              onClick={() => router.push(`/${roleSlug}/wallet`)}
-              style={css.walletPrimary}
-              className="ps-wallet-btn"
-            >
-              {role === 'shopper' ? (
-                <>
-                  <MdAdd size={16} color="#0504AA" />
-                  <span>Top up</span>
-                </>
-              ) : (
-                <span>Withdraw</span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push(`/${roleSlug}/wallet`)}
-              style={css.walletSecondary}
-              className="ps-wallet-btn2"
-            >
-              <span>View wallet</span>
-              <MdArrowForward size={16} color="#fff" />
-            </button>
+
+          {/* ACCOUNT */}
+          <h3 style={css.sectionLabel}>Account</h3>
+          <div style={css.section}>
+            <Row
+              icon={
+                <MdSwapHoriz size={18} color="var(--success-fg)" />
+              }
+              iconBg="var(--success-bg)"
+              label="Switch role"
+              subtitle={ROLE_LABEL[role]}
+              onClick={() => router.push('/onboarding?mode=switch')}
+            />
           </div>
+
+          {/* LOG OUT */}
+          <button
+            onClick={handleLogout}
+            style={css.logoutBtn}
+            className="ps-logout"
+          >
+            <MdLogout size={20} color="var(--danger-fg)" />
+            <span>Log Out</span>
+          </button>
+
+          <div style={{ height: 24 }} />
         </div>
-
-        {/* ACCOUNT */}
-        <h3 style={css.sectionLabel}>Account</h3>
-        <div style={css.section}>
-          <Row
-            icon={<MdSwapHoriz size={18} color="#16A34A" />}
-            iconBg="#DCFCE7"
-            label="Switch role"
-            subtitle={ROLE_LABEL[role]}
-            onClick={() => router.push('/onboarding?mode=switch')}
-          />
-        </div>
-
-        {/* LOG OUT */}
-        <button
-          onClick={handleLogout}
-          style={css.logoutBtn}
-          className="ps-logout"
-        >
-          <MdLogout size={20} color="#DC2626" />
-          <span>Log Out</span>
-        </button>
-
-        <div style={{ height: 24 }} />
       </div>
 
       {/* AVATAR MODAL */}
       {showAvatarModal && (
-        <div style={css.modalOverlay} onClick={closeAvatarModal}>
-          <div style={css.modalCard} onClick={(e) => e.stopPropagation()}>
+        <div
+          style={css.modalOverlay}
+          className="ps-modal-overlay"
+          onClick={closeAvatarModal}
+        >
+          <div
+            style={css.modalCard}
+            className="ps-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={closeAvatarModal}
               style={css.modalClose}
               aria-label="Close"
             >
-              <MdClose size={20} color="#64748B" />
+              <MdClose size={20} color="var(--text-tertiary)" />
             </button>
             <h3 style={css.modalTitle}>Update photo</h3>
             <p style={css.modalSub}>Choose a clear photo of yourself</p>
@@ -659,14 +703,22 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                 <img
                   src={avatarPreview}
                   alt=""
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
                 />
               ) : avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={avatarUrl}
                   alt=""
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
                 />
               ) : (
                 <div style={css.avatarFallbackLarge}>{initial}</div>
@@ -687,7 +739,10 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                 onClick={() => avatarInputRef.current?.click()}
                 style={css.modalSecondary}
               >
-                <MdPhotoLibrary size={18} color="#0504AA" />
+                <MdPhotoLibrary
+                  size={18}
+                  color="var(--brand-primary)"
+                />
                 <span>Choose from gallery</span>
               </button>
               <button
@@ -695,7 +750,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                 onClick={() => avatarInputRef.current?.click()}
                 style={css.modalSecondary}
               >
-                <MdCameraAlt size={18} color="#0504AA" />
+                <MdCameraAlt size={18} color="var(--brand-primary)" />
                 <span>Take a photo</span>
               </button>
             </div>
@@ -707,7 +762,9 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                 ...css.modalPrimary,
                 opacity: !avatarFile || uploadingAvatar ? 0.5 : 1,
                 cursor:
-                  !avatarFile || uploadingAvatar ? 'not-allowed' : 'pointer',
+                  !avatarFile || uploadingAvatar
+                    ? 'not-allowed'
+                    : 'pointer',
               }}
             >
               {uploadingAvatar ? 'Uploading…' : 'Save photo'}
@@ -722,7 +779,10 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
 // ─────────────────────────────────────────────────────────────
 // Role-specific tile + activity builders
 // ─────────────────────────────────────────────────────────────
-function buildStatTiles(role: ProfileRole, stats: Stats | null): StatTile[] {
+function buildStatTiles(
+  role: ProfileRole,
+  stats: Stats | null,
+): StatTile[] {
   if (role === 'shopper') {
     const s = (stats as ShopperStats | null) ?? {
       savedCount: 0,
@@ -732,25 +792,32 @@ function buildStatTiles(role: ProfileRole, stats: Stats | null): StatTile[] {
     };
     return [
       {
-        icon: <MdFavoriteBorder size={20} color="#0504AA" />,
+        icon: (
+          <MdFavoriteBorder size={20} color="var(--brand-primary)" />
+        ),
         label: 'Saved',
         value: String(s.savedCount),
-        onClick: () => {}, // replaced below by router
+        onClick: () => {},
       },
       {
-        icon: <MdSearch size={20} color="#0891B2" />,
+        icon: <MdSearch size={20} color="var(--info-fg)" />,
         label: 'Wanted',
         value: String(s.wantedCount),
         onClick: () => {},
       },
       {
-        icon: <MdShoppingBag size={20} color="#7E22CE" />,
+        icon: <MdShoppingBag size={20} color="var(--purple-fg)" />,
         label: 'Orders',
         value: String(s.ordersCount),
         onClick: () => {},
       },
       {
-        icon: <MdAccountBalanceWallet size={20} color="#16A34A" />,
+        icon: (
+          <MdAccountBalanceWallet
+            size={20}
+            color="var(--success-fg)"
+          />
+        ),
         label: 'Wallet',
         value: fmtBalance(s.walletBalance),
         onClick: () => {},
@@ -768,25 +835,33 @@ function buildStatTiles(role: ProfileRole, stats: Stats | null): StatTile[] {
     };
     return [
       {
-        icon: <MdInventory2 size={20} color="#0504AA" />,
+        icon: <MdInventory2 size={20} color="var(--brand-primary)" />,
         label: 'Listings',
         value: String(s.listingsCount),
         onClick: () => {},
       },
       {
-        icon: <MdReceiptLong size={20} color="#0891B2" />,
+        icon: <MdReceiptLong size={20} color="var(--info-fg)" />,
         label: 'Orders',
         value: String(s.ordersCount),
         onClick: () => {},
       },
       {
-        icon: <MdVisibility size={20} color="#7E22CE" />,
+        icon: <MdVisibility size={20} color="var(--purple-fg)" />,
         label: 'Views',
-        value: s.viewsCount >= 1000 ? `${(s.viewsCount / 1000).toFixed(1)}k` : String(s.viewsCount),
+        value:
+          s.viewsCount >= 1000
+            ? `${(s.viewsCount / 1000).toFixed(1)}k`
+            : String(s.viewsCount),
         onClick: () => {},
       },
       {
-        icon: <MdAccountBalanceWallet size={20} color="#16A34A" />,
+        icon: (
+          <MdAccountBalanceWallet
+            size={20}
+            color="var(--success-fg)"
+          />
+        ),
         label: 'Revenue',
         value: fmtBalance(s.walletBalance),
         onClick: () => {},
@@ -803,25 +878,25 @@ function buildStatTiles(role: ProfileRole, stats: Stats | null): StatTile[] {
   };
   return [
     {
-      icon: <MdBuild size={20} color="#0504AA" />,
+      icon: <MdBuild size={20} color="var(--brand-primary)" />,
       label: 'Services',
       value: String(s.servicesCount),
       onClick: () => {},
     },
     {
-      icon: <MdEventAvailable size={20} color="#0891B2" />,
+      icon: <MdEventAvailable size={20} color="var(--info-fg)" />,
       label: 'Bookings',
       value: String(s.bookingsCount),
       onClick: () => {},
     },
     {
-      icon: <MdStar size={20} color="#D97706" />,
+      icon: <MdStar size={20} color="var(--warning-fg)" />,
       label: 'Rating',
       value: s.rating > 0 ? s.rating.toFixed(1) : '—',
       onClick: () => {},
     },
     {
-      icon: <MdTrendingUp size={20} color="#16A34A" />,
+      icon: <MdTrendingUp size={20} color="var(--success-fg)" />,
       label: 'Earnings',
       value: fmtBalance(s.walletBalance),
       onClick: () => {},
@@ -844,26 +919,31 @@ function buildActivityRows(
       title: 'Your activity',
       rows: [
         {
-          icon: <MdFavoriteBorder size={18} color="#0504AA" />,
-          iconBg: '#EEF0FF',
+          icon: (
+            <MdFavoriteBorder
+              size={18}
+              color="var(--brand-primary)"
+            />
+          ),
+          iconBg: 'var(--brand-soft)',
           label: 'Saved items',
           value: String(s.savedCount),
         },
         {
-          icon: <MdSearch size={18} color="#0891B2" />,
-          iconBg: '#E0F2FE',
+          icon: <MdSearch size={18} color="var(--info-fg)" />,
+          iconBg: 'var(--info-bg)',
           label: 'Wanted alerts',
           value: String(s.wantedCount),
         },
         {
-          icon: <MdReceiptLong size={18} color="#7E22CE" />,
-          iconBg: '#F3E8FF',
+          icon: <MdReceiptLong size={18} color="var(--purple-fg)" />,
+          iconBg: 'var(--purple-bg)',
           label: 'Orders',
           value: String(s.ordersCount),
         },
         {
-          icon: <MdLocationOn size={18} color="#D97706" />,
-          iconBg: '#FEF3C7',
+          icon: <MdLocationOn size={18} color="var(--warning-fg)" />,
+          iconBg: 'var(--warning-bg)',
           label: 'Delivery addresses',
         },
       ],
@@ -882,25 +962,27 @@ function buildActivityRows(
       title: 'Your store',
       rows: [
         {
-          icon: <MdStorefront size={18} color="#0504AA" />,
-          iconBg: '#EEF0FF',
+          icon: (
+            <MdStorefront size={18} color="var(--brand-primary)" />
+          ),
+          iconBg: 'var(--brand-soft)',
           label: 'Store profile',
         },
         {
-          icon: <MdInventory2 size={18} color="#0891B2" />,
-          iconBg: '#E0F2FE',
+          icon: <MdInventory2 size={18} color="var(--info-fg)" />,
+          iconBg: 'var(--info-bg)',
           label: 'Listings',
           value: String(s.listingsCount),
         },
         {
-          icon: <MdReceiptLong size={18} color="#7E22CE" />,
-          iconBg: '#F3E8FF',
+          icon: <MdReceiptLong size={18} color="var(--purple-fg)" />,
+          iconBg: 'var(--purple-bg)',
           label: 'Orders received',
           value: String(s.ordersCount),
         },
         {
-          icon: <MdVerified size={18} color="#16A34A" />,
-          iconBg: '#DCFCE7',
+          icon: <MdVerified size={18} color="var(--success-fg)" />,
+          iconBg: 'var(--success-bg)',
           label: 'Verification',
         },
       ],
@@ -917,26 +999,28 @@ function buildActivityRows(
     title: 'Your work',
     rows: [
       {
-        icon: <MdBuild size={18} color="#0504AA" />,
-        iconBg: '#EEF0FF',
+        icon: <MdBuild size={18} color="var(--brand-primary)" />,
+        iconBg: 'var(--brand-soft)',
         label: 'My services',
         value: String(s.servicesCount),
       },
       {
-        icon: <MdEventAvailable size={18} color="#0891B2" />,
-        iconBg: '#E0F2FE',
+        icon: (
+          <MdEventAvailable size={18} color="var(--info-fg)" />
+        ),
+        iconBg: 'var(--info-bg)',
         label: 'Bookings',
         value: String(s.bookingsCount),
       },
       {
-        icon: <MdStar size={18} color="#D97706" />,
-        iconBg: '#FEF3C7',
+        icon: <MdStar size={18} color="var(--warning-fg)" />,
+        iconBg: 'var(--warning-bg)',
         label: 'Reviews',
         value: s.rating > 0 ? s.rating.toFixed(1) : '—',
       },
       {
-        icon: <MdTrendingUp size={18} color="#16A34A" />,
-        iconBg: '#DCFCE7',
+        icon: <MdTrendingUp size={18} color="var(--success-fg)" />,
+        iconBg: 'var(--success-bg)',
         label: 'Availability',
       },
     ],
@@ -971,10 +1055,38 @@ function Row({
         {subtitle && <span style={css.rowSubtitle}>{subtitle}</span>}
       </span>
       {value && <span style={css.rowValue}>{value}</span>}
-      <MdChevronRight size={18} color="#CBD5E1" />
+      <MdChevronRight size={18} color="var(--border-strong)" />
     </button>
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// Responsive CSS
+// ─────────────────────────────────────────────────────────────
+const CSS = `
+  /* Profile shell: caps content column, centered */
+  .ps-shell {
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  @media (min-width: 1024px) {
+    .ps-modal-overlay {
+      align-items: center !important;
+      padding: 24px;
+    }
+    .ps-modal-card {
+      border-radius: 24px !important;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+  }
+`;
 
 // ─────────────────────────────────────────────────────────────
 // Keyframes
@@ -982,14 +1094,14 @@ function Row({
 const KF = `
   @keyframes psShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
   @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-  .ps-stat-tile:hover { background-color: #FAFBFF; }
+  .ps-stat-tile:hover { background-color: var(--bg-hover); }
   .ps-stat-tile:active { transform: scale(0.97); }
-  .ps-row:hover { background-color: #FAFBFF; }
-  .ps-edit:hover { background-color: #F8FAFF; }
+  .ps-row:hover { background-color: var(--bg-hover); }
+  .ps-edit:hover { background-color: var(--brand-soft); }
   .ps-edit:active { transform: scale(0.98); }
   .ps-wallet-btn:active { transform: scale(0.98); }
   .ps-wallet-btn2:active { transform: scale(0.98); }
-  .ps-logout:hover { background-color: #FEF2F2; }
+  .ps-logout:hover { background-color: var(--danger-bg); }
   .ps-logout:active { transform: scale(0.99); }
 `;
 
@@ -1001,16 +1113,17 @@ const css: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   hero: {
     position: 'relative',
-    backgroundColor: '#0504AA',
-    backgroundImage:
-      'radial-gradient(ellipse at 80% 0%, #1A0FB8 0%, #0504AA 55%, #03037A 100%)',
+    background: 'var(--brand-gradient)',
     padding: '0 20px 56px',
     overflow: 'hidden',
+    transition: 'background 0.18s ease',
   },
   heroGlow: {
     position: 'absolute',
@@ -1020,7 +1133,7 @@ const css: Record<string, React.CSSProperties> = {
     height: 280,
     borderRadius: '50%',
     background:
-      'radial-gradient(circle, rgba(61,59,255,0.4) 0%, rgba(61,59,255,0) 70%)',
+      'radial-gradient(circle, color-mix(in srgb, var(--brand-on-gradient) 22%, transparent) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   topBar: {
@@ -1033,11 +1146,12 @@ const css: Record<string, React.CSSProperties> = {
   topTitle: {
     fontSize: 15,
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: 0.3,
   },
   ghostBtn: {
-    background: 'rgba(255,255,255,0.08)',
+    background:
+      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
     border: 'none',
     cursor: 'pointer',
     padding: 8,
@@ -1063,8 +1177,10 @@ const css: Record<string, React.CSSProperties> = {
     width: 96,
     height: 96,
     borderRadius: '50%',
-    border: '3px solid rgba(255,255,255,0.18)',
-    background: 'rgba(255,255,255,0.08)',
+    border:
+      '3px solid color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
+    background:
+      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
     cursor: 'pointer',
     padding: 0,
     display: 'flex',
@@ -1084,7 +1200,7 @@ const css: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     fontSize: 36,
     fontWeight: 800,
     letterSpacing: -1,
@@ -1095,10 +1211,10 @@ const css: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontSize: 44,
     fontWeight: 800,
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
   },
   cameraBadge: {
     position: 'absolute',
@@ -1107,13 +1223,14 @@ const css: Record<string, React.CSSProperties> = {
     width: 30,
     height: 30,
     borderRadius: '50%',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
-    border: '2px solid #0504AA',
+    boxShadow: 'var(--shadow-md)',
+    border: '2px solid var(--brand-primary)',
     pointerEvents: 'none',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   nameRow: {
     display: 'flex',
@@ -1125,7 +1242,7 @@ const css: Record<string, React.CSSProperties> = {
   name: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     margin: 0,
     letterSpacing: -0.3,
     textAlign: 'center',
@@ -1147,7 +1264,8 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 6,
     fontSize: 12.5,
-    color: 'rgba(255,255,255,0.78)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
     fontWeight: 500,
   },
   metaRow: {
@@ -1160,17 +1278,20 @@ const css: Record<string, React.CSSProperties> = {
     fontSize: 10.5,
     fontWeight: 800,
     letterSpacing: 0.6,
-    color: '#0504AA',
-    backgroundColor: '#fff',
+    color: 'var(--brand-primary)',
+    backgroundColor: 'var(--bg-secondary)',
     padding: '4px 10px',
     borderRadius: 999,
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   metaDot: {
-    color: 'rgba(255,255,255,0.4)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 40%, transparent)',
   },
   metaText: {
     fontSize: 11.5,
-    color: 'rgba(255,255,255,0.7)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)',
     fontWeight: 500,
   },
   editBtn: {
@@ -1181,15 +1302,15 @@ const css: Record<string, React.CSSProperties> = {
     padding: '10px 20px',
     borderRadius: 14,
     border: 'none',
-    backgroundColor: '#fff',
-    color: '#0504AA',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--brand-primary)',
     fontSize: 13.5,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
     letterSpacing: -0.1,
     transition: 'background-color 0.15s, transform 0.12s',
-    boxShadow: '0 6px 16px rgba(0,0,0,0.14)',
+    boxShadow: 'var(--shadow-md)',
   },
   sheet: {
     flex: 1,
@@ -1200,11 +1321,12 @@ const css: Record<string, React.CSSProperties> = {
   statsCard: {
     display: 'flex',
     alignItems: 'stretch',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 20,
-    border: '1px solid #EAECF3',
-    boxShadow: '0 12px 30px rgba(5,4,170,0.10)',
+    border: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-md)',
     padding: '14px 6px',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   statTile: {
     flex: 1,
@@ -1225,43 +1347,45 @@ const css: Record<string, React.CSSProperties> = {
     width: 34,
     height: 34,
     borderRadius: 11,
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
+    transition: 'background-color 0.18s ease',
   },
   statValue: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.3,
     fontVariantNumeric: 'tabular-nums',
   },
   statLabel: {
     fontSize: 10.5,
     fontWeight: 600,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.2,
   },
   statDivider: {
     width: 1,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--border-subtle)',
     margin: '10px 0',
   },
   sectionLabel: {
     fontSize: 11.5,
     fontWeight: 800,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     margin: '22px 0 8px 4px',
   },
   section: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     overflow: 'hidden',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   row: {
     display: 'flex',
@@ -1295,28 +1419,31 @@ const css: Record<string, React.CSSProperties> = {
   rowLabel: {
     fontSize: 14.5,
     fontWeight: 600,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
   },
   rowSubtitle: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
   },
   rowValue: {
     fontSize: 13,
     fontWeight: 500,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
   },
   walletCard: {
-    backgroundColor: '#0504AA',
-    backgroundImage:
-      'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    background: 'var(--brand-gradient)',
     borderRadius: 20,
     padding: '18px 18px 16px',
-    color: '#fff',
-    boxShadow: '0 14px 32px rgba(5,4,170,0.28)',
+    color: 'var(--brand-on-gradient)',
+    boxShadow: 'var(--shadow-brand)',
+    transition: 'background 0.18s ease',
   },
-  walletTop: { display: 'flex', flexDirection: 'column', gap: 6 },
+  walletTop: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
   walletLabelRow: {
     display: 'flex',
     alignItems: 'center',
@@ -1326,7 +1453,8 @@ const css: Record<string, React.CSSProperties> = {
     fontSize: 11.5,
     fontWeight: 700,
     letterSpacing: 0.5,
-    color: 'rgba(255,255,255,0.78)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
     textTransform: 'uppercase',
   },
   walletBalance: {
@@ -1334,6 +1462,7 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: -0.5,
     fontVariantNumeric: 'tabular-nums',
+    color: 'var(--brand-on-gradient)',
   },
   walletActions: {
     display: 'flex',
@@ -1349,13 +1478,13 @@ const css: Record<string, React.CSSProperties> = {
     padding: '12px 14px',
     borderRadius: 14,
     border: 'none',
-    backgroundColor: '#fff',
-    color: '#0504AA',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--brand-primary)',
     fontSize: 14,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    transition: 'transform 0.12s',
+    transition: 'transform 0.12s, background-color 0.18s ease',
   },
   walletSecondary: {
     flex: 1,
@@ -1365,9 +1494,11 @@ const css: Record<string, React.CSSProperties> = {
     gap: 6,
     padding: '12px 14px',
     borderRadius: 14,
-    border: '1.5px solid rgba(255,255,255,0.4)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    color: '#fff',
+    border:
+      '1.5px solid color-mix(in srgb, var(--brand-on-gradient) 40%, transparent)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
@@ -1383,20 +1514,21 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 22,
     padding: '14px 20px',
     borderRadius: 16,
-    border: '1.5px solid #FECACA',
-    backgroundColor: '#FFFFFF',
-    color: '#DC2626',
+    border: '1.5px solid var(--danger-strong)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--danger-fg)',
     fontSize: 15,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
     letterSpacing: -0.1,
-    transition: 'background-color 0.15s, transform 0.12s',
+    transition:
+      'background-color 0.15s, transform 0.12s, border-color 0.18s ease, color 0.18s ease',
   },
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(15,23,42,0.48)',
+    backgroundColor: 'var(--overlay)',
     backdropFilter: 'blur(6px)',
     WebkitBackdropFilter: 'blur(6px)',
     zIndex: 200,
@@ -1407,12 +1539,14 @@ const css: Record<string, React.CSSProperties> = {
   modalCard: {
     width: '100%',
     maxWidth: 520,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-elevated)',
+    color: 'var(--text-primary)',
     borderRadius: '24px 24px 0 0',
     padding: '24px 24px calc(28px + env(safe-area-inset-bottom))',
-    boxShadow: '0 -8px 40px rgba(5,4,170,0.2)',
+    boxShadow: 'var(--shadow-lg)',
     position: 'relative',
     animation: 'sheetUp 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   modalClose: {
     position: 'absolute',
@@ -1422,36 +1556,38 @@ const css: Record<string, React.CSSProperties> = {
     height: 32,
     borderRadius: 10,
     border: 'none',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
+    transition: 'background-color 0.18s ease',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: '0 0 4px',
     letterSpacing: -0.3,
   },
   modalSub: {
     fontSize: 13,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     margin: '0 0 20px',
   },
   modalAvatarPreview: {
     width: 140,
     height: 140,
     borderRadius: '50%',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-tertiary)',
     margin: '0 auto 20px',
     overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    border: '3px solid #EEF0FF',
+    border: '3px solid var(--brand-soft)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   modalActions: {
     display: 'flex',
@@ -1466,56 +1602,61 @@ const css: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '13px 16px',
     borderRadius: 14,
-    border: '1.5px solid #E6E8F0',
-    backgroundColor: '#FFFFFF',
-    color: '#0504AA',
+    border: '1.5px solid var(--border-default)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--brand-primary)',
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
+    transition:
+      'background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease',
   },
   modalPrimary: {
     width: '100%',
     padding: 16,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 14,
     fontSize: 15,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 10px 24px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
   avatarSkeleton: {
     width: 96,
     height: 96,
     borderRadius: '50%',
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
     marginTop: 8,
   },
   skelLine: {
     width: 180,
     height: 14,
     borderRadius: 7,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
     marginTop: 16,
   },
   statsSkeleton: {
     height: 100,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     animation: 'psShimmer 1.4s ease-in-out infinite',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   sectionSkeleton: {
     height: 120,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 18,
     animation: 'psShimmer 1.4s ease-in-out infinite',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   errorRoot: {
     display: 'flex',
@@ -1523,16 +1664,18 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   errorHalo: {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1541,13 +1684,13 @@ const css: Record<string, React.CSSProperties> = {
   errorHeading: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   errorBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 8,
     maxWidth: 320,
     lineHeight: 1.5,
@@ -1559,14 +1702,13 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 700,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 };
