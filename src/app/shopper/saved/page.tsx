@@ -62,18 +62,15 @@ interface WalletOrder {
   created_at?: string;
   quantity?: number;
   listing_id?: string;
-  // ── Joined from `stores`
   store_name?: string;
   store_image_url?: string;
   store_address?: string;
   store_latitude?: number;
   store_longitude?: number;
   storekeeper_name?: string;
-  // ── Joined from `listings`
   listing_title?: string;
   listing_image_url?: string;
   listing_category?: string;
-  // ── Misc
   customer_name?: string;
   [key: string]: unknown;
 }
@@ -213,7 +210,8 @@ function formatRemaining(expiresMs: number, nowMs: number): string {
   return remHrs > 0 ? `in ${days}d ${remHrs}h` : `in ${days}d`;
 }
 
-// Order status → chip
+// Order status → chip. Colors resolve through CSS vars so the chip
+// flips correctly between light and dark.
 function statusMeta(status?: string): {
   label: string;
   bg: string;
@@ -222,31 +220,66 @@ function statusMeta(status?: string): {
 } {
   switch ((status || '').toLowerCase()) {
     case 'locked':
-      return { label: 'Reserved', bg: '#EEF0FF', fg: '#0504AA', border: '#C7CCFF' };
+      return {
+        label: 'Reserved',
+        bg: 'var(--brand-soft)',
+        fg: 'var(--brand-primary)',
+        border: 'var(--brand-primary)',
+      };
     case 'accepted':
-      return { label: 'Holding for pickup', bg: '#F3E8FF', fg: '#7E22CE', border: '#D8B4FE' };
+      return {
+        label: 'Holding for pickup',
+        bg: 'var(--purple-bg)',
+        fg: 'var(--purple-fg)',
+        border:
+          'color-mix(in srgb, var(--purple-fg) 40%, transparent)',
+      };
     case 'picked_up':
-      return { label: 'Picked up', bg: '#ECFDF5', fg: '#065F46', border: '#A7F3D0' };
+      return {
+        label: 'Picked up',
+        bg: 'var(--success-bg)',
+        fg: 'var(--success-fg)',
+        border: 'var(--success-strong)',
+      };
     case 'dispatched':
-      return { label: 'Out for delivery', bg: '#ECFEFF', fg: '#0E7490', border: '#A5F3FC' };
+      return {
+        label: 'Out for delivery',
+        bg: 'var(--info-bg)',
+        fg: 'var(--info-fg)',
+        border:
+          'color-mix(in srgb, var(--info-fg) 40%, transparent)',
+      };
     case 'returned':
-      return { label: 'Returned', bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1' };
+      return {
+        label: 'Returned',
+        bg: 'var(--bg-tertiary)',
+        fg: 'var(--text-secondary)',
+        border: 'var(--border-default)',
+      };
     case 'expired':
-      return { label: 'Expired', bg: '#F1F5F9', fg: '#64748B', border: '#CBD5E1' };
+      return {
+        label: 'Expired',
+        bg: 'var(--bg-tertiary)',
+        fg: 'var(--text-muted)',
+        border: 'var(--border-default)',
+      };
     case 'reversed':
-      return { label: 'Reversed', bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1' };
+      return {
+        label: 'Reversed',
+        bg: 'var(--bg-tertiary)',
+        fg: 'var(--text-secondary)',
+        border: 'var(--border-default)',
+      };
     default:
       return {
         label: status ? status : 'Unknown',
-        bg: '#F1F5F9',
-        fg: '#475569',
-        border: '#CBD5E1',
+        bg: 'var(--bg-tertiary)',
+        fg: 'var(--text-secondary)',
+        border: 'var(--border-default)',
       };
   }
 }
 
-// Booking status → chip. Deliberately distinct palette so a shopper
-// glancing at the tab doesn't confuse bookings with reservations.
 function bookingStatusMeta(status?: string): {
   label: string;
   bg: string;
@@ -255,21 +288,47 @@ function bookingStatusMeta(status?: string): {
 } {
   switch ((status || '').toLowerCase()) {
     case 'locked':
-      return { label: 'Booked', bg: '#EEF0FF', fg: '#0504AA', border: '#C7CCFF' };
+      return {
+        label: 'Booked',
+        bg: 'var(--brand-soft)',
+        fg: 'var(--brand-primary)',
+        border: 'var(--brand-primary)',
+      };
     case 'accepted':
-      return { label: 'Provider confirmed', bg: '#F3E8FF', fg: '#7E22CE', border: '#D8B4FE' };
+      return {
+        label: 'Provider confirmed',
+        bg: 'var(--purple-bg)',
+        fg: 'var(--purple-fg)',
+        border:
+          'color-mix(in srgb, var(--purple-fg) 40%, transparent)',
+      };
     case 'completed':
-      return { label: 'Completed', bg: '#ECFDF5', fg: '#065F46', border: '#A7F3D0' };
+      return {
+        label: 'Completed',
+        bg: 'var(--success-bg)',
+        fg: 'var(--success-fg)',
+        border: 'var(--success-strong)',
+      };
     case 'cancelled':
-      return { label: 'Cancelled', bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1' };
+      return {
+        label: 'Cancelled',
+        bg: 'var(--bg-tertiary)',
+        fg: 'var(--text-secondary)',
+        border: 'var(--border-default)',
+      };
     case 'declined':
-      return { label: 'Declined', bg: '#FEF2F2', fg: '#991B1B', border: '#FECACA' };
+      return {
+        label: 'Declined',
+        bg: 'var(--danger-bg)',
+        fg: 'var(--danger-fg)',
+        border: 'var(--danger-strong)',
+      };
     default:
       return {
         label: status ? status : 'Unknown',
-        bg: '#F1F5F9',
-        fg: '#475569',
-        border: '#CBD5E1',
+        bg: 'var(--bg-tertiary)',
+        fg: 'var(--text-secondary)',
+        border: 'var(--border-default)',
       };
   }
 }
@@ -308,22 +367,21 @@ function SavedPageContent() {
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
 
-  // Live countdown heartbeat.
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
 
-  // Create-alert sheet
   const [showCreateWanted, setShowCreateWanted] = useState(false);
   const [newWantedTitle, setNewWantedTitle] = useState('');
   const [newWantedNotes, setNewWantedNotes] = useState('');
   const [newWantedBudget, setNewWantedBudget] = useState('');
   const [creatingWanted, setCreatingWanted] = useState(false);
-  const [createWantedError, setCreateWantedError] = useState<string | null>(null);
+  const [createWantedError, setCreateWantedError] = useState<string | null>(
+    null,
+  );
 
-  // Sync URL with tab
   useEffect(() => {
     const current = searchParams.get('tab');
     if (current !== activeTab) {
@@ -384,7 +442,9 @@ function SavedPageContent() {
 
     if (basketResult.status === 'fulfilled') {
       const raw = basketResult.value as BasketResponse | null;
-      const items = Array.isArray(raw?.items) ? (raw!.items as BasketItem[]) : [];
+      const items = Array.isArray(raw?.items)
+        ? (raw!.items as BasketItem[])
+        : [];
       setBasketItems(items);
       setBasketTotal(Number(raw?.total ?? 0));
     } else {
@@ -423,7 +483,6 @@ function SavedPageContent() {
     setIsRefreshing(false);
   };
 
-  // ─── Navigation ───────────────────────────────────────────────
   const openReservation = (order: WalletOrder) => {
     router.push(`/reservation-confirmed?order_id=${order.order_id}`);
   };
@@ -431,7 +490,9 @@ function SavedPageContent() {
   const openBooking = (booking: ServiceBooking) => {
     if (booking.booking_id) {
       router.push(
-        `/booking-confirmed?booking_id=${encodeURIComponent(booking.booking_id)}`,
+        `/booking-confirmed?booking_id=${encodeURIComponent(
+          booking.booking_id,
+        )}`,
       );
     } else if (booking.service_id) {
       router.push(`/service-detail/${booking.service_id}`);
@@ -451,7 +512,6 @@ function SavedPageContent() {
     router.push(`/map?lat=${lat}&lng=${lng}&destination=${dest}&navigate=true`);
   };
 
-  // ─── Wanted actions ────────────────────────────────────────────
   const handleCreateWanted = async () => {
     const title = newWantedTitle.trim();
     if (!title) {
@@ -503,7 +563,9 @@ function SavedPageContent() {
 
   const handleToggleWanted = async (id: number) => {
     try {
-      const res = (await api.toggleWantedAlert(id)) as { is_active?: boolean };
+      const res = (await api.toggleWantedAlert(id)) as {
+        is_active?: boolean;
+      };
       setWantedAlerts((prev) =>
         prev.map((a) =>
           a.id === id
@@ -516,7 +578,6 @@ function SavedPageContent() {
     }
   };
 
-  // ─── Filtering ─────────────────────────────────────────────────
   const q = query.trim().toLowerCase();
 
   const applyFilter = <T extends Record<string, unknown>>(
@@ -599,15 +660,19 @@ function SavedPageContent() {
     [basketItems, q],
   );
 
-  // ─── Shared order card (Reservations, Deliveries, History) ─────
-  const renderOrderCard = (order: WalletOrder, opts: { showExpiry: boolean }) => {
+  const renderOrderCard = (
+    order: WalletOrder,
+    opts: { showExpiry: boolean },
+  ) => {
     const storeImage = resolveImageUrl(order.store_image_url);
     const itemTitle = (order.listing_title as string) || '';
     const storeName = (order.store_name as string) || 'Store';
     const address = (order.store_address as string) || '';
     const expiresMs = parseAsUtc(order.expires_at);
     const expired =
-      Number.isFinite(expiresMs) && expiresMs <= nowMs && order.status !== 'picked_up';
+      Number.isFinite(expiresMs) &&
+      expiresMs <= nowMs &&
+      order.status !== 'picked_up';
     const expiresSoon =
       !expired &&
       opts.showExpiry &&
@@ -634,9 +699,14 @@ function SavedPageContent() {
         <div style={styles.resTopRow}>
           <div style={styles.resThumb}>
             {storeImage ? (
-              <img src={storeImage} alt="" loading="lazy" style={styles.resThumbImg} />
+              <img
+                src={storeImage}
+                alt=""
+                loading="lazy"
+                style={styles.resThumbImg}
+              />
             ) : (
-              <MdStorefront size={22} color="#94A3B8" />
+              <MdStorefront size={22} color="var(--text-muted)" />
             )}
           </div>
 
@@ -647,7 +717,7 @@ function SavedPageContent() {
 
             {itemTitle ? (
               <div style={styles.resItemLine} title={itemTitle}>
-                <MdInventory2 size={12} color="#64748B" />
+                <MdInventory2 size={12} color="var(--text-tertiary)" />
                 <span style={styles.resItemText}>
                   {itemTitle}
                   {qty > 1 ? ` × ${qty}` : ''}
@@ -655,8 +725,10 @@ function SavedPageContent() {
               </div>
             ) : (
               <div style={styles.resItemLine}>
-                <MdInventory2 size={12} color="#94A3B8" />
-                <span style={{ ...styles.resItemText, color: '#94A3B8' }}>
+                <MdInventory2 size={12} color="var(--text-muted)" />
+                <span
+                  style={{ ...styles.resItemText, color: 'var(--text-muted)' }}
+                >
                   Order #{shortId(order.order_id)}
                 </span>
               </div>
@@ -670,8 +742,10 @@ function SavedPageContent() {
                 disabled={!hasCoords}
                 title={hasCoords ? 'Open in map' : address}
               >
-                <MdLocationOn size={12} color="#64748B" />
-                <span style={styles.resAddressText}>{shortAddress(address)}</span>
+                <MdLocationOn size={12} color="var(--text-tertiary)" />
+                <span style={styles.resAddressText}>
+                  {shortAddress(address)}
+                </span>
               </button>
             ) : null}
           </div>
@@ -716,7 +790,7 @@ function SavedPageContent() {
 
         {expiresSoon && (
           <div style={styles.resWarnRow}>
-            <MdTimer size={14} color="#B45309" />
+            <MdTimer size={14} color="var(--warning-fg)" />
             <span>Expiring soon — pick up before it&apos;s cancelled</span>
           </div>
         )}
@@ -724,14 +798,14 @@ function SavedPageContent() {
     );
   };
 
-  // ─── Booking card ──────────────────────────────────────────────
   const renderBookingCard = (booking: ServiceBooking) => {
     const providerImage = resolveImageUrl(
       booking.provider_image_url || booking.provider_avatar,
     );
     const serviceImage = resolveImageUrl(booking.service_image_url);
     const thumb = providerImage || serviceImage;
-    const title = booking.service_title || booking.title || 'Service booking';
+    const title =
+      booking.service_title || booking.title || 'Service booking';
     const meta = bookingStatusMeta(booking.status);
     const scheduled = booking.scheduled_for
       ? fmtDateTime(booking.scheduled_for)
@@ -749,9 +823,14 @@ function SavedPageContent() {
         <div style={styles.resTopRow}>
           <div style={styles.resThumb}>
             {thumb ? (
-              <img src={thumb} alt="" loading="lazy" style={styles.resThumbImg} />
+              <img
+                src={thumb}
+                alt=""
+                loading="lazy"
+                style={styles.resThumbImg}
+              />
             ) : (
-              <MdBuild size={22} color="#94A3B8" />
+              <MdBuild size={22} color="var(--text-muted)" />
             )}
           </div>
 
@@ -762,14 +841,16 @@ function SavedPageContent() {
 
             {booking.provider_name ? (
               <div style={styles.resItemLine}>
-                <MdStorefront size={12} color="#64748B" />
-                <span style={styles.resItemText}>{booking.provider_name}</span>
+                <MdStorefront size={12} color="var(--text-tertiary)" />
+                <span style={styles.resItemText}>
+                  {booking.provider_name}
+                </span>
               </div>
             ) : null}
 
             {scheduled ? (
               <div style={styles.resItemLine}>
-                <MdCalendarToday size={12} color="#64748B" />
+                <MdCalendarToday size={12} color="var(--text-tertiary)" />
                 <span style={styles.resItemText}>{scheduled}</span>
               </div>
             ) : null}
@@ -799,12 +880,16 @@ function SavedPageContent() {
     );
   };
 
-  // ─── Tab renderers ─────────────────────────────────────────────
   const renderItemsTab = () => {
     if (filteredSaved.length === 0) {
       return (
         <EmptyState
-          icon={<MdInventory size={44} color="#C7D2FE" />}
+          icon={
+            <MdInventory
+              size={44}
+              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+            />
+          }
           text={q ? `No saved items match "${query}"` : 'No saved items yet.'}
         />
       );
@@ -835,7 +920,7 @@ function SavedPageContent() {
                     }}
                   />
                 ) : (
-                  <MdImage size={22} color="#94A3B8" />
+                  <MdImage size={22} color="var(--text-muted)" />
                 )}
               </div>
               <div style={styles.cardContent}>
@@ -846,7 +931,7 @@ function SavedPageContent() {
                 </div>
               </div>
               <div style={styles.cardTrailing}>{fmtNaira(item.price)}</div>
-              <MdChevronRight size={16} color="#999" />
+              <MdChevronRight size={16} color="var(--text-muted)" />
             </div>
           );
         })}
@@ -861,7 +946,7 @@ function SavedPageContent() {
           onClick={() => setShowCreateWanted(true)}
           style={styles.createAlertBtn}
         >
-          <MdAdd size={20} color="#fff" />
+          <MdAdd size={20} color="var(--brand-on-gradient)" />
           <span style={{ marginLeft: 6 }}>
             Post what you&apos;re looking for
           </span>
@@ -869,7 +954,12 @@ function SavedPageContent() {
 
         {filteredWanted.length === 0 ? (
           <EmptyState
-            icon={<MdNotificationsActive size={44} color="#C7D2FE" />}
+            icon={
+              <MdNotificationsActive
+                size={44}
+                color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+              />
+            }
             text={
               q
                 ? `No alerts match "${query}"`
@@ -888,7 +978,11 @@ function SavedPageContent() {
               >
                 <MdNotificationsActive
                   size={20}
-                  color={alert.is_active ? '#0504AA' : '#94A3B8'}
+                  color={
+                    alert.is_active
+                      ? 'var(--brand-primary)'
+                      : 'var(--text-muted)'
+                  }
                   style={{ marginRight: 8 }}
                 />
                 <div style={styles.cardContent}>
@@ -900,7 +994,9 @@ function SavedPageContent() {
                     {alert.budget != null &&
                       `Budget: ${fmtNaira(alert.budget)} · `}
                     {alert.is_active ? 'Active' : 'Paused'}
-                    {alert.created_at ? ` · ${fmtDate(alert.created_at)}` : ''}
+                    {alert.created_at
+                      ? ` · ${fmtDate(alert.created_at)}`
+                      : ''}
                   </div>
                 </div>
 
@@ -910,9 +1006,9 @@ function SavedPageContent() {
                   title={alert.is_active ? 'Pause alert' : 'Resume alert'}
                 >
                   {alert.is_active ? (
-                    <MdToggleOn size={24} color="#0504AA" />
+                    <MdToggleOn size={24} color="var(--brand-primary)" />
                   ) : (
-                    <MdToggleOff size={24} color="#94A3B8" />
+                    <MdToggleOff size={24} color="var(--text-muted)" />
                   )}
                 </button>
                 <button
@@ -920,7 +1016,7 @@ function SavedPageContent() {
                   style={styles.iconBtn}
                   title="Delete"
                 >
-                  <MdDeleteOutline size={20} color="#EF4444" />
+                  <MdDeleteOutline size={20} color="var(--danger-fg)" />
                 </button>
               </div>
             ))}
@@ -934,7 +1030,12 @@ function SavedPageContent() {
     if (filteredReservations.length === 0) {
       return (
         <EmptyState
-          icon={<MdEventNote size={44} color="#C7D2FE" />}
+          icon={
+            <MdEventNote
+              size={44}
+              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+            />
+          }
           text={
             q
               ? `No reservations match "${query}"`
@@ -953,7 +1054,9 @@ function SavedPageContent() {
     });
     return (
       <div style={styles.list}>
-        {sorted.map((order) => renderOrderCard(order, { showExpiry: true }))}
+        {sorted.map((order) =>
+          renderOrderCard(order, { showExpiry: true }),
+        )}
       </div>
     );
   };
@@ -962,11 +1065,14 @@ function SavedPageContent() {
     if (filteredDeliveries.length === 0) {
       return (
         <EmptyState
-          icon={<MdLocalShipping size={44} color="#C7D2FE" />}
+          icon={
+            <MdLocalShipping
+              size={44}
+              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+            />
+          }
           text={
-            q
-              ? `No deliveries match "${query}"`
-              : 'No active deliveries.'
+            q ? `No deliveries match "${query}"` : 'No active deliveries.'
           }
         />
       );
@@ -981,7 +1087,9 @@ function SavedPageContent() {
     });
     return (
       <div style={styles.list}>
-        {sorted.map((order) => renderOrderCard(order, { showExpiry: false }))}
+        {sorted.map((order) =>
+          renderOrderCard(order, { showExpiry: false }),
+        )}
       </div>
     );
   };
@@ -990,8 +1098,15 @@ function SavedPageContent() {
     if (filteredBookings.length === 0) {
       return (
         <EmptyState
-          icon={<MdBuild size={44} color="#C7D2FE" />}
-          text={q ? `No bookings match "${query}"` : 'No service bookings.'}
+          icon={
+            <MdBuild
+              size={44}
+              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+            />
+          }
+          text={
+            q ? `No bookings match "${query}"` : 'No service bookings.'
+          }
         />
       );
     }
@@ -1014,7 +1129,12 @@ function SavedPageContent() {
     if (filteredBasket.length === 0) {
       return (
         <EmptyState
-          icon={<MdShoppingBasket size={44} color="#C7D2FE" />}
+          icon={
+            <MdShoppingBasket
+              size={44}
+              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+            />
+          }
           text={q ? `No basket items match "${query}"` : 'Basket is empty.'}
         />
       );
@@ -1023,12 +1143,15 @@ function SavedPageContent() {
       <div style={styles.list}>
         {filteredBasket.map((item, i) => {
           const image = resolveImageUrl(item.image_url);
-          const lineTotal = Number(item.price || 0) * (item.quantity ?? 1);
+          const lineTotal =
+            Number(item.price || 0) * (item.quantity ?? 1);
           return (
             <div
               key={item.id || item.listing_id || i}
               style={styles.resCard}
-              onClick={() => router.push(`/item-detail/${item.listing_id}`)}
+              onClick={() =>
+                router.push(`/item-detail/${item.listing_id}`)
+              }
               role="button"
               tabIndex={0}
             >
@@ -1042,21 +1165,32 @@ function SavedPageContent() {
                       style={styles.resThumbImg}
                     />
                   ) : (
-                    <MdImage size={22} color="#94A3B8" />
+                    <MdImage size={22} color="var(--text-muted)" />
                   )}
                 </div>
                 <div style={styles.resInfo}>
-                  <div style={styles.resStoreName} title={item.title || 'Item'}>
+                  <div
+                    style={styles.resStoreName}
+                    title={item.title || 'Item'}
+                  >
                     {item.title || 'Item'}
                   </div>
                   {item.store_name ? (
                     <div style={styles.resItemLine}>
-                      <MdStorefront size={12} color="#64748B" />
-                      <span style={styles.resItemText}>{item.store_name}</span>
+                      <MdStorefront
+                        size={12}
+                        color="var(--text-tertiary)"
+                      />
+                      <span style={styles.resItemText}>
+                        {item.store_name}
+                      </span>
                     </div>
                   ) : null}
                   <div style={styles.resItemLine}>
-                    <MdInventory2 size={12} color="#64748B" />
+                    <MdInventory2
+                      size={12}
+                      color="var(--text-tertiary)"
+                    />
                     <span style={styles.resItemText}>
                       Qty {item.quantity ?? 1}
                     </span>
@@ -1088,7 +1222,12 @@ function SavedPageContent() {
     if (filteredHistory.length === 0) {
       return (
         <EmptyState
-          icon={<MdCheckCircle size={44} color="#C7D2FE" />}
+          icon={
+            <MdCheckCircle
+              size={44}
+              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+            />
+          }
           text={q ? `No orders match "${query}"` : 'No past orders.'}
         />
       );
@@ -1103,7 +1242,9 @@ function SavedPageContent() {
     });
     return (
       <div style={styles.list}>
-        {sorted.map((order) => renderOrderCard(order, { showExpiry: false }))}
+        {sorted.map((order) =>
+          renderOrderCard(order, { showExpiry: false }),
+        )}
       </div>
     );
   };
@@ -1128,20 +1269,26 @@ function SavedPageContent() {
   };
 
   return (
-    <main style={styles.container}>
-      <div style={styles.tabBar}>
+    <main style={styles.container} className="sv-main">
+      <style>{CSS}</style>
+
+      <div style={styles.tabBar} className="sv-tabbar">
         {TABS.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
+            className="sv-tab"
             style={{
               ...styles.tab,
               borderBottom:
                 activeTab === tab
-                  ? '2px solid #0504AA'
+                  ? '2px solid var(--brand-primary)'
                   : '2px solid transparent',
-              color: activeTab === tab ? '#0504AA' : '#666',
-              fontWeight: activeTab === tab ? 700 : 400,
+              color:
+                activeTab === tab
+                  ? 'var(--brand-primary)'
+                  : 'var(--text-tertiary)',
+              fontWeight: activeTab === tab ? 700 : 500,
             }}
           >
             {tab}
@@ -1155,16 +1302,18 @@ function SavedPageContent() {
         >
           <MdRefresh
             size={22}
-            color="#0504AA"
+            color="var(--brand-primary)"
             style={{
-              animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none',
+              animation: isRefreshing
+                ? 'spin 0.8s linear infinite'
+                : 'none',
             }}
           />
         </button>
       </div>
 
-      <div style={styles.searchWrap}>
-        <MdSearch size={18} color="#94A3B8" />
+      <div style={styles.searchWrap} className="sv-search-wrap">
+        <MdSearch size={18} color="var(--text-muted)" />
         <input
           type="text"
           placeholder={`Search ${activeTab.toLowerCase()}…`}
@@ -1174,14 +1323,14 @@ function SavedPageContent() {
         />
       </div>
 
-      <div style={styles.content}>
+      <div style={styles.content} className="sv-content">
         {isLoading ? (
           <div style={styles.center}>
             <div style={styles.spinner} />
           </div>
         ) : error ? (
           <div style={styles.center}>
-            <MdCancel size={44} color="#EF9A9A" />
+            <MdCancel size={44} color="var(--danger-fg)" />
             <p style={styles.errorText}>{error}</p>
             <button onClick={handleRefresh} style={styles.primaryBtn}>
               Try again
@@ -1195,9 +1344,14 @@ function SavedPageContent() {
       {showCreateWanted && (
         <div
           style={styles.modalOverlay}
+          className="sv-modal-overlay"
           onClick={() => !creatingWanted && setShowCreateWanted(false)}
         >
-          <div style={styles.sheet} onClick={(e) => e.stopPropagation()}>
+          <div
+            style={styles.sheet}
+            className="sv-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={styles.sheetHeader}>
               <h3 style={styles.sheetTitle}>Post a wanted alert</h3>
               <button
@@ -1205,7 +1359,7 @@ function SavedPageContent() {
                 style={styles.iconBtn}
                 disabled={creatingWanted}
               >
-                <MdClose size={22} color="#666" />
+                <MdClose size={22} color="var(--text-tertiary)" />
               </button>
             </div>
 
@@ -1278,8 +1432,6 @@ function SavedPageContent() {
           </div>
         </div>
       )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }
@@ -1294,6 +1446,8 @@ export default function SavedPage() {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
+            background: 'var(--bg-primary)',
+            color: 'var(--text-secondary)',
           }}
         >
           Loading…
@@ -1305,7 +1459,13 @@ export default function SavedPage() {
   );
 }
 
-function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
+function EmptyState({
+  icon,
+  text,
+}: {
+  icon: React.ReactNode;
+  text: string;
+}) {
   return (
     <div style={styles.center}>
       {icon}
@@ -1319,24 +1479,27 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   tabBar: {
     display: 'flex',
     alignItems: 'center',
-    borderBottom: '1px solid #eee',
+    borderBottom: '1px solid var(--border-default)',
     overflowX: 'auto',
     whiteSpace: 'nowrap',
-    padding: '0 8px',
     flexShrink: 0,
+    transition: 'border-color 0.18s ease',
   },
   tab: {
     background: 'none',
     border: 'none',
-    padding: '12px 10px',
     fontSize: 13,
     cursor: 'pointer',
     flexShrink: 0,
+    fontFamily: 'inherit',
+    transition: 'color 0.15s',
   },
   refreshBtn: {
     background: 'none',
@@ -1360,12 +1523,12 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    margin: '8px 12px 4px',
     padding: '8px 12px',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 10,
-    border: '1px solid #E2E8F0',
+    border: '1px solid var(--border-default)',
     flexShrink: 0,
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   searchInput: {
     flex: 1,
@@ -1373,12 +1536,12 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     fontSize: 14,
     backgroundColor: 'transparent',
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
+    fontFamily: 'inherit',
   },
   content: {
     flex: 1,
     overflowY: 'auto',
-    padding: '12px 16px 24px',
     minHeight: 0,
   },
   center: {
@@ -1390,18 +1553,18 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '48px 24px',
     gap: 12,
     textAlign: 'center',
-    color: '#888',
+    color: 'var(--text-muted)',
   },
   spinner: {
     width: 36,
     height: 36,
-    border: '4px solid #eee',
-    borderTopColor: '#0504AA',
+    border: '4px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   errorText: {
-    color: '#B71C1C',
+    color: 'var(--danger-fg)',
     fontSize: 14,
     margin: 0,
     maxWidth: 320,
@@ -1409,7 +1572,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   emptyText: {
     fontSize: 14,
-    color: '#888',
+    color: 'var(--text-muted)',
     margin: 0,
     maxWidth: 300,
     lineHeight: 1.5,
@@ -1423,17 +1586,17 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     padding: 12,
     marginBottom: 10,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 12,
-    border: '1px solid #EEF2FF',
+    border: '1px solid var(--border-default)',
     cursor: 'pointer',
-    transition: 'opacity 0.2s',
+    transition: 'background-color 0.15s, border-color 0.15s',
   },
   thumb: {
     width: 44,
     height: 44,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1448,14 +1611,14 @@ const styles: Record<string, React.CSSProperties> = {
   cardTitle: {
     fontSize: 15,
     fontWeight: 600,
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   cardSubtitle: {
     fontSize: 13,
-    color: '#666',
+    color: 'var(--text-tertiary)',
     marginTop: 2,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1463,33 +1626,33 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardMeta: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     marginTop: 3,
   },
   cardTrailing: {
     fontSize: 15,
     fontWeight: 600,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     marginLeft: 8,
     whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
   },
 
-  // ── Rich card (Reservations, Deliveries, Bookings, Basket, History)
   resCard: {
     padding: 14,
     marginBottom: 10,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 14,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     cursor: 'pointer',
-    transition: 'border-color 0.15s, box-shadow 0.15s',
+    transition: 'background-color 0.15s, border-color 0.15s, box-shadow 0.15s',
     display: 'flex',
     flexDirection: 'column',
     gap: 10,
   },
   resCardExpired: {
-    backgroundColor: '#FAFAFC',
-    borderColor: '#EEF0F7',
+    backgroundColor: 'var(--bg-tertiary)',
+    borderColor: 'var(--border-subtle)',
   },
   resTopRow: {
     display: 'flex',
@@ -1501,7 +1664,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 48,
     flex: '0 0 48px',
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1522,7 +1685,7 @@ const styles: Record<string, React.CSSProperties> = {
   resStoreName: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1537,7 +1700,7 @@ const styles: Record<string, React.CSSProperties> = {
   resItemText: {
     fontSize: 12.5,
     fontWeight: 600,
-    color: '#475569',
+    color: 'var(--text-secondary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1558,7 +1721,7 @@ const styles: Record<string, React.CSSProperties> = {
   resAddressText: {
     fontSize: 11.5,
     fontWeight: 500,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1566,10 +1729,11 @@ const styles: Record<string, React.CSSProperties> = {
   resAmount: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     whiteSpace: 'nowrap',
     letterSpacing: '-0.01em',
     marginTop: 2,
+    fontVariantNumeric: 'tabular-nums',
   },
   resBottomRow: {
     display: 'flex',
@@ -1595,14 +1759,14 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 5,
     fontSize: 12.5,
     fontWeight: 600,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
   },
   resCountdownWarn: {
-    color: '#B45309',
+    color: 'var(--warning-fg)',
     fontWeight: 800,
   },
   resCountdownExpired: {
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
   },
   resWarnRow: {
     display: 'flex',
@@ -1610,12 +1774,12 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
     padding: '8px 10px',
     marginTop: 2,
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #FDE68A',
+    backgroundColor: 'var(--warning-bg)',
+    border: '1px solid var(--warning-strong)',
     borderRadius: 10,
     fontSize: 12,
     fontWeight: 700,
-    color: '#92400E',
+    color: 'var(--warning-fg)',
     lineHeight: 1.4,
   },
 
@@ -1626,20 +1790,23 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '12px 20px',
     marginBottom: 12,
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    backgroundImage: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 12,
     fontSize: 14,
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: 'var(--shadow-brand)',
   },
   basketFooter: {
     marginTop: 12,
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 12,
-    border: '1px solid #E2E8F0',
+    border: '1px solid var(--border-default)',
     display: 'flex',
     flexDirection: 'column',
     gap: 12,
@@ -1651,44 +1818,52 @@ const styles: Record<string, React.CSSProperties> = {
   },
   basketLabel: {
     fontSize: 14,
-    color: '#64748B',
-    fontWeight: 500,
+    color: 'var(--text-tertiary)',
+    fontWeight: 600,
   },
   basketValue: {
     fontSize: 18,
     fontWeight: 700,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
+    fontVariantNumeric: 'tabular-nums',
   },
   primaryBtn: {
     padding: '12px 20px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundImage: 'var(--brand-gradient)',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 10,
     fontSize: 14,
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: 'pointer',
     width: '100%',
+    fontFamily: 'inherit',
+    boxShadow: 'var(--shadow-brand)',
   },
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(15,23,42,0.5)',
+    backgroundColor: 'var(--overlay)',
     display: 'flex',
     alignItems: 'flex-end',
     justifyContent: 'center',
     zIndex: 200,
+    backdropFilter: 'blur(4px)',
+    WebkitBackdropFilter: 'blur(4px)',
   },
   sheet: {
     width: '100%',
     maxWidth: 500,
     maxHeight: '85vh',
     overflowY: 'auto',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-primary)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: '16px 20px 32px',
-    boxShadow: '0 -8px 24px rgba(0,0,0,0.12)',
+    boxShadow: 'var(--shadow-lg)',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   sheetHeader: {
     display: 'flex',
@@ -1699,12 +1874,12 @@ const styles: Record<string, React.CSSProperties> = {
   sheetTitle: {
     fontSize: 18,
     fontWeight: 700,
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   sheetHelper: {
     fontSize: 13,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     lineHeight: 1.5,
     margin: '4px 0 16px',
   },
@@ -1712,7 +1887,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'block',
     fontSize: 13,
     fontWeight: 600,
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
     marginBottom: 12,
   },
   textInput: {
@@ -1721,9 +1896,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 6,
     padding: '12px 14px',
     fontSize: 14,
-    color: '#1A1A1A',
-    backgroundColor: '#fff',
-    border: '1px solid #E2E8F0',
+    color: 'var(--text-primary)',
+    backgroundColor: 'var(--bg-tertiary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 10,
     outline: 'none',
     boxSizing: 'border-box',
@@ -1731,10 +1906,74 @@ const styles: Record<string, React.CSSProperties> = {
   },
   inlineError: {
     padding: '10px 12px',
-    backgroundColor: '#FEE2E2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     borderRadius: 10,
-    color: '#B71C1C',
+    color: 'var(--danger-fg)',
     fontSize: 13,
   },
 };
+
+// ─── Responsive layout ─────────────────────────────────────────────
+// Padding/margin for tabbar, searchWrap and content live in CSS so the
+// desktop media query can restyle them without !important.
+const CSS = `
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .sv-tabbar {
+    padding: 0 8px;
+  }
+  .sv-tab {
+    padding: 12px 10px;
+  }
+  .sv-search-wrap {
+    margin: 8px 12px 4px;
+  }
+  .sv-content {
+    padding: 12px 16px 24px;
+  }
+
+  @media (min-width: 1024px) {
+    .sv-tabbar {
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 24px;
+      justify-content: center;
+      overflow-x: visible;
+    }
+    .sv-tab {
+      padding: 14px 20px;
+      font-size: 13.5px;
+    }
+    .sv-search-wrap {
+      width: calc(100% - 48px);
+      max-width: 900px;
+      margin: 16px auto 8px;
+      box-sizing: border-box;
+    }
+    .sv-content {
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px 24px 32px;
+      box-sizing: border-box;
+    }
+    .sv-modal-overlay {
+      align-items: center !important;
+      padding: 24px;
+    }
+    .sv-sheet {
+      border-radius: 20px !important;
+      max-height: 80vh;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+`;
