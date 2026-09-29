@@ -1,13 +1,21 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '../../../services/api';
+import api, { extractErrorDetail } from '../../../services/api';
+import { useAuthGuard } from '../../../hooks/useAuthGuard';
+import { confirmDialog, alertDialog } from '../../../components/ui/dialogs';
 import {
   MdSearch,
-  MdInventory,
+  MdInventory2,
   MdEdit,
-  MdDelete,
+  MdDeleteOutline,
+  MdAdd,
+  MdClose,
+  MdRefresh,
+  MdErrorOutline,
+  MdImage,
+  MdStorefront,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -16,358 +24,1023 @@ interface StoreItem {
   title?: string;
   price?: number | string;
   image_url?: string;
+  image_width?: number | null;
+  image_height?: number | null;
+  category?: string | null;
+  quantity_total?: number | null;
+  quantity_available?: number | null;
+  created_at?: string;
   [key: string]: unknown;
 }
 
+type StockFilter = 'all' | 'in' | 'low' | 'out';
+
+// ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
+  if (
+    url.startsWith('http') ||
+    url.startsWith('blob:') ||
+    url.startsWith('data:')
+  )
+    return url;
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
+  if (!base) return url;
+  if (url.startsWith('/')) return `${base}${url}`;
+  return `${base}/${url}`;
 }
 
-function extractErrorMessage(err: unknown): string {
-  if (typeof err === 'object' && err !== null) {
-    const e = err as {
-      response?: { data?: { detail?: unknown } };
-      message?: unknown;
-    };
-    const detail = e.response?.data?.detail;
-    if (typeof detail === 'string') return detail;
-    if (typeof e.message === 'string') return e.message;
+function formatPrice(raw: unknown): string {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return '₦0';
+  return `₦${Math.round(n).toLocaleString('en-NG')}`;
+}
+
+function stockState(item: StoreItem): 'in' | 'low' | 'out' {
+  const available = item.quantity_available ?? 0;
+  const total = item.quantity_total ?? available;
+  if (available <= 0) return 'out';
+  if (total > 0 && available <= Math.max(1, Math.floor(total * 0.2))) {
+    return 'low';
   }
-  return 'Could not delete item. Please try again.';
+  return 'in';
 }
 
+// ─── Component ──────────────────────────────────────────────────────
 export default function StorekeeperItemsPage() {
+  useAuthGuard();
   const router = useRouter();
 
   const [allItems, setAllItems] = useState<StoreItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errored, setErrored] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [stockFilter, setStockFilter] = useState<StockFilter>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(null);
 
-  const loadItems = async () => {
-    setLoading(true);
-    setErrorMsg(null);
+  const reqSeq = useRef(0);
+  const isMountedRef = useRef(true);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadItems = useCallback(async (showSpinner = true) => {
+    const seq = ++reqSeq.current;
+    if (showSpinner) setLoading(true);
+    setErrored(false);
     try {
       const store = (await api.getMyStore()) as { store_id?: string } | null;
-      if (store?.store_id) {
-        const items = (await api.getStoreItems(store.store_id)) as StoreItem[];
-        setAllItems(items);
-      } else {
+      if (seq !== reqSeq.current || !isMountedRef.current) return;
+      if (!store?.store_id) {
+        setStoreId(null);
         setAllItems([]);
+        return;
       }
+      setStoreId(store.store_id);
+      const items = (await api.getStoreItems(store.store_id)) as StoreItem[];
+      if (seq !== reqSeq.current || !isMountedRef.current) return;
+      setAllItems(Array.isArray(items) ? items : []);
     } catch {
-      setAllItems([]);
+      if (seq === reqSeq.current && isMountedRef.current) setErrored(true);
     } finally {
-      setLoading(false);
+      if (seq === reqSeq.current && isMountedRef.current) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadItems();
+      void loadItems();
     }, 0);
     return () => clearTimeout(timer);
-  }, []);
+  }, [loadItems]);
 
-  // Derived filtered items – no setState in effect
+  // ── Derived ────────────────────────────────────────────────────
+  const counts = useMemo(() => {
+    let inStock = 0;
+    let low = 0;
+    let out = 0;
+    for (const it of allItems) {
+      const s = stockState(it);
+      if (s === 'in') inStock++;
+      else if (s === 'low') low++;
+      else out++;
+    }
+    return { inStock, low, out, total: allItems.length };
+  }, [allItems]);
+
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return allItems;
-    return allItems.filter((item) =>
-      (item.title || '').toLowerCase().includes(q)
-    );
-  }, [allItems, searchQuery]);
+    return allItems.filter((item) => {
+      if (stockFilter !== 'all') {
+        const s = stockState(item);
+        if (stockFilter === 'in' && s !== 'in') return false;
+        if (stockFilter === 'low' && s !== 'low') return false;
+        if (stockFilter === 'out' && s !== 'out') return false;
+      }
+      if (q && !(item.title || '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [allItems, searchQuery, stockFilter]);
 
+  // ── Actions ────────────────────────────────────────────────────
   const handleEdit = (id: string) => {
     router.push(`/storekeeper/edit-item/${id}`);
   };
 
-  const handleDelete = async (id: string) => {
-    const confirmed = window.confirm(
-      "Delete this item? This can't be undone."
+  const handleDelete = async (item: StoreItem) => {
+    const ok = await confirmDialog({
+      title: 'Delete item?',
+      body: `"${item.title || 'Untitled'}" will be removed permanently. This can't be undone.`,
+      kind: 'danger',
+    });
+    if (!ok) return;
+
+    setDeletingId(item.listing_id);
+    // Optimistic removal
+    const previous = allItems;
+    setAllItems((prev) =>
+      prev.filter((it) => it.listing_id !== item.listing_id),
     );
-    if (!confirmed) return;
-
-    setErrorMsg(null);
-    setDeletingId(id);
-
-    // Optimistic removal so the UI feels instant
-    const previousItems = allItems;
-    setAllItems((prev) => prev.filter((item) => item.listing_id !== id));
 
     try {
-      await api.deleteListing(id);
-    } catch (err: unknown) {
-      // Roll back if the server rejected the delete
-      setAllItems(previousItems);
-      setErrorMsg(extractErrorMessage(err));
-      console.error('Delete failed:', err);
+      await api.deleteListing(item.listing_id);
+    } catch (err) {
+      // Roll back
+      if (isMountedRef.current) setAllItems(previous);
+      await alertDialog({
+        title: 'Could not delete',
+        body: extractErrorDetail(
+          err,
+          'Something went wrong. Please try again.',
+        ),
+        kind: 'danger',
+      });
     } finally {
-      setDeletingId(null);
+      if (isMountedRef.current) setDeletingId(null);
     }
   };
 
-  return (
-    <main style={styles.container}>
-      {/* Header */}
-      <div style={styles.header}>
-        <h1 style={styles.headerTitle}>My Items</h1>
-      </div>
+  const goToAddItem = () => router.push('/storekeeper/add-item');
 
-      {/* Search bar */}
-      <div style={styles.searchBar}>
-        <MdSearch size={20} color="#888" />
-        <input
-          type="text"
-          placeholder="Search items..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={styles.searchInput}
-        />
-      </div>
-
-      {/* Error banner */}
-      {errorMsg && (
-        <div style={styles.errorBanner}>
-          <span>{errorMsg}</span>
-          <button
-            onClick={() => setErrorMsg(null)}
-            style={styles.errorDismiss}
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* Content */}
-      <div style={styles.content}>
-        {loading ? (
-          <div style={styles.center}>
-            <div style={styles.spinner} />
+  // ── Loading skeleton ───────────────────────────────────────────
+  if (loading) {
+    return (
+      <main style={css.root} className="sk-items">
+        <style>{CSS}</style>
+        <div style={css.headerWrap}>
+          <div style={css.headerInner}>
+            <div style={css.skelLine} />
+            <div style={{ ...css.skelLine, width: 100 }} />
           </div>
-        ) : filteredItems.length === 0 ? (
-          <div style={styles.center}>
-            <MdInventory size={48} color="#ccc" />
-            <p style={{ color: '#888', marginTop: 8 }}>No items found</p>
+        </div>
+        <div style={css.sheet}>
+          <div style={css.searchSkeleton} />
+          <div style={css.pillRowSkeleton} />
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={css.itemSkeleton} />
+          ))}
+        </div>
+      </main>
+    );
+  }
+
+  // ── Error ──────────────────────────────────────────────────────
+  if (errored) {
+    return (
+      <main style={css.centerRoot}>
+        <style>{CSS}</style>
+        <div style={css.errorHalo}>
+          <MdErrorOutline size={40} color="#B91C1C" />
+        </div>
+        <h2 style={css.centerTitle}>Couldn&apos;t load your items</h2>
+        <p style={css.centerBody}>
+          Check your connection and try again. If this keeps happening, sign
+          out and back in.
+        </p>
+        <button onClick={() => void loadItems()} style={css.retryBtn}>
+          <MdRefresh size={18} color="#fff" />
+          <span>Retry</span>
+        </button>
+      </main>
+    );
+  }
+
+  // ── No store yet ───────────────────────────────────────────────
+  if (!storeId && allItems.length === 0) {
+    return (
+      <main style={css.centerRoot}>
+        <style>{CSS}</style>
+        <div style={css.setupHalo}>
+          <MdStorefront size={40} color="#0504AA" />
+        </div>
+        <h2 style={css.centerTitle}>No store yet</h2>
+        <p style={css.centerBody}>
+          Create your store first, then you can start listing items.
+        </p>
+        <button
+          onClick={() => router.push('/storekeeper/onboarding')}
+          style={css.retryBtn}
+        >
+          <span>Set up store</span>
+        </button>
+      </main>
+    );
+  }
+
+  // ── Main ───────────────────────────────────────────────────────
+  const hasNoItems = allItems.length === 0;
+  const hasNoMatches = !hasNoItems && filteredItems.length === 0;
+
+  return (
+    <main style={css.root} className="sk-items">
+      <style>{CSS}</style>
+
+      {/* HEADER */}
+      <div style={css.headerWrap}>
+        <div style={css.headerInner}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={css.title}>My items</h1>
+            <div style={css.subtitle}>
+              {hasNoItems
+                ? 'List your first product'
+                : `${counts.total} item${counts.total === 1 ? '' : 's'} · ${
+                    counts.inStock
+                  } in stock`}
+            </div>
+          </div>
+          {!hasNoItems && (
+            <button
+              type="button"
+              onClick={goToAddItem}
+              style={css.addBtn}
+              className="sk-add-btn"
+            >
+              <MdAdd size={20} color="#fff" />
+              <span className="sk-add-label">Add</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={css.sheet}>
+        {hasNoItems ? (
+          // ── EMPTY STATE ──────────────────────────────────────
+          <div style={css.emptyState}>
+            <div style={css.emptyHalo}>
+              <MdInventory2 size={44} color="#0504AA" />
+            </div>
+            <h2 style={css.emptyTitle}>No items yet</h2>
+            <p style={css.emptyBody}>
+              Add your first product to start selling on Admerce. It takes
+              about 30 seconds — photo, title, price.
+            </p>
+            <button onClick={goToAddItem} style={css.emptyPrimary}>
+              <MdAdd size={20} color="#fff" />
+              <span>Add your first item</span>
+            </button>
           </div>
         ) : (
-          <div style={styles.list}>
-            {filteredItems.map((item) => {
-              const image = resolveImageUrl(item.image_url);
-              const isDeleting = deletingId === item.listing_id;
-              return (
-                <div
-                  key={item.listing_id}
-                  style={{
-                    ...styles.itemCard,
-                    opacity: isDeleting ? 0.5 : 1,
-                  }}
+          <>
+            {/* SEARCH */}
+            <div style={css.searchWrap}>
+              <MdSearch size={18} color="#94A3B8" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search your items"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setSearchQuery('');
+                }}
+                style={css.searchInput}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  style={css.searchClear}
+                  aria-label="Clear search"
                 >
-                  <div style={styles.itemAvatar}>
-                    {image ? (
-                      <img
-                        src={image}
-                        alt=""
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                        }}
-                      />
-                    ) : (
-                      <MdInventory size={24} color="#888" />
-                    )}
-                  </div>
-                  <div style={styles.itemInfo}>
-                    <div style={styles.itemTitle}>
-                      {item.title || 'Untitled'}
-                    </div>
-                    <div style={styles.itemPrice}>
-                      ₦{Number(item.price || 0).toFixed(0)}
-                    </div>
-                  </div>
-                  <div style={styles.itemActions}>
-                    <button
-                      onClick={() => handleEdit(item.listing_id)}
-                      style={{
-                        ...styles.iconBtn,
-                        cursor: isDeleting ? 'not-allowed' : 'pointer',
-                      }}
-                      title="Edit"
-                      disabled={isDeleting}
-                    >
-                      <MdEdit size={20} color="#0504AA" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(item.listing_id)}
-                      style={{
-                        ...styles.iconBtn,
-                        cursor: isDeleting ? 'not-allowed' : 'pointer',
-                      }}
-                      title="Delete"
-                      disabled={isDeleting}
-                    >
-                      {isDeleting ? (
-                        <div style={styles.smallSpinner} />
-                      ) : (
-                        <MdDelete size={20} color="#FF0000" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                  <MdClose size={14} color="#64748B" />
+                </button>
+              )}
+            </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            {/* STOCK FILTER PILLS */}
+            <div style={css.pillRow}>
+              <FilterPill
+                label="All"
+                count={counts.total}
+                active={stockFilter === 'all'}
+                onClick={() => setStockFilter('all')}
+              />
+              <FilterPill
+                label="In stock"
+                count={counts.inStock}
+                active={stockFilter === 'in'}
+                tint={{ bg: '#DCFCE7', color: '#166534' }}
+                onClick={() => setStockFilter('in')}
+              />
+              <FilterPill
+                label="Low"
+                count={counts.low}
+                active={stockFilter === 'low'}
+                tint={{ bg: '#FEF3C7', color: '#92400E' }}
+                onClick={() => setStockFilter('low')}
+              />
+              <FilterPill
+                label="Out"
+                count={counts.out}
+                active={stockFilter === 'out'}
+                tint={{ bg: '#FEE2E2', color: '#991B1B' }}
+                onClick={() => setStockFilter('out')}
+              />
+            </div>
+
+            {/* LIST */}
+            {hasNoMatches ? (
+              <div style={css.noMatchWrap}>
+                <div style={css.noMatchHalo}>
+                  <MdSearch size={32} color="#94A3B8" />
+                </div>
+                <div style={css.noMatchTitle}>No matches</div>
+                <div style={css.noMatchBody}>
+                  Try a different word, or clear the filters.
+                </div>
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setStockFilter('all');
+                  }}
+                  style={css.clearAllBtn}
+                >
+                  Clear filters
+                </button>
+              </div>
+            ) : (
+              <div style={css.list} className="sk-item-list">
+                {filteredItems.map((item) => (
+                  <ItemRow
+                    key={item.listing_id}
+                    item={item}
+                    isDeleting={deletingId === item.listing_id}
+                    onEdit={() => handleEdit(item.listing_id)}
+                    onDelete={() => handleDelete(item)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        <div style={{ height: 32 }} />
+      </div>
     </main>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
-const styles: Record<string, React.CSSProperties> = {
-  container: {
+// ─── Sub-components ─────────────────────────────────────────────────
+function FilterPill({
+  label,
+  count,
+  active,
+  tint,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  tint?: { bg: string; color: string };
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...css.pill,
+        borderColor: active ? '#0504AA' : '#E6E8F0',
+        backgroundColor: active ? '#EEF0FF' : '#FFFFFF',
+      }}
+    >
+      <span
+        style={{
+          color: active ? '#0504AA' : '#475569',
+          fontWeight: active ? 800 : 700,
+          fontSize: 12.5,
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          ...css.pillCount,
+          backgroundColor: tint?.bg ?? (active ? '#FFFFFF' : '#F1F5F9'),
+          color: tint?.color ?? (active ? '#0504AA' : '#64748B'),
+        }}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function ItemRow({
+  item,
+  isDeleting,
+  onEdit,
+  onDelete,
+}: {
+  item: StoreItem;
+  isDeleting: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const image = resolveImageUrl(item.image_url);
+  const state = stockState(item);
+  const available = item.quantity_available ?? 0;
+
+  const stockBadge =
+    state === 'out'
+      ? { text: 'Out of stock', bg: '#FEE2E2', color: '#991B1B' }
+      : state === 'low'
+        ? { text: `${available} left`, bg: '#FEF3C7', color: '#92400E' }
+        : { text: `${available} in stock`, bg: '#DCFCE7', color: '#166534' };
+
+  return (
+    <div
+      style={{
+        ...css.itemCard,
+        opacity: isDeleting ? 0.5 : 1,
+      }}
+      className="sk-item-card"
+    >
+      <button
+        type="button"
+        onClick={onEdit}
+        style={css.itemMain}
+        aria-label={`Edit ${item.title || 'item'}`}
+      >
+        <div style={css.thumb}>
+          {image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={image} alt="" style={css.thumbImg} loading="lazy" />
+          ) : (
+            <div style={css.thumbPlaceholder}>
+              <MdImage size={22} color="#94A3B8" />
+            </div>
+          )}
+        </div>
+
+        <div style={css.itemInfo}>
+          <div style={css.itemTitle} title={item.title}>
+            {item.title || 'Untitled'}
+          </div>
+          <div style={css.itemMeta}>
+            <span style={css.itemPrice}>{formatPrice(item.price)}</span>
+            <span
+              style={{
+                ...css.stockChip,
+                backgroundColor: stockBadge.bg,
+                color: stockBadge.color,
+              }}
+            >
+              {stockBadge.text}
+            </span>
+          </div>
+        </div>
+      </button>
+
+      <div style={css.itemActions}>
+        <button
+          type="button"
+          onClick={onEdit}
+          style={css.iconBtn}
+          disabled={isDeleting}
+          title="Edit"
+          aria-label="Edit"
+        >
+          <MdEdit size={18} color="#0504AA" />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          style={css.iconBtnDanger}
+          disabled={isDeleting}
+          title="Delete"
+          aria-label="Delete"
+        >
+          {isDeleting ? (
+            <div style={css.smallSpinner} />
+          ) : (
+            <MdDeleteOutline size={18} color="#DC2626" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Interaction CSS + desktop layout ───────────────────────────────
+const CSS = `
+  @keyframes skSpin { to { transform: rotate(360deg); } }
+  @keyframes skShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+  .sk-items,
+  .sk-items *,
+  .sk-items *::before,
+  .sk-items *::after {
+    box-sizing: border-box;
+  }
+
+  .sk-add-btn {
+    transition: transform 0.12s ease, box-shadow 0.15s ease;
+  }
+  .sk-add-btn:hover {
+    box-shadow: 0 12px 24px rgba(5,4,170,0.32);
+  }
+  .sk-add-btn:active {
+    transform: scale(0.97);
+  }
+
+  .sk-item-card {
+    transition: box-shadow 0.15s ease, transform 0.12s ease;
+  }
+  .sk-item-card:hover {
+    box-shadow: 0 10px 24px rgba(15,23,42,0.06) !important;
+  }
+
+  /* Desktop: wider column, 2-col grid, tighter add button */
+  @media (min-width: 1024px) {
+    .sk-items .sk-items-inner {
+      max-width: 1080px;
+    }
+    .sk-item-list {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .sk-item-list > div {
+      margin-bottom: 0 !important;
+    }
+  }
+`;
+
+// ─── Styles ─────────────────────────────────────────────────────────
+const css: Record<string, React.CSSProperties> = {
+  root: {
     display: 'flex',
     flexDirection: 'column',
-    height: '100%',
-    backgroundColor: '#fff',
+    minHeight: '100vh',
+    backgroundColor: '#F4F5FB',
+    overflowX: 'hidden',
   },
-  header: {
-    padding: '12px 16px',
-    borderBottom: '1px solid #eee',
+
+  // HEADER
+  headerWrap: {
+    position: 'sticky',
+    top: 0,
+    zIndex: 20,
+    backgroundColor: '#0504AA',
+    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    padding: '14px 20px',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 600,
-    color: '#1A1A1A',
-    margin: 0,
-  },
-  searchBar: {
+  headerInner: {
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
-    padding: '8px 16px',
-    margin: '8px 16px',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
+    gap: 12,
+    maxWidth: 1080,
+    margin: '0 auto',
+    width: '100%',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: 800,
+    color: '#fff',
+    margin: 0,
+    letterSpacing: -0.4,
+  },
+  subtitle: {
+    fontSize: 12.5,
+    color: 'rgba(255,255,255,0.78)',
+    fontWeight: 600,
+    marginTop: 3,
+  },
+  addBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '10px 16px',
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    border: 'none',
+    color: '#0504AA',
+    fontSize: 13.5,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 8px 20px rgba(0,0,0,0.18)',
+  },
+
+  // SHEET
+  sheet: {
+    flex: 1,
+    padding: '16px 20px 40px',
+    maxWidth: 1080,
+    margin: '0 auto',
+    width: '100%',
+  },
+
+  // SEARCH
+  searchWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '12px 16px',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    border: '1px solid #EAECF3',
   },
   searchInput: {
     flex: 1,
     border: 'none',
     outline: 'none',
     background: 'transparent',
-    fontSize: 14,
-    color: '#1A1A1A',
-    padding: '8px 0',
+    fontSize: 14.5,
+    color: '#0B0B1A',
+    fontFamily: 'inherit',
+    fontWeight: 500,
   },
-  errorBanner: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    margin: '0 16px 8px',
-    padding: '10px 12px',
-    backgroundColor: '#FFEBEE',
-    border: '1px solid #FFCDD2',
+  searchClear: {
+    width: 26,
+    height: 26,
     borderRadius: 8,
-    color: '#B71C1C',
-    fontSize: 13,
-  },
-  errorDismiss: {
-    background: 'none',
+    backgroundColor: '#F1F5F9',
     border: 'none',
-    color: '#B71C1C',
-    fontSize: 18,
-    lineHeight: 1,
     cursor: 'pointer',
-    padding: '0 4px',
-  },
-  content: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '0 16px 16px',
-  },
-  center: {
     display: 'flex',
-    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100%',
-    color: '#888',
   },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: '4px solid #eee',
-    borderTopColor: '#0504AA',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
+
+  // PILLS
+  pillRow: {
+    display: 'flex',
+    gap: 8,
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
+  pill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '7px 8px 7px 14px',
+    borderRadius: 999,
+    border: '1.5px solid',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'background-color 0.15s, border-color 0.15s',
+  },
+  pillCount: {
+    minWidth: 22,
+    height: 22,
+    padding: '0 6px',
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 800,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontVariantNumeric: 'tabular-nums',
+  },
+
+  // LIST
+  list: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+    marginTop: 16,
+  },
+
+  // ITEM CARD
+  itemCard: {
+    display: 'flex',
+    alignItems: 'stretch',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #EAECF3',
+    borderRadius: 18,
+    overflow: 'hidden',
+    boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+  },
+  itemMain: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    padding: '12px 4px 12px 12px',
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    minWidth: 0,
+  },
+  thumb: {
+    width: 72,
+    height: 72,
+    flexShrink: 0,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#F4F5FB',
+    border: '1px solid #EAECF3',
+  },
+  thumbImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  },
+  thumbPlaceholder: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+  },
+  itemInfo: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  itemTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    letterSpacing: -0.2,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    lineHeight: 1.3,
+  },
+  itemMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  itemPrice: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: '#0504AA',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  stockChip: {
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0.2,
+    padding: '3px 8px',
+    borderRadius: 999,
+  },
+
+  // ACTIONS
+  itemActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    padding: '0 8px',
+  },
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#EEF0FF',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background-color 0.15s',
+  },
+  iconBtnDanger: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background-color 0.15s',
   },
   smallSpinner: {
     width: 16,
     height: 16,
-    border: '2px solid #eee',
-    borderTopColor: '#FF0000',
+    border: '2px solid #FECACA',
+    borderTopColor: '#DC2626',
     borderRadius: '50%',
-    animation: 'spin 0.7s linear infinite',
+    animation: 'skSpin 0.7s linear infinite',
   },
-  list: {
+
+  // EMPTY
+  emptyState: {
     display: 'flex',
     flexDirection: 'column',
-  },
-  itemCard: {
-    display: 'flex',
     alignItems: 'center',
-    padding: '12px',
-    marginBottom: 8,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    border: '1px solid #eee',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+    justifyContent: 'center',
+    padding: '56px 24px',
+    textAlign: 'center',
   },
-  itemAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 50,
-    overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
+  emptyHalo: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    backgroundColor: '#EEF0FF',
+    border: '1px solid #C7D2FE',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginBottom: 20,
   },
-  itemInfo: {
-    flex: 1,
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    margin: 0,
+    letterSpacing: -0.3,
   },
-  itemTitle: {
-    fontSize: 15,
-    fontWeight: 600,
-    color: '#1A1A1A',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  itemPrice: {
+  emptyBody: {
     fontSize: 14,
-    color: '#0504AA',
-    marginTop: 2,
+    color: '#64748B',
+    margin: '8px 0 24px',
+    maxWidth: 340,
+    lineHeight: 1.55,
   },
-  itemActions: {
+  emptyPrimary: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '14px 22px',
+    borderRadius: 14,
+    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    backgroundColor: '#0504AA',
+    color: '#fff',
+    border: 'none',
+    fontSize: 15,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 12px 24px rgba(5,4,170,0.28)',
+  },
+
+  // NO MATCHES
+  noMatchWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '40px 20px',
+    textAlign: 'center',
+  },
+  noMatchHalo: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: '#F1F5F9',
     display: 'flex',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    marginBottom: 14,
   },
-  iconBtn: {
-    background: 'none',
+  noMatchTitle: {
+    fontSize: 16,
+    fontWeight: 800,
+    color: '#0B0B1A',
+  },
+  noMatchBody: {
+    fontSize: 13.5,
+    color: '#64748B',
+    marginTop: 4,
+    lineHeight: 1.5,
+  },
+  clearAllBtn: {
+    marginTop: 16,
+    padding: '10px 18px',
+    borderRadius: 12,
+    backgroundColor: '#EEF0FF',
+    color: '#0504AA',
+    border: 'none',
+    fontSize: 13.5,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+
+  // CENTER SCREENS (error / no store)
+  centerRoot: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#F4F5FB',
+    padding: 24,
+    textAlign: 'center',
+  },
+  errorHalo: {
+    width: 84,
+    height: 84,
+    borderRadius: 24,
+    backgroundColor: '#FEF2F2',
+    border: '1px solid #FECACA',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  setupHalo: {
+    width: 84,
+    height: 84,
+    borderRadius: 24,
+    backgroundColor: '#EEF0FF',
+    border: '1px solid #C7D2FE',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  centerTitle: {
+    fontSize: 20,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    margin: 0,
+    letterSpacing: -0.3,
+  },
+  centerBody: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 8,
+    maxWidth: 340,
+    lineHeight: 1.55,
+  },
+  retryBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
+    padding: '13px 24px',
+    borderRadius: 14,
+    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    backgroundColor: '#0504AA',
+    color: '#fff',
     border: 'none',
     cursor: 'pointer',
-    padding: 6,
-    display: 'flex',
-    alignItems: 'center',
+    fontSize: 14,
+    fontWeight: 800,
+    fontFamily: 'inherit',
+    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+  },
+
+  // SKELETONS
+  skelLine: {
+    height: 14,
+    width: 180,
+    borderRadius: 7,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  searchSkeleton: {
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #EAECF3',
+    animation: 'skShimmer 1.4s ease-in-out infinite',
+  },
+  pillRowSkeleton: {
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #EAECF3',
+    marginTop: 12,
+    maxWidth: 400,
+    animation: 'skShimmer 1.4s ease-in-out infinite',
+  },
+  itemSkeleton: {
+    height: 100,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #EAECF3',
+    marginTop: 10,
+    animation: 'skShimmer 1.4s ease-in-out infinite',
   },
 };
