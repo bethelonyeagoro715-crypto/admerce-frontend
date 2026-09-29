@@ -246,7 +246,6 @@ export default function StorekeeperDashboardPage() {
     return () => clearTimeout(timer);
   }, [loadDashboardData]);
 
-  // ── Modals ────────────────────────────────────────────────────
   const openStoreImageModal = () => setShowStoreImageModal(true);
   const closeStoreImageModal = () => {
     setShowStoreImageModal(false);
@@ -317,12 +316,10 @@ export default function StorekeeperDashboardPage() {
     }
   };
 
-  // ── Derived ───────────────────────────────────────────────────
   const storeImageUrl =
     storeImagePreview || resolveImageUrl(store?.store_image_url);
   const avatarUrl = avatarPreview || resolveImageUrl(profile?.avatar_url);
-  const userName =
-    profile?.nickname || profile?.username || 'Storekeeper';
+  const userName = profile?.nickname || profile?.username || 'Storekeeper';
   const verificationStatus = safeVerificationStatus(store);
   const verificationMeta = VERIFICATION_META[verificationStatus];
   const memberSince = fmtMemberSince(
@@ -337,24 +334,26 @@ export default function StorekeeperDashboardPage() {
   // ── Loading skeleton ──────────────────────────────────────────
   if (isLoading) {
     return (
-      <main style={css.root}>
+      <main style={css.root} className="sk-dash">
         <style>{CSS}</style>
         <div style={css.hero}>
-          <div style={css.topBar}>
-            <span style={css.topTitle}>Dashboard</span>
-            <div style={{ width: 38 }} />
-          </div>
-          <div style={css.identityRow}>
-            <div style={css.thumbSkeleton} />
-            <div style={{ flex: 1 }}>
-              <div style={css.skelLine} />
-              <div
-                style={{ ...css.skelLine, width: 130, marginTop: 8 }}
-              />
+          <div className="sk-hero-inner">
+            <div style={css.topBar}>
+              <span style={css.topTitle}>Dashboard</span>
+              <div style={{ width: 38 }} />
+            </div>
+            <div style={css.identityRow}>
+              <div style={css.thumbSkeleton} />
+              <div style={{ flex: 1 }}>
+                <div style={css.skelLine} />
+                <div
+                  style={{ ...css.skelLine, width: 130, marginTop: 8 }}
+                />
+              </div>
             </div>
           </div>
         </div>
-        <div style={css.sheet}>
+        <div style={css.sheet} className="sk-sheet">
           <div style={css.revenueSkeleton} />
           <div style={css.pulseSkeleton} />
           {[0, 1].map((i) => (
@@ -368,7 +367,7 @@ export default function StorekeeperDashboardPage() {
   // ── Error ─────────────────────────────────────────────────────
   if (errored) {
     return (
-      <main style={css.errorRoot}>
+      <main style={css.errorRoot} className="sk-dash">
         <style>{CSS}</style>
         <div style={css.errorHalo}>
           <MdErrorOutline size={40} color="#B91C1C" />
@@ -392,7 +391,7 @@ export default function StorekeeperDashboardPage() {
   // ── No store yet ──────────────────────────────────────────────
   if (!store) {
     return (
-      <main style={css.errorRoot}>
+      <main style={css.errorRoot} className="sk-dash">
         <style>{CSS}</style>
         <div style={css.setupHalo}>
           <MdStorefront size={40} color="#0504AA" />
@@ -419,68 +418,70 @@ export default function StorekeeperDashboardPage() {
       <style>{CSS}</style>
 
       {/* HERO */}
-      <div style={css.hero}>
+      <div style={css.hero} className="sk-hero">
         <div style={css.heroGlow} aria-hidden />
 
-        <div style={css.topBar}>
-          <span style={css.topTitle}>Dashboard</span>
-          <button
-            onClick={() => void loadDashboardData()}
-            style={css.ghostBtn}
-            aria-label="Refresh"
-          >
-            <MdRefresh size={20} color="#fff" />
-          </button>
-        </div>
+        <div className="sk-hero-inner">
+          <div style={css.topBar}>
+            <span style={css.topTitle}>Dashboard</span>
+            <button
+              onClick={() => void loadDashboardData()}
+              style={css.ghostBtn}
+              aria-label="Refresh"
+            >
+              <MdRefresh size={20} color="#fff" />
+            </button>
+          </div>
 
-        <div style={css.identityRow}>
-          <button
-            type="button"
-            onClick={openStoreImageModal}
-            style={css.storeThumb}
-            aria-label="Change store image"
-          >
-            {storeImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={storeImageUrl} alt="" style={css.storeThumbImg} />
-            ) : (
-              <div style={css.storeThumbPlaceholder}>
-                <MdStorefront size={30} color="rgba(255,255,255,0.85)" />
+          <div style={css.identityRow}>
+            <button
+              type="button"
+              onClick={openStoreImageModal}
+              style={css.storeThumb}
+              aria-label="Change store image"
+            >
+              {storeImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={storeImageUrl} alt="" style={css.storeThumbImg} />
+              ) : (
+                <div style={css.storeThumbPlaceholder}>
+                  <MdStorefront size={30} color="rgba(255,255,255,0.85)" />
+                </div>
+              )}
+              <span style={css.cameraBadge} aria-hidden>
+                <MdCameraAlt size={11} color="#0504AA" />
+              </span>
+            </button>
+
+            <div style={css.identityMeta}>
+              <div style={css.nameRow}>
+                <span style={css.storeName}>{store.name || 'Your Store'}</span>
+                {verificationStatus === 'verified' && (
+                  <MdVerified
+                    size={18}
+                    color="#7DD3FC"
+                    aria-label="Verified"
+                  />
+                )}
               </div>
-            )}
-            <span style={css.cameraBadge} aria-hidden>
-              <MdCameraAlt size={11} color="#0504AA" />
-            </span>
-          </button>
-
-          <div style={css.identityMeta}>
-            <div style={css.nameRow}>
-              <span style={css.storeName}>{store.name || 'Your Store'}</span>
-              {verificationStatus === 'verified' && (
-                <MdVerified
-                  size={18}
-                  color="#7DD3FC"
-                  aria-label="Verified"
-                />
-              )}
-            </div>
-            <div style={css.metaLine}>
-              {userName}
-              {memberSince && (
-                <>
-                  <span style={css.metaDot}>·</span>
-                  <span>Since {memberSince}</span>
-                </>
-              )}
+              <div style={css.metaLine}>
+                {userName}
+                {memberSince && (
+                  <>
+                    <span style={css.metaDot}>·</span>
+                    <span>Since {memberSince}</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* SHEET */}
-      <div style={css.sheet}>
+      <div style={css.sheet} className="sk-sheet">
         {/* REVENUE SPOTLIGHT */}
-        <div style={css.revenueCard}>
+        <div style={css.revenueCard} className="sk-revenue-card">
           <div style={css.revenueTop}>
             <div style={css.revenueLabelRow}>
               <MdAccountBalanceWallet
@@ -498,7 +499,9 @@ export default function StorekeeperDashboardPage() {
               <MdChevronRight size={16} color="rgba(255,255,255,0.85)" />
             </button>
           </div>
-          <div style={css.revenueAmount}>{formatNaira(revenue)}</div>
+          <div style={css.revenueAmount} className="sk-revenue-amount">
+            {formatNaira(revenue)}
+          </div>
           <div style={css.revenueSub}>
             {sold > 0
               ? `Across ${sold} completed sale${sold === 1 ? '' : 's'}`
@@ -507,7 +510,7 @@ export default function StorekeeperDashboardPage() {
         </div>
 
         {/* PULSE ROW */}
-        <div style={css.pulseRow}>
+        <div style={css.pulseRow} className="sk-pulse-row">
           <PulseTile
             icon={<MdVisibility size={18} color="#0504AA" />}
             tint="#EEF0FF"
@@ -605,7 +608,7 @@ export default function StorekeeperDashboardPage() {
 
         {/* QUICK ACTIONS */}
         <h3 style={css.sectionLabel}>Quick actions</h3>
-        <div style={css.actionGrid}>
+        <div style={css.actionGrid} className="sk-action-grid">
           <button
             type="button"
             onClick={() => router.push('/storekeeper/add-item')}
@@ -894,7 +897,7 @@ function Modal({
   );
 }
 
-// ─── Keyframes + interaction CSS ────────────────────────────────────
+// ─── Keyframes + desktop layout ─────────────────────────────────────
 const CSS = `
   @keyframes skSpin { to { transform: rotate(360deg); } }
   @keyframes skShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
@@ -909,6 +912,20 @@ const CSS = `
 
   .sk-dash, .sk-dash *, .sk-dash *::before, .sk-dash *::after {
     box-sizing: border-box;
+  }
+
+  /* ── Centered column: hero content + sheet share the same width ── */
+  .sk-hero-inner {
+    position: relative;
+    max-width: 720px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .sk-sheet {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
   }
 
   .sk-setup-row + .sk-setup-row {
@@ -935,6 +952,39 @@ const CSS = `
   }
   .sk-pulse-tile:active {
     transform: scale(0.97);
+  }
+
+  /* ── Desktop: widen the reading column, breathe more ── */
+  @media (min-width: 1024px) {
+    .sk-hero-inner {
+      max-width: 960px;
+      padding-left: 32px;
+      padding-right: 32px;
+    }
+    .sk-sheet {
+      max-width: 960px;
+      padding-left: 32px;
+      padding-right: 32px;
+    }
+    .sk-revenue-amount {
+      font-size: 52px !important;
+      letter-spacing: -1.5px !important;
+    }
+    .sk-revenue-card {
+      padding: 28px 30px 30px !important;
+    }
+    .sk-action-grid {
+      grid-template-columns: repeat(4, 1fr) !important;
+    }
+    .sk-pulse-row {
+      gap: 14px !important;
+    }
+    .sk-pulse-tile {
+      padding: 18px 16px !important;
+    }
+    .sk-community-card {
+      padding: 20px 22px !important;
+    }
   }
 `;
 
@@ -1072,22 +1122,18 @@ const css: Record<string, React.CSSProperties> = {
   },
   metaDot: { color: 'rgba(255,255,255,0.4)' },
 
-  // SHEET
+  // SHEET — layout handled by `.sk-sheet` CSS class
   sheet: {
     flex: 1,
     marginTop: -52,
-    padding: '0 20px 40px',
     position: 'relative',
-    maxWidth: 720,
-    margin: '-52px auto 0',
-    width: '100%',
+    padding: '0 20px 40px',
   },
 
   // REVENUE
   revenueCard: {
     backgroundColor: '#0504AA',
-    backgroundImage:
-      'linear-gradient(135deg, #0B0B1A 0%, #0504AA 100%)',
+    backgroundImage: 'linear-gradient(135deg, #0B0B1A 0%, #0504AA 100%)',
     borderRadius: 22,
     padding: '20px 22px 22px',
     color: '#fff',
@@ -1265,8 +1311,7 @@ const css: Record<string, React.CSSProperties> = {
   },
   actionTilePrimary: {
     backgroundColor: '#0504AA',
-    backgroundImage:
-      'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
     border: 'none',
     boxShadow: '0 12px 28px rgba(5,4,170,0.28)',
   },
@@ -1329,8 +1374,7 @@ const css: Record<string, React.CSSProperties> = {
     gap: 12,
     width: '100%',
     padding: '16px 16px',
-    background:
-      'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
+    background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
     border: '1px solid #DDE3F5',
     borderRadius: 20,
     cursor: 'pointer',
@@ -1494,8 +1538,7 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: 16,
     backgroundColor: '#0504AA',
-    backgroundImage:
-      'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
     color: '#fff',
     border: 'none',
     borderRadius: 14,
@@ -1595,8 +1638,7 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    backgroundImage:
-      'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
     backgroundColor: '#0504AA',
     color: '#fff',
     border: 'none',
