@@ -475,7 +475,7 @@ function StoreSpotlight({
               style={{
                 background: 'none',
                 border: 'none',
-                color: 'var(--brand-on-soft)',
+                color: 'var(--brand-primary)',
                 cursor: 'pointer',
                 padding: 4,
               }}
@@ -493,7 +493,7 @@ function StoreSpotlight({
             style={{
               background: 'none',
               border: 'none',
-              color: 'var(--brand-on-soft)',
+              color: 'var(--brand-primary)',
               cursor: 'pointer',
               padding: 4,
             }}
@@ -1229,7 +1229,7 @@ export default function ShopperHomePage() {
               aria-label="Search"
               title="Search"
             >
-              <MdSearch size={22} color="var(--brand-on-soft)" />
+              <MdSearch size={22} color="var(--brand-primary)" />
             </button>
             <button
               style={styles.iconBtn}
@@ -1237,7 +1237,7 @@ export default function ShopperHomePage() {
               aria-label="Basket"
               title="Basket"
             >
-              <MdShoppingBasket size={22} color="var(--brand-on-soft)" />
+              <MdShoppingBasket size={22} color="var(--brand-primary)" />
             </button>
             <button
               style={styles.iconBtn}
@@ -1245,7 +1245,7 @@ export default function ShopperHomePage() {
               aria-label="Notifications"
               title="Notifications"
             >
-              <MdNotificationsNone size={22} color="var(--brand-on-soft)" />
+              <MdNotificationsNone size={22} color="var(--brand-primary)" />
             </button>
             <button
               style={{
@@ -1258,7 +1258,7 @@ export default function ShopperHomePage() {
               aria-label="Feed options"
               title="Feed options"
             >
-              <MdTune size={22} color="var(--brand-on-soft)" />
+              <MdTune size={22} color="var(--brand-primary)" />
             </button>
           </div>
         </div>
@@ -1323,7 +1323,7 @@ export default function ShopperHomePage() {
                   aria-label="Remove kind filter"
                   style={styles.activeFilterClose}
                 >
-                  <MdClose size={12} color="var(--brand-on-soft)" />
+                  <MdClose size={12} color="var(--brand-primary)" />
                 </button>
               </span>
             )}
@@ -1336,7 +1336,7 @@ export default function ShopperHomePage() {
                   aria-label="Remove category filter"
                   style={styles.activeFilterClose}
                 >
-                  <MdClose size={12} color="var(--brand-on-soft)" />
+                  <MdClose size={12} color="var(--brand-primary)" />
                 </button>
               </span>
             )}
@@ -1551,7 +1551,7 @@ export default function ShopperHomePage() {
                           style={{
                             ...styles.filterOptionLabel,
                             color: active
-                              ? 'var(--brand-on-soft)'
+                              ? 'var(--brand-primary)'
                               : 'var(--text-primary)',
                           }}
                         >
@@ -1562,7 +1562,7 @@ export default function ShopperHomePage() {
                       {active && (
                         <MdCheckCircle
                           size={20}
-                          color="var(--brand-on-soft)"
+                          color="var(--brand-primary)"
                         />
                       )}
                     </button>
@@ -1724,7 +1724,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   brandName: {
     fontWeight: 800,
-    color: 'var(--brand-on-soft)',
+    color: 'var(--brand-primary)',   // ← CHANGED from --brand-on-soft
     fontSize: 18,
     letterSpacing: '-0.3px',
     lineHeight: 1,
@@ -1794,7 +1794,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '4px 8px 4px 12px',
     borderRadius: 999,
     background: 'var(--brand-soft)',
-    color: 'var(--brand-on-soft)',
+    color: 'var(--brand-primary)',    // ← CHANGED from --brand-on-soft
     fontSize: 12,
     fontWeight: 700,
   },
@@ -1842,7 +1842,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
 
-  // ── Reel card (overlay-based, mostly theme-independent) ──────
+  // ── Reel card (overlay-based, theme-independent) ─────────────
   reelCard: {
     position: 'relative',
     width: '100%',
@@ -2248,4 +2248,4 @@ const CSS = `
       transition-duration: 0.01ms !important;
     }
   }
-`;;
+`;
