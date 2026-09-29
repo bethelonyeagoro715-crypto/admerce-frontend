@@ -19,7 +19,6 @@ import {
   MdInfo,
   MdDeleteForever,
   MdSwapHoriz,
-  MdArrowForward,
 } from 'react-icons/md';
 
 // ─── Shell ─────────────────────────────────────────────────────
@@ -36,7 +35,6 @@ export function SettingsShell({
 }) {
   const pathname = usePathname() || '';
   const roleSlug = detectRoleSlug(pathname);
-  const activeKey = detectActiveKey(pathname);
 
   const goToProfile = () => {
     if (typeof window === 'undefined') return;
@@ -71,7 +69,7 @@ export function SettingsShell({
             onClick={goToProfile}
             className="st-sidebar-back"
           >
-            <MdArrowBack size={16} color="#64748B" />
+            <MdArrowBack size={16} color="currentColor" />
             <span>Back to profile</span>
           </button>
 
@@ -94,7 +92,9 @@ export function SettingsShell({
                     >
                       <span className="st-nav-icon">{item.icon}</span>
                       <span className="st-nav-text">{item.label}</span>
-                      {active && <MdChevronRight size={16} color="#0504AA" />}
+                      {active && (
+                        <MdChevronRight size={16} color="currentColor" />
+                      )}
                     </a>
                   );
                 })}
@@ -112,7 +112,7 @@ export function SettingsShell({
                 className="st-icon-btn st-back-mobile"
                 aria-label="Back"
               >
-                <MdArrowBack size={22} color="#0B0B1A" />
+                <MdArrowBack size={22} />
               </button>
               <h1 className="st-title">{title}</h1>
               <div className="st-action">{action}</div>
@@ -151,19 +151,19 @@ function buildNav(roleSlug: string): NavGroup[] {
         {
           href: `${base}/account/contact`,
           label: 'Phone & email',
-          icon: <MdPhone size={16} color="#0891B2" />,
+          icon: <MdPhone size={16} color="currentColor" />,
           match: [`${base}/account/contact`],
         },
         {
           href: `${base}/account/2fa`,
           label: 'Two-factor auth',
-          icon: <MdSecurity size={16} color="#16A34A" />,
+          icon: <MdSecurity size={16} color="currentColor" />,
           match: [`${base}/account/2fa`],
         },
         {
           href: `${base}/account/sessions`,
           label: 'Active sessions',
-          icon: <MdDevices size={16} color="#D97706" />,
+          icon: <MdDevices size={16} color="currentColor" />,
           match: [`${base}/account/sessions`],
         },
       ],
@@ -174,18 +174,18 @@ function buildNav(roleSlug: string): NavGroup[] {
         {
           href: `${base}/notifications`,
           label: 'Notifications',
-          icon: <MdNotifications size={16} color="#0504AA" />,
+          icon: <MdNotifications size={16} color="currentColor" />,
         },
         {
           href: `${base}/privacy`,
           label: 'Privacy',
-          icon: <MdShield size={16} color="#0891B2" />,
+          icon: <MdShield size={16} color="currentColor" />,
           match: [`${base}/privacy`],
         },
         {
           href: `${base}/appearance`,
           label: 'Appearance',
-          icon: <MdPalette size={16} color="#7E22CE" />,
+          icon: <MdPalette size={16} color="currentColor" />,
           match: [`${base}/appearance`],
         },
       ],
@@ -196,12 +196,12 @@ function buildNav(roleSlug: string): NavGroup[] {
         {
           href: `/${roleSlug}/wallet/cards`,
           label: 'Payment methods',
-          icon: <MdCreditCard size={16} color="#7E22CE" />,
+          icon: <MdCreditCard size={16} color="currentColor" />,
         },
         {
           href: '/wallet-pin-setup',
           label: 'Wallet PIN',
-          icon: <MdSecurity size={16} color="#16A34A" />,
+          icon: <MdSecurity size={16} color="currentColor" />,
         },
       ],
     },
@@ -214,7 +214,7 @@ function buildNav(roleSlug: string): NavGroup[] {
         {
           href: `${base}/discovery`,
           label: 'Discovery',
-          icon: <MdLocationOn size={16} color="#D97706" />,
+          icon: <MdLocationOn size={16} color="currentColor" />,
         },
       ],
     });
@@ -230,7 +230,7 @@ function buildNav(roleSlug: string): NavGroup[] {
             roleSlug === 'storekeeper'
               ? 'Store preferences'
               : 'Booking & availability',
-          icon: <MdStarOutline size={16} color="#D97706" />,
+          icon: <MdStarOutline size={16} color="currentColor" />,
         },
       ],
     });
@@ -242,7 +242,7 @@ function buildNav(roleSlug: string): NavGroup[] {
       {
         href: `${base}/help`,
         label: 'Help center',
-        icon: <MdHelpOutline size={16} color="#0504AA" />,
+        icon: <MdHelpOutline size={16} color="currentColor" />,
       },
     ],
   });
@@ -253,19 +253,19 @@ function buildNav(roleSlug: string): NavGroup[] {
       {
         href: `${base}/legal/terms`,
         label: 'Terms & conditions',
-        icon: <MdGavel size={16} color="#475569" />,
+        icon: <MdGavel size={16} color="currentColor" />,
         match: [`${base}/legal/terms`],
       },
       {
         href: `${base}/legal/privacy`,
         label: 'Privacy policy',
-        icon: <MdShield size={16} color="#475569" />,
+        icon: <MdShield size={16} color="currentColor" />,
         match: [`${base}/legal/privacy`],
       },
       {
         href: `${base}/legal/licenses`,
         label: 'Licenses',
-        icon: <MdGavel size={16} color="#475569" />,
+        icon: <MdGavel size={16} color="currentColor" />,
         match: [`${base}/legal/licenses`],
       },
     ],
@@ -277,12 +277,12 @@ function buildNav(roleSlug: string): NavGroup[] {
       {
         href: `${base}/about`,
         label: 'About Admerce',
-        icon: <MdInfo size={16} color="#475569" />,
+        icon: <MdInfo size={16} color="currentColor" />,
       },
       {
         href: '/onboarding?mode=switch',
         label: 'Switch role',
-        icon: <MdSwapHoriz size={16} color="#16A34A" />,
+        icon: <MdSwapHoriz size={16} color="currentColor" />,
       },
     ],
   });
@@ -293,7 +293,7 @@ function buildNav(roleSlug: string): NavGroup[] {
       {
         href: `${base}/account/delete`,
         label: 'Delete account',
-        icon: <MdDeleteForever size={16} color="#DC2626" />,
+        icon: <MdDeleteForever size={16} color="currentColor" />,
         match: [`${base}/account/delete`],
         danger: true,
       },
@@ -320,10 +320,6 @@ function detectRoleSlug(pathname: string): string {
   return m ? m[1] : 'shopper';
 }
 
-function detectActiveKey(pathname: string): string {
-  return pathname;
-}
-
 // ─── Section ───────────────────────────────────────────────────
 export function SettingsSection({
   label,
@@ -346,7 +342,7 @@ export function SettingsSection({
 // ─── Tappable row ──────────────────────────────────────────────
 export function SettingsRow({
   icon,
-  iconBg = '#EEF0FF',
+  iconBg,
   label,
   subtitle,
   value,
@@ -379,10 +375,22 @@ export function SettingsRow({
       }}
     >
       {icon && (
-        <span style={{ ...S.rowIconWrap, backgroundColor: iconBg }}>{icon}</span>
+        <span
+          style={{
+            ...S.rowIconWrap,
+            backgroundColor: iconBg ?? 'var(--brand-soft)',
+          }}
+        >
+          {icon}
+        </span>
       )}
       <span style={S.rowBody}>
-        <span style={{ ...S.rowLabel, color: danger ? '#DC2626' : '#0B0B1A' }}>
+        <span
+          style={{
+            ...S.rowLabel,
+            color: danger ? 'var(--danger-fg)' : 'var(--text-primary)',
+          }}
+        >
           {label}
         </span>
         {subtitle && <span style={S.rowSubtitle}>{subtitle}</span>}
@@ -391,7 +399,7 @@ export function SettingsRow({
         <span style={S.rowBadge}>{badge > 99 ? '99+' : badge}</span>
       )}
       {value && <span style={S.rowValue}>{value}</span>}
-      {tappable && <MdChevronRight size={18} color="#CBD5E1" />}
+      {tappable && <MdChevronRight size={18} color="var(--text-muted)" />}
     </button>
   );
 }
@@ -399,7 +407,7 @@ export function SettingsRow({
 // ─── Toggle row ────────────────────────────────────────────────
 export function SettingsToggle({
   icon,
-  iconBg = '#EEF0FF',
+  iconBg,
   label,
   subtitle,
   value,
@@ -420,7 +428,14 @@ export function SettingsToggle({
       style={{ ...S.row, cursor: 'default', opacity: disabled ? 0.6 : 1 }}
     >
       {icon && (
-        <span style={{ ...S.rowIconWrap, backgroundColor: iconBg }}>{icon}</span>
+        <span
+          style={{
+            ...S.rowIconWrap,
+            backgroundColor: iconBg ?? 'var(--brand-soft)',
+          }}
+        >
+          {icon}
+        </span>
       )}
       <span style={S.rowBody}>
         <span style={S.rowLabel}>{label}</span>
@@ -434,7 +449,7 @@ export function SettingsToggle({
 // ─── Slider row ────────────────────────────────────────────────
 export function SettingsSlider({
   icon,
-  iconBg = '#EEF0FF',
+  iconBg,
   label,
   value,
   min,
@@ -457,7 +472,12 @@ export function SettingsSlider({
     <div className="st-row" style={S.sliderWrap}>
       <div style={S.sliderHeader}>
         {icon && (
-          <span style={{ ...S.rowIconWrap, backgroundColor: iconBg }}>
+          <span
+            style={{
+              ...S.rowIconWrap,
+              backgroundColor: iconBg ?? 'var(--brand-soft)',
+            }}
+          >
             {icon}
           </span>
         )}
@@ -483,7 +503,7 @@ export function SettingsSlider({
 // ─── Native select picker ──────────────────────────────────────
 export function SettingsPicker({
   icon,
-  iconBg = '#EEF0FF',
+  iconBg,
   label,
   value,
   items,
@@ -499,7 +519,14 @@ export function SettingsPicker({
   return (
     <label className="st-row" style={{ ...S.row, cursor: 'pointer' }}>
       {icon && (
-        <span style={{ ...S.rowIconWrap, backgroundColor: iconBg }}>{icon}</span>
+        <span
+          style={{
+            ...S.rowIconWrap,
+            backgroundColor: iconBg ?? 'var(--brand-soft)',
+          }}
+        >
+          {icon}
+        </span>
       )}
       <span style={S.rowBody}>
         <span style={S.rowLabel}>{label}</span>
@@ -523,7 +550,7 @@ export function SettingsPicker({
 // ─── Radio row ─────────────────────────────────────────────────
 export function SettingsRadio({
   icon,
-  iconBg = '#EEF0FF',
+  iconBg,
   label,
   subtitle,
   checked,
@@ -544,7 +571,14 @@ export function SettingsRadio({
       style={{ ...S.row, cursor: 'pointer' }}
     >
       {icon && (
-        <span style={{ ...S.rowIconWrap, backgroundColor: iconBg }}>{icon}</span>
+        <span
+          style={{
+            ...S.rowIconWrap,
+            backgroundColor: iconBg ?? 'var(--brand-soft)',
+          }}
+        >
+          {icon}
+        </span>
       )}
       <span style={S.rowBody}>
         <span style={S.rowLabel}>{label}</span>
@@ -555,7 +589,9 @@ export function SettingsRadio({
           width: 22,
           height: 22,
           borderRadius: '50%',
-          border: checked ? '6px solid #0504AA' : '2px solid #CBD5E1',
+          border: checked
+            ? '6px solid var(--brand-primary)'
+            : '2px solid var(--border-strong)',
           boxSizing: 'border-box',
           flexShrink: 0,
           transition: 'border 0.15s ease',
@@ -568,7 +604,7 @@ export function SettingsRadio({
 // ─── Read-only row ─────────────────────────────────────────────
 export function SettingsValue({
   icon,
-  iconBg = '#EEF0FF',
+  iconBg,
   label,
   value,
 }: {
@@ -580,7 +616,14 @@ export function SettingsValue({
   return (
     <div className="st-row" style={{ ...S.row, cursor: 'default' }}>
       {icon && (
-        <span style={{ ...S.rowIconWrap, backgroundColor: iconBg }}>{icon}</span>
+        <span
+          style={{
+            ...S.rowIconWrap,
+            backgroundColor: iconBg ?? 'var(--brand-soft)',
+          }}
+        >
+          {icon}
+        </span>
       )}
       <span style={S.rowBody}>
         <span style={S.rowLabel}>{label}</span>
@@ -614,7 +657,9 @@ function Switch({
         borderRadius: 999,
         border: 'none',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        backgroundColor: value ? '#0504AA' : '#CBD5E1',
+        backgroundColor: value
+          ? 'var(--brand-primary)'
+          : 'var(--border-strong)',
         transition: 'background-color 0.18s ease',
         padding: 0,
         flexShrink: 0,
@@ -628,8 +673,8 @@ function Switch({
           width: 22,
           height: 22,
           borderRadius: '50%',
-          backgroundColor: '#fff',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+          backgroundColor: '#FFFFFF',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
           transition: 'left 0.18s ease',
         }}
       />
@@ -637,7 +682,7 @@ function Switch({
   );
 }
 
-// ─── Shell CSS (media queries + sidebar) ───────────────────────
+// ─── Shell CSS ─────────────────────────────────────────────────
 const SHELL_CSS = `
   .st-shell, .st-shell *, .st-shell *::before, .st-shell *::after {
     box-sizing: border-box;
@@ -645,8 +690,10 @@ const SHELL_CSS = `
 
   .st-shell {
     min-height: 100vh;
-    background-color: #F4F5FB;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
     width: 100%;
+    transition: background-color 0.18s ease, color 0.18s ease;
   }
 
   .st-layout {
@@ -655,13 +702,13 @@ const SHELL_CSS = `
     width: 100%;
   }
 
-  /* Sidebar — hidden by default (mobile), shown on desktop */
+  /* Sidebar — hidden on mobile, shown on desktop */
   .st-sidebar {
     display: none;
     width: 264px;
     flex-shrink: 0;
-    background-color: #FFFFFF;
-    border-right: 1px solid #EAECF3;
+    background-color: var(--bg-secondary);
+    border-right: 1px solid var(--border-default);
     padding: 18px 12px 32px;
     position: sticky;
     top: 0;
@@ -683,13 +730,13 @@ const SHELL_CSS = `
   .st-sidebar-title {
     font-size: 14.5px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     letter-spacing: -0.2;
     line-height: 1.2;
   }
   .st-sidebar-role {
     font-size: 11.5px;
-    color: #94A3B8;
+    color: var(--text-muted);
     font-weight: 600;
     margin-top: 1px;
   }
@@ -701,7 +748,7 @@ const SHELL_CSS = `
     padding: 9px 10px;
     border: none;
     background-color: transparent;
-    color: #64748B;
+    color: var(--text-tertiary);
     font-size: 13px;
     font-weight: 600;
     font-family: inherit;
@@ -711,7 +758,7 @@ const SHELL_CSS = `
     transition: background-color 0.15s;
   }
   .st-sidebar-back:hover {
-    background-color: #F4F5FB;
+    background-color: var(--bg-hover);
   }
 
   .st-nav {
@@ -729,7 +776,7 @@ const SHELL_CSS = `
     font-weight: 800;
     letter-spacing: 0.7px;
     text-transform: uppercase;
-    color: #94A3B8;
+    color: var(--text-muted);
     padding: 4px 10px 6px;
   }
   .st-nav-item {
@@ -738,7 +785,7 @@ const SHELL_CSS = `
     gap: 10px;
     padding: 9px 10px;
     border-radius: 10px;
-    color: #334155;
+    color: var(--text-secondary);
     font-size: 13.5px;
     font-weight: 600;
     text-decoration: none;
@@ -746,18 +793,18 @@ const SHELL_CSS = `
     letter-spacing: -0.05;
   }
   .st-nav-item:hover {
-    background-color: #F4F5FB;
-    color: #0B0B1A;
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
   }
   .st-nav-item.is-active {
-    background-color: #EEF0FF;
-    color: #0504AA;
+    background-color: var(--brand-soft);
+    color: var(--brand-on-soft);
   }
   .st-nav-item.is-danger {
-    color: #DC2626;
+    color: var(--danger-fg);
   }
   .st-nav-item.is-danger:hover {
-    background-color: #FEF2F2;
+    background-color: var(--danger-bg);
   }
   .st-nav-icon {
     display: inline-flex;
@@ -786,10 +833,10 @@ const SHELL_CSS = `
     position: sticky;
     top: 0;
     z-index: 20;
-    background-color: rgba(244,245,251,0.94);
+    background-color: color-mix(in srgb, var(--bg-primary) 92%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid #EAECF3;
+    border-bottom: 1px solid var(--border-default);
     width: 100%;
   }
   .st-header-inner {
@@ -802,12 +849,26 @@ const SHELL_CSS = `
     max-width: 880px;
     margin: 0 auto;
   }
+  .st-icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    border: none;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
+  }
   .st-title {
     flex: 1;
     text-align: center;
     font-size: 15.5px;
     font-weight: 700;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0;
     letter-spacing: -0.2;
     overflow: hidden;
@@ -820,19 +881,6 @@ const SHELL_CSS = `
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
-    flex-shrink: 0;
-  }
-  .st-icon-btn {
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
-    border: none;
-    background-color: #FFFFFF;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 0 1px 3px rgba(15,23,42,0.06);
     flex-shrink: 0;
   }
 
@@ -852,13 +900,13 @@ const SHELL_CSS = `
 
   /* Rows */
   .st-row + .st-row {
-    border-top: 1px solid #F1F5F9;
+    border-top: 1px solid var(--border-subtle);
   }
   .st-row:hover:not(:disabled) {
-    background-color: #FAFBFF;
+    background-color: var(--bg-hover);
   }
   .st-row:active:not(:disabled) {
-    background-color: #F4F5FB;
+    background-color: var(--bg-pressed);
   }
 
   /* Desktop — show sidebar, hide mobile back arrow */
@@ -868,6 +916,14 @@ const SHELL_CSS = `
     .st-header-inner { padding: 12px 32px; }
     .st-body { padding: 24px 32px 64px; }
   }
+
+  /* prefers-color-scheme is handled by the ThemeProvider, but we
+     also honor reduced-motion to kill the color transition. */
+  @media (prefers-reduced-motion: reduce) {
+    .st-shell, .st-shell * {
+      transition-duration: 0.01ms !important;
+    }
+  }
 `;
 
 // ─── Styles (inline, non-responsive) ───────────────────────────
@@ -876,20 +932,20 @@ const S: Record<string, React.CSSProperties> = {
   sectionLabel: {
     fontSize: 11.5,
     fontWeight: 800,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     margin: '0 0 0 4px',
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     overflow: 'hidden',
   },
   sectionFooter: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     margin: '2px 4px 0',
     lineHeight: 1.5,
   },
@@ -903,6 +959,7 @@ const S: Record<string, React.CSSProperties> = {
     backgroundColor: 'transparent',
     fontFamily: 'inherit',
     textAlign: 'left',
+    color: 'var(--text-primary)',
   },
   rowIconWrap: {
     width: 34,
@@ -923,15 +980,19 @@ const S: Record<string, React.CSSProperties> = {
   rowLabel: {
     fontSize: 14.5,
     fontWeight: 600,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
     lineHeight: 1.35,
   },
-  rowSubtitle: { fontSize: 12, color: '#94A3B8', lineHeight: 1.35 },
+  rowSubtitle: {
+    fontSize: 12,
+    color: 'var(--text-muted)',
+    lineHeight: 1.35,
+  },
   rowValue: {
     fontSize: 13,
     fontWeight: 500,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     maxWidth: 150,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -943,8 +1004,8 @@ const S: Record<string, React.CSSProperties> = {
     height: 22,
     padding: '0 6px',
     borderRadius: 999,
-    backgroundColor: '#DC2626',
-    color: '#fff',
+    backgroundColor: 'var(--danger-strong)',
+    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: 800,
     display: 'flex',
@@ -963,21 +1024,21 @@ const S: Record<string, React.CSSProperties> = {
   sliderValue: {
     fontSize: 13,
     fontWeight: 700,
-    color: '#0504AA',
+    color: 'var(--brand-on-soft)',
     marginLeft: 'auto',
     fontVariantNumeric: 'tabular-nums',
     flexShrink: 0,
   },
   sliderInput: {
     width: '100%',
-    accentColor: '#0504AA',
+    accentColor: 'var(--brand-primary)',
     cursor: 'pointer',
   },
   select: {
     fontSize: 13,
     fontWeight: 600,
-    color: '#0504AA',
-    backgroundColor: '#EEF0FF',
+    color: 'var(--brand-on-soft)',
+    backgroundColor: 'var(--brand-soft)',
     border: 'none',
     borderRadius: 10,
     padding: '6px 10px',

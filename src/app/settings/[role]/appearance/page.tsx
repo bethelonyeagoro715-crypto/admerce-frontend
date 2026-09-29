@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import api, { extractErrorDetail } from '../../../../services/api';
 import { useAuthGuard } from '../../../../hooks/useAuthGuard';
 import { alertDialog } from '../../../../components/ui/dialogs';
+import { useTheme, type ThemePreference } from '../../../../contexts/ThemeContext';
 import {
   SettingsShell,
   SettingsSection,
@@ -19,10 +20,7 @@ import {
   MdTextFields,
   MdAnimation,
   MdContrast,
-  MdSave,
 } from 'react-icons/md';
-
-type ThemeMode = 'system' | 'light' | 'dark';
 
 export default function AppearancePage() {
   useAuthGuard();
@@ -32,10 +30,13 @@ export default function AppearancePage() {
   const role = raw === 'service-provider' ? 'service_provider' : raw;
   const roleSlug = role === 'service_provider' ? 'service-provider' : role;
 
+  // ✅ Live theme state — these immediately re-render the app
+  const { theme, setTheme, resolvedTheme } = useTheme();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  // Persisted preferences that aren't the theme itself
   const [textScale, setTextScale] = useState(100);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
@@ -56,12 +57,14 @@ export default function AppearancePage() {
     try {
       const s = (await api.getSettings(role)) as Record<string, unknown>;
       if (seq !== reqSeq.current || !isMountedRef.current) return;
-      setThemeMode((s.theme_mode as ThemeMode) ?? 'system');
       setTextScale((s.text_scale as number) ?? 100);
       setReduceMotion((s.reduce_motion as boolean) ?? false);
       setHighContrast((s.high_contrast as boolean) ?? false);
+      // Note: the theme itself is NOT loaded from the server here.
+      // It's stored in localStorage and applied by ThemeProvider so it
+      // takes effect on first paint. The backend copy is informational.
     } catch {
-      // Silent — defaults are fine
+      // Silent
     } finally {
       if (seq === reqSeq.current && isMountedRef.current) setLoading(false);
     }
@@ -80,11 +83,24 @@ export default function AppearancePage() {
     }
   };
 
+  // Theme changes apply immediately — no Save button needed for them.
+  const handleThemeChange = (next: ThemePreference) => {
+    setTheme(next);
+    // Fire-and-forget sync to backend. If it fails, the theme still works
+    // locally, and the next visit reads localStorage.
+    void api
+      .saveSettings(role, { theme_mode: next })
+      .catch(() => {
+        // Silent — localStorage is authoritative
+      });
+  };
+
+  // Other preferences use the traditional Save flow.
   const handleSave = async () => {
     setSaving(true);
     try {
       await api.saveSettings(role, {
-        theme_mode: themeMode,
+        theme_mode: theme,
         text_scale: textScale,
         reduce_motion: reduceMotion,
         high_contrast: highContrast,
@@ -125,30 +141,37 @@ export default function AppearancePage() {
         </button>
       }
     >
-      <SettingsSection label="Theme" footer="System follows your device settings.">
+      <SettingsSection
+        label="Theme"
+        footer={
+          resolvedTheme === 'dark'
+            ? 'Currently showing the dark theme.'
+            : 'Currently showing the light theme.'
+        }
+      >
         <SettingsRadio
-          icon={<MdBrightnessAuto size={18} color="#0504AA" />}
-          iconBg="#EEF0FF"
+          icon={<MdBrightnessAuto size={18} color="var(--brand-on-soft)" />}
+          iconBg="var(--brand-soft)"
           label="System default"
           subtitle="Match your device"
-          checked={themeMode === 'system'}
-          onSelect={() => setThemeMode('system')}
+          checked={theme === 'system'}
+          onSelect={() => handleThemeChange('system')}
         />
         <SettingsRadio
-          icon={<MdLightMode size={18} color="#D97706" />}
-          iconBg="#FEF3C7"
+          icon={<MdLightMode size={18} color="var(--warning-strong)" />}
+          iconBg="var(--warning-bg)"
           label="Light"
           subtitle="Always light"
-          checked={themeMode === 'light'}
-          onSelect={() => setThemeMode('light')}
+          checked={theme === 'light'}
+          onSelect={() => handleThemeChange('light')}
         />
         <SettingsRadio
-          icon={<MdDarkMode size={18} color="#7E22CE" />}
-          iconBg="#F3E8FF"
+          icon={<MdDarkMode size={18} color="var(--purple-fg)" />}
+          iconBg="var(--purple-bg)"
           label="Dark"
           subtitle="Always dark"
-          checked={themeMode === 'dark'}
-          onSelect={() => setThemeMode('dark')}
+          checked={theme === 'dark'}
+          onSelect={() => handleThemeChange('dark')}
         />
       </SettingsSection>
 
@@ -157,8 +180,8 @@ export default function AppearancePage() {
         footer={`Currently ${textScale}% of system default.`}
       >
         <SettingsSlider
-          icon={<MdTextFields size={18} color="#0891B2" />}
-          iconBg="#E0F2FE"
+          icon={<MdTextFields size={18} color="var(--info-fg)" />}
+          iconBg="var(--info-bg)"
           label="Text scale"
           value={textScale}
           min={85}
@@ -171,16 +194,16 @@ export default function AppearancePage() {
 
       <SettingsSection label="Accessibility">
         <SettingsToggle
-          icon={<MdAnimation size={18} color="#16A34A" />}
-          iconBg="#DCFCE7"
+          icon={<MdAnimation size={18} color="var(--success-fg)" />}
+          iconBg="var(--success-bg)"
           label="Reduce motion"
           subtitle="Minimize animations across the app"
           value={reduceMotion}
           onChanged={setReduceMotion}
         />
         <SettingsToggle
-          icon={<MdContrast size={18} color="#7E22CE" />}
-          iconBg="#F3E8FF"
+          icon={<MdContrast size={18} color="var(--purple-fg)" />}
+          iconBg="var(--purple-bg)"
           label="High contrast"
           subtitle="Stronger borders and darker text"
           value={highContrast}
@@ -196,8 +219,8 @@ const css: Record<string, React.CSSProperties> = {
     padding: '8px 16px',
     borderRadius: 10,
     border: 'none',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: '#FFFFFF',
     fontSize: 13.5,
     fontWeight: 700,
     cursor: 'pointer',
@@ -208,7 +231,8 @@ const css: Record<string, React.CSSProperties> = {
   skeleton: {
     height: 180,
     borderRadius: 18,
-    backgroundColor: '#EAECF3',
-    animation: 'pulse 1.4s ease-in-out infinite',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
+    opacity: 0.5,
   },
 };

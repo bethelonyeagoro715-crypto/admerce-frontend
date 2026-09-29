@@ -1,0 +1,165 @@
+/* src/styles/theme.css
+ *
+ * Theme palette + global surface styles.
+ *
+ * Usage: import this once in `app/layout.tsx`. Every component then
+ * references colors via `var(--token)` instead of hardcoded hex.
+ *
+ * Theme is set via `data-theme="dark|light"` on `<html>`. The ThemeProvider
+ * handles that attribute; the inline script in layout.tsx prevents FOUC.
+ */
+
+:root {
+  /* ── Surfaces ──────────────────────────────────────────────── */
+  --bg-primary: #F4F5FB;          /* page background */
+  --bg-secondary: #FFFFFF;        /* card, header */
+  --bg-tertiary: #F8FAFC;         /* nested rows, muted areas */
+  --bg-elevated: #FFFFFF;         /* modals, popovers */
+  --bg-hover: #FAFBFF;            /* hover on rows */
+  --bg-pressed: #F4F5FB;          /* press */
+  --bg-inverse: #0B0B1A;          /* dark tile that stays dark */
+
+  /* ── Text ──────────────────────────────────────────────────── */
+  --text-primary: #0B0B1A;
+  --text-secondary: #475569;
+  --text-tertiary: #64748B;
+  --text-muted: #94A3B8;
+  --text-inverse: #FFFFFF;
+
+  /* ── Borders ───────────────────────────────────────────────── */
+  --border-default: #EAECF3;
+  --border-subtle: #F1F5F9;
+  --border-strong: #CBD5E1;
+
+  /* ── Brand ─────────────────────────────────────────────────── */
+  --brand-primary: #0504AA;
+  --brand-hover: #3D3BFF;
+  --brand-soft: #EEF0FF;
+  --brand-soft-strong: #E0E7FF;
+  --brand-on-soft: #0504AA;
+  --brand-gradient: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
+
+  /* ── Status (bg + fg pairs) ────────────────────────────────── */
+  --success-bg: #DCFCE7;
+  --success-fg: #166534;
+  --success-strong: #16A34A;
+
+  --danger-bg: #FEE2E2;
+  --danger-fg: #991B1B;
+  --danger-strong: #DC2626;
+
+  --warning-bg: #FEF3C7;
+  --warning-fg: #92400E;
+  --warning-strong: #D97706;
+
+  --info-bg: #E0F2FE;
+  --info-fg: #075985;
+  --info-strong: #0891B2;
+
+  --purple-bg: #F3E8FF;
+  --purple-fg: #6B21A8;
+
+  /* ── Shadows ───────────────────────────────────────────────── */
+  --shadow-sm: 0 2px 6px rgba(15,23,42,0.03);
+  --shadow-md: 0 10px 24px rgba(15,23,42,0.06);
+  --shadow-lg: 0 20px 40px rgba(5,4,170,0.10);
+  --shadow-brand: 0 12px 28px rgba(5,4,170,0.28);
+
+  /* ── Overlays ──────────────────────────────────────────────── */
+  --overlay: rgba(15,23,42,0.48);
+  --skeleton: linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%);
+
+  /* ── Radius / spacing (unchanged across themes) ────────────── */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  /* ── Surfaces ──────────────────────────────────────────────── */
+  --bg-primary: #0B0B14;
+  --bg-secondary: #14141F;
+  --bg-tertiary: #1A1A28;
+  --bg-elevated: #1A1A28;
+  --bg-hover: #1E1E2E;
+  --bg-pressed: #23233A;
+  --bg-inverse: #F8FAFC;
+
+  /* ── Text ──────────────────────────────────────────────────── */
+  --text-primary: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-tertiary: #94A3B8;
+  --text-muted: #64748B;
+  --text-inverse: #0B0B1A;
+
+  /* ── Borders ───────────────────────────────────────────────── */
+  --border-default: #23233A;
+  --border-subtle: #1C1C2E;
+  --border-strong: #3D3D5A;
+
+  /* ── Brand ─────────────────────────────────────────────────── */
+  --brand-primary: #7C7CFF;
+  --brand-hover: #9B9BFF;
+  --brand-soft: rgba(124,124,255,0.14);
+  --brand-soft-strong: rgba(124,124,255,0.22);
+  --brand-on-soft: #A5A5FF;
+  --brand-gradient: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
+
+  /* ── Status (bg becomes translucent, fg becomes lighter) ───── */
+  --success-bg: rgba(34,197,94,0.15);
+  --success-fg: #4ADE80;
+  --success-strong: #22C55E;
+
+  --danger-bg: rgba(239,68,68,0.15);
+  --danger-fg: #F87171;
+  --danger-strong: #EF4444;
+
+  --warning-bg: rgba(251,191,36,0.15);
+  --warning-fg: #FBBF24;
+  --warning-strong: #F59E0B;
+
+  --info-bg: rgba(14,165,233,0.15);
+  --info-fg: #38BDF8;
+  --info-strong: #0EA5E9;
+
+  --purple-bg: rgba(168,85,247,0.15);
+  --purple-fg: #C084FC;
+
+  /* ── Shadows (deeper, less colorful) ───────────────────────── */
+  --shadow-sm: 0 2px 6px rgba(0,0,0,0.35);
+  --shadow-md: 0 10px 24px rgba(0,0,0,0.45);
+  --shadow-lg: 0 20px 40px rgba(0,0,0,0.55);
+  --shadow-brand: 0 12px 28px rgba(124,124,255,0.28);
+
+  /* ── Overlays ──────────────────────────────────────────────── */
+  --overlay: rgba(0,0,0,0.72);
+  --skeleton: linear-gradient(
+    90deg,
+    #1A1A28 0%,
+    #23233A 50%,
+    #1A1A28 100%
+  );
+
+  color-scheme: dark;
+}
+
+/* ── Global base ─────────────────────────────────────────────── */
+html,
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+/* ── Reduced-motion users skip the transition ───────────────── */
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body {
+    transition: none;
+  }
+}
