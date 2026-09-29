@@ -1,29 +1,31 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '../../../services/api';
+import api, { extractErrorDetail } from '../../../services/api';
+import { useAuthGuard } from '../../../hooks/useAuthGuard';
+import { alertDialog, confirmDialog } from '../../../components/ui/dialogs';
 import {
-  MdSettings,
+  MdRefresh,
   MdAutoAwesome,
   MdEdit,
   MdCheckCircle,
-  MdPauseCircle,
-  MdMoreVert,
-  MdDeleteOutline,
-  MdPlayArrow,
-  MdPause,
-  MdRestaurantMenu,
+  MdAdd,
+  MdStorefront,
   MdCalendarToday,
   MdToday,
   MdWallet,
   MdStar,
-  MdAdd,
-  MdStorefront,
+  MdAccountBalanceWallet,
+  MdDesignServices,
   MdToggleOn,
   MdToggleOff,
-  MdChevronRight,
   MdGroups,
+  MdChevronRight,
+  MdErrorOutline,
+  MdImage,
+  MdSearch,
+  MdReceiptLong,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -40,10 +42,14 @@ interface ServiceItem {
 }
 
 interface Booking {
-  id: string;
+  id?: string;
+  booking_id?: string;
   service_title?: string;
   user_name?: string;
+  customer_name?: string;
   booking_date?: string;
+  scheduled_for?: string;
+  amount?: number;
   status?: string;
   [key: string]: unknown;
 }
@@ -71,27 +77,108 @@ interface CommunityStats {
   active_senders_7d: number;
 }
 
-function resolveImageUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (url.startsWith('http')) return url;
-  return `${process.env.NEXT_PUBLIC_API_URL || ''}${url}`;
+interface CommunityStatsApi {
+  communityGetStats?: (room: string) => Promise<CommunityStats | null>;
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────
+function resolveImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (
+    url.startsWith('http') ||
+    url.startsWith('blob:') ||
+    url.startsWith('data:')
+  )
+    return url;
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
+  if (!base) return url;
+  if (url.startsWith('/')) return `${base}${url}`;
+  return `${base}/${url}`;
+}
+
+function formatNaira(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return '₦0';
+  if (v >= 1_000_000) return `₦${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 10_000) return `₦${(v / 1_000).toFixed(1)}k`;
+  return `₦${Math.round(v).toLocaleString('en-NG')}`;
+}
+
+function isServiceActive(s: ServiceItem): boolean {
+  return typeof s.is_active === 'boolean' ? s.is_active : s.is_active === 1;
+}
+
+function bookingId(b: Booking): string {
+  return String(b.booking_id ?? b.id ?? '');
+}
+
+function isActiveBooking(b: Booking): boolean {
+  const s = (b.status || '').toLowerCase();
+  return s === 'pending' || s === 'locked' || s === 'accepted';
+}
+
+function bookingStatusMeta(status: string): {
+  label: string;
+  bg: string;
+  fg: string;
+} {
+  const s = (status || 'pending').toLowerCase();
+  if (s === 'locked' || s === 'pending') {
+    return { label: 'New', bg: '#FEF3C7', fg: '#92400E' };
+  }
+  if (s === 'accepted') {
+    return { label: 'Confirmed', bg: '#E0F2FE', fg: '#075985' };
+  }
+  if (s === 'completed') {
+    return { label: 'Completed', bg: '#DCFCE7', fg: '#166534' };
+  }
+  if (s === 'cancelled' || s === 'declined') {
+    return { label: 'Cancelled', bg: '#FEE2E2', fg: '#991B1B' };
+  }
+  return { label: status || 'Pending', bg: '#F1F5F9', fg: '#475569' };
+}
+
+// ─── Component ──────────────────────────────────────────────────────
 export default function ServiceProviderDashboardPage() {
+  useAuthGuard();
   const router = useRouter();
 
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [stats, setStats] = useState<Stats>({});
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
+  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(
+    null,
+  );
   const [isAvailable, setIsAvailable] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [errored, setErrored] = useState(false);
+  const [togglingAvailability, setTogglingAvailability] = useState(false);
+  const [busyBookingId, setBusyBookingId] = useState<string | null>(null);
 
-  const loadDashboardData = async () => {
-    setIsLoading(true);
+  const reqSeq = useRef(0);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadDashboardData = useCallback(async (showSpinner = true) => {
+    const seq = ++reqSeq.current;
+    if (showSpinner) setIsLoading(true);
+    setErrored(false);
     try {
-      const [servicesData, bookingsData, statsData, profileData, communityData] = await Promise.all([
+      const communityApi = api as unknown as CommunityStatsApi;
+      const [
+        servicesData,
+        bookingsData,
+        statsData,
+        profileData,
+        communityData,
+      ] = await Promise.all([
         api.getProviderServices() as Promise<ServiceItem[]>,
         api.getProviderBookings() as Promise<Booking[]>,
         api.getProviderStats() as Promise<Stats>,
@@ -100,460 +187,1231 @@ export default function ServiceProviderDashboardPage() {
           username: 'Provider',
           avatar_url: null,
         })) as Promise<Profile>,
-        Promise.resolve(
-          (api as typeof api & {
-            communityGetStats?: (scope: string) => Promise<CommunityStats | null>;
-          }).communityGetStats?.('global'),
-        ).catch(() => null),
+        communityApi.communityGetStats?.('global').catch(() => null) ??
+          Promise.resolve(null),
       ]);
-
+      if (seq !== reqSeq.current || !isMountedRef.current) return;
       setServices(Array.isArray(servicesData) ? servicesData : []);
       setBookings(Array.isArray(bookingsData) ? bookingsData : []);
       setStats(statsData || {});
       setProfile(profileData);
       setCommunityStats(communityData as CommunityStats | null);
-
       if (typeof profileData?.is_available === 'boolean') {
         setIsAvailable(profileData.is_available);
       }
-    } catch (error) {
-      console.error('Failed to load dashboard:', error);
+    } catch {
+      if (seq === reqSeq.current && isMountedRef.current) setErrored(true);
     } finally {
-      setIsLoading(false);
+      if (seq === reqSeq.current && isMountedRef.current) setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      loadDashboardData();
-    }, 0);
-    return () => clearTimeout(timer);
   }, []);
 
-  const refreshDashboard = async () => {
-    await loadDashboardData();
-  };
+  useEffect(() => {
+    const t = window.setTimeout(() => void loadDashboardData(), 0);
+    return () => window.clearTimeout(t);
+  }, [loadDashboardData]);
 
+  // ── Actions ────────────────────────────────────────────────────
   const toggleAvailability = async (value: boolean) => {
+    if (togglingAvailability) return;
+    setTogglingAvailability(true);
+    const previous = isAvailable;
+    setIsAvailable(value); // optimistic
     try {
       await api.updateProviderAvailability(value);
-      setIsAvailable(value);
-      alert(value ? 'Now accepting bookings' : 'Paused bookings');
     } catch (err) {
-      alert('Failed to update availability');
+      if (isMountedRef.current) setIsAvailable(previous);
+      await alertDialog({
+        title: "Couldn't update availability",
+        body: extractErrorDetail(err, 'Please try again.'),
+        kind: 'danger',
+      });
+    } finally {
+      if (isMountedRef.current) setTogglingAvailability(false);
     }
   };
 
-  const confirmBooking = async (bookingId: string) => {
-    if (!window.confirm('Confirm this booking?')) return;
+  const handleConfirmBooking = async (b: Booking) => {
+    const id = bookingId(b);
+    if (!id) return;
+    const customer = b.customer_name || b.user_name || 'this customer';
+    const ok = await confirmDialog({
+      title: 'Confirm this booking?',
+      body: `${b.service_title || 'The service'} for ${customer}. Once confirmed, they'll be notified to expect you.`,
+      kind: 'info',
+      confirmLabel: 'Confirm booking',
+      cancelLabel: 'Not yet',
+    });
+    if (!ok) return;
+    setBusyBookingId(id);
     try {
-      await api.confirmBooking(bookingId);
-      await refreshDashboard();
-      alert('Booking confirmed!');
+      await api.confirmBooking(id);
+      await loadDashboardData(false);
     } catch (err) {
-      alert('Failed to confirm booking');
+      await alertDialog({
+        title: "Couldn't confirm booking",
+        body: extractErrorDetail(err, 'Please try again.'),
+        kind: 'danger',
+      });
+    } finally {
+      if (isMountedRef.current) setBusyBookingId(null);
     }
   };
 
-  const completeBooking = async (bookingId: string) => {
-    if (!window.confirm('Complete this booking? Payment will be released.')) return;
+  const handleCompleteBooking = async (b: Booking) => {
+    const id = bookingId(b);
+    if (!id) return;
+    const customer = b.customer_name || b.user_name || 'this customer';
+    const ok = await confirmDialog({
+      title: 'Mark as complete?',
+      body: `Confirm that you've finished ${b.service_title || 'this job'} for ${customer}. Payment will be released to your wallet.`,
+      kind: 'info',
+      confirmLabel: 'Complete & release',
+      cancelLabel: 'Not yet',
+    });
+    if (!ok) return;
+    setBusyBookingId(id);
     try {
-      await api.completeBooking(bookingId);
-      await refreshDashboard();
-      alert('Booking completed! Payment released.');
+      await api.completeBooking(id);
+      await loadDashboardData(false);
     } catch (err) {
-      alert('Failed to complete booking');
+      await alertDialog({
+        title: "Couldn't complete booking",
+        body: extractErrorDetail(err, 'Please try again.'),
+        kind: 'danger',
+      });
+    } finally {
+      if (isMountedRef.current) setBusyBookingId(null);
     }
   };
 
-  const deleteService = async (serviceId: string) => {
-    if (!window.confirm('Are you sure you want to delete this service?')) return;
-    try {
-      await api.deleteService(serviceId);
-      await refreshDashboard();
-      alert('Service deleted');
-    } catch (err) {
-      alert('Failed to delete service');
-    }
-  };
+  const goAddService = () => router.push('/service-provider/add-service');
+  const goServices = () => router.push('/service-provider/services');
+  const goBookings = () => router.push('/service-provider/bookings');
+  const goEditProfile = () => router.push('/service-provider/edit-profile');
+  const goSeai = () => router.push('/seai/ask?mode=agent');
+  const goCommunity = () => router.push('/service-provider/community');
+  const goSettings = () => router.push('/settings/service-provider');
 
-  const toggleServiceActive = async (serviceId: string) => {
-    try {
-      await api.toggleServiceActive(serviceId);
-      await refreshDashboard();
-    } catch (err) {
-      alert('Failed to toggle service');
-    }
-  };
+  // ── Derived ────────────────────────────────────────────────────
+  const name =
+    profile?.business_name ||
+    profile?.nickname ||
+    profile?.username ||
+    'Service Provider';
+  const businessImageUrl =
+    resolveImageUrl(profile?.business_image_url) ||
+    resolveImageUrl(profile?.avatar_url);
+  const initial = (name.charAt(0) || '?').toUpperCase();
 
-  const editProfile = () => {
-    router.push('/service-provider/edit-profile');
-  };
+  const servicesActiveCount = services.filter(isServiceActive).length;
+  const pendingBookings = bookings.filter(isActiveBooking);
+  const todayBookings = Number(stats.today_bookings ?? 0);
+  const totalEarnings = Number(stats.total_earnings ?? 0);
+  const rating = Number(stats.rating ?? 0);
 
-  const openSeaiAgent = () => {
-    router.push('/seai/ask?mode=agent');
-  };
-
-  const addService = () => {
-    router.push('/service-provider/add-service');
-  };
-
+  // ── Loading skeleton ───────────────────────────────────────────
   if (isLoading) {
     return (
-      <main style={styles.center}>
-        <div style={styles.spinner} />
+      <main style={css.root} className="sp-dash">
+        <style>{CSS}</style>
+        <div style={css.hero}>
+          <div className="sp-hero-inner">
+            <div style={css.topBar}>
+              <span style={css.topTitle}>Dashboard</span>
+              <div style={{ width: 38 }} />
+            </div>
+            <div style={css.identityRow}>
+              <div style={css.thumbSkeleton} />
+              <div style={{ flex: 1 }}>
+                <div style={css.skelLine} />
+                <div
+                  style={{ ...css.skelLine, width: 130, marginTop: 8 }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={css.sheet} className="sp-sheet">
+          <div style={css.blockSkeleton} />
+          <div style={css.blockSkeleton} />
+          {[0, 1].map((i) => (
+            <div key={i} style={css.blockSkeleton} />
+          ))}
+        </div>
       </main>
     );
   }
 
-  const name = profile?.business_name || profile?.nickname || profile?.username || 'Service Provider';
-  const avatarUrl = resolveImageUrl(profile?.avatar_url) || '';
-  const businessImageUrl = resolveImageUrl(profile?.business_image_url) || '';
-
-  const statsToday = stats.today_bookings ?? 0;
-  const statsEarnings = stats.total_earnings ?? 0;
-  const statsRating = stats.rating ?? 0;
-
-  return (
-    <main style={styles.container}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes pulseDot {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.55; transform: scale(1.5); }
-        }
-      `}</style>
-
-      {/* Header */}
-      <div style={styles.header}>
-        <h1 style={styles.headerTitle}>Dashboard</h1>
-        <button onClick={() => router.push('/settings')} style={styles.iconBtn} title="Settings">
-          <MdSettings size={24} color="#1A1A1A" />
+  // ── Error ──────────────────────────────────────────────────────
+  if (errored) {
+    return (
+      <main style={css.centerRoot} className="sp-dash">
+        <style>{CSS}</style>
+        <div style={css.errorHalo}>
+          <MdErrorOutline size={40} color="#B91C1C" />
+        </div>
+        <h2 style={css.centerTitle}>Couldn&apos;t load your dashboard</h2>
+        <p style={css.centerBody}>
+          Check your connection and try again. If this keeps happening, sign
+          out and back in.
+        </p>
+        <button
+          onClick={() => void loadDashboardData()}
+          style={css.centerPrimary}
+        >
+          <MdRefresh size={18} color="#fff" />
+          <span>Retry</span>
         </button>
+      </main>
+    );
+  }
+
+  // ── Main ───────────────────────────────────────────────────────
+  return (
+    <main style={css.root} className="sp-dash">
+      <style>{CSS}</style>
+
+      {/* HERO */}
+      <div style={css.hero}>
+        <div style={css.heroGlow} aria-hidden />
+
+        <div className="sp-hero-inner">
+          <div style={css.topBar}>
+            <span style={css.topTitle}>Dashboard</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                type="button"
+                onClick={goSettings}
+                style={css.ghostBtn}
+                aria-label="Settings"
+              >
+                <MdEdit size={18} color="#fff" />
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadDashboardData()}
+                style={css.ghostBtn}
+                aria-label="Refresh"
+              >
+                <MdRefresh size={18} color="#fff" />
+              </button>
+            </div>
+          </div>
+
+          <div style={css.identityRow}>
+            <button
+              type="button"
+              onClick={goEditProfile}
+              style={css.bizThumb}
+              aria-label="Edit business profile"
+            >
+              {businessImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={businessImageUrl}
+                  alt=""
+                  style={css.bizThumbImg}
+                />
+              ) : (
+                <div style={css.bizThumbPlaceholder}>
+                  <span style={css.bizThumbInitial}>{initial}</span>
+                </div>
+              )}
+            </button>
+
+            <div style={css.identityMeta}>
+              <div style={css.nameRow}>
+                <span style={css.businessName}>{name}</span>
+              </div>
+              <div style={css.metaLine}>
+                <span
+                  style={{
+                    ...css.availabilityPill,
+                    backgroundColor: isAvailable
+                      ? 'rgba(34,197,94,0.22)'
+                      : 'rgba(148,163,184,0.22)',
+                    color: isAvailable ? '#86EFAC' : '#CBD5E1',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      backgroundColor: isAvailable ? '#22C55E' : '#94A3B8',
+                      display: 'inline-block',
+                    }}
+                  />
+                  {isAvailable ? 'Available' : 'Paused'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Floating SEAI button */}
-      <button onClick={openSeaiAgent} style={styles.fab} title="Ask SEAI">
-        <MdAutoAwesome size={24} color="#fff" />
-      </button>
-
-      <div style={styles.scrollArea}>
-        {/* Business Image Banner */}
-        <div onClick={editProfile} style={styles.businessImage}>
-          {businessImageUrl ? (
-            <img src={businessImageUrl} alt="Business" style={styles.businessImg} />
-          ) : (
-            <div style={styles.businessPlaceholder}>Tap to add business image</div>
-          )}
+      {/* SHEET */}
+      <div style={css.sheet} className="sp-sheet">
+        {/* REVENUE SPOTLIGHT */}
+        <div style={css.revenueCard} className="sp-revenue-card">
+          <div style={css.revenueTop}>
+            <div style={css.revenueLabelRow}>
+              <MdAccountBalanceWallet
+                size={14}
+                color="rgba(255,255,255,0.72)"
+              />
+              <span style={css.revenueLabel}>Total earnings</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/service-provider/wallet')}
+              style={css.revenueLink}
+            >
+              <span>Wallet</span>
+              <MdChevronRight size={16} color="rgba(255,255,255,0.85)" />
+            </button>
+          </div>
+          <div style={css.revenueAmount} className="sp-revenue-amount">
+            {formatNaira(totalEarnings)}
+          </div>
+          <div style={css.revenueSub}>
+            {rating > 0
+              ? `★ ${rating.toFixed(1)} avg rating across completed jobs`
+              : 'Complete your first job to build your rating'}
+          </div>
         </div>
 
-        {/* Profile Header */}
-        <div style={styles.profileCard}>
-          <div style={styles.avatarWrapper} onClick={editProfile}>
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="Avatar" style={styles.avatar} />
+        {/* AVAILABILITY — hero control */}
+        <button
+          type="button"
+          onClick={() => toggleAvailability(!isAvailable)}
+          disabled={togglingAvailability}
+          style={{
+            ...css.availabilityCard,
+            borderColor: isAvailable ? '#86EFAC' : '#E6E8F0',
+            backgroundColor: isAvailable ? '#F0FDF4' : '#FFFFFF',
+            opacity: togglingAvailability ? 0.6 : 1,
+          }}
+          className="sp-availability-card"
+        >
+          <span
+            style={{
+              ...css.availabilityIcon,
+              backgroundColor: isAvailable ? '#DCFCE7' : '#F1F5F9',
+            }}
+          >
+            {isAvailable ? (
+              <MdToggleOn size={26} color="#16A34A" />
             ) : (
-              <MdStorefront size={30} color="#0504AA" />
+              <MdToggleOff size={26} color="#64748B" />
             )}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={styles.profileName}>{name}</div>
-            <div style={styles.profileRole}>Service Provider</div>
-          </div>
-          <button onClick={editProfile} style={styles.iconBtn}>
-            <MdEdit size={22} color="#0504AA" />
+          </span>
+          <span style={css.availabilityText}>
+            <span
+              style={{
+                ...css.availabilityTitle,
+                color: isAvailable ? '#166534' : '#0B0B1A',
+              }}
+            >
+              {isAvailable ? 'Available now' : 'Paused'}
+            </span>
+            <span style={css.availabilityHint}>
+              {isAvailable
+                ? 'Buyers can book your services'
+                : 'No new bookings will be accepted'}
+            </span>
+          </span>
+          <span
+            style={{
+              ...css.miniSwitch,
+              backgroundColor: isAvailable ? '#16A34A' : '#CBD5E1',
+            }}
+            aria-hidden
+          >
+            <span
+              style={{
+                ...css.miniSwitchKnob,
+                left: isAvailable ? 20 : 3,
+              }}
+            />
+          </span>
+        </button>
+
+        {/* PULSE ROW */}
+        <div style={css.pulseRow} className="sp-pulse-row">
+          <PulseTile
+            icon={<MdToday size={18} color="#0504AA" />}
+            tint="#EEF0FF"
+            label="Today"
+            value={String(todayBookings)}
+          />
+          <PulseTile
+            icon={<MdStar size={18} color="#D97706" />}
+            tint="#FEF3C7"
+            label="Rating"
+            value={rating > 0 ? rating.toFixed(1) : '—'}
+          />
+          <PulseTile
+            icon={<MdDesignServices size={18} color="#7E22CE" />}
+            tint="#F3E8FF"
+            label="Services"
+            value={`${servicesActiveCount}/${services.length}`}
+          />
+        </div>
+
+        {/* PENDING BOOKINGS */}
+        {pendingBookings.length > 0 && (
+          <>
+            <h3 style={css.sectionLabel}>
+              Needs your attention · {pendingBookings.length}
+            </h3>
+            <div style={css.section}>
+              {pendingBookings.slice(0, 3).map((b) => {
+                const id = bookingId(b);
+                const busy = busyBookingId === id;
+                const status = (b.status || 'pending').toLowerCase();
+                const meta = bookingStatusMeta(status);
+                const isPending = status === 'locked' || status === 'pending';
+                const isAccepted = status === 'accepted';
+                const customer =
+                  b.customer_name || b.user_name || 'Customer';
+                const when =
+                  b.scheduled_for || b.booking_date || 'Date not set';
+
+                return (
+                  <div
+                    key={id}
+                    style={{ ...css.bookingRow, opacity: busy ? 0.55 : 1 }}
+                  >
+                    <span style={css.bookingAvatar}>
+                      {(customer.charAt(0) || '?').toUpperCase()}
+                    </span>
+                    <div style={css.bookingBody}>
+                      <div style={css.bookingService} title={b.service_title}>
+                        {b.service_title || 'Service'}
+                      </div>
+                      <div style={css.bookingMeta}>
+                        <span>{customer}</span>
+                        <span style={css.bookingDot}>·</span>
+                        <span style={css.bookingDate}>{String(when)}</span>
+                      </div>
+                      <div style={css.bookingStatusRow}>
+                        <span
+                          style={{
+                            ...css.bookingChip,
+                            backgroundColor: meta.bg,
+                            color: meta.fg,
+                          }}
+                        >
+                          {meta.label}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={css.bookingActions}>
+                      {isPending && (
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmBooking(b)}
+                          disabled={busy}
+                          style={{
+                            ...css.bookingPrimary,
+                            opacity: busy ? 0.6 : 1,
+                          }}
+                          className="sp-booking-btn"
+                        >
+                          Confirm
+                        </button>
+                      )}
+                      {isAccepted && (
+                        <button
+                          type="button"
+                          onClick={() => handleCompleteBooking(b)}
+                          disabled={busy}
+                          style={{
+                            ...css.bookingSuccess,
+                            opacity: busy ? 0.6 : 1,
+                          }}
+                          className="sp-booking-btn"
+                        >
+                          Complete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {pendingBookings.length > 3 && (
+                <button
+                  type="button"
+                  onClick={goBookings}
+                  style={css.viewAllRow}
+                  className="sp-row"
+                >
+                  <span style={css.viewAllText}>
+                    View all {pendingBookings.length} pending bookings
+                  </span>
+                  <MdChevronRight size={18} color="#CBD5E1" />
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* QUICK ACTIONS */}
+        <h3 style={css.sectionLabel}>Quick actions</h3>
+        <div style={css.actionGrid} className="sp-action-grid">
+          <button
+            type="button"
+            onClick={goAddService}
+            style={{ ...css.actionTile, ...css.actionTilePrimary }}
+            className="sp-action-tile"
+          >
+            <span style={css.actionIconWrapPrimary}>
+              <MdAdd size={22} color="#0504AA" />
+            </span>
+            <span style={css.actionTextPrimary}>
+              <span style={css.actionTitlePrimary}>Add service</span>
+              <span style={css.actionHintPrimary}>List a new offering</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={goServices}
+            style={css.actionTile}
+            className="sp-action-tile"
+          >
+            <span
+              style={{
+                ...css.actionIconWrap,
+                backgroundColor: '#F3E8FF',
+              }}
+            >
+              <MdDesignServices size={22} color="#7E22CE" />
+            </span>
+            <span style={css.actionText}>
+              <span style={css.actionTitle}>My services</span>
+              <span style={css.actionHint}>
+                {services.length} listing{services.length === 1 ? '' : 's'}
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={goBookings}
+            style={css.actionTile}
+            className="sp-action-tile"
+          >
+            <span
+              style={{
+                ...css.actionIconWrap,
+                backgroundColor: '#E0F2FE',
+              }}
+            >
+              <MdCalendarToday size={22} color="#0891B2" />
+            </span>
+            <span style={css.actionText}>
+              <span style={css.actionTitle}>Bookings</span>
+              <span style={css.actionHint}>
+                {bookings.length} total
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={goSeai}
+            style={css.actionTile}
+            className="sp-action-tile"
+          >
+            <span
+              style={{
+                ...css.actionIconWrap,
+                backgroundColor: '#FEF3C7',
+              }}
+            >
+              <MdAutoAwesome size={22} color="#D97706" />
+            </span>
+            <span style={css.actionText}>
+              <span style={css.actionTitle}>Ask SEAI</span>
+              <span style={css.actionHint}>AI assistant</span>
+            </span>
           </button>
         </div>
 
-        {/* Availability Toggle */}
-        <div style={{
-          ...styles.availabilityCard,
-          backgroundColor: isAvailable ? '#E8F5E9' : '#F5F5F5',
-          borderColor: isAvailable ? '#4CAF50' : '#9E9E9E',
-        }}>
-          <div style={styles.availabilityIcon}>
-            {isAvailable ? <MdToggleOn size={32} color="#4CAF50" /> : <MdToggleOff size={32} color="#9E9E9E" />}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={styles.availabilityTitle}>
-              {isAvailable ? 'Available Now' : 'Unavailable'}
-            </div>
-            <div style={styles.availabilitySubtitle}>
-              {isAvailable ? 'Customers can book your services' : 'Paused – no new bookings will be accepted'}
-            </div>
-          </div>
-          <label style={styles.switch}>
-            <input
-              type="checkbox"
-              checked={isAvailable}
-              onChange={(e) => toggleAvailability(e.target.checked)}
-              style={{ display: 'none' }}
-            />
-            <span style={{
-              ...styles.slider,
-              backgroundColor: isAvailable ? '#4CAF50' : '#ccc',
-            }} />
-            <span style={{
-              ...styles.knob,
-              transform: isAvailable ? 'translateX(20px)' : 'translateX(0)',
-            }} />
-          </label>
-        </div>
-
-        {/* Community row — enticing entry point */}
+        {/* COMMUNITY */}
+        <h3 style={css.sectionLabel}>Sellers only</h3>
         <button
           type="button"
-          onClick={() => router.push('/service-provider/community')}
-          style={styles.communityRow}
+          onClick={goCommunity}
+          style={css.communityCard}
+          className="sp-community-card"
         >
-          <span style={styles.communityIcon}>
+          <span style={css.communityIcon}>
             <MdGroups size={22} color="#0504AA" />
-            <span style={styles.communityLiveDot} />
+            <span style={css.communityDot} />
           </span>
-          <span style={styles.communityText}>
-            <span style={styles.communityTitle}>Community</span>
-            <span style={styles.communityHint}>
+          <span style={css.communityText}>
+            <span style={css.communityTitle}>Sellers community</span>
+            <span style={css.communityHint}>
               {communityStats && communityStats.active_senders_7d > 0
-                ? `${communityStats.active_senders_7d} seller${communityStats.active_senders_7d === 1 ? '' : 's'} active this week`
+                ? `${communityStats.active_senders_7d} seller${
+                    communityStats.active_senders_7d === 1 ? '' : 's'
+                  } active this week`
                 : 'Chat with other sellers'}
             </span>
           </span>
-          <MdChevronRight size={22} color="#94A3B8" />
+          <MdChevronRight size={20} color="#CBD5E1" />
         </button>
 
-        {/* Stats Row */}
-        <div style={styles.statsRow}>
-          <StatCard icon={<MdToday size={14} color="#0504AA" />} title="Today" value={String(statsToday)} subtitle="Bookings" />
-          <StatCard icon={<MdWallet size={14} color="#0504AA" />} title="Earnings" value={`₦${Number(statsEarnings).toFixed(0)}`} subtitle="Total" />
-          <StatCard icon={<MdStar size={14} color="#0504AA" />} title="Rating" value={Number(statsRating).toFixed(1)} subtitle="Stars" />
-        </div>
-
-        {/* Menu Section */}
-        <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>My Menu</h2>
-          <span style={styles.sectionCount}>{services.length} items</span>
-        </div>
-
-        {services.length === 0 ? (
-          <EmptyState icon={<MdRestaurantMenu size={48} color="#ccc" />} message="Your menu is empty" subMessage="Add your first service to start getting bookings" />
-        ) : (
-          services.map((service) => (
-            <MenuItemCard
-              key={service.service_id}
-              service={service}
-              onEdit={() => router.push(`/service-provider/edit-service/${service.service_id}`)}
-              onDelete={() => deleteService(service.service_id)}
-              onToggle={() => toggleServiceActive(service.service_id)}
-            />
-          ))
-        )}
-
-        <button onClick={addService} style={styles.addBtn}>
-          <MdAdd size={20} color="#fff" />
-          Add to Menu
-        </button>
-
-        <div style={styles.sectionHeader}>
-          <h2 style={styles.sectionTitle}>Upcoming Bookings</h2>
-          {bookings.length > 0 && <span style={styles.pendingCount}>{bookings.length} pending</span>}
-        </div>
-
-        {bookings.length === 0 ? (
-          <EmptyState icon={<MdCalendarToday size={48} color="#ccc" />} message="No bookings yet" subMessage="When customers book your services, they'll appear here" />
-        ) : (
-          bookings.slice(0, 3).map((booking) => (
-            <BookingCard
-              key={booking.id}
-              booking={booking}
-              onConfirm={() => confirmBooking(booking.id)}
-              onComplete={() => completeBooking(booking.id)}
-            />
-          ))
-        )}
-
-        {bookings.length > 3 && (
-          <button onClick={() => router.push('/service-provider/bookings')} style={styles.viewAllBtn}>
-            View all {bookings.length} bookings
-          </button>
-        )}
+        <div style={{ height: 32 }} />
       </div>
     </main>
   );
 }
 
-// ─── Stat Card ──────────────────────────────────────────────────────
-function StatCard({ icon, title, value, subtitle }: { icon: React.ReactNode; title: string; value: string; subtitle: string }) {
+// ─── Sub-components ─────────────────────────────────────────────────
+function PulseTile({
+  icon,
+  tint,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  tint: string;
+  label: string;
+  value: string;
+}) {
   return (
-    <div style={styles.statCard}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {icon}
-        <span style={styles.statTitle}>{title}</span>
-      </div>
-      <div style={styles.statValue}>{value}</div>
-      <div style={styles.statSubtitle}>{subtitle}</div>
+    <div style={css.pulseTile} className="sp-pulse-tile">
+      <div style={{ ...css.pulseIcon, backgroundColor: tint }}>{icon}</div>
+      <div style={css.pulseValue}>{value}</div>
+      <div style={css.pulseLabel}>{label}</div>
     </div>
   );
 }
 
-// ─── Menu Item Card ─────────────────────────────────────────────────
-function MenuItemCard({ service, onEdit, onDelete, onToggle }: { service: ServiceItem; onEdit: () => void; onDelete: () => void; onToggle: () => void }) {
-  const title = service.title || 'Untitled';
-  const description = service.description || '';
-  const price = Number(service.price || 0).toFixed(0);
-  const duration = service.duration_minutes ?? 30;
-  const isActive = typeof service.is_active === 'boolean' ? service.is_active : service.is_active === 1;
-  const mediaUrl = resolveImageUrl(service.image_url || service.video_url);
+// ─── CSS ────────────────────────────────────────────────────────────
+const CSS = `
+  @keyframes spShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  @keyframes spPulseDot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(1.45); }
+  }
 
-  return (
-    <div style={styles.menuItem}>
-      <div style={styles.menuThumb}>
-        {mediaUrl ? (
-          <img src={mediaUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          <MdRestaurantMenu size={24} color={isActive ? '#4CAF50' : '#9E9E9E'} />
-        )}
-        <span style={{
-          position: 'absolute',
-          bottom: -2,
-          right: -2,
-          backgroundColor: isActive ? '#4CAF50' : '#9E9E9E',
-          borderRadius: '50%',
-          width: 16,
-          height: 16,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          {isActive ? <MdCheckCircle size={10} color="#fff" /> : <MdPause size={10} color="#fff" />}
-        </span>
-      </div>
-      <div style={styles.menuInfo}>
-        <div style={styles.menuTitle}>{title}</div>
-        {description && <div style={styles.menuDescription}>{description}</div>}
-        <div style={styles.menuPrice}>
-          ₦{price} <span style={{ margin: '0 8px' }}>•</span> {duration} min
-        </div>
-      </div>
-      <button onClick={onEdit} style={styles.iconBtn}>
-        <MdMoreVert size={20} color="#666" />
-      </button>
-      <button onClick={onDelete} style={styles.iconBtn}>
-        <MdDeleteOutline size={20} color="#FF0000" />
-      </button>
-      <button onClick={onToggle} style={styles.iconBtn}>
-        {isActive ? <MdPause size={20} color="#FFA000" /> : <MdPlayArrow size={20} color="#4CAF50" />}
-      </button>
-    </div>
-  );
-}
+  .sp-dash, .sp-dash *, .sp-dash *::before, .sp-dash *::after {
+    box-sizing: border-box;
+  }
 
-// ─── Booking Card ───────────────────────────────────────────────────
-function BookingCard({ booking, onConfirm, onComplete }: { booking: Booking; onConfirm: () => void; onComplete: () => void }) {
-  const serviceTitle = booking.service_title || 'Service';
-  const userName = booking.user_name || 'Customer';
-  const date = booking.booking_date || 'Date TBD';
-  const status = booking.status || 'pending';
+  .sp-hero-inner {
+    position: relative;
+    max-width: 720px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .sp-sheet {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
 
-  let statusColor = '#999';
-  let statusText = status;
-  if (status === 'pending') { statusColor = '#FFA000'; statusText = 'Pending'; }
-  else if (status === 'confirmed') { statusColor = '#2196F3'; statusText = 'Confirmed'; }
-  else if (status === 'completed') { statusColor = '#4CAF50'; statusText = 'Completed'; }
+  .sp-availability-card {
+    transition: background-color 0.15s, border-color 0.15s, transform 0.12s;
+  }
+  .sp-availability-card:active:not(:disabled) { transform: scale(0.995); }
 
-  return (
-    <div style={styles.bookingCard}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <div style={styles.bookingAvatar}>
-          {userName.charAt(0).toUpperCase()}
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={styles.bookingTitle}>{serviceTitle}</div>
-          <div style={styles.bookingUser}>{userName}</div>
-        </div>
-        <span style={{ ...styles.bookingStatus, backgroundColor: `${statusColor}20`, color: statusColor }}>
-          {statusText}
-        </span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
-        <MdCalendarToday size={14} color="#888" />
-        <span style={{ fontSize: 12, color: '#888', marginLeft: 4 }}>{date}</span>
-        <div style={{ flex: 1 }} />
-        {status === 'pending' && (
-          <button onClick={onConfirm} style={styles.confirmBtn}>Confirm</button>
-        )}
-        {status === 'confirmed' && (
-          <button onClick={onComplete} style={styles.completeBtn}>Complete</button>
-        )}
-      </div>
-    </div>
-  );
-}
+  .sp-action-tile {
+    transition: transform 0.12s ease, box-shadow 0.15s ease;
+  }
+  .sp-action-tile:hover {
+    box-shadow: 0 10px 24px rgba(5,4,170,0.10);
+  }
+  .sp-action-tile:active { transform: scale(0.98); }
 
-// ─── Empty State ───────────────────────────────────────────────────
-function EmptyState({ icon, message, subMessage }: { icon: React.ReactNode; message: string; subMessage?: string }) {
-  return (
-    <div style={styles.emptyState}>
-      {icon}
-      <div style={styles.emptyMessage}>{message}</div>
-      {subMessage && <div style={styles.emptySub}>{subMessage}</div>}
-    </div>
-  );
-}
+  .sp-community-card:active { transform: scale(0.99); }
 
-// ─── Styles ──────────────────────────────────────────────────────
-const styles: Record<string, React.CSSProperties> = {
-  container: { display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#fff' },
-  center: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#fff' },
-  spinner: { width: 36, height: 36, border: '4px solid #eee', borderTopColor: '#0504AA', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #eee' },
-  headerTitle: { fontSize: 18, fontWeight: 700, color: '#1A1A1A', margin: 0 },
-  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' },
-  fab: { position: 'fixed', bottom: 90, right: 24, width: 56, height: 56, borderRadius: '50%', backgroundColor: '#0504AA', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(5,4,170,0.4)', cursor: 'pointer', zIndex: 50 },
-  scrollArea: { flex: 1, overflowY: 'auto', padding: '16px' },
-  businessImage: { width: '100%', height: 120, borderRadius: 12, backgroundColor: '#f0f0f0', cursor: 'pointer', overflow: 'hidden', marginBottom: 12 },
-  businessImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  businessPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' },
-  profileCard: { display: 'flex', alignItems: 'center', padding: 16, backgroundColor: '#f9f9f9', borderRadius: 16, border: '1px solid #eee', marginBottom: 24 },
-  avatarWrapper: { width: 60, height: 60, borderRadius: '50%', overflow: 'hidden', backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 16, cursor: 'pointer' },
-  avatar: { width: '100%', height: '100%', objectFit: 'cover' },
-  profileName: { fontSize: 16, fontWeight: 700, color: '#1A1A1A' },
-  profileRole: { fontSize: 13, color: '#888' },
-  availabilityCard: { display: 'flex', alignItems: 'center', padding: '12px 16px', borderRadius: 12, border: '1px solid', marginBottom: 12 },
-  availabilityIcon: { marginRight: 12 },
-  availabilityTitle: { fontSize: 15, fontWeight: 600, color: '#1A1A1A' },
-  availabilitySubtitle: { fontSize: 12, color: '#888' },
-  switch: { position: 'relative', width: 44, height: 24, display: 'inline-block' },
-  slider: { position: 'absolute', inset: 0, borderRadius: 24, transition: 'background-color 0.3s' },
-  knob: { position: 'absolute', top: 2, left: 2, width: 20, height: 20, borderRadius: '50%', backgroundColor: '#fff', transition: 'transform 0.3s' },
+  .sp-pulse-tile {
+    transition: transform 0.12s ease;
+  }
+  .sp-pulse-tile:active { transform: scale(0.97); }
 
-  // ── Community row (enticing)
-  communityRow: {
+  .sp-booking-btn {
+    transition: transform 0.12s ease, opacity 0.15s;
+  }
+  .sp-booking-btn:active:not(:disabled) { transform: scale(0.97); }
+
+  .sp-row:hover { background-color: #FAFBFF; }
+
+  @media (min-width: 1024px) {
+    .sp-hero-inner {
+      max-width: 960px;
+      padding-left: 32px;
+      padding-right: 32px;
+    }
+    .sp-sheet {
+      max-width: 960px;
+      padding-left: 32px;
+      padding-right: 32px;
+    }
+    .sp-revenue-amount {
+      font-size: 52px !important;
+      letter-spacing: -1.5px !important;
+    }
+    .sp-revenue-card {
+      padding: 28px 30px 30px !important;
+    }
+    .sp-action-grid {
+      grid-template-columns: repeat(4, 1fr) !important;
+    }
+    .sp-pulse-row {
+      gap: 14px !important;
+    }
+    .sp-pulse-tile {
+      padding: 18px 16px !important;
+    }
+    .sp-community-card {
+      padding: 20px 22px !important;
+    }
+  }
+`;
+
+// ─── Styles ─────────────────────────────────────────────────────────
+const css: Record<string, React.CSSProperties> = {
+  root: {
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: '100vh',
+    backgroundColor: '#F4F5FB',
+    overflowX: 'hidden',
+  },
+
+  // HERO
+  hero: {
+    position: 'relative',
+    backgroundColor: '#0504AA',
+    backgroundImage:
+      'radial-gradient(ellipse at 80% 0%, #1A0FB8 0%, #0504AA 55%, #03037A 100%)',
+    padding: '0 20px 76px',
+    overflow: 'hidden',
+  },
+  heroGlow: {
+    position: 'absolute',
+    top: -120,
+    right: -100,
+    width: 320,
+    height: 320,
+    borderRadius: '50%',
+    background:
+      'radial-gradient(circle, rgba(61,59,255,0.45) 0%, rgba(61,59,255,0) 70%)',
+    pointerEvents: 'none',
+  },
+  topBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  topTitle: {
+    fontSize: 15,
+    fontWeight: 600,
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  ghostBtn: {
+    background: 'rgba(255,255,255,0.10)',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    minWidth: 38,
+    minHeight: 38,
+  },
+
+  identityRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    paddingTop: 22,
+  },
+  bizThumb: {
+    position: 'relative',
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    overflow: 'hidden',
+    border: '3px solid rgba(255,255,255,0.18)',
+    background: 'rgba(255,255,255,0.08)',
+    cursor: 'pointer',
+    padding: 0,
+    flexShrink: 0,
+  },
+  bizThumbImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  },
+  bizThumbPlaceholder: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background:
+      'linear-gradient(135deg, rgba(61,59,255,0.6) 0%, rgba(5,4,170,0.6) 100%)',
+  },
+  bizThumbInitial: {
+    fontSize: 30,
+    fontWeight: 800,
+    color: '#fff',
+    letterSpacing: -0.5,
+  },
+
+  identityMeta: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  nameRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  businessName: {
+    fontSize: 22,
+    fontWeight: 800,
+    color: '#fff',
+    letterSpacing: -0.4,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '100%',
+  },
+  metaLine: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+  availabilityPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '4px 10px',
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+
+  // SHEET
+  sheet: {
+    flex: 1,
+    marginTop: -52,
+    position: 'relative',
+    padding: '0 20px 40px',
+  },
+
+  // REVENUE
+  revenueCard: {
+    backgroundColor: '#0504AA',
+    backgroundImage: 'linear-gradient(135deg, #0B0B1A 0%, #0504AA 100%)',
+    borderRadius: 22,
+    padding: '20px 22px 22px',
+    color: '#fff',
+    boxShadow: '0 20px 40px rgba(5,4,170,0.28)',
+  },
+  revenueTop: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  revenueLabelRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+  revenueLabel: {
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.75)',
+  },
+  revenueLink: {
+    background: 'rgba(255,255,255,0.10)',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#fff',
+    fontFamily: 'inherit',
+    fontSize: 12,
+    fontWeight: 700,
+    padding: '6px 10px 6px 12px',
+    borderRadius: 999,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 2,
+  },
+  revenueAmount: {
+    fontSize: 40,
+    fontWeight: 800,
+    letterSpacing: -1,
+    fontVariantNumeric: 'tabular-nums',
+    marginTop: 12,
+    lineHeight: 1.05,
+  },
+  revenueSub: {
+    fontSize: 12.5,
+    color: 'rgba(255,255,255,0.72)',
+    fontWeight: 500,
+    marginTop: 6,
+  },
+
+  // AVAILABILITY
+  availabilityCard: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     width: '100%',
+    marginTop: 16,
     padding: '14px 16px',
-    background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
-    border: '1px solid #DDE3F5',
-    borderRadius: 16,
-    marginBottom: 24,
+    borderRadius: 18,
+    border: '1.5px solid',
     cursor: 'pointer',
-    textAlign: 'left',
     fontFamily: 'inherit',
-    boxShadow: '0 6px 18px rgba(5, 4, 170, 0.06)',
+    textAlign: 'left',
+    transition: 'background-color 0.15s, border-color 0.15s',
   },
-  communityIcon: {
+  availabilityIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  availabilityText: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  availabilityTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    letterSpacing: -0.2,
+  },
+  availabilityHint: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: 500,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  miniSwitch: {
     position: 'relative',
-    width: 42,
-    height: 42,
-    flex: '0 0 42px',
-    borderRadius: 12,
-    background: 'linear-gradient(135deg, #EEF0FF, #E0E7FF)',
-    display: 'inline-flex',
+    width: 44,
+    height: 24,
+    borderRadius: 999,
+    flexShrink: 0,
+    transition: 'background-color 0.18s',
+  },
+  miniSwitchKnob: {
+    position: 'absolute',
+    top: 3,
+    width: 18,
+    height: 18,
+    borderRadius: '50%',
+    backgroundColor: '#fff',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+    transition: 'left 0.18s',
+  },
+
+  // PULSE
+  pulseRow: {
+    display: 'flex',
+    gap: 10,
+    marginTop: 16,
+  },
+  pulseTile: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    border: '1px solid #EAECF3',
+    padding: '14px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  pulseIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  communityLiveDot: {
+  pulseValue: {
+    fontSize: 20,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    letterSpacing: -0.4,
+    fontVariantNumeric: 'tabular-nums',
+    marginTop: 2,
+  },
+  pulseLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: '#64748B',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+
+  // SECTION LABEL
+  sectionLabel: {
+    fontSize: 11.5,
+    fontWeight: 800,
+    color: '#64748B',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    margin: '26px 0 10px 4px',
+  },
+  section: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    border: '1px solid #EAECF3',
+    overflow: 'hidden',
+  },
+
+  // BOOKING ROW
+  bookingRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '14px 16px',
+    borderBottom: '1px solid #F1F5F9',
+  },
+  bookingAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: '#EEF0FF',
+    color: '#0504AA',
+    fontSize: 16,
+    fontWeight: 800,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  bookingBody: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 3,
+  },
+  bookingService: {
+    fontSize: 14.5,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    letterSpacing: -0.1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  bookingMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: 500,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  bookingDot: { color: '#CBD5E1' },
+  bookingDate: { color: '#94A3B8' },
+  bookingStatusRow: { marginTop: 4 },
+  bookingChip: {
+    display: 'inline-block',
+    fontSize: 10,
+    fontWeight: 800,
+    letterSpacing: 0.3,
+    padding: '3px 8px',
+    borderRadius: 999,
+    textTransform: 'uppercase',
+  },
+  bookingActions: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    flexShrink: 0,
+  },
+  bookingPrimary: {
+    padding: '9px 16px',
+    backgroundColor: '#0504AA',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+  },
+  bookingSuccess: {
+    padding: '9px 16px',
+    backgroundColor: '#16A34A',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+  },
+  viewAllRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    padding: '14px 16px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'background-color 0.15s',
+  },
+  viewAllText: {
+    fontSize: 13.5,
+    fontWeight: 700,
+    color: '#0504AA',
+  },
+
+  // QUICK ACTIONS
+  actionGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 12,
+  },
+  actionTile: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    gap: 12,
+    padding: '16px 16px 18px',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #EAECF3',
+    borderRadius: 20,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    minHeight: 128,
+    boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+  },
+  actionTilePrimary: {
+    backgroundColor: '#0504AA',
+    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    border: 'none',
+    boxShadow: '0 12px 28px rgba(5,4,170,0.28)',
+  },
+  actionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionIconWrapPrimary: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: '#FFFFFF',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionText: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    marginTop: 'auto',
+  },
+  actionTextPrimary: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    marginTop: 'auto',
+  },
+  actionTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    letterSpacing: -0.2,
+  },
+  actionTitlePrimary: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  actionHint: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    fontWeight: 500,
+  },
+  actionHintPrimary: {
+    fontSize: 11.5,
+    color: 'rgba(255,255,255,0.78)',
+    fontWeight: 500,
+  },
+
+  // COMMUNITY
+  communityCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    padding: '16px 16px',
+    background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
+    border: '1px solid #DDE3F5',
+    borderRadius: 20,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    boxShadow: '0 8px 22px rgba(5,4,170,0.06)',
+  },
+  communityIcon: {
+    position: 'relative',
+    width: 44,
+    height: 44,
+    flexShrink: 0,
+    borderRadius: 13,
+    background: 'linear-gradient(135deg, #EEF0FF, #E0E7FF)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  communityDot: {
     position: 'absolute',
     top: 6,
     right: 6,
@@ -562,7 +1420,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     backgroundColor: '#22C55E',
     border: '2px solid #FFFFFF',
-    animation: 'pulseDot 2s ease-in-out infinite',
+    animation: 'spPulseDot 2s ease-in-out infinite',
   },
   communityText: {
     flex: 1,
@@ -574,7 +1432,7 @@ const styles: Record<string, React.CSSProperties> = {
   communityTitle: {
     fontSize: 15,
     fontWeight: 800,
-    letterSpacing: '-0.01em',
+    letterSpacing: -0.1,
     color: '#0504AA',
   },
   communityHint: {
@@ -585,31 +1443,80 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
   },
 
-  statsRow: { display: 'flex', gap: 8, marginBottom: 24 },
-  statCard: { flex: 1, padding: 12, backgroundColor: '#f9f9f9', borderRadius: 12 },
-  statTitle: { fontSize: 12, color: '#888' },
-  statValue: { fontSize: 18, fontWeight: 'bold', color: '#1A1A1A' },
-  statSubtitle: { fontSize: 11, color: '#888' },
-  sectionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, marginTop: 24 },
-  sectionTitle: { fontSize: 18, fontWeight: 700, color: '#1A1A1A', margin: 0 },
-  sectionCount: { fontSize: 13, color: '#888' },
-  pendingCount: { fontSize: 13, color: '#FFA000' },
-  menuItem: { display: 'flex', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0' },
-  menuThumb: { position: 'relative', width: 48, height: 48, borderRadius: 8, backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  menuInfo: { flex: 1 },
-  menuTitle: { fontSize: 15, fontWeight: 600, color: '#1A1A1A' },
-  menuDescription: { fontSize: 13, color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  menuPrice: { fontSize: 13, color: '#0504AA', fontWeight: 600, marginTop: 2 },
-  bookingCard: { backgroundColor: '#fff', border: '1px solid #eee', borderRadius: 12, padding: 12, marginBottom: 8 },
-  bookingAvatar: { width: 32, height: 32, borderRadius: '50%', backgroundColor: '#0504AA10', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12, color: '#0504AA', fontWeight: 'bold' },
-  bookingTitle: { fontSize: 14, fontWeight: 600 },
-  bookingUser: { fontSize: 12, color: '#888' },
-  bookingStatus: { padding: '4px 8px', borderRadius: 8, fontSize: 10, fontWeight: 600 },
-  confirmBtn: { padding: '6px 12px', backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 },
-  completeBtn: { padding: '6px 12px', backgroundColor: '#4CAF50', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 },
-  emptyState: { padding: '32px 16px', backgroundColor: '#f9f9f9', borderRadius: 12, border: '1px solid #eee', textAlign: 'center' },
-  emptyMessage: { fontSize: 15, fontWeight: 600, color: '#666', marginTop: 8 },
-  emptySub: { fontSize: 13, color: '#888', marginTop: 4 },
-  addBtn: { width: '100%', padding: '16px', backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 },
-  viewAllBtn: { background: 'none', border: 'none', color: '#0504AA', fontWeight: 600, cursor: 'pointer', padding: '8px 0' },
+  // CENTER SCREENS
+  centerRoot: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#F4F5FB',
+    padding: 24,
+    textAlign: 'center',
+  },
+  errorHalo: {
+    width: 84,
+    height: 84,
+    borderRadius: 24,
+    backgroundColor: '#FEF2F2',
+    border: '1px solid #FECACA',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  centerTitle: {
+    fontSize: 20,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    margin: 0,
+    letterSpacing: -0.3,
+  },
+  centerBody: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 8,
+    maxWidth: 340,
+    lineHeight: 1.55,
+  },
+  centerPrimary: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
+    padding: '13px 24px',
+    borderRadius: 14,
+    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    backgroundColor: '#0504AA',
+    color: '#fff',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: 14,
+    fontWeight: 800,
+    fontFamily: 'inherit',
+    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+  },
+
+  // SKELETONS
+  thumbSkeleton: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    flexShrink: 0,
+  },
+  skelLine: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    width: 180,
+  },
+  blockSkeleton: {
+    height: 120,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #EAECF3',
+    marginTop: 16,
+    animation: 'spShimmer 1.4s ease-in-out infinite',
+  },
 };
