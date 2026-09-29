@@ -87,16 +87,17 @@ interface PresenceInfo {
   public_url: string | null;
 }
 
-// ─── Brand ──────────────────────────────────────────────────────────
+// ─── Brand tokens (all resolve through CSS vars) ────────────────────
 const BRAND = {
-  primary: '#0504AA',
-  bubbleMine: '#0504AA',
-  bubbleTheirs: '#FFFFFF',
-  bg: '#EEF0FF',
-  datePill: '#E4E3FF',
-  statusText: 'rgba(255,255,255,0.62)',
-  muted: '#8696A0',
-  danger: '#DC2626',
+  primary: 'var(--brand-primary)',
+  bubbleMine: 'var(--brand-primary)',
+  bubbleTheirs: 'var(--bg-secondary)',
+  bg: 'var(--bg-primary)',
+  datePill: 'var(--bg-tertiary)',
+  statusText:
+    'color-mix(in srgb, var(--brand-on-primary) 62%, transparent)',
+  muted: 'var(--text-tertiary)',
+  danger: 'var(--danger-fg)',
   online: '#22C55E',
 };
 
@@ -230,10 +231,8 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 }
 
 // ─── Voice player ───────────────────────────────────────────────────
-// Module-level: only one voice note plays across the whole app at a time.
 let _currentlyPlayingAudio: HTMLAudioElement | null = null;
 
-// Stylized wave heights — max 24 to fit in a 30px box with padding.
 const VOICE_WAVE = [
   6, 10, 14, 20, 24, 16, 10, 18, 22, 14, 8, 12, 20, 24, 18, 10, 6, 14, 22, 18,
   12, 8,
@@ -259,14 +258,29 @@ function VoiceBubblePlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Colors — invert based on which side the bubble is on
-  const accent = isMine ? '#FFFFFF' : '#0504AA';
-  const accentSoft = isMine ? 'rgba(255,255,255,0.32)' : 'rgba(5,4,170,0.15)';
-  const onAccent = isMine ? '#0504AA' : '#FFFFFF';
-  const timeColor = isMine ? 'rgba(255,255,255,0.85)' : '#64748B';
-  const dangerColor = isMine ? '#FECACA' : '#DC2626';
+  // Colors route through CSS vars — the bubble background flips
+  // blue→silver in dark, so the accent must flip with it.
+  const accent = isMine
+    ? 'var(--brand-on-primary)'
+    : 'var(--brand-primary)';
+  const accentSoft = isMine
+    ? 'color-mix(in srgb, var(--brand-on-primary) 32%, transparent)'
+    : 'color-mix(in srgb, var(--brand-primary) 15%, transparent)';
+  const onAccent = isMine
+    ? 'var(--brand-primary)'
+    : 'var(--brand-on-primary)';
+  const timeColor = isMine
+    ? 'color-mix(in srgb, var(--brand-on-primary) 85%, transparent)'
+    : 'var(--text-secondary)';
+  const dangerColor = isMine ? '#991B1B' : 'var(--danger-fg)';
+  const errorHalo = isMine
+    ? 'color-mix(in srgb, var(--brand-on-primary) 15%, transparent)'
+    : 'var(--danger-bg)';
+  const errorLabel = isMine
+    ? 'color-mix(in srgb, var(--brand-on-primary) 90%, transparent)'
+    : 'var(--text-secondary)';
+  const retryColor = isMine ? '#991B1B' : 'var(--brand-primary)';
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       const a = audioRef.current;
@@ -296,8 +310,6 @@ function VoiceBubblePlayer({
     setState('loading');
     let playableUrl = src;
 
-    // Blob fetch first — bypasses browser cache/range quirks and gives us
-    // a real error if the resource is gone.
     try {
       const res = await fetch(src);
       if (res.ok) {
@@ -310,14 +322,11 @@ function VoiceBubblePlayer({
         res.status === 403 ||
         res.status === 404
       ) {
-        // Definitely gone or forbidden — fail fast.
         setState('error');
         return null;
       }
-      // For 5xx / other errors, fall through to the raw src — the audio
-      // element may still succeed via range requests.
     } catch {
-      // CORS or network — fall through to the raw src
+      // fall through to the raw src
     }
 
     const audio = new Audio(playableUrl);
@@ -417,7 +426,6 @@ function VoiceBubblePlayer({
     }
   }, [ensureAudio]);
 
-  // ── Error state ────────────────────────────────────────────────
   if (state === 'error') {
     return (
       <div
@@ -435,9 +443,7 @@ function VoiceBubblePlayer({
             height: 38,
             flexShrink: 0,
             borderRadius: '50%',
-            background: isMine
-              ? 'rgba(255,255,255,0.15)'
-              : 'rgba(220,38,38,0.10)',
+            background: errorHalo,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -450,7 +456,7 @@ function VoiceBubblePlayer({
             style={{
               fontSize: 12.5,
               fontWeight: 700,
-              color: isMine ? 'rgba(255,255,255,0.9)' : '#475569',
+              color: errorLabel,
             }}
           >
             Voice note unavailable
@@ -467,7 +473,7 @@ function VoiceBubblePlayer({
               fontFamily: 'inherit',
               fontSize: 11.5,
               fontWeight: 800,
-              color: isMine ? '#FECACA' : '#0504AA',
+              color: retryColor,
               textDecoration: 'underline',
               textUnderlineOffset: 2,
             }}
@@ -501,7 +507,6 @@ function VoiceBubblePlayer({
         minWidth: 200,
       }}
     >
-      {/* Play button with progress ring */}
       <div
         style={{
           position: 'relative',
@@ -584,12 +589,15 @@ function VoiceBubblePlayer({
           ) : isPlaying ? (
             <MdPause size={14} color={onAccent} />
           ) : (
-            <MdPlayArrow size={16} color={onAccent} style={{ marginLeft: 1 }} />
+            <MdPlayArrow
+              size={16}
+              color={onAccent}
+              style={{ marginLeft: 1 }}
+            />
           )}
         </button>
       </div>
 
-      {/* Waveform */}
       <div
         onClick={handleSeek}
         style={{
@@ -628,7 +636,6 @@ function VoiceBubblePlayer({
         </svg>
       </div>
 
-      {/* Time */}
       <div
         style={{
           flexShrink: 0,
@@ -657,10 +664,25 @@ function Toast({
 }) {
   const c =
     toast.kind === 'success'
-      ? { bg: '#ECFDF5', border: '#A7F3D0', text: '#065F46', icon: '#16A34A' }
+      ? {
+          bg: 'var(--success-bg)',
+          border: 'var(--success-strong)',
+          text: 'var(--success-fg)',
+          icon: 'var(--success-fg)',
+        }
       : toast.kind === 'error'
-      ? { bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', icon: '#DC2626' }
-      : { bg: '#0B0B1A', border: '#0B0B1A', text: '#fff', icon: '#fff' };
+      ? {
+          bg: 'var(--danger-bg)',
+          border: 'var(--danger-strong)',
+          text: 'var(--danger-fg)',
+          icon: 'var(--danger-fg)',
+        }
+      : {
+          bg: 'var(--bg-elevated)',
+          border: 'var(--border-strong)',
+          text: 'var(--text-primary)',
+          icon: 'var(--text-primary)',
+        };
 
   return (
     <div
@@ -679,13 +701,15 @@ function Toast({
         fontSize: 13,
         fontWeight: 700,
         cursor: 'pointer',
-        boxShadow: '0 8px 24px rgba(11,11,26,0.18)',
+        boxShadow: 'var(--shadow-md)',
         animation: 'chatToastIn 0.2s ease',
         pointerEvents: 'auto',
       }}
     >
       {toast.kind === 'success' && <MdCheck size={16} color={c.icon} />}
-      {toast.kind === 'error' && <MdErrorOutline size={16} color={c.icon} />}
+      {toast.kind === 'error' && (
+        <MdErrorOutline size={16} color={c.icon} />
+      )}
       <span>{toast.text}</span>
     </div>
   );
@@ -696,63 +720,33 @@ function ChatSkeleton() {
   const bubble = (mine: boolean, w: number) => (
     <div
       key={`${mine}-${w}`}
+      className={
+        mine
+          ? 'chat-skel-bubble chat-skel-bubble-mine'
+          : 'chat-skel-bubble'
+      }
       style={{
         alignSelf: mine ? 'flex-end' : 'flex-start',
         width: `${w}%`,
-        height: 44,
-        marginBottom: 8,
-        borderRadius: 16,
-        background: mine
-          ? 'linear-gradient(90deg, #DDE2FF 0%, #EEF0FF 50%, #DDE2FF 100%)'
-          : 'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
-        backgroundSize: '400px 100%',
-        animation: 'chatShimmer 1.4s infinite linear',
       }}
     />
   );
 
   return (
-    <main
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100dvh',
-        background: BRAND.bg,
-      }}
-    >
-      <div
-        style={{
-          height: 58,
-          background: BRAND.primary,
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 16px',
-        }}
-      >
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.2)',
-            animation: 'chatShimmer 1.4s infinite linear',
-          }}
-        />
-      </div>
-      <div
-        style={{
-          flex: 1,
-          padding: 16,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        {bubble(false, 55)}
-        {bubble(true, 45)}
-        {bubble(true, 60)}
-        {bubble(false, 70)}
-        {bubble(true, 50)}
-        {bubble(false, 40)}
+    <main style={s.root}>
+      <style>{CSS}</style>
+      <div className="chat-shell">
+        <div className="chat-skel-header">
+          <div className="chat-skel-header-avatar" />
+        </div>
+        <div className="chat-skel-body">
+          {bubble(false, 55)}
+          {bubble(true, 45)}
+          {bubble(true, 60)}
+          {bubble(false, 70)}
+          {bubble(true, 50)}
+          {bubble(false, 40)}
+        </div>
       </div>
     </main>
   );
@@ -791,10 +785,11 @@ function ChatContent() {
 
   const [replyDraft, setReplyDraft] = useState<ReplyDraft | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<ConfirmDeleteState | null>(
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(
     null,
   );
+  const [confirmDelete, setConfirmDelete] =
+    useState<ConfirmDeleteState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [hasNewWhileScrolled, setHasNewWhileScrolled] = useState(false);
@@ -811,7 +806,8 @@ function ChatContent() {
   const prevMessageCountRef = useRef(0);
 
   const isSeaiConversation =
-    otherUserId.toLowerCase() === 'seai' || conversationId.includes('_seai');
+    otherUserId.toLowerCase() === 'seai' ||
+    conversationId.includes('_seai');
   const hasRecipient = Boolean(otherUserId);
   const displayError = !hasRecipient
     ? 'Missing recipient. Please open this chat from your inbox.'
@@ -826,8 +822,8 @@ function ChatContent() {
   const statusLabel = isOnline
     ? 'Online'
     : presence?.last_seen
-    ? formatLastSeen(presence.last_seen)
-    : 'Offline';
+      ? formatLastSeen(presence.last_seen)
+      : 'Offline';
 
   const showToast = useCallback(
     (kind: ToastMessage['kind'], text: string) => {
@@ -984,7 +980,9 @@ function ChatContent() {
   const startRecording = async () => {
     if (!hasRecipient || isRecording) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
       const mr = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm')
           ? 'audio/webm'
@@ -1069,7 +1067,10 @@ function ChatContent() {
       setReplyDraft(null);
       showToast('success', 'Voice note sent');
     } catch (e) {
-      showToast('error', extractErrorDetail(e, 'Failed to send voice note'));
+      showToast(
+        'error',
+        extractErrorDetail(e, 'Failed to send voice note'),
+      );
     } finally {
       setSendingVoice(false);
       setRecordSeconds(0);
@@ -1114,7 +1115,11 @@ function ChatContent() {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === editDraft.id
-              ? { ...m, text: result.text, edited_at: result.edited_at }
+              ? {
+                  ...m,
+                  text: result.text,
+                  edited_at: result.edited_at,
+                }
               : m,
           ),
         );
@@ -1173,7 +1178,8 @@ function ChatContent() {
   const handleDoubleTap = useCallback(
     (msg: ChatMessage) => {
       if (msg.deleted_for_everyone) return;
-      const senderName = msg.sender_id === currentUserId ? 'You' : displayName;
+      const senderName =
+        msg.sender_id === currentUserId ? 'You' : displayName;
       let previewText = msg.text || '';
       if (!previewText && msg.audio_url) previewText = '🎤 Voice note';
       if (!previewText && msg.image_url) previewText = '📷 Photo';
@@ -1270,14 +1276,20 @@ function ChatContent() {
     setContextMenu(null);
     if (!msg?.text) return;
     const ok = await copyTextToClipboard(msg.text);
-    showToast(ok ? 'success' : 'error', ok ? 'Text copied' : 'Could not copy');
+    showToast(
+      ok ? 'success' : 'error',
+      ok ? 'Text copied' : 'Could not copy',
+    );
   };
 
   const handleEdit = () => {
     if (!contextMenu) return;
     const msg = messages.find((m) => m.id === contextMenu.messageId);
     if (!msg) return;
-    setEditDraft({ id: contextMenu.messageId, originalText: msg.text || '' });
+    setEditDraft({
+      id: contextMenu.messageId,
+      originalText: msg.text || '',
+    });
     setInputText(msg.text || '');
     setReplyDraft(null);
     setContextMenu(null);
@@ -1327,7 +1339,6 @@ function ChatContent() {
 
   const startCall = (video: boolean) => {
     if (!hasRecipient) return;
-    // router.push(`/chat/${conversationId}/call?video=${video ? '1' : '0'}&name=${encodeURIComponent(displayName)}`);
     showToast('info', `${video ? 'Video' : 'Voice'} calls coming soon`);
   };
 
@@ -1348,7 +1359,10 @@ function ChatContent() {
     router.push(publicUrl);
   };
 
-  const groupedMessages = useMemo(() => groupByDate(messages), [messages]);
+  const groupedMessages = useMemo(
+    () => groupByDate(messages),
+    [messages],
+  );
   const showMicButton = !inputText.trim() && !editDraft;
 
   if (isSeaiConversation) {
@@ -1359,455 +1373,523 @@ function ChatContent() {
           justifyContent: 'center',
           alignItems: 'center',
           height: '100vh',
-          backgroundColor: BRAND.bg,
+          backgroundColor: 'var(--bg-primary)',
+          color: 'var(--text-secondary)',
         }}
       >
-        <p style={{ color: '#555' }}>Redirecting to SEAI…</p>
+        <p style={{ color: 'var(--text-secondary)' }}>
+          Redirecting to SEAI…
+        </p>
       </main>
     );
   }
 
   return (
     <main style={s.root}>
+      <style>{CSS}</style>
+
       {toasts.length > 0 && (
         <div style={s.toastStack}>
           {toasts.map((t) => (
-            <Toast key={t.id} toast={t} onDismiss={() => dismissToast(t.id)} />
+            <Toast
+              key={t.id}
+              toast={t}
+              onDismiss={() => dismissToast(t.id)}
+            />
           ))}
         </div>
       )}
 
-      <div style={s.header}>
-        <button
-          style={s.iconBtn}
-          onClick={() => router.back()}
-          aria-label="Go back"
-        >
-          <MdArrowBack size={22} color="#fff" />
-        </button>
+      <div className="chat-shell">
+        <div style={s.header}>
+          <button
+            style={s.iconBtn}
+            onClick={() => router.back()}
+            aria-label="Go back"
+          >
+            <MdArrowBack size={22} color="var(--brand-on-primary)" />
+          </button>
 
-        <button
-          type="button"
-          onClick={openProfile}
-          disabled={!publicUrl}
-          aria-label={publicUrl ? `Open ${displayName}'s profile` : displayName}
-          style={{
-            ...s.headerTapArea,
-            cursor: publicUrl ? 'pointer' : 'default',
-          }}
-        >
-          <div style={s.avatarWrap}>
-            {displayAvatar ? (
-              <img src={displayAvatar} alt="" style={s.avatarImg} />
-            ) : (
-              <span style={s.avatarInitial}>
-                {displayName.charAt(0).toUpperCase()}
+          <button
+            type="button"
+            onClick={openProfile}
+            disabled={!publicUrl}
+            aria-label={
+              publicUrl ? `Open ${displayName}'s profile` : displayName
+            }
+            style={{
+              ...s.headerTapArea,
+              cursor: publicUrl ? 'pointer' : 'default',
+            }}
+          >
+            <div style={s.avatarWrap}>
+              {displayAvatar ? (
+                <img src={displayAvatar} alt="" style={s.avatarImg} />
+              ) : (
+                <span style={s.avatarInitial}>
+                  {displayName.charAt(0).toUpperCase()}
+                </span>
+              )}
+              {isOnline && (
+                <span style={s.presenceDot} aria-hidden="true" />
+              )}
+            </div>
+
+            <div style={s.headerInfo}>
+              <span style={s.headerName} title={displayName}>
+                {displayName}
               </span>
+              <span
+                className={
+                  isOnline
+                    ? 'chat-header-status chat-header-status-online'
+                    : 'chat-header-status'
+                }
+              >
+                {statusLabel}
+              </span>
+            </div>
+
+            {publicUrl && (
+              <MdChevronRight
+                size={18}
+                color="color-mix(in srgb, var(--brand-on-primary) 55%, transparent)"
+                aria-hidden="true"
+                style={{ flexShrink: 0 }}
+              />
             )}
-            {isOnline && <span style={s.presenceDot} aria-hidden="true" />}
-          </div>
+          </button>
 
-          <div style={s.headerInfo}>
-            <span style={s.headerName} title={displayName}>
-              {displayName}
-            </span>
-            <span
-              style={{
-                ...s.headerStatus,
-                color: isOnline ? '#DCFCE7' : BRAND.statusText,
-                fontWeight: isOnline ? 700 : 600,
-              }}
-            >
-              {statusLabel}
-            </span>
-          </div>
+          <div style={{ flex: 1 }} />
 
-          {publicUrl && (
-            <MdChevronRight
-              size={18}
-              color="rgba(255,255,255,0.55)"
-              aria-hidden="true"
-              style={{ flexShrink: 0 }}
-            />
-          )}
-        </button>
+          <button
+            style={s.iconBtn}
+            onClick={() => startCall(false)}
+            aria-label="Voice call"
+          >
+            <MdPhone size={20} color="var(--brand-on-primary)" />
+          </button>
+          <button
+            style={s.iconBtn}
+            onClick={() => startCall(true)}
+            aria-label="Video call"
+          >
+            <MdVideocam size={20} color="var(--brand-on-primary)" />
+          </button>
+          <button
+            style={s.iconBtn}
+            onClick={() => setMenuOpen(true)}
+            aria-label="More options"
+          >
+            <MdMoreVert size={20} color="var(--brand-on-primary)" />
+          </button>
+        </div>
 
-        <div style={{ flex: 1 }} />
+        <div className="chat-wallpaper" />
 
-        <button
-          style={s.iconBtn}
-          onClick={() => startCall(false)}
-          aria-label="Voice call"
+        <div
+          ref={scrollContainerRef}
+          style={s.messages}
+          onScroll={handleScroll}
         >
-          <MdPhone size={20} color="#fff" />
-        </button>
-        <button
-          style={s.iconBtn}
-          onClick={() => startCall(true)}
-          aria-label="Video call"
-        >
-          <MdVideocam size={20} color="#fff" />
-        </button>
-        <button
-          style={s.iconBtn}
-          onClick={() => setMenuOpen(true)}
-          aria-label="More options"
-        >
-          <MdMoreVert size={20} color="#fff" />
-        </button>
-      </div>
-
-      <div style={s.wallpaper} />
-
-      <div
-        ref={scrollContainerRef}
-        style={s.messages}
-        onScroll={handleScroll}
-      >
-        {showLoading ? (
-          <div style={s.centerInner}>
-            <div style={s.spinner} />
-          </div>
-        ) : displayError ? (
-          <div style={s.centerInner}>
-            <div style={s.stateIconError} aria-hidden="true">
-              <MdErrorOutline size={32} color="#DC2626" />
+          {showLoading ? (
+            <div style={s.centerInner}>
+              <div style={s.spinner} />
             </div>
-            <p style={s.stateTitle}>Could not load chat</p>
-            <p style={s.stateBody}>{displayError}</p>
-            <button
-              onClick={() => loadMessages(otherUserId)}
-              style={s.retryBtn}
-              type="button"
-            >
-              <MdRefresh size={16} color="#fff" />
-              Try again
-            </button>
-          </div>
-        ) : messages.length === 0 ? (
-          <div style={s.centerInner}>
-            <div style={s.stateIconInfo} aria-hidden="true">
-              <MdChatBubbleOutline size={32} color={BRAND.primary} />
+          ) : displayError ? (
+            <div style={s.centerInner}>
+              <div style={s.stateIconError} aria-hidden="true">
+                <MdErrorOutline size={32} color="var(--danger-fg)" />
+              </div>
+              <p style={s.stateTitle}>Could not load chat</p>
+              <p style={s.stateBody}>{displayError}</p>
+              <button
+                onClick={() => loadMessages(otherUserId)}
+                style={s.retryBtn}
+                type="button"
+              >
+                <MdRefresh
+                  size={16}
+                  color="var(--brand-on-primary)"
+                />
+                Try again
+              </button>
             </div>
-            <p style={s.stateTitle}>Say hi to {displayName}</p>
-            <p style={s.stateBody}>
-              Double-tap any bubble to reply. Long-press for more options.
-            </p>
-          </div>
-        ) : (
-          <>
-            {groupedMessages.map((group) => (
-              <div key={group.date}>
-                <div style={s.datePillWrap}>
-                  <span style={s.datePillText}>{group.date}</span>
-                </div>
-                {group.messages.map((msg, idx) => {
-                  const isMine = msg.sender_id === currentUserId;
-                  const time = msg.created_at
-                    ? formatTime(msg.created_at)
-                    : '';
-                  const isDeleted = !!msg.deleted_for_everyone;
-                  return (
-                    <div
-                      key={msg.id ?? idx}
-                      style={{
-                        display: 'flex',
-                        justifyContent: isMine ? 'flex-end' : 'flex-start',
-                        marginBottom: 2,
-                        paddingLeft: isMine ? 60 : 0,
-                        paddingRight: isMine ? 0 : 60,
-                      }}
-                    >
+          ) : messages.length === 0 ? (
+            <div style={s.centerInner}>
+              <div style={s.stateIconInfo} aria-hidden="true">
+                <MdChatBubbleOutline size={32} color={BRAND.primary} />
+              </div>
+              <p style={s.stateTitle}>Say hi to {displayName}</p>
+              <p style={s.stateBody}>
+                Double-tap any bubble to reply. Long-press for more
+                options.
+              </p>
+            </div>
+          ) : (
+            <>
+              {groupedMessages.map((group) => (
+                <div key={group.date}>
+                  <div style={s.datePillWrap}>
+                    <span style={s.datePillText}>{group.date}</span>
+                  </div>
+                  {group.messages.map((msg, idx) => {
+                    const isMine = msg.sender_id === currentUserId;
+                    const time = msg.created_at
+                      ? formatTime(msg.created_at)
+                      : '';
+                    const isDeleted = !!msg.deleted_for_everyone;
+                    return (
                       <div
+                        key={msg.id ?? idx}
                         style={{
-                          ...s.bubble,
-                          backgroundColor: isMine
-                            ? BRAND.bubbleMine
-                            : BRAND.bubbleTheirs,
-                          color: isMine ? '#fff' : '#111',
-                          borderTopLeftRadius: isMine ? 16 : 4,
-                          borderTopRightRadius: isMine ? 4 : 16,
+                          display: 'flex',
+                          justifyContent: isMine
+                            ? 'flex-end'
+                            : 'flex-start',
+                          marginBottom: 2,
+                          paddingLeft: isMine ? 60 : 0,
+                          paddingRight: isMine ? 0 : 60,
                         }}
-                        onClick={() => handleBubbleTap(msg)}
-                        onDoubleClick={() => handleDoubleTap(msg)}
-                        onContextMenu={(e) =>
-                          !isDeleted && openContextMenu(e, msg)
-                        }
-                        onTouchStart={(e) => handleTouchStart(e, msg)}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={(e) => handleTouchEnd(e, msg)}
-                        onTouchCancel={handleTouchMove}
                       >
-                        {msg.reply_to_id && (
-                          <div
-                            style={{
-                              ...s.replyQuote,
-                              backgroundColor: isMine
-                                ? 'rgba(255,255,255,0.15)'
-                                : 'rgba(5,4,170,0.06)',
-                              borderLeftColor: isMine ? '#fff' : BRAND.primary,
-                            }}
-                          >
+                        <div
+                          style={{
+                            ...s.bubble,
+                            backgroundColor: isMine
+                              ? BRAND.bubbleMine
+                              : BRAND.bubbleTheirs,
+                            color: isMine
+                              ? 'var(--brand-on-primary)'
+                              : 'var(--text-primary)',
+                            borderTopLeftRadius: isMine ? 16 : 4,
+                            borderTopRightRadius: isMine ? 4 : 16,
+                          }}
+                          onClick={() => handleBubbleTap(msg)}
+                          onDoubleClick={() => handleDoubleTap(msg)}
+                          onContextMenu={(e) =>
+                            !isDeleted && openContextMenu(e, msg)
+                          }
+                          onTouchStart={(e) =>
+                            handleTouchStart(e, msg)
+                          }
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={(e) => handleTouchEnd(e, msg)}
+                          onTouchCancel={handleTouchMove}
+                        >
+                          {msg.reply_to_id && (
                             <div
                               style={{
-                                ...s.replyQuoteName,
-                                color: isMine ? '#fff' : BRAND.primary,
+                                ...s.replyQuote,
+                                backgroundColor: isMine
+                                  ? 'color-mix(in srgb, var(--brand-on-primary) 15%, transparent)'
+                                  : 'color-mix(in srgb, var(--brand-primary) 6%, transparent)',
+                                borderLeftColor: isMine
+                                  ? 'var(--brand-on-primary)'
+                                  : BRAND.primary,
                               }}
                             >
-                              {msg.reply_to_sender_name || 'Reply'}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: isMine
-                                  ? 'rgba(255,255,255,0.85)'
-                                  : '#555',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                            >
-                              {msg.reply_to_deleted
-                                ? 'This message was deleted'
-                                : (msg.reply_to_text || '').slice(0, 80)}
-                            </div>
-                          </div>
-                        )}
-
-                        {isDeleted ? (
-                          <div
-                            style={{
-                              ...s.deletedText,
-                              color: isMine
-                                ? 'rgba(255,255,255,0.65)'
-                                : '#999',
-                            }}
-                          >
-                            <MdClose size={14} style={{ marginRight: 4 }} />
-                            {isMine
-                              ? 'You deleted this message'
-                              : 'This message was deleted'}
-                          </div>
-                        ) : (
-                          <>
-                            {msg.audio_url && (
-                              <VoiceBubblePlayer
-                                src={resolveImageUrl(msg.audio_url) || ''}
-                                isMine={isMine}
-                              />
-                            )}
-                            {msg.image_url && (
-                              <img
-                                src={resolveImageUrl(msg.image_url) || ''}
-                                alt=""
-                                style={{
-                                  maxWidth: 220,
-                                  borderRadius: 8,
-                                  marginBottom: msg.text ? 4 : 0,
-                                  display: 'block',
-                                }}
-                              />
-                            )}
-                            {msg.text && (
                               <div
                                 style={{
-                                  ...s.msgText,
-                                  color: isMine ? '#fff' : '#111',
+                                  ...s.replyQuoteName,
+                                  color: isMine
+                                    ? 'var(--brand-on-primary)'
+                                    : BRAND.primary,
                                 }}
                               >
-                                {msg.text}
+                                {msg.reply_to_sender_name || 'Reply'}
                               </div>
-                            )}
-                          </>
-                        )}
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  color: isMine
+                                    ? 'color-mix(in srgb, var(--brand-on-primary) 85%, transparent)'
+                                    : 'var(--text-secondary)',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {msg.reply_to_deleted
+                                  ? 'This message was deleted'
+                                  : (msg.reply_to_text || '').slice(
+                                      0,
+                                      80,
+                                    )}
+                              </div>
+                            </div>
+                          )}
 
-                        <div style={s.metaRow}>
-                          {msg.edited_at && !isDeleted && (
+                          {isDeleted ? (
+                            <div
+                              style={{
+                                ...s.deletedText,
+                                color: isMine
+                                  ? 'color-mix(in srgb, var(--brand-on-primary) 65%, transparent)'
+                                  : 'var(--text-muted)',
+                              }}
+                            >
+                              <MdClose
+                                size={14}
+                                style={{ marginRight: 4 }}
+                              />
+                              {isMine
+                                ? 'You deleted this message'
+                                : 'This message was deleted'}
+                            </div>
+                          ) : (
+                            <>
+                              {msg.audio_url && (
+                                <VoiceBubblePlayer
+                                  src={
+                                    resolveImageUrl(msg.audio_url) || ''
+                                  }
+                                  isMine={isMine}
+                                />
+                              )}
+                              {msg.image_url && (
+                                <img
+                                  src={
+                                    resolveImageUrl(msg.image_url) || ''
+                                  }
+                                  alt=""
+                                  style={{
+                                    maxWidth: 220,
+                                    borderRadius: 8,
+                                    marginBottom: msg.text ? 4 : 0,
+                                    display: 'block',
+                                  }}
+                                />
+                              )}
+                              {msg.text && (
+                                <div
+                                  style={{
+                                    ...s.msgText,
+                                    color: isMine
+                                      ? 'var(--brand-on-primary)'
+                                      : 'var(--text-primary)',
+                                  }}
+                                >
+                                  {msg.text}
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          <div style={s.metaRow}>
+                            {msg.edited_at && !isDeleted && (
+                              <span
+                                style={{
+                                  ...s.editedLabel,
+                                  color: isMine
+                                    ? 'color-mix(in srgb, var(--brand-on-primary) 65%, transparent)'
+                                    : BRAND.muted,
+                                }}
+                              >
+                                edited
+                              </span>
+                            )}
                             <span
                               style={{
-                                ...s.editedLabel,
+                                ...s.timeText,
                                 color: isMine
-                                  ? 'rgba(255,255,255,0.65)'
+                                  ? 'color-mix(in srgb, var(--brand-on-primary) 70%, transparent)'
                                   : BRAND.muted,
                               }}
                             >
-                              edited
+                              {time}
                             </span>
-                          )}
-                          <span
-                            style={{
-                              ...s.timeText,
-                              color: isMine
-                                ? 'rgba(255,255,255,0.7)'
-                                : BRAND.muted,
-                            }}
-                          >
-                            {time}
-                          </span>
-                          {isMine && !isDeleted && (
-                            <MdDoneAll
-                              size={14}
-                              color="rgba(255,255,255,0.85)"
-                              style={{ marginLeft: 2 }}
-                            />
-                          )}
+                            {isMine && !isDeleted && (
+                              <MdDoneAll
+                                size={14}
+                                color="color-mix(in srgb, var(--brand-on-primary) 85%, transparent)"
+                                style={{ marginLeft: 2 }}
+                              />
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              ))}
+              <div ref={messagesEndRef} style={{ height: 8 }} />
+            </>
+          )}
+        </div>
+
+        {hasNewWhileScrolled && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            style={s.jumpPill}
+            aria-label="Jump to new messages"
+          >
+            <MdChevronDown
+              size={16}
+              color="var(--brand-on-primary)"
+            />
+            <span>New messages</span>
+          </button>
+        )}
+
+        {(replyDraft || editDraft) && (
+          <div style={s.previewBar}>
+            <div style={s.previewAccent} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={s.previewLabel}>
+                {editDraft ? (
+                  <>
+                    <MdEdit size={13} style={{ marginRight: 4 }} />
+                    Editing message
+                  </>
+                ) : (
+                  <>
+                    <MdReply size={13} style={{ marginRight: 4 }} />
+                    Replying to {replyDraft?.senderName}
+                  </>
+                )}
               </div>
-            ))}
-            <div ref={messagesEndRef} style={{ height: 8 }} />
-          </>
+              <div style={s.previewText}>
+                {editDraft
+                  ? editDraft.originalText
+                  : replyDraft?.previewText}
+              </div>
+            </div>
+            <button
+              style={s.previewClose}
+              onClick={() => {
+                setReplyDraft(null);
+                setEditDraft(null);
+                setInputText('');
+              }}
+              aria-label="Cancel"
+            >
+              <MdClose size={20} color="var(--text-tertiary)" />
+            </button>
+          </div>
+        )}
+
+        {isRecording && (
+          <div style={s.recordingBar}>
+            <button
+              style={s.recordCancelBtn}
+              onClick={cancelRecording}
+              title="Cancel recording"
+              aria-label="Cancel recording"
+            >
+              <MdDelete size={22} color={BRAND.danger} />
+            </button>
+            <div style={s.recordingPulse} />
+            <span style={s.recordingTime}>
+              {formatDuration(recordSeconds)}
+            </span>
+            <span style={s.recordingHint}>Tap ✓ to send</span>
+            <div style={{ flex: 1 }} />
+            <button
+              style={{
+                ...s.sendCircle,
+                backgroundColor: sendingVoice
+                  ? 'var(--bg-tertiary)'
+                  : 'var(--brand-primary)',
+                color: sendingVoice
+                  ? 'var(--text-muted)'
+                  : 'var(--brand-on-primary)',
+              }}
+              onClick={stopAndSendVoice}
+              disabled={sendingVoice}
+              title="Send voice note"
+              aria-label="Send voice note"
+            >
+              {sendingVoice ? (
+                <div style={s.spinnerMini} />
+              ) : (
+                <MdCheck size={22} />
+              )}
+            </button>
+          </div>
+        )}
+
+        {!isRecording && (
+          <div style={s.inputBar}>
+            <div style={s.inputRow}>
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder={
+                  editDraft ? 'Edit message…' : 'Type a message'
+                }
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                  if (e.key === 'Escape') {
+                    setReplyDraft(null);
+                    setEditDraft(null);
+                    setInputText('');
+                  }
+                }}
+                style={s.input}
+                disabled={!hasRecipient}
+                aria-label="Message input"
+              />
+            </div>
+
+            {showMicButton ? (
+              <button
+                style={{
+                  ...s.sendCircle,
+                  backgroundColor: sendingVoice
+                    ? 'var(--bg-tertiary)'
+                    : 'var(--brand-primary)',
+                  color: sendingVoice
+                    ? 'var(--text-muted)'
+                    : 'var(--brand-on-primary)',
+                }}
+                onClick={startRecording}
+                disabled={!hasRecipient || sendingVoice}
+                title="Tap to record voice note"
+                aria-label="Start voice recording"
+              >
+                <MdMic size={22} />
+              </button>
+            ) : (
+              <button
+                style={{
+                  ...s.sendCircle,
+                  backgroundColor: inputText.trim()
+                    ? 'var(--brand-primary)'
+                    : 'var(--border-strong)',
+                  color: inputText.trim()
+                    ? 'var(--brand-on-primary)'
+                    : 'var(--text-muted)',
+                }}
+                onClick={sendMessage}
+                disabled={!inputText.trim() || sending || !hasRecipient}
+                title={editDraft ? 'Save edit' : 'Send'}
+                aria-label={editDraft ? 'Save edit' : 'Send message'}
+              >
+                {sending ? (
+                  <div style={s.spinnerMini} />
+                ) : editDraft ? (
+                  <MdCheck size={22} />
+                ) : (
+                  <MdSend size={22} />
+                )}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
-      {hasNewWhileScrolled && (
-        <button
-          type="button"
-          onClick={scrollToBottom}
-          style={s.jumpPill}
-          aria-label="Jump to new messages"
-        >
-          <MdChevronDown size={16} color="#fff" />
-          <span>New messages</span>
-        </button>
-      )}
-
-      {(replyDraft || editDraft) && (
-        <div style={s.previewBar}>
-          <div style={s.previewAccent} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={s.previewLabel}>
-              {editDraft ? (
-                <>
-                  <MdEdit size={13} style={{ marginRight: 4 }} />
-                  Editing message
-                </>
-              ) : (
-                <>
-                  <MdReply size={13} style={{ marginRight: 4 }} />
-                  Replying to {replyDraft?.senderName}
-                </>
-              )}
-            </div>
-            <div style={s.previewText}>
-              {editDraft ? editDraft.originalText : replyDraft?.previewText}
-            </div>
-          </div>
-          <button
-            style={s.previewClose}
-            onClick={() => {
-              setReplyDraft(null);
-              setEditDraft(null);
-              setInputText('');
-            }}
-            aria-label="Cancel"
-          >
-            <MdClose size={20} color="#666" />
-          </button>
-        </div>
-      )}
-
-      {isRecording && (
-        <div style={s.recordingBar}>
-          <button
-            style={s.recordCancelBtn}
-            onClick={cancelRecording}
-            title="Cancel recording"
-            aria-label="Cancel recording"
-          >
-            <MdDelete size={22} color={BRAND.danger} />
-          </button>
-          <div style={s.recordingPulse} />
-          <span style={s.recordingTime}>{formatDuration(recordSeconds)}</span>
-          <span style={s.recordingHint}>Tap ✓ to send</span>
-          <div style={{ flex: 1 }} />
-          <button
-            style={{
-              ...s.sendCircle,
-              backgroundColor: sendingVoice ? '#94a3b8' : BRAND.primary,
-            }}
-            onClick={stopAndSendVoice}
-            disabled={sendingVoice}
-            title="Send voice note"
-            aria-label="Send voice note"
-          >
-            {sendingVoice ? (
-              <div style={s.spinnerMini} />
-            ) : (
-              <MdCheck size={22} color="#fff" />
-            )}
-          </button>
-        </div>
-      )}
-
-      {!isRecording && (
-        <div style={s.inputBar}>
-          <div style={s.inputRow}>
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder={editDraft ? 'Edit message…' : 'Type a message'}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-                if (e.key === 'Escape') {
-                  setReplyDraft(null);
-                  setEditDraft(null);
-                  setInputText('');
-                }
-              }}
-              style={s.input}
-              disabled={!hasRecipient}
-              aria-label="Message input"
-            />
-          </div>
-
-          {showMicButton ? (
-            <button
-              style={{
-                ...s.sendCircle,
-                backgroundColor: sendingVoice ? '#94a3b8' : BRAND.primary,
-              }}
-              onClick={startRecording}
-              disabled={!hasRecipient || sendingVoice}
-              title="Tap to record voice note"
-              aria-label="Start voice recording"
-            >
-              <MdMic size={22} color="#fff" />
-            </button>
-          ) : (
-            <button
-              style={{
-                ...s.sendCircle,
-                backgroundColor: inputText.trim() ? BRAND.primary : '#cbd5e1',
-              }}
-              onClick={sendMessage}
-              disabled={!inputText.trim() || sending || !hasRecipient}
-              title={editDraft ? 'Save edit' : 'Send'}
-              aria-label={editDraft ? 'Save edit' : 'Send message'}
-            >
-              {sending ? (
-                <div style={s.spinnerMini} />
-              ) : editDraft ? (
-                <MdCheck size={22} color="#fff" />
-              ) : (
-                <MdSend size={22} color="#fff" />
-              )}
-            </button>
-          )}
-        </div>
-      )}
-
       {contextMenu && (
         <>
-          <div style={s.ctxBackdrop} onClick={() => setContextMenu(null)} />
+          <div
+            style={s.ctxBackdrop}
+            onClick={() => setContextMenu(null)}
+          />
           <div
             style={{
               ...s.ctxMenu,
@@ -1815,8 +1897,9 @@ function ChatContent() {
                 8,
                 Math.min(
                   contextMenu.x,
-                  (typeof window !== 'undefined' ? window.innerWidth : 360) -
-                    210,
+                  (typeof window !== 'undefined'
+                    ? window.innerWidth
+                    : 360) - 210,
                 ),
               ),
               top: Math.max(
@@ -1831,18 +1914,30 @@ function ChatContent() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button type="button" style={s.ctxItem} onClick={handleReply}>
+            <button
+              type="button"
+              style={s.ctxItem}
+              onClick={handleReply}
+            >
               <MdReply size={18} color={BRAND.primary} />
               <span>Reply</span>
             </button>
             {contextMenu.hasText && (
-              <button type="button" style={s.ctxItem} onClick={handleCopy}>
+              <button
+                type="button"
+                style={s.ctxItem}
+                onClick={handleCopy}
+              >
                 <MdContentCopy size={18} color={BRAND.muted} />
                 <span>Copy</span>
               </button>
             )}
             {contextMenu.isMine && contextMenu.hasText && (
-              <button type="button" style={s.ctxItem} onClick={handleEdit}>
+              <button
+                type="button"
+                style={s.ctxItem}
+                onClick={handleEdit}
+              >
                 <MdEdit size={18} color={BRAND.muted} />
                 <span>Edit</span>
               </button>
@@ -1871,7 +1966,10 @@ function ChatContent() {
 
       {menuOpen && (
         <>
-          <div style={s.ctxBackdrop} onClick={() => setMenuOpen(false)} />
+          <div
+            style={s.ctxBackdrop}
+            onClick={() => setMenuOpen(false)}
+          />
           <div
             style={{
               ...s.ctxMenu,
@@ -1882,7 +1980,11 @@ function ChatContent() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button type="button" style={s.ctxItem} onClick={copyChatId}>
+            <button
+              type="button"
+              style={s.ctxItem}
+              onClick={copyChatId}
+            >
               <MdLink size={18} color={BRAND.muted} />
               <span>Copy chat ID</span>
             </button>
@@ -1897,7 +1999,10 @@ function ChatContent() {
           role="dialog"
           aria-modal="true"
         >
-          <div style={s.dialog} onClick={(e) => e.stopPropagation()}>
+          <div
+            style={s.dialog}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={s.dialogIcon}>
               <MdDelete size={28} color={BRAND.danger} />
             </div>
@@ -1926,8 +2031,6 @@ function ChatContent() {
           </div>
         </div>
       )}
-
-      <style>{CSS}</style>
     </main>
   );
 }
@@ -1949,6 +2052,8 @@ const s: Record<string, React.CSSProperties> = {
     backgroundColor: BRAND.bg,
     position: 'relative',
     overflow: 'hidden',
+    alignItems: 'center',
+    transition: 'background-color 0.18s ease',
   },
   header: {
     display: 'flex',
@@ -1957,6 +2062,7 @@ const s: Record<string, React.CSSProperties> = {
     backgroundColor: BRAND.primary,
     zIndex: 10,
     gap: 2,
+    transition: 'background-color 0.18s ease',
   },
   iconBtn: {
     background: 'none',
@@ -1989,7 +2095,8 @@ const s: Record<string, React.CSSProperties> = {
     width: 38,
     height: 38,
     borderRadius: '50%',
-    backgroundColor: 'rgba(255,255,255,0.20)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-primary) 20%, transparent)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2003,7 +2110,11 @@ const s: Record<string, React.CSSProperties> = {
     objectFit: 'cover',
     display: 'block',
   },
-  avatarInitial: { fontSize: 16, fontWeight: 700, color: '#fff' },
+  avatarInitial: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: 'var(--brand-on-primary)',
+  },
   presenceDot: {
     position: 'absolute',
     right: -1,
@@ -2024,26 +2135,16 @@ const s: Record<string, React.CSSProperties> = {
   headerName: {
     fontSize: 15.5,
     fontWeight: 700,
-    color: '#fff',
+    color: 'var(--brand-on-primary)',
     lineHeight: 1.2,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  headerStatus: {
-    fontSize: 11.5,
-    fontWeight: 600,
-    letterSpacing: 0.02,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    marginTop: 1,
-  },
   wallpaper: {
     position: 'absolute',
     inset: 0,
     top: 54,
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1' fill='%230504AA' opacity='0.06'/%3E%3C/svg%3E")`,
     pointerEvents: 'none',
     zIndex: 0,
   },
@@ -2068,7 +2169,7 @@ const s: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 24,
-    background: '#EEF0FF',
+    background: 'var(--brand-soft)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2078,7 +2179,7 @@ const s: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 24,
-    background: '#FEF2F2',
+    background: 'var(--danger-bg)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2087,13 +2188,13 @@ const s: Record<string, React.CSSProperties> = {
   stateTitle: {
     fontSize: 17,
     fontWeight: 800,
-    color: '#334155',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: '-0.01em',
   },
   stateBody: {
     fontSize: 13.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     margin: '4px 0 0',
     maxWidth: 320,
     lineHeight: 1.55,
@@ -2101,24 +2202,25 @@ const s: Record<string, React.CSSProperties> = {
   spinner: {
     width: 36,
     height: 36,
-    border: '4px solid #DDE2FF',
-    borderTopColor: BRAND.primary,
+    border: '4px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'chatSpin 0.8s linear infinite',
   },
   spinnerMini: {
     width: 18,
     height: 18,
-    border: '2px solid rgba(255,255,255,0.45)',
-    borderTopColor: '#fff',
+    border:
+      '2px solid color-mix(in srgb, currentColor 35%, transparent)',
+    borderTopColor: 'currentColor',
     borderRadius: '50%',
     animation: 'chatSpin 0.7s linear infinite',
   },
   retryBtn: {
     marginTop: 14,
     padding: '10px 20px',
-    backgroundColor: BRAND.primary,
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     border: 'none',
     borderRadius: 12,
     cursor: 'pointer',
@@ -2136,7 +2238,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   datePillText: {
     backgroundColor: BRAND.datePill,
-    color: '#334155',
+    color: 'var(--text-secondary)',
     fontSize: 12,
     fontWeight: 700,
     padding: '4px 14px',
@@ -2146,13 +2248,14 @@ const s: Record<string, React.CSSProperties> = {
   bubble: {
     maxWidth: '100%',
     padding: '6px 10px 4px',
-    boxShadow: '0 1px 2px rgba(5,4,170,0.10)',
+    boxShadow: 'var(--shadow-sm)',
     cursor: 'pointer',
     userSelect: 'none',
     WebkitUserSelect: 'none',
     touchAction: 'pan-y',
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
+    transition: 'background-color 0.18s ease',
   },
   replyQuote: {
     borderLeftWidth: 4,
@@ -2162,7 +2265,11 @@ const s: Record<string, React.CSSProperties> = {
     borderRadius: 4,
     padding: '4px 8px',
   },
-  replyQuoteName: { fontSize: 12, fontWeight: 700, marginBottom: 2 },
+  replyQuoteName: {
+    fontSize: 12,
+    fontWeight: 700,
+    marginBottom: 2,
+  },
   deletedText: {
     fontStyle: 'italic',
     fontSize: 13.5,
@@ -2194,13 +2301,13 @@ const s: Record<string, React.CSSProperties> = {
     gap: 4,
     padding: '8px 16px',
     borderRadius: 999,
-    backgroundColor: BRAND.primary,
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     border: 'none',
     fontWeight: 700,
     fontSize: 12.5,
     cursor: 'pointer',
-    boxShadow: '0 8px 22px rgba(5,4,170,0.35)',
+    boxShadow: 'var(--shadow-brand)',
     zIndex: 5,
     animation: 'chatToastIn 0.2s ease',
     fontFamily: 'inherit',
@@ -2209,10 +2316,11 @@ const s: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     padding: '8px 12px',
-    backgroundColor: '#fff',
-    borderTop: '1px solid #E2E8F0',
+    backgroundColor: 'var(--bg-secondary)',
+    borderTop: '1px solid var(--border-default)',
     gap: 0,
     zIndex: 2,
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   previewAccent: {
     width: 4,
@@ -2232,7 +2340,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   previewText: {
     fontSize: 13,
-    color: '#475569',
+    color: 'var(--text-secondary)',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -2249,9 +2357,10 @@ const s: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     padding: '8px 12px',
     gap: 10,
-    backgroundColor: '#fff',
-    borderTop: '2px solid #FEE2E2',
+    backgroundColor: 'var(--bg-secondary)',
+    borderTop: '2px solid var(--danger-strong)',
     zIndex: 2,
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   recordCancelBtn: {
     background: 'none',
@@ -2277,24 +2386,30 @@ const s: Record<string, React.CSSProperties> = {
     fontVariantNumeric: 'tabular-nums',
     minWidth: 40,
   },
-  recordingHint: { fontSize: 13, color: '#64748B', fontWeight: 500 },
+  recordingHint: {
+    fontSize: 13,
+    color: 'var(--text-tertiary)',
+    fontWeight: 500,
+  },
   inputBar: {
     display: 'flex',
     alignItems: 'center',
     padding: '8px 10px calc(8px + env(safe-area-inset-bottom))',
     gap: 8,
-    backgroundColor: '#EEF0F8',
+    backgroundColor: 'var(--bg-tertiary)',
     zIndex: 2,
+    transition: 'background-color 0.18s ease',
   },
   inputRow: {
     flex: 1,
     display: 'flex',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 24,
     padding: '4px 6px 4px 16px',
-    boxShadow: '0 1px 3px rgba(5,4,170,0.06)',
-    border: '1px solid #E2E8F0',
+    boxShadow: 'var(--shadow-sm)',
+    border: '1px solid var(--border-default)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   input: {
     flex: 1,
@@ -2303,7 +2418,7 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 15,
     backgroundColor: 'transparent',
     padding: '8px 4px',
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     fontFamily: 'inherit',
   },
   sendCircle: {
@@ -2316,8 +2431,8 @@ const s: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     cursor: 'pointer',
     flexShrink: 0,
-    boxShadow: '0 2px 6px rgba(5,4,170,0.25)',
-    transition: 'background 0.15s',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background 0.15s, color 0.15s',
   },
   toastStack: {
     position: 'fixed',
@@ -2341,13 +2456,14 @@ const s: Record<string, React.CSSProperties> = {
   ctxMenu: {
     position: 'fixed',
     zIndex: 1000,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-elevated)',
     borderRadius: 14,
-    boxShadow: '0 12px 40px rgba(11,11,26,0.18)',
+    boxShadow: 'var(--shadow-lg)',
     padding: '6px 0',
     minWidth: 210,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     animation: 'chatToastIn 0.15s ease',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   ctxItem: {
     display: 'flex',
@@ -2359,7 +2475,7 @@ const s: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     fontSize: 14.5,
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
     textAlign: 'left',
     fontWeight: 600,
     fontFamily: 'inherit',
@@ -2367,28 +2483,31 @@ const s: Record<string, React.CSSProperties> = {
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(11,11,26,0.55)',
+    backgroundColor: 'var(--overlay)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2000,
     padding: 20,
     animation: 'chatFadeIn 0.15s ease',
+    backdropFilter: 'blur(4px)',
+    WebkitBackdropFilter: 'blur(4px)',
   },
   dialog: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-elevated)',
     borderRadius: 20,
     padding: '24px 22px',
     maxWidth: 380,
     width: '100%',
-    boxShadow: '0 24px 70px rgba(11,11,26,0.35)',
+    boxShadow: 'var(--shadow-lg)',
     textAlign: 'center',
+    transition: 'background-color 0.18s ease',
   },
   dialogIcon: {
     width: 60,
     height: 60,
     borderRadius: 20,
-    background: '#FEF2F2',
+    background: 'var(--danger-bg)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2397,12 +2516,12 @@ const s: Record<string, React.CSSProperties> = {
   dialogTitle: {
     fontSize: 18,
     fontWeight: 800,
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
     margin: '0 0 8px',
   },
   dialogBody: {
     fontSize: 14,
-    color: '#475569',
+    color: 'var(--text-secondary)',
     marginBottom: 22,
     lineHeight: 1.55,
   },
@@ -2414,8 +2533,8 @@ const s: Record<string, React.CSSProperties> = {
     flex: 1,
     padding: '13px',
     backgroundColor: 'transparent',
-    color: BRAND.primary,
-    border: '1px solid #E2E8F0',
+    color: 'var(--brand-primary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 12,
     cursor: 'pointer',
     fontWeight: 700,
@@ -2425,8 +2544,8 @@ const s: Record<string, React.CSSProperties> = {
   deleteBtn: {
     flex: 1,
     padding: '13px',
-    backgroundColor: BRAND.danger,
-    color: '#fff',
+    backgroundColor: 'var(--danger-fg)',
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: 12,
     cursor: 'pointer',
@@ -2451,6 +2570,100 @@ const CSS = `
     from { opacity: 0; }
     to { opacity: 1; }
   }
+
+  /* ─── Chat shell: caps column at 820px, centered ──────────── */
+  .chat-shell {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 820px;
+    height: 100%;
+    min-height: 0;
+    position: relative;
+    background: var(--bg-primary);
+    transition: background-color 0.18s ease;
+  }
+
+  /* ─── Wallpaper: dot pattern reading brand token ──────────── */
+  .chat-wallpaper {
+    position: absolute;
+    inset: 0;
+    top: 54px;
+    background-image: radial-gradient(
+      circle at center,
+      color-mix(in srgb, var(--brand-primary) 6%, transparent) 1px,
+      transparent 1.4px
+    );
+    background-size: 60px 60px;
+    background-position: 0 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── Header status text ──────────────────────────────────── */
+  .chat-header-status {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.02;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+    color: color-mix(in srgb, var(--brand-on-primary) 62%, transparent);
+  }
+  .chat-header-status-online {
+    color: #A7F3D0;
+    font-weight: 700;
+  }
+  [data-theme='dark'] .chat-header-status-online {
+    color: #065F46;
+  }
+
+  /* ─── Skeleton pieces ─────────────────────────────────────── */
+  .chat-skel-header {
+    height: 54px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    background: var(--brand-primary);
+    transition: background-color 0.18s ease;
+  }
+  .chat-skel-header-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--brand-on-primary) 20%, transparent);
+    animation: chatShimmer 1.4s infinite linear;
+  }
+  .chat-skel-body {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+  .chat-skel-bubble {
+    height: 44px;
+    margin-bottom: 8px;
+    border-radius: 16px;
+    background: linear-gradient(
+      90deg,
+      var(--bg-tertiary) 0%,
+      var(--bg-hover) 50%,
+      var(--bg-tertiary) 100%
+    );
+    background-size: 400px 100%;
+    animation: chatShimmer 1.4s infinite linear;
+  }
+  .chat-skel-bubble-mine {
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--brand-primary) 22%, var(--bg-tertiary)) 0%,
+      var(--bg-tertiary) 50%,
+      color-mix(in srgb, var(--brand-primary) 22%, var(--bg-tertiary)) 100%
+    );
+    background-size: 400px 100%;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * {
       animation-duration: 0.01ms !important;
