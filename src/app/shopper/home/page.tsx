@@ -367,6 +367,7 @@ function StoreSpotlight({
                   touchPaused.current = false;
                 }, 300);
               }}
+              className="sh-spotlight-btn"
               style={{
                 display: 'block',
                 width: '100%',
@@ -377,7 +378,6 @@ function StoreSpotlight({
                 borderRadius: 20,
                 overflow: 'hidden',
                 position: 'relative',
-                height: 160,
                 textAlign: 'left',
                 fontFamily: 'inherit',
               }}
@@ -1764,15 +1764,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tabsInner: {
     display: 'flex',
-    gap: 8,                          // ← CHANGED from 6 — more air between pills
+    gap: 8,
     width: '100%',
   },
   tabBtn: {
     flex: 1,
-    padding: '11px 10px',            // ← CHANGED from 9px — slightly taller pill
-    borderRadius: 999,               // ← CHANGED from 12 — full pill
+    padding: '11px 10px',
+    borderRadius: 999,
     border: '1px solid',
-    fontWeight: 800,                 // ← CHANGED from 700 — bolder pill text
+    fontWeight: 800,
     fontSize: 12,
     letterSpacing: 0.6,
     cursor: 'pointer',
@@ -2010,8 +2010,8 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 20px',
     borderRadius: 12,
     border: 'none',
-    background: 'var(--brand-primary)',
-    color: 'var(--brand-on-primary)',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 13.5,
     fontWeight: 800,
     cursor: 'pointer',
@@ -2049,7 +2049,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'var(--bg-secondary)',
     color: 'var(--text-primary)',
     width: '100%',
-    maxWidth: 500,
+    maxWidth: 560,
     padding: '10px 20px 24px',
     overflowY: 'auto',
     transition: 'background-color 0.18s ease',
@@ -2215,6 +2215,11 @@ const CSS = `
     transform: scale(0.985);
   }
 
+  /* ─── Spotlight height: mobile vs desktop ─────────────── */
+  .sh-spotlight-btn {
+    height: 160px;
+  }
+
   /* Pill tab hover — subtle lift, silver shine peek */
   .sh-tab-pill:hover:not([aria-selected="true"]) {
     background-color: var(--bg-hover) !important;
@@ -2257,9 +2262,21 @@ const CSS = `
       padding: 0 24px 24px;
     }
     .sh-tabs-inner {
-      padding: 14px 24px 12px;
-      max-width: 720px;
+      padding: 16px 24px 14px;
+      max-width: 840px;
       margin: 0 auto;
+    }
+    .sh-spotlight-btn {
+      height: 220px;
+    }
+
+    /* Desktop hover lift on reel cards */
+    .sh-reel {
+      transition: transform 0.16s ease, box-shadow 0.22s ease !important;
+    }
+    .sh-reel:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
     }
   }
 

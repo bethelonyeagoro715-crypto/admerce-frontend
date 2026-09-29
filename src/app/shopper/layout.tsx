@@ -12,41 +12,51 @@ import {
 } from 'react-icons/md';
 import type { IconType } from 'react-icons';
 
-// ─── Nav palette (all values resolve through CSS vars) ──────────────
-const NAV_BG = 'var(--bg-secondary)';
-const NAV_BORDER = 'var(--border-default)';
-const ACTIVE_COLOR = 'var(--brand-primary)';
-const INACTIVE_COLOR = 'var(--text-muted)';
-const ACTIVE_AVATAR_RING = 'var(--brand-primary)';
+// ─── Nav entries (shared by rail and bottom nav) ────────────────────
+type NavEntry = { Icon: IconType; label: string; path: string };
+
+const NAV_ENTRIES: NavEntry[] = [
+  { Icon: MdStorefront,           label: 'Home',   path: '/shopper/home'   },
+  { Icon: MdLocationOn,           label: 'Map',    path: '/shopper/map'    },
+  { Icon: MdFavoriteBorder,       label: 'Saved',  path: '/shopper/saved'  },
+  { Icon: MdChatBubbleOutline,    label: 'Inbox',  path: '/shopper/inbox'  },
+  { Icon: MdAccountBalanceWallet, label: 'Wallet', path: '/shopper/wallet' },
+];
+
+const PROFILE_PATH = '/shopper/profile';
+const PROFILE_LABEL = 'Profile';
 
 function UserAvatar({
   imageUrl,
   name,
   active,
+  size = 28,
 }: {
   imageUrl?: string;
   name: string;
   active: boolean;
+  size?: number;
 }) {
   const initials = (name || '?')[0].toUpperCase();
   return (
     <div
       style={{
-        width: 28,
-        height: 28,
+        width: size,
+        height: size,
         borderRadius: '50%',
         overflow: 'hidden',
         backgroundColor: 'var(--bg-tertiary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: 12,
+        fontSize: Math.round(size * 0.42),
         color: 'var(--brand-on-soft)',
         border: active
-          ? `2px solid ${ACTIVE_AVATAR_RING}`
+          ? '2px solid var(--brand-primary)'
           : '2px solid transparent',
         boxSizing: 'border-box',
-        transition: 'background-color 0.18s ease, border-color 0.18s ease',
+        transition:
+          'background-color 0.18s ease, border-color 0.18s ease',
       }}
     >
       {imageUrl ? (
@@ -56,7 +66,7 @@ function UserAvatar({
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       ) : (
-        <span style={{ fontWeight: 'bold' }}>{initials}</span>
+        <span style={{ fontWeight: 800 }}>{initials}</span>
       )}
     </div>
   );
@@ -84,183 +94,239 @@ export default function ShopperLayout({
     })();
   }, []);
 
-  let currentIndex = 0;
-  if (pathname.startsWith('/shopper/map')) currentIndex = 1;
-  else if (pathname.startsWith('/shopper/saved')) currentIndex = 2;
-  else if (pathname.startsWith('/shopper/inbox')) currentIndex = 3;
-  else if (pathname.startsWith('/shopper/wallet')) currentIndex = 4;
-  else if (pathname.startsWith('/shopper/profile')) currentIndex = 5;
-
-  const navigate = (index: number) => {
-    switch (index) {
-      case 0:
-        router.replace('/shopper/home');
-        break;
-      case 1:
-        router.replace('/shopper/map');
-        break;
-      case 2:
-        router.replace('/shopper/saved');
-        break;
-      case 3:
-        router.replace('/shopper/inbox');
-        break;
-      case 4:
-        router.replace('/shopper/wallet');
-        break;
-      case 5:
-        router.replace('/shopper/profile');
-        break;
+  let activeIndex = 0;
+  for (let i = 0; i < NAV_ENTRIES.length; i++) {
+    if (pathname.startsWith(NAV_ENTRIES[i].path)) {
+      activeIndex = i;
+      break;
     }
-  };
+  }
+  if (pathname.startsWith(PROFILE_PATH)) activeIndex = NAV_ENTRIES.length;
 
   const avatarName = profile?.nickname || profile?.phone || '';
+  const go = (path: string) => router.replace(path);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        backgroundColor: 'var(--bg-primary)',
-        transition: 'background-color 0.18s ease',
-      }}
-    >
-      {/* Content area — padded at the bottom so it doesn't hide behind
-          the fixed nav bar. 64px is the nav height. */}
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 64 }}>
-        {children}
-      </div>
+    <div className="shl-root">
+      <style>{CSS}</style>
 
-      <nav style={styles.navBar}>
-        <NavItem
-          Icon={MdStorefront}
-          label="Home"
-          active={currentIndex === 0}
-          onTap={() => navigate(0)}
-        />
-        <NavItem
-          Icon={MdLocationOn}
-          label="Map"
-          active={currentIndex === 1}
-          onTap={() => navigate(1)}
-        />
-        <NavItem
-          Icon={MdFavoriteBorder}
-          label="Saved"
-          active={currentIndex === 2}
-          onTap={() => navigate(2)}
-        />
-        <NavItem
-          Icon={MdChatBubbleOutline}
-          label="Inbox"
-          active={currentIndex === 3}
-          onTap={() => navigate(3)}
-        />
-        <NavItem
-          Icon={MdAccountBalanceWallet}
-          label="Wallet"
-          active={currentIndex === 4}
-          onTap={() => navigate(4)}
-        />
+      {/* ── Desktop side rail ────────────────────────────── */}
+      <aside className="shl-rail" aria-label="Shopper navigation">
+        <nav className="shl-rail-nav">
+          {NAV_ENTRIES.map((entry, i) => {
+            const active = activeIndex === i;
+            return (
+              <button
+                key={entry.path}
+                type="button"
+                onClick={() => go(entry.path)}
+                className={
+                  active
+                    ? 'shl-rail-item shl-rail-item-active'
+                    : 'shl-rail-item'
+                }
+                aria-current={active ? 'page' : undefined}
+                title={entry.label}
+              >
+                <entry.Icon size={22} />
+                <span className="shl-rail-label">{entry.label}</span>
+              </button>
+            );
+          })}
+        </nav>
 
-        {/* Profile avatar tab */}
-        <div
-          onClick={() => navigate(5)}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            flex: 1,
-            gap: 2,
-            padding: '4px 0',
-            WebkitTapHighlightColor: 'transparent',
-          }}
+        <button
+          type="button"
+          onClick={() => go(PROFILE_PATH)}
+          className={
+            activeIndex === NAV_ENTRIES.length
+              ? 'shl-rail-item shl-rail-profile shl-rail-item-active'
+              : 'shl-rail-item shl-rail-profile'
+          }
+          aria-current={
+            activeIndex === NAV_ENTRIES.length ? 'page' : undefined
+          }
+          title={PROFILE_LABEL}
         >
           <UserAvatar
             imageUrl={profile?.avatar_url}
             name={avatarName}
-            active={currentIndex === 5}
+            active={activeIndex === NAV_ENTRIES.length}
+            size={24}
           />
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: currentIndex === 5 ? 600 : 400,
-              color:
-                currentIndex === 5 ? ACTIVE_COLOR : INACTIVE_COLOR,
-              lineHeight: 1,
-            }}
-          >
-            Profile
-          </span>
-        </div>
+          <span className="shl-rail-label">{PROFILE_LABEL}</span>
+        </button>
+      </aside>
+
+      {/* ── Content ──────────────────────────────────────── */}
+      <main className="shl-content">{children}</main>
+
+      {/* ── Mobile bottom nav ────────────────────────────── */}
+      <nav className="shl-bottom" aria-label="Shopper navigation">
+        {NAV_ENTRIES.map((entry, i) => {
+          const active = activeIndex === i;
+          return (
+            <button
+              key={entry.path}
+              type="button"
+              onClick={() => go(entry.path)}
+              className={active ? 'shl-tab shl-tab-active' : 'shl-tab'}
+              aria-current={active ? 'page' : undefined}
+            >
+              <entry.Icon size={22} />
+              <span className="shl-tab-label">{entry.label}</span>
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={() => go(PROFILE_PATH)}
+          className={
+            activeIndex === NAV_ENTRIES.length
+              ? 'shl-tab shl-tab-active'
+              : 'shl-tab'
+          }
+          aria-current={
+            activeIndex === NAV_ENTRIES.length ? 'page' : undefined
+          }
+        >
+          <UserAvatar
+            imageUrl={profile?.avatar_url}
+            name={avatarName}
+            active={activeIndex === NAV_ENTRIES.length}
+          />
+          <span className="shl-tab-label">{PROFILE_LABEL}</span>
+        </button>
       </nav>
     </div>
   );
 }
 
-// ─── NavItem ────────────────────────────────────────────────────────
-function NavItem({
-  Icon,
-  label,
-  active,
-  onTap,
-}: {
-  Icon: IconType;
-  label: string;
-  active: boolean;
-  onTap: () => void;
-}) {
-  return (
-    <div
-      onClick={onTap}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        flex: 1,
-        gap: 2,
-        padding: '4px 0',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      <Icon size={22} color={active ? ACTIVE_COLOR : INACTIVE_COLOR} />
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: active ? 600 : 400,
-          color: active ? ACTIVE_COLOR : INACTIVE_COLOR,
-          lineHeight: 1,
-        }}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
+// ─── CSS ─────────────────────────────────────────────────────────────
+const CSS = `
+  .shl-root {
+    display: flex;
+    height: 100dvh;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.18s ease, color 0.18s ease;
+  }
 
-// ─── Styles ────────────────────────────────────────────────────────
-const styles = {
-  navBar: {
-    position: 'fixed',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    display: 'flex',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: NAV_BG,
-    borderTop: `1px solid ${NAV_BORDER}`,
-    paddingTop: 10,
-    // Respect iPhone home indicator at the bottom of the screen.
-    paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
-    paddingLeft: 'env(safe-area-inset-left)',
-    paddingRight: 'env(safe-area-inset-right)',
-    zIndex: 100,
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
-  } as React.CSSProperties,
-};
+  .shl-content {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding-bottom: 72px; /* space for the fixed bottom nav on mobile */
+    transition: padding 0.18s ease;
+  }
+
+  /* ── Desktop side rail (hidden by default) ───────────── */
+  .shl-rail {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    width: 88px;
+    flex: 0 0 88px;
+    padding: 16px 8px 18px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-default);
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .shl-rail-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+  .shl-rail-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 68px;
+    padding: 10px 4px;
+    border: none;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s, transform 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .shl-rail-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .shl-rail-item:active { transform: scale(0.97); }
+  .shl-rail-item-active,
+  .shl-rail-item-active:hover {
+    background: var(--brand-soft);
+    color: var(--brand-primary);
+  }
+  .shl-rail-item:focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
+  }
+  .shl-rail-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.2px;
+  }
+  .shl-rail-profile { margin-top: auto; }
+
+  /* ── Mobile bottom nav (shown by default) ────────────── */
+  .shl-bottom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-default);
+    padding: 10px 0 max(8px, env(safe-area-inset-bottom));
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    z-index: 100;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .shl-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 2px;
+    padding: 4px 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s;
+  }
+  .shl-tab-active { color: var(--brand-primary); }
+  .shl-tab-label {
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1;
+  }
+  .shl-tab-active .shl-tab-label { font-weight: 600; }
+
+  /* ── Desktop breakpoint ─────────────────────────────── */
+  @media (min-width: 1024px) {
+    .shl-rail { display: flex; }
+    .shl-bottom { display: none; }
+    .shl-content { padding-bottom: 0; }
+  }
+`;
