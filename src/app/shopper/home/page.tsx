@@ -1762,14 +1762,14 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'var(--bg-primary)',
     transition: 'background-color 0.18s ease',
   },
+  // NOTE: flex + padding on the pill live in CSS (.sh-tab-pill) so the
+  // desktop media query can override them without !important.
   tabsInner: {
     display: 'flex',
     gap: 8,
     width: '100%',
   },
   tabBtn: {
-    flex: 1,
-    padding: '11px 10px',
     borderRadius: 999,
     border: '1px solid',
     fontWeight: 800,
@@ -2215,6 +2215,12 @@ const CSS = `
     transform: scale(0.985);
   }
 
+  /* ─── Pill tabs — flex + padding live here so desktop can override ── */
+  .sh-tab-pill {
+    flex: 1;
+    padding: 11px 10px;
+  }
+
   /* ─── Spotlight height: mobile vs desktop ─────────────── */
   .sh-spotlight-btn {
     height: 160px;
@@ -2261,11 +2267,23 @@ const CSS = `
     .sh-panel-inner {
       padding: 0 24px 24px;
     }
+
+    /* ── Pill tabs on desktop: content-width, centered ────── */
     .sh-tabs-inner {
-      padding: 16px 24px 14px;
-      max-width: 840px;
+      padding: 18px 24px 14px;
+      max-width: 640px;
       margin: 0 auto;
+      justify-content: center;
+      gap: 10px;
     }
+    .sh-tab-pill {
+      flex: 0 0 auto;
+      min-width: 170px;
+      padding: 12px 26px;
+      font-size: 13px;
+      letter-spacing: 0.8px;
+    }
+
     .sh-spotlight-btn {
       height: 220px;
     }
