@@ -1,19 +1,18 @@
 'use client';
 
-import { useState, useEffect, useRef, FormEvent } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '../../../services/api';
+import api, { extractErrorDetail } from '../../../services/api';
+import { useAuthGuard } from '../../../hooks/useAuthGuard';
+import { alertDialog } from '../../../components/ui/dialogs';
 import {
   MdRefresh,
   MdAutoAwesome,
   MdVisibility,
   MdChat,
   MdShoppingBag,
-  MdAttachMoney,
   MdAdd,
   MdGridView,
-  MdEdit,
-  MdPerson,
   MdAddPhotoAlternate,
   MdPhotoLibrary,
   MdCameraAlt,
@@ -24,6 +23,9 @@ import {
   MdInfoOutline,
   MdChevronRight,
   MdGroups,
+  MdStorefront,
+  MdImage,
+  MdAccountBalanceWallet,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -34,12 +36,16 @@ interface Store {
   verification_status?: string;
   verified?: boolean;
   verified_at?: string | null;
+  created_at?: string;
 }
 
 interface Profile {
   nickname?: string;
   username?: string;
   avatar_url?: string;
+  avatar_width?: number | null;
+  avatar_height?: number | null;
+  created_at?: string;
 }
 
 interface StoreStats {
@@ -66,10 +72,55 @@ type VerificationStatus =
   | 'rejected'
   | 'suspended';
 
+// ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string {
   if (!url) return '';
-  if (url.startsWith('http')) return url;
-  return `${process.env.NEXT_PUBLIC_API_BASE || ''}${url}`;
+  if (
+    url.startsWith('http') ||
+    url.startsWith('blob:') ||
+    url.startsWith('data:')
+  )
+    return url;
+  const base =
+    process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
+  if (!base) return url;
+  if (url.startsWith('/')) return `${base}${url}`;
+  return `${base}/${url}`;
+}
+
+function formatNaira(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return '₦0';
+  if (v >= 1_000_000) return `₦${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 10_000) return `₦${(v / 1_000).toFixed(1)}k`;
+  return `₦${Math.round(v).toLocaleString('en-NG')}`;
+}
+
+function formatNumber(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return '0';
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
+  return String(v);
+}
+
+function parseAsUtc(iso?: string | null): number {
+  if (!iso) return NaN;
+  const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
+  const trimmed = iso.replace(/(\.\d{3})\d+/, '$1');
+  return new Date(hasTz ? trimmed : `${trimmed}Z`).getTime();
+}
+
+function fmtMemberSince(iso?: string): string {
+  if (!iso) return '';
+  const t = parseAsUtc(iso);
+  if (Number.isNaN(t)) return '';
+  try {
+    return new Date(t).toLocaleDateString('en-GB', {
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return '';
+  }
 }
 
 function safeVerificationStatus(store: Store | null): VerificationStatus {
@@ -91,45 +142,50 @@ const VERIFICATION_META: Record<
   { label: string; hint: string; color: string; soft: string }
 > = {
   unverified: {
-    label: 'Not verified yet',
-    hint: 'Submit a request to get a verified badge',
+    label: 'Store not verified',
+    hint: 'Get the verified badge — buyers trust it',
     color: '#64748B',
     soft: '#F1F5F9',
   },
   pending: {
-    label: 'Under review',
+    label: 'Verification under review',
     hint: 'We received your submission',
     color: '#D97706',
     soft: '#FEF3C7',
   },
   verified: {
-    label: 'Verified',
-    hint: 'Your store shows the verified badge',
+    label: 'Store verified',
+    hint: 'Buyers see the verified badge on your store',
     color: '#16A34A',
     soft: '#DCFCE7',
   },
   rejected: {
-    label: 'Not approved',
+    label: 'Verification not approved',
     hint: 'Review the reason and resubmit',
     color: '#DC2626',
     soft: '#FEE2E2',
   },
   suspended: {
-    label: 'Suspended',
+    label: 'Store suspended',
     hint: 'Contact support for details',
     color: '#DC2626',
     soft: '#FEE2E2',
   },
 };
 
+// ─── Component ──────────────────────────────────────────────────────
 export default function StorekeeperDashboardPage() {
+  useAuthGuard();
   const router = useRouter();
 
   const [store, setStore] = useState<Store | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<StoreStats>({});
-  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(null);
+  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
+  const [errored, setErrored] = useState(false);
 
   const [showStoreImageModal, setShowStoreImageModal] = useState(false);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -137,43 +193,60 @@ export default function StorekeeperDashboardPage() {
   const storeImageInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  const [storeImagePreview, setStoreImagePreview] = useState<string | null>(null);
+  const [storeImagePreview, setStoreImagePreview] = useState<string | null>(
+    null,
+  );
   const [storeImageFile, setStoreImageFile] = useState<File | null>(null);
-
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
   const [uploadingStoreImage, setUploadingStoreImage] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  const loadDashboardData = async () => {
-    setIsLoading(true);
+  const reqSeq = useRef(0);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadDashboardData = useCallback(async (showSpinner = true) => {
+    const seq = ++reqSeq.current;
+    if (showSpinner) setIsLoading(true);
+    setErrored(false);
     try {
-      const [storeData, profileData, statsData, communityData] = await Promise.all([
-        api.getMyStore() as Promise<Store | null>,
-        api.getMyProfile() as Promise<Profile>,
-        api.getStoreStats() as Promise<StoreStats>,
-        (api as unknown as CommunityStatsApi).communityGetStats?.('global').catch(() => null) ??
-          Promise.resolve(null),
-      ]);
+      const communityApi = api as unknown as CommunityStatsApi;
+      const [storeData, profileData, statsData, communityData] =
+        await Promise.all([
+          api.getMyStore() as Promise<Store | null>,
+          api.getMyProfile() as Promise<Profile>,
+          api.getStoreStats() as Promise<StoreStats>,
+          communityApi.communityGetStats?.('global').catch(() => null) ??
+            Promise.resolve(null),
+        ]);
+      if (seq !== reqSeq.current || !isMountedRef.current) return;
       setStore(storeData);
       setProfile(profileData);
       setStats(statsData);
       setCommunityStats(communityData as CommunityStats | null);
-    } catch (error) {
-      console.error('Failed to load dashboard:', error);
+    } catch {
+      if (seq === reqSeq.current && isMountedRef.current) setErrored(true);
     } finally {
-      setIsLoading(false);
+      if (seq === reqSeq.current && isMountedRef.current) setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadDashboardData();
+      void loadDashboardData();
     }, 0);
     return () => clearTimeout(timer);
-  }, []);
+  }, [loadDashboardData]);
 
+  // ── Modals ────────────────────────────────────────────────────
   const openStoreImageModal = () => setShowStoreImageModal(true);
   const closeStoreImageModal = () => {
     setShowStoreImageModal(false);
@@ -213,12 +286,16 @@ export default function StorekeeperDashboardPage() {
       const formData = new FormData();
       formData.append('image', storeImageFile);
       await api.updateStoreImage(formData);
-      await loadDashboardData();
+      await loadDashboardData(false);
       closeStoreImageModal();
-    } catch (error) {
-      alert('Failed to update store image');
+    } catch (err) {
+      await alertDialog({
+        title: 'Upload failed',
+        body: extractErrorDetail(err, 'Please try again in a moment.'),
+        kind: 'danger',
+      });
     } finally {
-      setUploadingStoreImage(false);
+      if (isMountedRef.current) setUploadingStoreImage(false);
     }
   };
 
@@ -227,197 +304,440 @@ export default function StorekeeperDashboardPage() {
     setUploadingAvatar(true);
     try {
       await api.uploadAvatar(avatarFile);
-      await loadDashboardData();
+      await loadDashboardData(false);
       closeAvatarModal();
-    } catch (error) {
-      alert('Failed to update avatar');
+    } catch (err) {
+      await alertDialog({
+        title: 'Upload failed',
+        body: extractErrorDetail(err, 'Please try again in a moment.'),
+        kind: 'danger',
+      });
     } finally {
-      setUploadingAvatar(false);
+      if (isMountedRef.current) setUploadingAvatar(false);
     }
   };
 
-  const storeImageUrl = storeImagePreview || resolveImageUrl(store?.store_image_url);
+  // ── Derived ───────────────────────────────────────────────────
+  const storeImageUrl =
+    storeImagePreview || resolveImageUrl(store?.store_image_url);
   const avatarUrl = avatarPreview || resolveImageUrl(profile?.avatar_url);
-  const userName = profile?.nickname || profile?.username || 'Storekeeper';
-
+  const userName =
+    profile?.nickname || profile?.username || 'Storekeeper';
   const verificationStatus = safeVerificationStatus(store);
   const verificationMeta = VERIFICATION_META[verificationStatus];
+  const memberSince = fmtMemberSince(
+    store?.created_at || profile?.created_at,
+  );
 
+  const views = stats.views ?? 0;
+  const inquiries = stats.inquiries ?? 0;
+  const sold = stats.sold ?? 0;
+  const revenue = stats.revenue ?? 0;
+
+  // ── Loading skeleton ──────────────────────────────────────────
   if (isLoading) {
     return (
-      <main style={styles.center}>
-        <div style={styles.spinner} />
+      <main style={css.root}>
+        <style>{CSS}</style>
+        <div style={css.hero}>
+          <div style={css.topBar}>
+            <span style={css.topTitle}>Dashboard</span>
+            <div style={{ width: 38 }} />
+          </div>
+          <div style={css.identityRow}>
+            <div style={css.thumbSkeleton} />
+            <div style={{ flex: 1 }}>
+              <div style={css.skelLine} />
+              <div
+                style={{ ...css.skelLine, width: 130, marginTop: 8 }}
+              />
+            </div>
+          </div>
+        </div>
+        <div style={css.sheet}>
+          <div style={css.revenueSkeleton} />
+          <div style={css.pulseSkeleton} />
+          {[0, 1].map((i) => (
+            <div key={i} style={css.sectionSkeleton} />
+          ))}
+        </div>
       </main>
     );
   }
 
-  return (
-    <main style={styles.container}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes pulseDot {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.55; transform: scale(1.5); }
-        }
-      `}</style>
-
-      {/* Header */}
-      <div style={styles.header}>
-        <h1 style={styles.headerTitle}>{store?.name || 'Dashboard'}</h1>
-        <button onClick={() => loadDashboardData()} style={styles.iconBtn} title="Refresh">
-          <MdRefresh size={24} color="#0504AA" />
-        </button>
-      </div>
-
-      {/* Floating SEAI button */}
-      <button
-        onClick={() => router.push('/seai/ask?mode=agent')}
-        style={styles.fab}
-        title="Ask SEAI"
-      >
-        <MdAutoAwesome size={24} color="#fff" />
-      </button>
-
-      <div style={styles.scrollArea}>
-        {/* Store preview */}
-        <h2 style={styles.sectionTitle}>Store Preview</h2>
-        <div onClick={openStoreImageModal} style={styles.storePreview}>
-          {storeImageUrl ? (
-            <img src={storeImageUrl} alt="Store" style={styles.storeImage} />
-          ) : (
-            <div style={styles.storeImagePlaceholder}>
-              <MdAddPhotoAlternate size={40} color="#999" />
-              <p>No store image yet</p>
-            </div>
-          )}
+  // ── Error ─────────────────────────────────────────────────────
+  if (errored) {
+    return (
+      <main style={css.errorRoot}>
+        <style>{CSS}</style>
+        <div style={css.errorHalo}>
+          <MdErrorOutline size={40} color="#B91C1C" />
         </div>
-        <p style={styles.hintText}>Tap to upload or change store image</p>
+        <h2 style={css.errorHeading}>Couldn&apos;t load your dashboard</h2>
+        <p style={css.errorBody}>
+          Check your connection and try again. If this keeps happening, sign
+          out and back in.
+        </p>
+        <button
+          onClick={() => void loadDashboardData()}
+          style={css.errorRetry}
+        >
+          <MdRefresh size={18} color="#fff" />
+          <span>Retry</span>
+        </button>
+      </main>
+    );
+  }
 
-        {/* Profile header */}
-        <div style={styles.profileHeader}>
-          <div onClick={openAvatarModal} style={styles.avatarWrapper}>
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="Avatar" style={styles.avatar} />
-            ) : (
-              <div style={styles.avatarPlaceholder}>
-                <MdPerson size={28} color="#0504AA" />
-              </div>
-            )}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={styles.profileName}>{userName}</div>
-            <div style={styles.profileRole}>Storekeeper</div>
-          </div>
+  // ── No store yet ──────────────────────────────────────────────
+  if (!store) {
+    return (
+      <main style={css.errorRoot}>
+        <style>{CSS}</style>
+        <div style={css.setupHalo}>
+          <MdStorefront size={40} color="#0504AA" />
+        </div>
+        <h2 style={css.errorHeading}>Set up your store</h2>
+        <p style={css.errorBody}>
+          You don&apos;t have a store yet. Create one to start selling on
+          Admerce — it takes about two minutes.
+        </p>
+        <button
+          onClick={() => router.push('/storekeeper/onboarding')}
+          style={css.errorRetry}
+        >
+          <span>Create my store</span>
+          <MdChevronRight size={18} color="#fff" />
+        </button>
+      </main>
+    );
+  }
+
+  // ── Main dashboard ────────────────────────────────────────────
+  return (
+    <main style={css.root} className="sk-dash">
+      <style>{CSS}</style>
+
+      {/* HERO */}
+      <div style={css.hero}>
+        <div style={css.heroGlow} aria-hidden />
+
+        <div style={css.topBar}>
+          <span style={css.topTitle}>Dashboard</span>
           <button
-            onClick={() => router.push('/storekeeper/profile')}
-            style={styles.editBtn}
-            title="Edit profile"
+            onClick={() => void loadDashboardData()}
+            style={css.ghostBtn}
+            aria-label="Refresh"
           >
-            <MdEdit size={22} color="#0504AA" />
+            <MdRefresh size={20} color="#fff" />
           </button>
         </div>
 
-        {/* Verification status row */}
-        <button
-          type="button"
-          onClick={() => router.push('/storekeeper/verification')}
-          style={styles.verificationRow}
-        >
-          <span
-            style={{
-              ...styles.verificationIcon,
-              backgroundColor: verificationMeta.soft,
-            }}
+        <div style={css.identityRow}>
+          <button
+            type="button"
+            onClick={openStoreImageModal}
+            style={css.storeThumb}
+            aria-label="Change store image"
           >
-            {verificationStatus === 'verified' && (
-              <MdVerified size={22} color={verificationMeta.color} />
+            {storeImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={storeImageUrl} alt="" style={css.storeThumbImg} />
+            ) : (
+              <div style={css.storeThumbPlaceholder}>
+                <MdStorefront size={30} color="rgba(255,255,255,0.85)" />
+              </div>
             )}
-            {verificationStatus === 'pending' && (
-              <MdHourglassEmpty size={22} color={verificationMeta.color} />
-            )}
-            {(verificationStatus === 'rejected' ||
-              verificationStatus === 'suspended') && (
-              <MdErrorOutline size={22} color={verificationMeta.color} />
-            )}
-            {verificationStatus === 'unverified' && (
-              <MdInfoOutline size={22} color={verificationMeta.color} />
-            )}
-          </span>
-          <span style={styles.verificationText}>
+            <span style={css.cameraBadge} aria-hidden>
+              <MdCameraAlt size={11} color="#0504AA" />
+            </span>
+          </button>
+
+          <div style={css.identityMeta}>
+            <div style={css.nameRow}>
+              <span style={css.storeName}>{store.name || 'Your Store'}</span>
+              {verificationStatus === 'verified' && (
+                <MdVerified
+                  size={18}
+                  color="#7DD3FC"
+                  aria-label="Verified"
+                />
+              )}
+            </div>
+            <div style={css.metaLine}>
+              {userName}
+              {memberSince && (
+                <>
+                  <span style={css.metaDot}>·</span>
+                  <span>Since {memberSince}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SHEET */}
+      <div style={css.sheet}>
+        {/* REVENUE SPOTLIGHT */}
+        <div style={css.revenueCard}>
+          <div style={css.revenueTop}>
+            <div style={css.revenueLabelRow}>
+              <MdAccountBalanceWallet
+                size={14}
+                color="rgba(255,255,255,0.72)"
+              />
+              <span style={css.revenueLabel}>Total revenue</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/storekeeper/wallet')}
+              style={css.revenueLink}
+            >
+              <span>Wallet</span>
+              <MdChevronRight size={16} color="rgba(255,255,255,0.85)" />
+            </button>
+          </div>
+          <div style={css.revenueAmount}>{formatNaira(revenue)}</div>
+          <div style={css.revenueSub}>
+            {sold > 0
+              ? `Across ${sold} completed sale${sold === 1 ? '' : 's'}`
+              : 'Complete your first sale to see it grow'}
+          </div>
+        </div>
+
+        {/* PULSE ROW */}
+        <div style={css.pulseRow}>
+          <PulseTile
+            icon={<MdVisibility size={18} color="#0504AA" />}
+            tint="#EEF0FF"
+            label="Views"
+            value={formatNumber(views)}
+          />
+          <PulseTile
+            icon={<MdChat size={18} color="#0891B2" />}
+            tint="#E0F2FE"
+            label="Inquiries"
+            value={formatNumber(inquiries)}
+          />
+          <PulseTile
+            icon={<MdShoppingBag size={18} color="#16A34A" />}
+            tint="#DCFCE7"
+            label="Sold"
+            value={formatNumber(sold)}
+          />
+        </div>
+
+        {/* STORE SETUP */}
+        <h3 style={css.sectionLabel}>Store setup</h3>
+        <div style={css.setupCard}>
+          <button
+            type="button"
+            onClick={() => router.push('/storekeeper/verification')}
+            style={css.setupRow}
+            className="sk-setup-row"
+          >
             <span
               style={{
-                ...styles.verificationTitle,
-                color: verificationMeta.color,
+                ...css.setupIcon,
+                backgroundColor: verificationMeta.soft,
               }}
             >
-              {verificationMeta.label}
+              {verificationStatus === 'verified' && (
+                <MdVerified size={18} color={verificationMeta.color} />
+              )}
+              {verificationStatus === 'pending' && (
+                <MdHourglassEmpty size={18} color={verificationMeta.color} />
+              )}
+              {(verificationStatus === 'rejected' ||
+                verificationStatus === 'suspended') && (
+                <MdErrorOutline size={18} color={verificationMeta.color} />
+              )}
+              {verificationStatus === 'unverified' && (
+                <MdInfoOutline size={18} color={verificationMeta.color} />
+              )}
             </span>
-            <span style={styles.verificationHint}>{verificationMeta.hint}</span>
-          </span>
-          <MdChevronRight size={22} color="#94A3B8" />
-        </button>
+            <span style={css.setupText}>
+              <span
+                style={{
+                  ...css.setupTitle,
+                  color: verificationMeta.color,
+                }}
+              >
+                {verificationMeta.label}
+              </span>
+              <span style={css.setupHint}>{verificationMeta.hint}</span>
+            </span>
+            <MdChevronRight size={18} color="#CBD5E1" />
+          </button>
 
-        {/* Community row — enticing entry point */}
+          <button
+            type="button"
+            onClick={openStoreImageModal}
+            style={css.setupRow}
+            className="sk-setup-row"
+          >
+            <span
+              style={{
+                ...css.setupIcon,
+                backgroundColor: storeImageUrl ? '#DCFCE7' : '#FEF3C7',
+              }}
+            >
+              {storeImageUrl ? (
+                <MdImage size={18} color="#16A34A" />
+              ) : (
+                <MdAddPhotoAlternate size={18} color="#D97706" />
+              )}
+            </span>
+            <span style={css.setupText}>
+              <span style={css.setupTitle}>
+                {storeImageUrl ? 'Store image set' : 'Add a store image'}
+              </span>
+              <span style={css.setupHint}>
+                {storeImageUrl
+                  ? 'Tap to change your store cover'
+                  : 'Buyers trust stores with photos'}
+              </span>
+            </span>
+            <MdChevronRight size={18} color="#CBD5E1" />
+          </button>
+        </div>
+
+        {/* QUICK ACTIONS */}
+        <h3 style={css.sectionLabel}>Quick actions</h3>
+        <div style={css.actionGrid}>
+          <button
+            type="button"
+            onClick={() => router.push('/storekeeper/add-item')}
+            style={{ ...css.actionTile, ...css.actionTilePrimary }}
+            className="sk-action-tile"
+          >
+            <span style={css.actionIconWrapPrimary}>
+              <MdAdd size={22} color="#0504AA" />
+            </span>
+            <span style={css.actionTextPrimary}>
+              <span style={css.actionTitlePrimary}>Add item</span>
+              <span style={css.actionHintPrimary}>List a new product</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                `/storekeeper/arrange-store?store_id=${store?.store_id || ''}`,
+              )
+            }
+            style={css.actionTile}
+            className="sk-action-tile"
+          >
+            <span
+              style={{
+                ...css.actionIconWrap,
+                backgroundColor: '#EEF0FF',
+              }}
+            >
+              <MdGridView size={22} color="#0504AA" />
+            </span>
+            <span style={css.actionText}>
+              <span style={css.actionTitle}>Arrange</span>
+              <span style={css.actionHint}>Reorder listings</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => router.push('/seai/ask?mode=agent')}
+            style={css.actionTile}
+            className="sk-action-tile"
+          >
+            <span
+              style={{
+                ...css.actionIconWrap,
+                backgroundColor: '#F3E8FF',
+              }}
+            >
+              <MdAutoAwesome size={22} color="#7E22CE" />
+            </span>
+            <span style={css.actionText}>
+              <span style={css.actionTitle}>Ask SEAI</span>
+              <span style={css.actionHint}>Your AI assistant</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openAvatarModal}
+            style={css.actionTile}
+            className="sk-action-tile"
+          >
+            <span
+              style={{
+                ...css.actionIconWrap,
+                backgroundColor: '#E0F2FE',
+              }}
+            >
+              <MdCameraAlt size={22} color="#0891B2" />
+            </span>
+            <span style={css.actionText}>
+              <span style={css.actionTitle}>Avatar</span>
+              <span style={css.actionHint}>Update your photo</span>
+            </span>
+          </button>
+        </div>
+
+        {/* COMMUNITY */}
+        <h3 style={css.sectionLabel}>Sellers only</h3>
         <button
           type="button"
           onClick={() => router.push('/storekeeper/community')}
-          style={styles.communityRow}
+          style={css.communityCard}
+          className="sk-community-card"
         >
-          <span style={styles.communityIcon}>
+          <span style={css.communityIcon}>
             <MdGroups size={22} color="#0504AA" />
-            <span style={styles.communityLiveDot} />
+            <span style={css.communityDot} />
           </span>
-          <span style={styles.communityText}>
-            <span style={styles.communityTitle}>Community</span>
-            <span style={styles.communityHint}>
+          <span style={css.communityText}>
+            <span style={css.communityTitle}>Sellers community</span>
+            <span style={css.communityHint}>
               {communityStats && communityStats.active_senders_7d > 0
-                ? `${communityStats.active_senders_7d} seller${communityStats.active_senders_7d === 1 ? '' : 's'} active this week`
+                ? `${communityStats.active_senders_7d} seller${
+                    communityStats.active_senders_7d === 1 ? '' : 's'
+                  } active this week`
                 : 'Chat with other sellers'}
             </span>
           </span>
-          <MdChevronRight size={22} color="#94A3B8" />
+          <MdChevronRight size={20} color="#CBD5E1" />
         </button>
 
-        {/* Metrics */}
-        <div style={styles.metricsRow}>
-          <MetricCard icon={<MdVisibility size={20} color="#0504AA" />} label="Views" value={String(stats.views ?? 0)} />
-          <MetricCard icon={<MdChat size={20} color="#0504AA" />} label="Inquiries" value={String(stats.inquiries ?? 0)} />
-        </div>
-        <div style={styles.metricsRow}>
-          <MetricCard icon={<MdShoppingBag size={20} color="#0504AA" />} label="Sold" value={String(stats.sold ?? 0)} />
-          <MetricCard icon={<MdAttachMoney size={20} color="#0504AA" />} label="Revenue" value={`₦${(stats.revenue ?? 0).toFixed(0)}`} />
-        </div>
-
-        {/* Action buttons */}
-        <div style={styles.actionRow}>
-          <button
-            onClick={() => router.push('/storekeeper/add-item')}
-            style={{ ...styles.actionButton, backgroundColor: '#0504AA' }}
-          >
-            <MdAdd size={20} color="#fff" />
-            Add Item
-          </button>
-          <button
-            onClick={() => router.push(`/storekeeper/arrange-store?store_id=${store?.store_id || ''}`)}
-            style={{ ...styles.actionButton, backgroundColor: 'transparent', border: '1px solid #0504AA', color: '#0504AA' }}
-          >
-            <MdGridView size={20} color="#0504AA" />
-            Arrange Store
-          </button>
-        </div>
+        <div style={{ height: 32 }} />
       </div>
 
-      {/* Store image upload modal */}
+      {/* STORE IMAGE MODAL */}
       {showStoreImageModal && (
         <Modal onClose={closeStoreImageModal}>
-          <h3 style={styles.modalTitle}>Update Store Image</h3>
-          <div style={styles.modalImagePreview} onClick={() => storeImageInputRef.current?.click()}>
+          <h3 style={css.modalTitle}>Update store image</h3>
+          <p style={css.modalSub}>
+            This is the cover buyers see on your store page.
+          </p>
+          <div
+            style={css.modalImagePreview}
+            onClick={() => storeImageInputRef.current?.click()}
+          >
             {storeImageUrl ? (
-              <img src={storeImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={storeImageUrl}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#888' }}>
-                <MdAddPhotoAlternate size={48} />
-                <span>Tap to pick image</span>
+              <div style={css.modalImagePlaceholder}>
+                <MdAddPhotoAlternate size={40} color="#94A3B8" />
+                <span style={css.modalImagePlaceholderText}>
+                  Tap to pick image
+                </span>
               </div>
             )}
           </div>
@@ -428,43 +748,61 @@ export default function StorekeeperDashboardPage() {
             style={{ display: 'none' }}
             onChange={handleStoreImageChange}
           />
-          <div style={styles.modalActions}>
+          <div style={css.modalActions}>
             <button
+              type="button"
               onClick={() => storeImageInputRef.current?.click()}
-              style={styles.secondaryBtn}
+              style={css.secondaryBtn}
             >
               <MdPhotoLibrary size={18} color="#0504AA" />
-              Gallery
+              <span>Choose from gallery</span>
             </button>
             <button
+              type="button"
               onClick={() => storeImageInputRef.current?.click()}
-              style={styles.secondaryBtn}
+              style={css.secondaryBtn}
             >
               <MdCameraAlt size={18} color="#0504AA" />
-              Camera
+              <span>Take a photo</span>
             </button>
           </div>
           <button
             onClick={uploadStoreImage}
             disabled={!storeImageFile || uploadingStoreImage}
-            style={styles.primaryBtn}
+            style={{
+              ...css.primaryBtn,
+              opacity: !storeImageFile || uploadingStoreImage ? 0.5 : 1,
+              cursor:
+                !storeImageFile || uploadingStoreImage
+                  ? 'not-allowed'
+                  : 'pointer',
+            }}
           >
-            {uploadingStoreImage ? 'Uploading...' : 'Save Image'}
+            {uploadingStoreImage ? 'Uploading…' : 'Save image'}
           </button>
         </Modal>
       )}
 
-      {/* Avatar upload modal */}
+      {/* AVATAR MODAL */}
       {showAvatarModal && (
         <Modal onClose={closeAvatarModal}>
-          <h3 style={styles.modalTitle}>Update Avatar</h3>
-          <div style={styles.modalAvatarPreview} onClick={() => avatarInputRef.current?.click()}>
+          <h3 style={css.modalTitle}>Update avatar</h3>
+          <p style={css.modalSub}>
+            A clear photo of yourself helps buyers trust your store.
+          </p>
+          <div
+            style={css.modalAvatarPreview}
+            onClick={() => avatarInputRef.current?.click()}
+          >
             {avatarUrl ? (
-              <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#888' }}>
-                <MdCameraAlt size={40} />
-              </div>
+              <MdCameraAlt size={40} color="#94A3B8" />
             )}
           </div>
           <input
@@ -474,28 +812,37 @@ export default function StorekeeperDashboardPage() {
             style={{ display: 'none' }}
             onChange={handleAvatarChange}
           />
-          <div style={styles.modalActions}>
+          <div style={css.modalActions}>
             <button
+              type="button"
               onClick={() => avatarInputRef.current?.click()}
-              style={styles.secondaryBtn}
+              style={css.secondaryBtn}
             >
               <MdPhotoLibrary size={18} color="#0504AA" />
-              Gallery
+              <span>Choose from gallery</span>
             </button>
             <button
+              type="button"
               onClick={() => avatarInputRef.current?.click()}
-              style={styles.secondaryBtn}
+              style={css.secondaryBtn}
             >
               <MdCameraAlt size={18} color="#0504AA" />
-              Camera
+              <span>Take a photo</span>
             </button>
           </div>
           <button
             onClick={uploadAvatar}
             disabled={!avatarFile || uploadingAvatar}
-            style={styles.primaryBtn}
+            style={{
+              ...css.primaryBtn,
+              opacity: !avatarFile || uploadingAvatar ? 0.5 : 1,
+              cursor:
+                !avatarFile || uploadingAvatar
+                  ? 'not-allowed'
+                  : 'pointer',
+            }}
           >
-            {uploadingAvatar ? 'Uploading...' : 'Save Avatar'}
+            {uploadingAvatar ? 'Uploading…' : 'Save avatar'}
           </button>
         </Modal>
       )}
@@ -503,26 +850,43 @@ export default function StorekeeperDashboardPage() {
   );
 }
 
-// ─── Metric Card ──────────────────────────────────────────────────
-function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+// ─── Sub-components ─────────────────────────────────────────────────
+function PulseTile({
+  icon,
+  tint,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  tint: string;
+  label: string;
+  value: string;
+}) {
   return (
-    <div style={styles.metricCard}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        {icon}
-        <span style={styles.metricValue}>{value}</span>
-      </div>
-      <div style={styles.metricLabel}>{label}</div>
+    <div style={css.pulseTile} className="sk-pulse-tile">
+      <div style={{ ...css.pulseIcon, backgroundColor: tint }}>{icon}</div>
+      <div style={css.pulseValue}>{value}</div>
+      <div style={css.pulseLabel}>{label}</div>
     </div>
   );
 }
 
-// ─── Modal Component ─────────────────────────────────────────────
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function Modal({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
   return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-        <button style={styles.modalClose} onClick={onClose}>
-          <MdClose size={20} color="#666" />
+    <div style={css.modalOverlay} onClick={onClose}>
+      <div style={css.modalCard} onClick={(e) => e.stopPropagation()}>
+        <button
+          style={css.modalClose}
+          onClick={onClose}
+          aria-label="Close"
+        >
+          <MdClose size={20} color="#64748B" />
         </button>
         {children}
       </div>
@@ -530,228 +894,462 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose: () =
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
-const styles: Record<string, React.CSSProperties> = {
-  container: {
+// ─── Keyframes + interaction CSS ────────────────────────────────────
+const CSS = `
+  @keyframes skSpin { to { transform: rotate(360deg); } }
+  @keyframes skShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  @keyframes skPulseDot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(1.45); }
+  }
+  @keyframes skSheetUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .sk-dash, .sk-dash *, .sk-dash *::before, .sk-dash *::after {
+    box-sizing: border-box;
+  }
+
+  .sk-setup-row + .sk-setup-row {
+    border-top: 1px solid #F1F5F9;
+  }
+  .sk-setup-row:hover { background-color: #FAFBFF; }
+
+  .sk-action-tile {
+    transition: transform 0.12s ease, box-shadow 0.15s ease;
+  }
+  .sk-action-tile:hover {
+    box-shadow: 0 10px 24px rgba(5,4,170,0.10);
+  }
+  .sk-action-tile:active {
+    transform: scale(0.98);
+  }
+
+  .sk-community-card:active {
+    transform: scale(0.99);
+  }
+
+  .sk-pulse-tile {
+    transition: transform 0.12s ease;
+  }
+  .sk-pulse-tile:active {
+    transform: scale(0.97);
+  }
+`;
+
+// ─── Styles ─────────────────────────────────────────────────────────
+const css: Record<string, React.CSSProperties> = {
+  root: {
     display: 'flex',
     flexDirection: 'column',
-    height: '100%',
+    minHeight: '100vh',
     backgroundColor: '#F7F5F0',
+    overflowX: 'hidden',
   },
-  center: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100%',
+
+  // HERO
+  hero: {
+    position: 'relative',
+    backgroundColor: '#0504AA',
+    backgroundImage:
+      'radial-gradient(ellipse at 80% 0%, #1A0FB8 0%, #0504AA 55%, #03037A 100%)',
+    padding: '0 20px 76px',
+    overflow: 'hidden',
   },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: '4px solid #eee',
-    borderTopColor: '#0504AA',
+  heroGlow: {
+    position: 'absolute',
+    top: -120,
+    right: -100,
+    width: 320,
+    height: 320,
     borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
+    background:
+      'radial-gradient(circle, rgba(61,59,255,0.45) 0%, rgba(61,59,255,0) 70%)',
+    pointerEvents: 'none',
   },
-  header: {
+  topBar: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '12px 16px',
-    backgroundColor: '#fff',
-    borderBottom: '1px solid #eee',
+    paddingTop: 14,
+    paddingBottom: 4,
   },
-  headerTitle: {
-    fontSize: 18,
+  topTitle: {
+    fontSize: 15,
     fontWeight: 600,
-    color: '#1A1A1A',
-    margin: 0,
-  },
-  iconBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 4,
-    display: 'flex',
-    alignItems: 'center',
-  },
-  fab: {
-    position: 'fixed',
-    bottom: 90,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: '50%',
-    backgroundColor: '#0504AA',
     color: '#fff',
-    border: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 4px 12px rgba(5, 4, 170, 0.4)',
-    cursor: 'pointer',
-    zIndex: 50,
+    letterSpacing: 0.3,
   },
-  scrollArea: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '16px',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 700,
-    marginBottom: 8,
-    color: '#1A1A1A',
-  },
-  storePreview: {
-    width: '100%',
-    height: 120,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
-    cursor: 'pointer',
-  },
-  storeImage: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  storeImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#999',
-  },
-  hintText: {
-    textAlign: 'center',
-    color: '#888',
-    fontSize: 12,
-    marginTop: 8,
-  },
-  profileHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    border: '1px solid #eee',
-    marginTop: 20,
-    marginBottom: 12,
-  },
-  avatarWrapper: {
-    width: 50,
-    height: 50,
-    borderRadius: '50%',
-    overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
-    cursor: 'pointer',
-    marginRight: 16,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileName: {
-    fontSize: 16,
-    fontWeight: 700,
-    color: '#1A1A1A',
-  },
-  profileRole: {
-    fontSize: 13,
-    color: '#888',
-  },
-  editBtn: {
-    background: 'none',
+  ghostBtn: {
+    background: 'rgba(255,255,255,0.10)',
     border: 'none',
     cursor: 'pointer',
-    padding: 4,
+    padding: 8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    minWidth: 38,
+    minHeight: 38,
   },
 
-  // ── Verification row
-  verificationRow: {
+  identityRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    paddingTop: 22,
+  },
+  storeThumb: {
+    position: 'relative',
+    width: 68,
+    height: 68,
+    borderRadius: 20,
+    overflow: 'hidden',
+    border: '3px solid rgba(255,255,255,0.18)',
+    background: 'rgba(255,255,255,0.08)',
+    cursor: 'pointer',
+    padding: 0,
+    flexShrink: 0,
+  },
+  storeThumbImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  },
+  storeThumbPlaceholder: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: '50%',
+    backgroundColor: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+    pointerEvents: 'none',
+  },
+
+  identityMeta: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+  },
+  nameRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  storeName: {
+    fontSize: 22,
+    fontWeight: 800,
+    color: '#fff',
+    letterSpacing: -0.4,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '100%',
+  },
+  metaLine: {
+    fontSize: 12.5,
+    color: 'rgba(255,255,255,0.72)',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaDot: { color: 'rgba(255,255,255,0.4)' },
+
+  // SHEET
+  sheet: {
+    flex: 1,
+    marginTop: -52,
+    padding: '0 20px 40px',
+    position: 'relative',
+    maxWidth: 720,
+    margin: '-52px auto 0',
+    width: '100%',
+  },
+
+  // REVENUE
+  revenueCard: {
+    backgroundColor: '#0504AA',
+    backgroundImage:
+      'linear-gradient(135deg, #0B0B1A 0%, #0504AA 100%)',
+    borderRadius: 22,
+    padding: '20px 22px 22px',
+    color: '#fff',
+    boxShadow: '0 20px 40px rgba(5,4,170,0.28)',
+  },
+  revenueTop: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  revenueLabelRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  },
+  revenueLabel: {
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.75)',
+  },
+  revenueLink: {
+    background: 'rgba(255,255,255,0.10)',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#fff',
+    fontFamily: 'inherit',
+    fontSize: 12,
+    fontWeight: 700,
+    padding: '6px 10px 6px 12px',
+    borderRadius: 999,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 2,
+  },
+  revenueAmount: {
+    fontSize: 40,
+    fontWeight: 800,
+    letterSpacing: -1,
+    fontVariantNumeric: 'tabular-nums',
+    marginTop: 12,
+    lineHeight: 1.05,
+  },
+  revenueSub: {
+    fontSize: 12.5,
+    color: 'rgba(255,255,255,0.72)',
+    fontWeight: 500,
+    marginTop: 6,
+  },
+
+  // PULSE
+  pulseRow: {
+    display: 'flex',
+    gap: 10,
+    marginTop: 16,
+  },
+  pulseTile: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    border: '1px solid #EAECF3',
+    padding: '14px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  pulseIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pulseValue: {
+    fontSize: 20,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    letterSpacing: -0.4,
+    fontVariantNumeric: 'tabular-nums',
+    marginTop: 2,
+  },
+  pulseLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: '#64748B',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+
+  // SECTIONS
+  sectionLabel: {
+    fontSize: 11.5,
+    fontWeight: 800,
+    color: '#64748B',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    margin: '26px 0 10px 4px',
+  },
+
+  // STORE SETUP
+  setupCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    border: '1px solid #EAECF3',
+    overflow: 'hidden',
+  },
+  setupRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     width: '100%',
     padding: '14px 16px',
-    backgroundColor: '#fff',
-    border: '1px solid #eee',
-    borderRadius: 16,
-    marginBottom: 12,
-    cursor: 'pointer',
-    textAlign: 'left',
+    border: 'none',
+    backgroundColor: 'transparent',
     fontFamily: 'inherit',
+    textAlign: 'left',
+    cursor: 'pointer',
+    transition: 'background-color 0.15s',
   },
-  verificationIcon: {
-    width: 42,
-    height: 42,
-    flex: '0 0 42px',
+  setupIcon: {
+    width: 36,
+    height: 36,
     borderRadius: 12,
-    display: 'inline-flex',
+    display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  verificationText: {
+  setupText: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
     gap: 2,
   },
-  verificationTitle: {
-    fontSize: 15,
-    fontWeight: 800,
-    letterSpacing: '-0.01em',
+  setupTitle: {
+    fontSize: 14.5,
+    fontWeight: 700,
+    color: '#0B0B1A',
+    letterSpacing: -0.1,
   },
-  verificationHint: {
-    fontSize: 12.5,
-    color: '#64748B',
+  setupHint: {
+    fontSize: 12,
+    color: '#94A3B8',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
 
-  // ── Community row (enticing)
-  communityRow: {
+  // QUICK ACTIONS
+  actionGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 12,
+  },
+  actionTile: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    gap: 12,
+    padding: '16px 16px 18px',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #EAECF3',
+    borderRadius: 20,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    minHeight: 128,
+    boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+  },
+  actionTilePrimary: {
+    backgroundColor: '#0504AA',
+    backgroundImage:
+      'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    border: 'none',
+    boxShadow: '0 12px 28px rgba(5,4,170,0.28)',
+  },
+  actionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionIconWrapPrimary: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    backgroundColor: '#FFFFFF',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionText: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    marginTop: 'auto',
+  },
+  actionTextPrimary: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    marginTop: 'auto',
+  },
+  actionTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    letterSpacing: -0.2,
+  },
+  actionTitlePrimary: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  actionHint: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    fontWeight: 500,
+  },
+  actionHintPrimary: {
+    fontSize: 11.5,
+    color: 'rgba(255,255,255,0.78)',
+    fontWeight: 500,
+  },
+
+  // COMMUNITY
+  communityCard: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     width: '100%',
-    padding: '14px 16px',
-    background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
+    padding: '16px 16px',
+    background:
+      'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
     border: '1px solid #DDE3F5',
-    borderRadius: 16,
-    marginBottom: 24,
+    borderRadius: 20,
     cursor: 'pointer',
-    textAlign: 'left',
     fontFamily: 'inherit',
-    boxShadow: '0 6px 18px rgba(5, 4, 170, 0.06)',
+    textAlign: 'left',
+    boxShadow: '0 8px 22px rgba(5,4,170,0.06)',
   },
   communityIcon: {
     position: 'relative',
-    width: 42,
-    height: 42,
-    flex: '0 0 42px',
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    flexShrink: 0,
+    borderRadius: 13,
     background: 'linear-gradient(135deg, #EEF0FF, #E0E7FF)',
-    display: 'inline-flex',
+    display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  communityLiveDot: {
+  communityDot: {
     position: 'absolute',
     top: 6,
     right: 6,
@@ -760,7 +1358,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     backgroundColor: '#22C55E',
     border: '2px solid #FFFFFF',
-    animation: 'pulseDot 2s ease-in-out infinite',
+    animation: 'skPulseDot 2s ease-in-out infinite',
   },
   communityText: {
     flex: 1,
@@ -772,7 +1370,7 @@ const styles: Record<string, React.CSSProperties> = {
   communityTitle: {
     fontSize: 15,
     fontWeight: 800,
-    letterSpacing: '-0.01em',
+    letterSpacing: -0.1,
     color: '#0504AA',
   },
   communityHint: {
@@ -783,129 +1381,229 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
   },
 
-  metricsRow: {
-    display: 'flex',
-    gap: 12,
-    marginBottom: 12,
-  },
-  metricCard: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-  },
-  metricValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#0504AA',
-  },
-  metricLabel: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
-  },
-  actionRow: {
-    display: 'flex',
-    gap: 12,
-    marginTop: 24,
-  },
-  actionButton: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: '14px',
-    borderRadius: 12,
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
+  // MODALS
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(15,23,42,0.48)',
+    backdropFilter: 'blur(6px)',
+    WebkitBackdropFilter: 'blur(6px)',
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
-    zIndex: 100,
+    zIndex: 200,
   },
   modalCard: {
-    backgroundColor: '#fff',
-    padding: 24,
-    borderRadius: 16,
-    width: '90%',
-    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    padding: '24px 22px calc(28px + env(safe-area-inset-bottom))',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    width: '100%',
+    maxWidth: 520,
     position: 'relative',
+    boxShadow: '0 -8px 40px rgba(5,4,170,0.2)',
+    animation: 'skSheetUp 0.28s cubic-bezier(0.22,1,0.36,1)',
   },
   modalClose: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    background: 'none',
+    top: 14,
+    right: 14,
+    background: '#F1F5F9',
     border: 'none',
     cursor: 'pointer',
+    padding: 6,
+    borderRadius: 10,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 32,
+    height: 32,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 700,
-    marginBottom: 16,
-    color: '#1A1A1A',
+    fontWeight: 800,
+    margin: '0 0 4px',
+    color: '#0B0B1A',
+    letterSpacing: -0.3,
+  },
+  modalSub: {
+    fontSize: 13,
+    color: '#64748B',
+    margin: '0 0 20px',
+    lineHeight: 1.5,
   },
   modalImagePreview: {
     width: 200,
     height: 200,
-    borderRadius: 12,
-    backgroundColor: '#f0f0f0',
-    margin: '0 auto',
+    borderRadius: 16,
+    backgroundColor: '#F4F5FB',
+    margin: '0 auto 20px',
     cursor: 'pointer',
     overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    border: '2px solid #EAECF3',
+  },
+  modalImagePlaceholder: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 8,
+    color: '#94A3B8',
+  },
+  modalImagePlaceholderText: {
+    fontSize: 12.5,
+    fontWeight: 600,
   },
   modalAvatarPreview: {
-    width: 120,
-    height: 120,
+    width: 140,
+    height: 140,
     borderRadius: '50%',
-    backgroundColor: '#f0f0f0',
-    margin: '0 auto',
+    backgroundColor: '#F4F5FB',
+    margin: '0 auto 20px',
     cursor: 'pointer',
     overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    border: '3px solid #EEF0FF',
   },
   modalActions: {
     display: 'flex',
-    gap: 12,
-    marginTop: 16,
-    marginBottom: 16,
+    flexDirection: 'column',
+    gap: 8,
+    marginBottom: 12,
   },
   secondaryBtn: {
-    flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    padding: '10px',
-    borderRadius: 8,
-    border: '1px solid #0504AA',
-    background: 'none',
+    gap: 10,
+    padding: '13px 16px',
+    borderRadius: 14,
+    border: '1.5px solid #E6E8F0',
+    background: '#FFFFFF',
     color: '#0504AA',
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontSize: 14,
   },
   primaryBtn: {
     width: '100%',
-    padding: '14px',
+    padding: 16,
+    backgroundColor: '#0504AA',
+    backgroundImage:
+      'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 14,
+    fontSize: 15,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 10px 24px rgba(5,4,170,0.24)',
+  },
+
+  // SKELETONS
+  thumbSkeleton: {
+    width: 68,
+    height: 68,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    flexShrink: 0,
+  },
+  skelLine: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    width: 180,
+  },
+  revenueSkeleton: {
+    height: 140,
+    borderRadius: 22,
+    backgroundColor: '#EAECF3',
+    animation: 'skShimmer 1.4s ease-in-out infinite',
+  },
+  pulseSkeleton: {
+    height: 104,
+    borderRadius: 18,
+    backgroundColor: '#EAECF3',
+    marginTop: 16,
+    animation: 'skShimmer 1.4s ease-in-out infinite',
+  },
+  sectionSkeleton: {
+    height: 160,
+    borderRadius: 18,
+    backgroundColor: '#EAECF3',
+    marginTop: 20,
+    animation: 'skShimmer 1.4s ease-in-out infinite',
+  },
+
+  // ERROR / EMPTY STATES
+  errorRoot: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#F7F5F0',
+    padding: 24,
+    textAlign: 'center',
+  },
+  errorHalo: {
+    width: 84,
+    height: 84,
+    borderRadius: 24,
+    backgroundColor: '#FEF2F2',
+    border: '1px solid #FECACA',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  setupHalo: {
+    width: 84,
+    height: 84,
+    borderRadius: 24,
+    backgroundColor: '#EEF0FF',
+    border: '1px solid #C7D2FE',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  errorHeading: {
+    fontSize: 20,
+    fontWeight: 800,
+    color: '#0B0B1A',
+    margin: 0,
+    letterSpacing: -0.3,
+  },
+  errorBody: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 8,
+    maxWidth: 340,
+    lineHeight: 1.55,
+  },
+  errorRetry: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
+    padding: '13px 24px',
+    borderRadius: 14,
+    backgroundImage:
+      'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
     backgroundColor: '#0504AA',
     color: '#fff',
     border: 'none',
-    borderRadius: 12,
-    fontSize: 16,
-    fontWeight: 600,
     cursor: 'pointer',
+    fontSize: 14,
+    fontWeight: 800,
+    fontFamily: 'inherit',
+    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
   },
 };
