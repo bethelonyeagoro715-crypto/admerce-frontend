@@ -1279,7 +1279,9 @@ export default function ShopperHomePage() {
           />
         )}
 
-        {/* Tabs */}
+        {/* ── PILL TABS ────────────────────────────────────────
+            Only BUYTEMS / SHOPNSTORE / SERVOOKS use this pill
+            treatment. Other buttons elsewhere stay rectangular. */}
         <div style={styles.tabsWrap} role="tablist">
           <div style={styles.tabsInner} className="sh-tabs-inner">
             {TAB_LABELS.map((label, i) => {
@@ -1293,15 +1295,19 @@ export default function ShopperHomePage() {
                   style={{
                     ...styles.tabBtn,
                     background: active
-                      ? 'var(--brand-primary)'
-                      : 'transparent',
+                      ? 'var(--brand-gradient)'
+                      : 'var(--bg-tertiary)',
                     color: active
-                      ? '#FFFFFF'
+                      ? 'var(--brand-on-gradient)'
                       : 'var(--text-secondary)',
                     borderColor: active
-                      ? 'var(--brand-primary)'
+                      ? 'transparent'
                       : 'var(--border-default)',
+                    boxShadow: active
+                      ? '0 6px 18px rgba(232,232,236,0.20), inset 0 1px 0 rgba(255,255,255,0.6)'
+                      : 'none',
                   }}
+                  className="sh-tab-pill"
                 >
                   {label}
                 </button>
@@ -1589,7 +1595,7 @@ export default function ShopperHomePage() {
                       ? 'var(--brand-primary)'
                       : 'var(--border-default)',
                     color: !selectedCategory
-                      ? '#FFFFFF'
+                      ? 'var(--brand-on-primary)'
                       : 'var(--text-secondary)',
                   }}
                 >
@@ -1614,7 +1620,7 @@ export default function ShopperHomePage() {
                           ? 'var(--brand-primary)'
                           : 'var(--border-default)',
                         color: active
-                          ? '#FFFFFF'
+                          ? 'var(--brand-on-primary)'
                           : 'var(--text-secondary)',
                       }}
                     >
@@ -1648,7 +1654,7 @@ export default function ShopperHomePage() {
                           ? 'var(--brand-primary)'
                           : 'var(--border-default)',
                         color: active
-                          ? '#FFFFFF'
+                          ? 'var(--brand-on-primary)'
                           : 'var(--text-secondary)',
                       }}
                     >
@@ -1724,7 +1730,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   brandName: {
     fontWeight: 800,
-    color: 'var(--brand-primary)',   // ← CHANGED from --brand-on-soft
+    color: 'var(--brand-primary)',
     fontSize: 18,
     letterSpacing: '-0.3px',
     lineHeight: 1,
@@ -1758,19 +1764,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tabsInner: {
     display: 'flex',
-    gap: 6,
+    gap: 8,                          // ← CHANGED from 6 — more air between pills
     width: '100%',
   },
   tabBtn: {
     flex: 1,
-    padding: '9px 10px',
-    borderRadius: 12,
+    padding: '11px 10px',            // ← CHANGED from 9px — slightly taller pill
+    borderRadius: 999,               // ← CHANGED from 12 — full pill
     border: '1px solid',
-    fontWeight: 700,
+    fontWeight: 800,                 // ← CHANGED from 700 — bolder pill text
     fontSize: 12,
     letterSpacing: 0.6,
     cursor: 'pointer',
-    transition: 'all 0.22s',
+    transition: 'all 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
     fontFamily: 'inherit',
   },
   activeFilters: {
@@ -1794,7 +1800,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '4px 8px 4px 12px',
     borderRadius: 999,
     background: 'var(--brand-soft)',
-    color: 'var(--brand-primary)',    // ← CHANGED from --brand-on-soft
+    color: 'var(--brand-primary)',
     fontSize: 12,
     fontWeight: 700,
   },
@@ -1842,7 +1848,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
 
-  // ── Reel card (overlay-based, theme-independent) ─────────────
+  // ── Reel card ────────────────────────────────────────────────
   reelCard: {
     position: 'relative',
     width: '100%',
@@ -2005,9 +2011,9 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 12,
     border: 'none',
     background: 'var(--brand-primary)',
-    color: '#fff',
+    color: 'var(--brand-on-primary)',
     fontSize: 13.5,
-    fontWeight: 700,
+    fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
@@ -2155,8 +2161,9 @@ const styles: Record<string, React.CSSProperties> = {
   applyBtn: {
     flex: 2,
     padding: '14px',
+    backgroundImage: 'var(--brand-gradient)',
     backgroundColor: 'var(--brand-primary)',
-    color: '#FFFFFF',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 14,
     fontWeight: 800,
@@ -2208,6 +2215,19 @@ const CSS = `
     transform: scale(0.985);
   }
 
+  /* Pill tab hover — subtle lift, silver shine peek */
+  .sh-tab-pill:hover:not([aria-selected="true"]) {
+    background-color: var(--bg-hover) !important;
+    border-color: var(--border-strong) !important;
+  }
+  .sh-tab-pill {
+    transition: transform 0.12s ease, box-shadow 0.22s ease,
+      background 0.22s ease !important;
+  }
+  .sh-tab-pill:active {
+    transform: scale(0.97);
+  }
+
   .sh-panel-inner {
     padding: 0 16px 16px;
   }
@@ -2238,6 +2258,8 @@ const CSS = `
     }
     .sh-tabs-inner {
       padding: 14px 24px 12px;
+      max-width: 720px;
+      margin: 0 auto;
     }
   }
 
