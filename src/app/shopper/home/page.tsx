@@ -28,18 +28,15 @@ const SPOTLIGHT_INTERVAL_MS = 4200;
 
 const CONTENT_MAX_WIDTH = 1440;
 
-// Pinterest-style variable ratios, weighted toward portrait.
-// `weight` = h/w (inverse of aspect ratio) — used by shortest-column-first.
 const CARD_RATIOS: { w: number; h: number; weight: number }[] = [
-  { w: 4, h: 5, weight: 5 / 4 }, // 30% — classic tall portrait
-  { w: 5, h: 6, weight: 6 / 5 }, // 25% — slightly shorter
-  { w: 3, h: 4, weight: 4 / 3 }, // 20% — taller
-  { w: 1, h: 1, weight: 1 }, // 15% — square
-  { w: 9, h: 16, weight: 16 / 9 }, // 10% — reel-tall
+  { w: 4, h: 5, weight: 5 / 4 },
+  { w: 5, h: 6, weight: 6 / 5 },
+  { w: 3, h: 4, weight: 4 / 3 },
+  { w: 1, h: 1, weight: 1 },
+  { w: 9, h: 16, weight: 16 / 9 },
 ];
 
 function ratioForSeed(seed: string) {
-  // FNV-1a — deterministic per item so the same card shape renders every time.
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
     h ^= seed.charCodeAt(i);
@@ -113,12 +110,9 @@ function interleave<T>(a: T[], b: T[]): T[] {
 }
 
 // ─── Brand icon components ─────────────────────────────────────────────────
-// LensIcon — custom viewfinder icon used for the visual search button.
-// Rounded-square camera body + inner lens circle + small tab on the
-// right edge, matching the Admerce lens reference.
 function LensIcon({
   size = 18,
-  color = '#0504AA',
+  color = 'currentColor',
 }: {
   size?: number;
   color?: string;
@@ -133,7 +127,6 @@ function LensIcon({
       aria-hidden="true"
       focusable="false"
     >
-      {/* Camera body — rounded square */}
       <rect
         x="2.25"
         y="2.25"
@@ -143,7 +136,6 @@ function LensIcon({
         stroke={color}
         strokeWidth="2.2"
       />
-      {/* Lens — inner circle */}
       <circle
         cx="10.75"
         cy="10.75"
@@ -151,7 +143,6 @@ function LensIcon({
         stroke={color}
         strokeWidth="2.2"
       />
-      {/* Viewfinder tab — protrudes from right edge */}
       <rect
         x="18.25"
         y="9.25"
@@ -248,7 +239,6 @@ function MasonryColumns<T>({
   const heights = new Array(columns).fill(0);
 
   for (const item of items) {
-    // Shortest-column-first with real weight (aspect-ratio-derived)
     let target = 0;
     for (let c = 1; c < columns; c++) {
       if (heights[c] < heights[target]) target = c;
@@ -293,11 +283,11 @@ function LocationBanner({
   return (
     <div
       style={{
-        background: '#FEF3C7',
+        background: 'var(--warning-bg)',
         padding: '10px 16px',
         fontSize: 13,
-        color: '#78350F',
-        borderBottom: '1px solid #FDE68A',
+        color: 'var(--warning-fg)',
+        borderBottom: '1px solid var(--warning-strong)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -312,8 +302,8 @@ function LocationBanner({
       <button
         onClick={onEnableLocation}
         style={{
-          background: '#78350F',
-          color: '#FEF3C7',
+          background: 'var(--warning-strong)',
+          color: '#FFFFFF',
           border: 'none',
           borderRadius: 10,
           padding: '6px 14px',
@@ -485,7 +475,7 @@ function StoreSpotlight({
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#0504AA',
+                color: 'var(--brand-on-soft)',
                 cursor: 'pointer',
                 padding: 4,
               }}
@@ -503,7 +493,7 @@ function StoreSpotlight({
             style={{
               background: 'none',
               border: 'none',
-              color: '#0504AA',
+              color: 'var(--brand-on-soft)',
               cursor: 'pointer',
               padding: 4,
             }}
@@ -516,7 +506,7 @@ function StoreSpotlight({
   );
 }
 
-// ─── ReelCard — shared portrait full-bleed card with variable height ───────
+// ─── ReelCard ──────────────────────────────────────────────────────────────
 function ReelCard({
   image,
   placeholder,
@@ -618,7 +608,7 @@ function ItemCard({
   return (
     <ReelCard
       image={item.image}
-      placeholder={<MdImage size={40} color="#9e9e9e" />}
+      placeholder={<MdImage size={40} color="var(--text-muted)" />}
       badge="ITEM"
       badgeBg="rgba(15,23,42,0.78)"
       ratio={ratio}
@@ -643,7 +633,7 @@ function StoreCard({
   return (
     <ReelCard
       image={store.image}
-      placeholder={<MdStorefront size={40} color="#9e9e9e" />}
+      placeholder={<MdStorefront size={40} color="var(--text-muted)" />}
       badge="STORE"
       badgeBg="rgba(5,4,170,0.88)"
       ratio={ratio}
@@ -1239,7 +1229,7 @@ export default function ShopperHomePage() {
               aria-label="Search"
               title="Search"
             >
-              <MdSearch size={22} color="#0504AA" />
+              <MdSearch size={22} color="var(--brand-on-soft)" />
             </button>
             <button
               style={styles.iconBtn}
@@ -1247,7 +1237,7 @@ export default function ShopperHomePage() {
               aria-label="Basket"
               title="Basket"
             >
-              <MdShoppingBasket size={22} color="#0504AA" />
+              <MdShoppingBasket size={22} color="var(--brand-on-soft)" />
             </button>
             <button
               style={styles.iconBtn}
@@ -1255,18 +1245,20 @@ export default function ShopperHomePage() {
               aria-label="Notifications"
               title="Notifications"
             >
-              <MdNotificationsNone size={22} color="#0504AA" />
+              <MdNotificationsNone size={22} color="var(--brand-on-soft)" />
             </button>
             <button
               style={{
                 ...styles.iconBtn,
-                backgroundColor: hasActiveFilters ? '#EEF0FF' : 'transparent',
+                backgroundColor: hasActiveFilters
+                  ? 'var(--brand-soft)'
+                  : 'transparent',
               }}
               onClick={openFilter}
               aria-label="Feed options"
               title="Feed options"
             >
-              <MdTune size={22} color="#0504AA" />
+              <MdTune size={22} color="var(--brand-on-soft)" />
             </button>
           </div>
         </div>
@@ -1300,9 +1292,15 @@ export default function ShopperHomePage() {
                   onClick={() => setCurrentTab(i)}
                   style={{
                     ...styles.tabBtn,
-                    background: active ? '#0504AA' : 'transparent',
-                    color: active ? '#fff' : '#334155',
-                    borderColor: active ? '#0504AA' : 'rgba(15,23,42,0.12)',
+                    background: active
+                      ? 'var(--brand-primary)'
+                      : 'transparent',
+                    color: active
+                      ? '#FFFFFF'
+                      : 'var(--text-secondary)',
+                    borderColor: active
+                      ? 'var(--brand-primary)'
+                      : 'var(--border-default)',
                   }}
                 >
                   {label}
@@ -1325,7 +1323,7 @@ export default function ShopperHomePage() {
                   aria-label="Remove kind filter"
                   style={styles.activeFilterClose}
                 >
-                  <MdClose size={12} color="#0504AA" />
+                  <MdClose size={12} color="var(--brand-on-soft)" />
                 </button>
               </span>
             )}
@@ -1338,7 +1336,7 @@ export default function ShopperHomePage() {
                   aria-label="Remove category filter"
                   style={styles.activeFilterClose}
                 >
-                  <MdClose size={12} color="#0504AA" />
+                  <MdClose size={12} color="var(--brand-on-soft)" />
                 </button>
               </span>
             )}
@@ -1390,14 +1388,14 @@ export default function ShopperHomePage() {
                 ) : feedItems.length === 0 ? (
                   hasActiveFilters ? (
                     <FeedEmpty
-                      icon={<MdTune size={40} color="#94a3b8" />}
+                      icon={<MdTune size={40} color="var(--text-muted)" />}
                       title="No matches"
                       body="Try a different category or clear the filters."
                       onClear={clearAllFilters}
                     />
                   ) : (
                     <FeedEmpty
-                      icon={<MdImage size={40} color="#94a3b8" />}
+                      icon={<MdImage size={40} color="var(--text-muted)" />}
                       title="Nothing to show yet"
                       body="Pull down to refresh, or check back soon."
                     />
@@ -1440,7 +1438,7 @@ export default function ShopperHomePage() {
                   <FeedSkeleton columns={columns} />
                 ) : stores.length === 0 ? (
                   <FeedEmpty
-                    icon={<MdStorefront size={40} color="#94a3b8" />}
+                    icon={<MdStorefront size={40} color="var(--text-muted)" />}
                     title="No stores yet"
                     body="Stores will appear here as storekeepers open them."
                   />
@@ -1471,7 +1469,7 @@ export default function ShopperHomePage() {
                   <FeedSkeleton columns={columns} />
                 ) : providers.length === 0 ? (
                   <FeedEmpty
-                    icon={<MdStorefront size={40} color="#94a3b8" />}
+                    icon={<MdStorefront size={40} color="var(--text-muted)" />}
                     title="No service providers yet"
                     body="Providers will appear here as they list services."
                   />
@@ -1521,7 +1519,7 @@ export default function ShopperHomePage() {
                 aria-label="Close"
                 style={styles.sheetClose}
               >
-                <MdClose size={20} color="#64748b" />
+                <MdClose size={20} color="var(--text-tertiary)" />
               </button>
             </div>
 
@@ -1540,22 +1538,33 @@ export default function ShopperHomePage() {
                       }}
                       style={{
                         ...styles.filterOption,
-                        background: active ? '#EEF0FF' : '#fff',
-                        borderColor: active ? '#0504AA' : '#E5E7EF',
+                        background: active
+                          ? 'var(--brand-soft)'
+                          : 'var(--bg-secondary)',
+                        borderColor: active
+                          ? 'var(--brand-primary)'
+                          : 'var(--border-default)',
                       }}
                     >
                       <span style={styles.filterOptionText}>
                         <span
                           style={{
                             ...styles.filterOptionLabel,
-                            color: active ? '#0504AA' : '#0F172A',
+                            color: active
+                              ? 'var(--brand-on-soft)'
+                              : 'var(--text-primary)',
                           }}
                         >
                           {opt.label}
                         </span>
                         <span style={styles.filterOptionHint}>{opt.hint}</span>
                       </span>
-                      {active && <MdCheckCircle size={20} color="#0504AA" />}
+                      {active && (
+                        <MdCheckCircle
+                          size={20}
+                          color="var(--brand-on-soft)"
+                        />
+                      )}
                     </button>
                   );
                 })}
@@ -1573,9 +1582,15 @@ export default function ShopperHomePage() {
                   }}
                   style={{
                     ...styles.categoryChip,
-                    background: !selectedCategory ? '#0504AA' : '#fff',
-                    borderColor: !selectedCategory ? '#0504AA' : '#E5E7EF',
-                    color: !selectedCategory ? '#fff' : '#334155',
+                    background: !selectedCategory
+                      ? 'var(--brand-primary)'
+                      : 'var(--bg-secondary)',
+                    borderColor: !selectedCategory
+                      ? 'var(--brand-primary)'
+                      : 'var(--border-default)',
+                    color: !selectedCategory
+                      ? '#FFFFFF'
+                      : 'var(--text-secondary)',
                   }}
                 >
                   All
@@ -1592,9 +1607,15 @@ export default function ShopperHomePage() {
                       }}
                       style={{
                         ...styles.categoryChip,
-                        background: active ? '#0504AA' : '#fff',
-                        borderColor: active ? '#0504AA' : '#E5E7EF',
-                        color: active ? '#fff' : '#334155',
+                        background: active
+                          ? 'var(--brand-primary)'
+                          : 'var(--bg-secondary)',
+                        borderColor: active
+                          ? 'var(--brand-primary)'
+                          : 'var(--border-default)',
+                        color: active
+                          ? '#FFFFFF'
+                          : 'var(--text-secondary)',
                       }}
                     >
                       <span aria-hidden="true">{cat.emoji}</span>
@@ -1620,9 +1641,15 @@ export default function ShopperHomePage() {
                       }}
                       style={{
                         ...styles.categoryChip,
-                        background: active ? '#0504AA' : '#fff',
-                        borderColor: active ? '#0504AA' : '#E5E7EF',
-                        color: active ? '#fff' : '#334155',
+                        background: active
+                          ? 'var(--brand-primary)'
+                          : 'var(--bg-secondary)',
+                        borderColor: active
+                          ? 'var(--brand-primary)'
+                          : 'var(--border-default)',
+                        color: active
+                          ? '#FFFFFF'
+                          : 'var(--text-secondary)',
                       }}
                     >
                       <span aria-hidden="true">{cat.emoji}</span>
@@ -1664,12 +1691,14 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
     minHeight: 0,
+    transition: 'background-color 0.18s ease',
   },
   appBar: {
-    backgroundColor: '#fff',
-    borderBottom: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-default)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   appBarInner: {
     display: 'flex',
@@ -1695,7 +1724,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   brandName: {
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-on-soft)',
     fontSize: 18,
     letterSpacing: '-0.3px',
     lineHeight: 1,
@@ -1724,7 +1753,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignSelf: 'center',
   },
   tabsWrap: {
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    transition: 'background-color 0.18s ease',
   },
   tabsInner: {
     display: 'flex',
@@ -1752,7 +1782,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   activeFiltersLabel: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 700,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
@@ -1763,8 +1793,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 4,
     padding: '4px 8px 4px 12px',
     borderRadius: 999,
-    background: '#EEF0FF',
-    color: '#0504AA',
+    background: 'var(--brand-soft)',
+    color: 'var(--brand-on-soft)',
     fontSize: 12,
     fontWeight: 700,
   },
@@ -1782,7 +1812,7 @@ const styles: Record<string, React.CSSProperties> = {
   activeFiltersClear: {
     background: 'none',
     border: 'none',
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontSize: 11.5,
     fontWeight: 700,
     textDecoration: 'underline',
@@ -1812,7 +1842,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
 
-  // ── Reel card ────────────────────────────────────────────────
+  // ── Reel card (overlay-based, mostly theme-independent) ──────
   reelCard: {
     position: 'relative',
     width: '100%',
@@ -1841,7 +1871,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#1F2937',
   },
   reelProviderPlaceholder: {
     position: 'absolute',
@@ -1952,16 +1982,20 @@ const styles: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 24,
-    background: '#EEF0FF',
+    background: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
-  emptyTitle: { fontSize: 16, fontWeight: 800, color: '#334155' },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: 800,
+    color: 'var(--text-primary)',
+  },
   emptyBody: {
     fontSize: 13.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     maxWidth: 340,
     lineHeight: 1.5,
   },
@@ -1970,7 +2004,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 20px',
     borderRadius: 12,
     border: 'none',
-    background: '#0504AA',
+    background: 'var(--brand-primary)',
     color: '#fff',
     fontSize: 13.5,
     fontWeight: 700,
@@ -1983,14 +2017,14 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     aspectRatio: '4 / 5',
     borderRadius: 16,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     overflow: 'hidden',
-    background: '#fff',
+    background: 'var(--bg-secondary)',
   },
   skeletonImage: {
     width: '100%',
     height: '100%',
-    background: 'linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%)',
+    background: 'var(--skeleton)',
     backgroundSize: '800px 100%',
     animation: 'shimmer 1.4s infinite linear',
   },
@@ -1999,23 +2033,25 @@ const styles: Record<string, React.CSSProperties> = {
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(11,11,26,0.5)',
+    backgroundColor: 'var(--overlay)',
     display: 'flex',
     justifyContent: 'center',
     zIndex: 1000,
     animation: 'fadeIn 0.18s ease-out',
   },
   filterSheet: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-primary)',
     width: '100%',
     maxWidth: 500,
     padding: '10px 20px 24px',
     overflowY: 'auto',
+    transition: 'background-color 0.18s ease',
   },
   sheetGrabber: {
     width: 40,
     height: 5,
-    background: '#E2E8F0',
+    background: 'var(--border-strong)',
     borderRadius: 3,
     margin: '0 auto 16px',
   },
@@ -2028,7 +2064,7 @@ const styles: Record<string, React.CSSProperties> = {
   sheetTitle: {
     fontSize: 18,
     fontWeight: 800,
-    color: '#0F172A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: '-0.2px',
   },
@@ -2046,7 +2082,7 @@ const styles: Record<string, React.CSSProperties> = {
   filterSectionLabel: {
     fontSize: 11,
     fontWeight: 800,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     letterSpacing: 1,
     textTransform: 'uppercase',
     marginBottom: 10,
@@ -2076,7 +2112,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: '-0.2px',
   },
-  filterOptionHint: { fontSize: 12.5, color: '#64748B', lineHeight: 1.4 },
+  filterOptionHint: {
+    fontSize: 12.5,
+    color: 'var(--text-tertiary)',
+    lineHeight: 1.4,
+  },
   chipGrid: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -2103,9 +2143,9 @@ const styles: Record<string, React.CSSProperties> = {
   clearBtn: {
     flex: 1,
     padding: '14px',
-    backgroundColor: '#fff',
-    color: '#334155',
-    border: '1px solid #E2E8F0',
+    backgroundColor: 'var(--bg-tertiary)',
+    color: 'var(--text-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 14,
     fontWeight: 700,
     fontSize: 14,
@@ -2115,8 +2155,8 @@ const styles: Record<string, React.CSSProperties> = {
   applyBtn: {
     flex: 2,
     padding: '14px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: 14,
     fontWeight: 800,
@@ -2138,8 +2178,8 @@ const styles: Record<string, React.CSSProperties> = {
   spinner: {
     width: 24,
     height: 24,
-    border: '3px solid #E2E8F0',
-    borderTopColor: '#0504AA',
+    border: '3px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
@@ -2164,7 +2204,6 @@ const CSS = `
     box-sizing: border-box;
   }
 
-  /* Subtle tap feedback — no hover, matches Pinterest's mobile-first feel */
   .sh-reel:active {
     transform: scale(0.985);
   }
@@ -2209,4 +2248,4 @@ const CSS = `
       transition-duration: 0.01ms !important;
     }
   }
-`;
+`;;
