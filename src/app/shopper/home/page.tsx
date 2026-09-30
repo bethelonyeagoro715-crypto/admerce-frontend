@@ -35,7 +35,7 @@ const DEFAULT_ASPECT = 3 / 4; // 0.75 — when dims are missing
 const SERVICE_ASPECT = 9 / 16; // services are video-only, always 9:16
 
 // Gap between cards, in pixels.
-const GRID_GAP_MOBILE = 18;
+const GRID_GAP_MOBILE = 20;
 const GRID_GAP_DESKTOP = 30;
 
 type FeedFilter = 'mixed' | 'items' | 'services';
