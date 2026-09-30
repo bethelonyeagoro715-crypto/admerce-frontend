@@ -21,7 +21,6 @@ import {
 
 const OTP_LENGTH = 6;
 
-// ─── Masking helpers ────────────────────────────────────────────────
 function maskEmail(email: string): string {
   const e = (email || '').trim();
   const at = e.indexOf('@');
@@ -35,7 +34,6 @@ function maskEmail(email: string): string {
 function maskPhone(phone: string): string {
   const p = (phone || '').trim();
   if (p.length < 6) return p;
-  // Show first 4 + last 3, mask the middle.
   const head = p.slice(0, 4);
   const tail = p.slice(-3);
   const middle = '*'.repeat(Math.max(2, p.length - 7));
@@ -50,7 +48,9 @@ function VerifyOtpContent() {
   const email = searchParams.get('email') || '';
   const intendedRole = searchParams.get('intended_role') || 'shopper';
 
-  const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
+  const [digits, setDigits] = useState<string[]>(
+    Array(OTP_LENGTH).fill(''),
+  );
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -145,7 +145,9 @@ function VerifyOtpContent() {
         return;
       }
 
-      router.replace(`/wallet-pin-setup?intended_role=${intendedRole}`);
+      router.replace(
+        `/wallet-pin-setup?intended_role=${intendedRole}`,
+      );
     } catch (err: unknown) {
       if (!isMountedRef.current) return;
 
@@ -201,7 +203,10 @@ function VerifyOtpContent() {
       if (!isMountedRef.current) return;
       await alertDialog({
         title: "Couldn't resend the code",
-        body: extractErrorDetail(err, 'Please try again in a moment.'),
+        body: extractErrorDetail(
+          err,
+          'Please try again in a moment.',
+        ),
         kind: 'danger',
       });
     } finally {
@@ -277,12 +282,12 @@ function VerifyOtpContent() {
         <style>{PAGE_CSS}</style>
         <div className="vo-card">
           <div className="vo-missingIcon">
-            <MdVerifiedUser size={40} color="#0504AA" />
+            <MdVerifiedUser size={40} color="var(--brand-primary)" />
           </div>
           <h1 className="vo-heading">Something&apos;s missing</h1>
           <p className="vo-subtitle">
-            We don&apos;t have the phone number to verify. Start over from the
-            sign-up page.
+            We don&apos;t have the phone number to verify. Start over
+            from the sign-up page.
           </p>
           <button
             onClick={() => router.replace('/signup')}
@@ -316,14 +321,17 @@ function VerifyOtpContent() {
             className="vo-backBtn"
             aria-label="Back"
           >
-            <MdArrowBack size={18} color="#64748B" />
+            <MdArrowBack size={18} color="var(--text-tertiary)" />
           </button>
 
           <div className="vo-heroWrap">
             <div className="vo-pulse vo-pulse-1" aria-hidden />
             <div className="vo-pulse vo-pulse-2" aria-hidden />
             <div className="vo-iconCircle">
-              <MdVerifiedUser size={36} color="#ffffff" />
+              <MdVerifiedUser
+                size={36}
+                color="var(--brand-on-gradient)"
+              />
             </div>
           </div>
 
@@ -332,18 +340,23 @@ function VerifyOtpContent() {
             Enter the 6-digit code we just sent you.
           </p>
 
-          {/* Where it went — dual-channel pill */}
           {(email || phone) && (
             <div className="vo-channels">
               {email && (
                 <span className="vo-channelChip">
-                  <MdMailOutline size={13} color="#0504AA" />
+                  <MdMailOutline
+                    size={13}
+                    color="var(--brand-primary)"
+                  />
                   <span>{maskEmail(email)}</span>
                 </span>
               )}
               {phone && (
                 <span className="vo-channelChip">
-                  <MdPhoneIphone size={13} color="#0504AA" />
+                  <MdPhoneIphone
+                    size={13}
+                    color="var(--brand-primary)"
+                  />
                   <span>{maskPhone(phone)}</span>
                 </span>
               )}
@@ -367,8 +380,12 @@ function VerifyOtpContent() {
                 onFocus={(e) => e.currentTarget.select()}
                 className="vo-otpBox"
                 style={{
-                  borderColor: inlineError ? '#FCA5A5' : undefined,
-                  backgroundColor: inlineError ? '#FEF2F2' : undefined,
+                  borderColor: inlineError
+                    ? 'var(--danger-strong)'
+                    : undefined,
+                  backgroundColor: inlineError
+                    ? 'var(--danger-bg)'
+                    : undefined,
                 }}
                 aria-label={`Digit ${i + 1} of ${OTP_LENGTH}`}
                 disabled={loading}
@@ -376,7 +393,9 @@ function VerifyOtpContent() {
             ))}
           </div>
 
-          {inlineError && <div className="vo-inlineError">{inlineError}</div>}
+          {inlineError && (
+            <div className="vo-inlineError">{inlineError}</div>
+          )}
 
           <button
             onClick={handleVerify}
@@ -402,7 +421,9 @@ function VerifyOtpContent() {
           </button>
 
           <div className="vo-resendRow">
-            <span className="vo-resendPrompt">Didn&apos;t get the code?</span>
+            <span className="vo-resendPrompt">
+              Didn&apos;t get the code?
+            </span>
             {countdown > 0 ? (
               <span className="vo-resendCountdown">
                 Resend in {countdown}s
@@ -424,7 +445,10 @@ function VerifyOtpContent() {
 
           {resentVisible && resentAt && (
             <div className="vo-resentChip">
-              <MdCheckCircle size={15} color="#065F46" />
+              <MdCheckCircle
+                size={15}
+                color="var(--success-fg)"
+              />
               <span>Fresh code sent</span>
             </div>
           )}
@@ -454,15 +478,15 @@ export default function VerifyOtpPage() {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: '#F4F5FB',
+            backgroundColor: 'var(--bg-primary)',
           }}
         >
           <div
             style={{
               width: 36,
               height: 36,
-              border: '3px solid #E6E8F0',
-              borderTopColor: '#0504AA',
+              border: '3px solid var(--border-default)',
+              borderTopColor: 'var(--brand-primary)',
               borderRadius: '50%',
               animation: 'voSpin 0.9s linear infinite',
             }}
@@ -475,7 +499,6 @@ export default function VerifyOtpPage() {
   );
 }
 
-// ─── CSS ────────────────────────────────────────────────────────────
 const PAGE_CSS = `
   @keyframes voSpin { to { transform: rotate(360deg); } }
   @keyframes voPulse {
@@ -494,13 +517,17 @@ const PAGE_CSS = `
   .vo-root {
     min-height: 100vh;
     background:
-      radial-gradient(ellipse at 15% 0%, rgba(61,59,255,0.08) 0%, rgba(61,59,255,0) 55%),
-      #F4F5FB;
+      radial-gradient(ellipse at 15% 0%,
+        color-mix(in srgb, var(--brand-primary) 8%, transparent) 0%,
+        transparent 55%),
+      var(--bg-primary);
     display: flex;
     align-items: flex-start;
     justify-content: center;
     padding: 24px 20px 48px;
     font-family: inherit;
+    color: var(--text-primary);
+    transition: background-color 0.18s ease, color 0.18s ease;
   }
 
   .vo-shell {
@@ -527,21 +554,20 @@ const PAGE_CSS = `
   .vo-brandName {
     font-size: 16px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     letter-spacing: -0.02em;
   }
 
   .vo-card {
     position: relative;
     width: 100%;
-    background: #FFFFFF;
+    background: var(--bg-secondary);
     border-radius: 24px;
     padding: 36px 28px 28px;
-    box-shadow:
-      0 1px 2px rgba(15,23,42,0.03),
-      0 8px 28px rgba(15,23,42,0.06);
-    border: 1px solid #EEF0F7;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-default);
     text-align: center;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
 
   .vo-backBtn {
@@ -552,14 +578,14 @@ const PAGE_CSS = `
     height: 34px;
     border-radius: 12px;
     border: none;
-    background: #F6F7FB;
+    background: var(--bg-tertiary);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     transition: background 0.15s;
   }
-  .vo-backBtn:hover { background: #EEF0F7; }
+  .vo-backBtn:hover { background: var(--bg-hover); }
 
   .vo-heroWrap {
     position: relative;
@@ -575,11 +601,11 @@ const PAGE_CSS = `
     width: 74px;
     height: 74px;
     border-radius: 24px;
-    background: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
+    background: var(--brand-gradient);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 12px 32px rgba(5,4,170,0.28);
+    box-shadow: var(--shadow-brand);
   }
   .vo-pulse {
     position: absolute;
@@ -590,7 +616,8 @@ const PAGE_CSS = `
     margin-left: -37px;
     margin-top: -37px;
     border-radius: 50%;
-    border: 2px solid rgba(5, 4, 170, 0.25);
+    border: 2px solid
+      color-mix(in srgb, var(--brand-primary) 25%, transparent);
     pointer-events: none;
   }
   .vo-pulse-1 { animation: voPulse 2.6s ease-out infinite; }
@@ -599,18 +626,17 @@ const PAGE_CSS = `
   .vo-heading {
     font-size: 24px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0;
     letter-spacing: -0.6px;
   }
   .vo-subtitle {
     font-size: 14px;
-    color: #5A6178;
+    color: var(--text-tertiary);
     margin: 8px 0 20px;
     line-height: 1.5;
   }
 
-  /* Channel chips — where the code was sent */
   .vo-channels {
     display: flex;
     flex-wrap: wrap;
@@ -624,9 +650,10 @@ const PAGE_CSS = `
     gap: 6px;
     padding: 6px 11px;
     border-radius: 999px;
-    background: #EEF0FF;
-    border: 1px solid #C7CCFF;
-    color: #0504AA;
+    background: var(--brand-soft);
+    border: 1px solid
+      color-mix(in srgb, var(--brand-primary) 40%, transparent);
+    color: var(--brand-primary);
     font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.01em;
@@ -645,25 +672,26 @@ const PAGE_CSS = `
     text-align: center;
     font-size: 22px;
     font-weight: 800;
-    color: #0B0B1A;
-    border: 1.5px solid #E6E8F0;
+    color: var(--text-primary);
+    border: 1.5px solid var(--border-default);
     border-radius: 12px;
-    background-color: #FAFAFC;
+    background-color: var(--bg-tertiary);
     outline: none;
     transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
     font-family: inherit;
     box-sizing: border-box;
-    caret-color: #0504AA;
+    caret-color: var(--brand-primary);
   }
   .vo-otpBox:focus {
-    border-color: #0504AA;
-    box-shadow: 0 0 0 4px rgba(5,4,170,0.10);
-    background-color: #FFFFFF;
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 4px
+      color-mix(in srgb, var(--brand-primary) 12%, transparent);
+    background-color: var(--bg-secondary);
   }
 
   .vo-inlineError {
     font-size: 12.5px;
-    color: #991B1B;
+    color: var(--danger-fg);
     font-weight: 600;
     margin-top: 8px;
     margin-bottom: 4px;
@@ -672,9 +700,8 @@ const PAGE_CSS = `
   .vo-primaryBtn {
     width: 100%;
     padding: 16px;
-    background-image: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
-    background-color: #0504AA;
-    color: #fff;
+    background: var(--brand-gradient);
+    color: var(--brand-on-gradient);
     border: none;
     border-radius: 14px;
     font-size: 16px;
@@ -685,14 +712,13 @@ const PAGE_CSS = `
     align-items: center;
     justify-content: center;
     gap: 10px;
-    box-shadow: 0 8px 20px rgba(5,4,170,0.24);
+    box-shadow: var(--shadow-brand);
     font-family: inherit;
     letter-spacing: -0.1px;
     transition: transform 0.12s, box-shadow 0.18s, opacity 0.15s;
   }
   .vo-primaryBtn:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 12px 26px rgba(5,4,170,0.3);
   }
   .vo-primaryBtn:active:not(:disabled) {
     transform: translateY(0) scale(0.985);
@@ -702,8 +728,9 @@ const PAGE_CSS = `
     display: inline-block;
     width: 18px;
     height: 18px;
-    border: 2.5px solid rgba(255,255,255,0.35);
-    border-top-color: #ffffff;
+    border:
+      2.5px solid color-mix(in srgb, var(--brand-on-gradient) 35%, transparent);
+    border-top-color: var(--brand-on-gradient);
     border-radius: 50%;
     animation: voSpin 0.7s linear infinite;
   }
@@ -717,16 +744,16 @@ const PAGE_CSS = `
     flex-wrap: wrap;
     gap: 4px;
   }
-  .vo-resendPrompt { color: #64748B; }
+  .vo-resendPrompt { color: var(--text-tertiary); }
   .vo-resendCountdown {
-    color: #94A3B8;
+    color: var(--text-muted);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
   .vo-resendBtn {
     background: none;
     border: none;
-    color: #0504AA;
+    color: var(--brand-primary);
     font-weight: 700;
     cursor: pointer;
     font-size: 13.5px;
@@ -743,26 +770,26 @@ const PAGE_CSS = `
     margin-top: 12px;
     padding: 6px 12px;
     border-radius: 999px;
-    background-color: #ECFDF5;
-    border: 1px solid #A7F3D0;
+    background-color: var(--success-bg);
+    border: 1px solid var(--success-strong);
     animation: voRise 220ms ease-out both;
   }
   .vo-resentChip span {
     font-size: 12px;
     font-weight: 700;
-    color: #065F46;
+    color: var(--success-fg);
     letter-spacing: 0.2px;
   }
 
   .vo-footer {
     font-size: 12.5px;
-    color: #94A3B8;
+    color: var(--text-muted);
     margin: 22px 0 0;
   }
   .vo-footerLink {
     background: none;
     border: none;
-    color: #94A3B8;
+    color: var(--text-muted);
     font-weight: 700;
     cursor: pointer;
     font-size: 12.5px;
@@ -772,12 +799,11 @@ const PAGE_CSS = `
     font-family: inherit;
   }
 
-  /* Missing-phone guard */
   .vo-missingIcon {
     width: 84px;
     height: 84px;
     border-radius: 26px;
-    background: linear-gradient(135deg, #EEF0FF 0%, #E0E7FF 100%);
+    background: var(--brand-soft);
     display: inline-flex;
     align-items: center;
     justify-content: center;

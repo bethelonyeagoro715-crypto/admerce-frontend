@@ -26,13 +26,12 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [phone, setPhone] = useState(''); // E.164 from PhoneField
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [obscure, setObscure] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // ─── Navigation helpers ──────────────────────────────────
   const navigateByRoleKey = async (roleKey: string) => {
     switch (roleKey) {
       case 'shopper':
@@ -51,7 +50,6 @@ function LoginContent() {
         await navigateServiceProvider();
         break;
       case 'admin':
-        // Handoff rule: route is /admin, NOT /_admin
         router.replace('/admin/dashboard');
         break;
       default:
@@ -63,7 +61,9 @@ function LoginContent() {
     try {
       const store = await api.getMyStore();
       router.replace(
-        store ? '/storekeeper/home' : '/storekeeper/onboarding/personal-info',
+        store
+          ? '/storekeeper/home'
+          : '/storekeeper/onboarding/personal-info',
       );
     } catch {
       router.replace('/storekeeper/onboarding/personal-info');
@@ -105,7 +105,6 @@ function LoginContent() {
     }
   };
 
-  // ─── Login handler ──────────────────────────────────────
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     if (!phone || !password) return;
@@ -113,7 +112,6 @@ function LoginContent() {
     setError('');
 
     try {
-      // `phone` is already E.164 from PhoneField.
       await api.login(phone, password);
 
       const profile = await api.getMyProfile();
@@ -133,8 +131,6 @@ function LoginContent() {
       } else {
         const dbRole = profile.role as string | undefined;
         if (dbRole) {
-          // Backend returns snake_case 'service_provider'; the nav switch
-          // expects a hyphenated 'service-provider'.
           const normalized = dbRole.replace(/_/g, '-');
           setActiveRole(dbRole);
           await navigateByRoleKey(normalized);
@@ -155,7 +151,6 @@ function LoginContent() {
     }
   };
 
-  // ─── Preserve query params on cross-links ───────────────
   const preserveParams = () => {
     const redirect = searchParams.get('redirect');
     const intendedRole = searchParams.get('intended_role');
@@ -169,14 +164,14 @@ function LoginContent() {
   const signupUrl = `/signup${qs ? `?${qs}` : ''}`;
   const forgotPasswordUrl = `/forgot-password${qs ? `?${qs}` : ''}`;
 
-  const canSubmit = phone.length > 0 && password.length > 0 && !loading;
+  const canSubmit =
+    phone.length > 0 && password.length > 0 && !loading;
 
   return (
     <main className="li-root">
       <style>{CSS}</style>
 
       <div className="li-shell">
-        {/* Brand */}
         <header className="li-brandRow">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -188,7 +183,9 @@ function LoginContent() {
         </header>
 
         <h1 className="li-heading">Welcome back</h1>
-        <p className="li-subtitle">Ready to find something amazing?</p>
+        <p className="li-subtitle">
+          Ready to find something amazing?
+        </p>
 
         <form onSubmit={handleLogin} className="li-form" noValidate>
           <div className="li-field">
@@ -208,7 +205,10 @@ function LoginContent() {
           <div className="li-field">
             <label htmlFor="li-password" className="li-label">
               <span className="li-labelIcon" aria-hidden>
-                <MdLockOutline size={14} color="#64748B" />
+                <MdLockOutline
+                  size={14}
+                  color="var(--text-tertiary)"
+                />
               </span>
               <span>Password</span>
             </label>
@@ -228,13 +228,21 @@ function LoginContent() {
                 type="button"
                 onClick={() => setObscure((v) => !v)}
                 className="li-eyeBtn"
-                aria-label={obscure ? 'Show password' : 'Hide password'}
+                aria-label={
+                  obscure ? 'Show password' : 'Hide password'
+                }
                 tabIndex={-1}
               >
                 {obscure ? (
-                  <MdVisibility size={18} color="#64748B" />
+                  <MdVisibility
+                    size={18}
+                    color="var(--text-tertiary)"
+                  />
                 ) : (
-                  <MdVisibilityOff size={18} color="#64748B" />
+                  <MdVisibilityOff
+                    size={18}
+                    color="var(--text-tertiary)"
+                  />
                 )}
               </button>
             </div>
@@ -248,7 +256,7 @@ function LoginContent() {
 
           {error && (
             <div className="li-errorBox" role="alert">
-              <MdErrorOutline size={18} color="#991B1B" />
+              <MdErrorOutline size={18} color="var(--danger-fg)" />
               <span>{error}</span>
             </div>
           )}
@@ -270,18 +278,20 @@ function LoginContent() {
             ) : (
               <>
                 <span>Log in</span>
-                <MdArrowForward size={18} color="#fff" />
+                <MdArrowForward
+                  size={18}
+                  color="var(--brand-on-gradient)"
+                />
               </>
             )}
           </button>
         </form>
 
-        {/* Footer */}
         <div className="li-footer">
           <span className="li-footerText">New to Admerce?</span>
           <Link href={signupUrl} className="li-footerLink">
             Let&apos;s get started
-            <MdArrowForward size={14} color="#0504AA" />
+            <MdArrowForward size={14} color="var(--brand-primary)" />
           </Link>
         </div>
       </div>
@@ -299,8 +309,8 @@ export default function LoginPage() {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: '#F4F5FB',
-            color: '#64748B',
+            backgroundColor: 'var(--bg-primary)',
+            color: 'var(--text-tertiary)',
             fontSize: 14,
           }}
         >
@@ -313,7 +323,6 @@ export default function LoginPage() {
   );
 }
 
-// ─── CSS ────────────────────────────────────────────────────────────
 const CSS = `
   @keyframes liSpin { to { transform: rotate(360deg); } }
   @keyframes liFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -321,13 +330,17 @@ const CSS = `
   .li-root {
     min-height: 100vh;
     background:
-      radial-gradient(ellipse at 15% 0%, rgba(61,59,255,0.08) 0%, rgba(61,59,255,0) 55%),
-      #F4F5FB;
+      radial-gradient(ellipse at 15% 0%,
+        color-mix(in srgb, var(--brand-primary) 8%, transparent) 0%,
+        transparent 55%),
+      var(--bg-primary);
     display: flex;
     align-items: flex-start;
     justify-content: center;
     padding: 24px 20px 48px;
     font-family: inherit;
+    color: var(--text-primary);
+    transition: background-color 0.18s ease, color 0.18s ease;
   }
 
   .li-shell {
@@ -339,7 +352,6 @@ const CSS = `
     padding-top: 8vh;
   }
 
-  /* Brand */
   .li-brandRow {
     display: inline-flex;
     align-items: center;
@@ -356,27 +368,25 @@ const CSS = `
   .li-brandName {
     font-size: 16px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     letter-spacing: -0.02em;
   }
 
-  /* Heading */
   .li-heading {
     font-size: 30px;
     line-height: 1.15;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0 0 8px;
     letter-spacing: -0.03em;
   }
   .li-subtitle {
     font-size: 14.5px;
-    color: #64748B;
+    color: var(--text-tertiary);
     margin: 0 0 28px;
     line-height: 1.5;
   }
 
-  /* Form */
   .li-form {
     display: flex;
     flex-direction: column;
@@ -393,7 +403,7 @@ const CSS = `
     gap: 6px;
     font-size: 13px;
     font-weight: 700;
-    color: #334155;
+    color: var(--text-secondary);
     letter-spacing: 0.01em;
   }
   .li-labelIcon {
@@ -405,10 +415,10 @@ const CSS = `
     width: 100%;
     padding: 14px 16px;
     border-radius: 14px;
-    border: 1.5px solid #E6E8F0;
-    background: #FFFFFF;
+    border: 1.5px solid var(--border-default);
+    background: var(--bg-tertiary);
     font-size: 15.5px;
-    color: #0B0B1A;
+    color: var(--text-primary);
     font-family: inherit;
     outline: none;
     box-sizing: border-box;
@@ -416,15 +426,19 @@ const CSS = `
     -webkit-appearance: none;
     appearance: none;
   }
-  .li-input::placeholder { color: #94A3B8; }
-  .li-input:hover:not(:disabled) { border-color: #CBD5E1; }
+  .li-input::placeholder { color: var(--text-muted); }
+  .li-input:hover:not(:disabled) {
+    border-color: var(--border-strong);
+  }
   .li-input:focus {
-    border-color: #0504AA;
-    box-shadow: 0 0 0 4px rgba(5,4,170,0.10);
+    border-color: var(--brand-primary);
+    background: var(--bg-secondary);
+    box-shadow: 0 0 0 4px
+      color-mix(in srgb, var(--brand-primary) 12%, transparent);
   }
   .li-input:disabled {
-    background: #F8FAFC;
-    color: #94A3B8;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
     cursor: not-allowed;
   }
   .li-inputPassword { padding-right: 52px; }
@@ -448,9 +462,8 @@ const CSS = `
     justify-content: center;
     transition: background 0.15s;
   }
-  .li-eyeBtn:hover { background: #F1F5F9; }
+  .li-eyeBtn:hover { background: var(--bg-hover); }
 
-  /* Forgot link row */
   .li-forgotRow {
     display: flex;
     justify-content: flex-end;
@@ -459,7 +472,7 @@ const CSS = `
   .li-forgotLink {
     font-size: 12.5px;
     font-weight: 700;
-    color: #0504AA;
+    color: var(--brand-primary);
     text-decoration: none;
     letter-spacing: -0.01em;
   }
@@ -468,23 +481,21 @@ const CSS = `
     text-underline-offset: 3px;
   }
 
-  /* Error */
   .li-errorBox {
     display: flex;
     align-items: flex-start;
     gap: 10px;
     padding: 12px 14px;
     border-radius: 14px;
-    background: #FEF2F2;
-    border: 1px solid #FECACA;
-    color: #991B1B;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-strong);
+    color: var(--danger-fg);
     font-size: 13.5px;
     font-weight: 600;
     line-height: 1.45;
     animation: liFadeIn 0.2s ease both;
   }
 
-  /* Submit */
   .li-submit {
     display: inline-flex;
     align-items: center;
@@ -495,19 +506,17 @@ const CSS = `
     margin-top: 6px;
     border: none;
     border-radius: 14px;
-    background-image: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
-    background-color: #0504AA;
-    color: #FFFFFF;
+    background: var(--brand-gradient);
+    color: var(--brand-on-gradient);
     font-size: 16px;
     font-weight: 700;
     font-family: inherit;
     letter-spacing: -0.01em;
-    box-shadow: 0 10px 24px rgba(5,4,170,0.26);
+    box-shadow: var(--shadow-brand);
     transition: transform 0.12s, box-shadow 0.15s, opacity 0.15s;
   }
   .li-submit:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 14px 30px rgba(5,4,170,0.32);
   }
   .li-submit:active:not(:disabled) {
     transform: translateY(0) scale(0.985);
@@ -516,12 +525,12 @@ const CSS = `
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.35);
-    border-top-color: #fff;
+    border:
+      2px solid color-mix(in srgb, var(--brand-on-gradient) 35%, transparent);
+    border-top-color: var(--brand-on-gradient);
     animation: liSpin 0.7s linear infinite;
   }
 
-  /* Footer */
   .li-footer {
     display: flex;
     align-items: center;
@@ -529,11 +538,11 @@ const CSS = `
     gap: 8px;
     margin-top: 28px;
     padding-top: 22px;
-    border-top: 1px solid #EAECF3;
+    border-top: 1px solid var(--border-default);
   }
   .li-footerText {
     font-size: 13.5px;
-    color: #64748B;
+    color: var(--text-tertiary);
   }
   .li-footerLink {
     display: inline-flex;
@@ -541,7 +550,7 @@ const CSS = `
     gap: 4px;
     font-size: 13.5px;
     font-weight: 800;
-    color: #0504AA;
+    color: var(--brand-primary);
     text-decoration: none;
     letter-spacing: -0.01em;
   }

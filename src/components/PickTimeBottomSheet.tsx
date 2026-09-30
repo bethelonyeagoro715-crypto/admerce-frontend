@@ -32,11 +32,9 @@ interface PickTimeOption {
   color: string;
 }
 
-/* ─── Public helper — translate a pickup preset string to a window in hours.
-       Used by the checkout flow when calling `api.reserveItem`.
-       '3 hours' → 3, '6 hours' → 6, '9 hours' → 9,
-       'Tomorrow' → hours until 23:59 tomorrow (matches the sheet copy).  */
-export function pickupValueToHours(value: string | null | undefined): number {
+export function pickupValueToHours(
+  value: string | null | undefined,
+): number {
   if (!value) return 3;
   const lower = String(value).toLowerCase().trim();
 
@@ -45,8 +43,9 @@ export function pickupValueToHours(value: string | null | undefined): number {
     const endOfTomorrow = new Date(now);
     endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
     endOfTomorrow.setHours(23, 59, 0, 0);
-    const hours = Math.ceil((endOfTomorrow.getTime() - now.getTime()) / 3_600_000);
-    // Clamp to backend range (1..168), same as ReserveRequest.
+    const hours = Math.ceil(
+      (endOfTomorrow.getTime() - now.getTime()) / 3_600_000,
+    );
     return Math.max(1, Math.min(168, hours));
   }
 
@@ -59,24 +58,18 @@ export function pickupValueToHours(value: string | null | undefined): number {
   return 3;
 }
 
-/* ─── Datetime helpers ─────────────────────────────────────── */
-// Local YYYY-MM-DDTHH:MM — the format <input type="datetime-local"> uses.
 function toLocalInputValue(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+    d.getDate(),
+  )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Local YYYY-MM-DDTHH:MM:SS — what the backend stores.
-// Deliberately NOT UTC — the backend uses naive datetime and the frontend
-// reads it back as local, so keeping it local avoids a timezone drift.
 function localInputToBackend(local: string): string {
   if (!local) return '';
   return local.length === 16 ? `${local}:00` : local;
 }
 
-/* ─── Pickup mode presets (unchanged) ──────────────────────── */
 function buildPickupOptions(): PickTimeOption[] {
   return [
     {
@@ -84,42 +77,39 @@ function buildPickupOptions(): PickTimeOption[] {
       value: '3 hours',
       description: 'Pick up within the next 3 hours',
       icon: <MdAccessTime size={22} />,
-      color: '#0504AA',
+      color: 'var(--brand-primary)',
     },
     {
       label: 'Now - 6 hours',
       value: '6 hours',
       description: 'Pick up within the next 6 hours',
       icon: <MdSchedule size={22} />,
-      color: '#F59E0B',
+      color: 'var(--warning-fg)',
     },
     {
       label: 'Now - 9 hours',
       value: '9 hours',
       description: 'Pick up within the next 9 hours',
       icon: <MdSchedule size={22} />,
-      color: '#10B981',
+      color: 'var(--success-fg)',
     },
     {
       label: 'Tomorrow',
       value: 'Tomorrow',
       description: 'Pick up anytime tomorrow',
       icon: <MdEvent size={22} />,
-      color: '#ad04e1',
+      color: 'var(--purple-fg)',
     },
   ];
 }
 
-/* ─── Service mode quick-pick shortcuts ────────────────────── */
-// These just FILL the datetime input. The user can then adjust it or tap
-// Confirm. Not the only way to book — any clock time is reachable.
 function buildServiceQuickPicks(now: Date): {
   label: string;
   date: Date;
   icon: React.ReactNode;
   color: string;
 }[] {
-  const asap = new Date(now.getTime() + 60 * 60 * 1000); // now + 1h
+  const asap = new Date(now.getTime() + 60 * 60 * 1000);
 
   const sixPm = new Date(now);
   sixPm.setHours(18, 0, 0, 0);
@@ -133,17 +123,16 @@ function buildServiceQuickPicks(now: Date): {
       label: 'ASAP',
       date: asap,
       icon: <MdFlashOn size={16} />,
-      color: '#0504AA',
+      color: 'var(--brand-primary)',
     },
   ];
 
-  // Only offer "today 6 PM" if it's still at least 2 hours away
   if (sixPm.getTime() - now.getTime() >= 2 * 60 * 60 * 1000) {
     picks.push({
       label: 'Today 6 PM',
       date: sixPm,
       icon: <MdWbTwilight size={16} />,
-      color: '#F59E0B',
+      color: 'var(--warning-fg)',
     });
   }
 
@@ -151,13 +140,12 @@ function buildServiceQuickPicks(now: Date): {
     label: 'Tomorrow 9 AM',
     date: tomorrowMorning,
     icon: <MdLightMode size={16} />,
-    color: '#10B981',
+    color: 'var(--success-fg)',
   });
 
   return picks;
 }
 
-/* ─── Component ────────────────────────────────────────────── */
 export default function PickTimeBottomSheet({
   isOpen,
   onClose,
@@ -167,8 +155,6 @@ export default function PickTimeBottomSheet({
   const [customDateTime, setCustomDateTime] = useState('');
   const [openedAt, setOpenedAt] = useState<number | null>(null);
 
-  // Bounds for the picker: no earlier than 1 hour from now, no later than
-  // 30 days out. Recomputed each time the sheet opens.
   const { minDateTime, maxDateTime, quickPicks } = useMemo(() => {
     if (openedAt === null) {
       return { minDateTime: '', maxDateTime: '', quickPicks: [] };
@@ -184,7 +170,6 @@ export default function PickTimeBottomSheet({
     };
   }, [openedAt]);
 
-  // Reset the picked time each time the sheet opens
   useEffect(() => {
     if (!isOpen) return;
 
@@ -196,7 +181,6 @@ export default function PickTimeBottomSheet({
     return () => window.clearTimeout(resetId);
   }, [isOpen]);
 
-  // Lock body scroll when open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -210,7 +194,8 @@ export default function PickTimeBottomSheet({
 
   if (typeof document === 'undefined') return null;
 
-  const heading = mode === 'service' ? 'Book a Time' : 'Select Pickup Time';
+  const heading =
+    mode === 'service' ? 'Book a Time' : 'Select Pickup Time';
   const subtext =
     mode === 'service'
       ? 'Pick any date and time, up to 30 days ahead'
@@ -229,7 +214,7 @@ export default function PickTimeBottomSheet({
             style={{
               position: 'fixed',
               inset: 0,
-              backgroundColor: 'rgba(0,0,0,0.4)',
+              backgroundColor: 'var(--overlay)',
               backdropFilter: 'blur(4px)',
               WebkitBackdropFilter: 'blur(4px)',
               zIndex: 999,
@@ -251,27 +236,28 @@ export default function PickTimeBottomSheet({
               right: 0,
               width: '91%',
               margin: '0 auto',
-              backgroundColor: '#FFFFFF',
+              backgroundColor: 'var(--bg-secondary)',
+              color: 'var(--text-primary)',
               borderRadius: '24px 24px 0 0',
-              padding: 'calc(12px + env(safe-area-inset-bottom)) 20px 32px',
-              boxShadow: '0 -10px 30px rgba(0,0,0,0.15)',
+              padding:
+                'calc(12px + env(safe-area-inset-bottom)) 20px 32px',
+              boxShadow: 'var(--shadow-lg)',
               zIndex: 1000,
               maxHeight: '90vh',
               overflowY: 'auto',
+              transition: 'background-color 0.18s ease, color 0.18s ease',
             }}
           >
-            {/* Drag handle */}
             <div
               style={{
                 width: '40px',
                 height: '5px',
-                backgroundColor: '#E5E7EB',
+                backgroundColor: 'var(--border-default)',
                 borderRadius: '3px',
                 margin: '0 auto 16px',
               }}
             />
 
-            {/* Header */}
             <div
               style={{
                 display: 'flex',
@@ -284,7 +270,7 @@ export default function PickTimeBottomSheet({
                 style={{
                   fontSize: 'clamp(18px, 5vw, 22px)',
                   fontWeight: 800,
-                  color: '#1A1A1A',
+                  color: 'var(--text-primary)',
                   margin: 0,
                 }}
               >
@@ -306,21 +292,20 @@ export default function PickTimeBottomSheet({
                 }}
                 aria-label="Close"
               >
-                <MdClose size={24} color="#6B7280" />
+                <MdClose size={24} color="var(--text-tertiary)" />
               </button>
             </div>
 
             <p
               style={{
                 fontSize: 'clamp(13px, 3.5vw, 15px)',
-                color: '#6B7280',
+                color: 'var(--text-tertiary)',
                 marginBottom: '16px',
               }}
             >
               {subtext}
             </p>
 
-            {/* ─── PICKUP MODE — presets only (unchanged) ─────── */}
             {mode === 'pickup' && (
               <div
                 style={{
@@ -339,13 +324,14 @@ export default function PickTimeBottomSheet({
                       alignItems: 'center',
                       gap: '12px',
                       padding: '14px',
-                      backgroundColor: '#F9FAFB',
-                      border: '1px solid #E5E7EB',
+                      backgroundColor: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-default)',
                       borderRadius: '16px',
                       cursor: 'pointer',
                       width: '100%',
                       textAlign: 'left',
                       minHeight: 56,
+                      color: 'var(--text-primary)',
                     }}
                   >
                     <div
@@ -353,7 +339,7 @@ export default function PickTimeBottomSheet({
                         width: '44px',
                         height: '44px',
                         borderRadius: '12px',
-                        backgroundColor: `${option.color}15`,
+                        backgroundColor: `color-mix(in srgb, ${option.color} 15%, transparent)`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -368,7 +354,7 @@ export default function PickTimeBottomSheet({
                         style={{
                           fontSize: 'clamp(15px, 4vw, 17px)',
                           fontWeight: 700,
-                          color: '#1A1A1A',
+                          color: 'var(--text-primary)',
                         }}
                       >
                         {option.label}
@@ -376,23 +362,28 @@ export default function PickTimeBottomSheet({
                       <div
                         style={{
                           fontSize: 'clamp(12px, 3vw, 14px)',
-                          color: '#6B7280',
+                          color: 'var(--text-tertiary)',
                           marginTop: '2px',
                         }}
                       >
                         {option.description}
                       </div>
                     </div>
-                    <span style={{ color: '#6B7280', fontSize: '20px' }}>›</span>
+                    <span
+                      style={{
+                        color: 'var(--text-tertiary)',
+                        fontSize: '20px',
+                      }}
+                    >
+                      ›
+                    </span>
                   </motion.button>
                 ))}
               </div>
             )}
 
-            {/* ─── SERVICE MODE — quick chips + real datetime picker ─── */}
             {mode === 'service' && (
               <>
-                {/* Quick chips — tap to prefill the input */}
                 <div
                   style={{
                     display: 'flex',
@@ -409,7 +400,9 @@ export default function PickTimeBottomSheet({
                       key={pick.label}
                       type="button"
                       onClick={() =>
-                        setCustomDateTime(toLocalInputValue(pick.date))
+                        setCustomDateTime(
+                          toLocalInputValue(pick.date),
+                        )
                       }
                       style={{
                         display: 'inline-flex',
@@ -417,9 +410,9 @@ export default function PickTimeBottomSheet({
                         gap: 6,
                         padding: '8px 14px',
                         borderRadius: 20,
-                        border: '1px solid #E5E7EB',
-                        backgroundColor: '#F9FAFB',
-                        color: '#374151',
+                        border: '1px solid var(--border-default)',
+                        backgroundColor: 'var(--bg-tertiary)',
+                        color: 'var(--text-secondary)',
                         fontWeight: 600,
                         fontSize: 13,
                         cursor: 'pointer',
@@ -427,7 +420,12 @@ export default function PickTimeBottomSheet({
                         flexShrink: 0,
                       }}
                     >
-                      <span style={{ color: pick.color, display: 'flex' }}>
+                      <span
+                        style={{
+                          color: pick.color,
+                          display: 'flex',
+                        }}
+                      >
                         {pick.icon}
                       </span>
                       {pick.label}
@@ -435,7 +433,6 @@ export default function PickTimeBottomSheet({
                   ))}
                 </div>
 
-                {/* Divider */}
                 <div
                   style={{
                     display: 'flex',
@@ -448,13 +445,13 @@ export default function PickTimeBottomSheet({
                     style={{
                       flex: 1,
                       height: 1,
-                      backgroundColor: '#E5E7EB',
+                      backgroundColor: 'var(--border-default)',
                     }}
                   />
                   <span
                     style={{
                       fontSize: 12,
-                      color: '#9CA3AF',
+                      color: 'var(--text-muted)',
                       fontWeight: 600,
                       letterSpacing: 0.5,
                     }}
@@ -465,12 +462,11 @@ export default function PickTimeBottomSheet({
                     style={{
                       flex: 1,
                       height: 1,
-                      backgroundColor: '#E5E7EB',
+                      backgroundColor: 'var(--border-default)',
                     }}
                   />
                 </div>
 
-                {/* Datetime input */}
                 <label
                   style={{
                     display: 'flex',
@@ -479,16 +475,25 @@ export default function PickTimeBottomSheet({
                     padding: '14px 16px',
                     borderRadius: 14,
                     border: `1.5px solid ${
-                      customDateTime ? '#0504AA' : '#E5E7EB'
+                      customDateTime
+                        ? 'var(--brand-primary)'
+                        : 'var(--border-default)'
                     }`,
-                    backgroundColor: customDateTime ? '#F5F4FF' : '#fff',
+                    backgroundColor: customDateTime
+                      ? 'var(--brand-soft)'
+                      : 'var(--bg-tertiary)',
                     marginBottom: 20,
-                    transition: 'border-color 0.2s, background-color 0.2s',
+                    transition:
+                      'border-color 0.2s, background-color 0.2s',
                   }}
                 >
                   <MdCalendarToday
                     size={22}
-                    color={customDateTime ? '#0504AA' : '#9CA3AF'}
+                    color={
+                      customDateTime
+                        ? 'var(--brand-primary)'
+                        : 'var(--text-muted)'
+                    }
                     style={{ flexShrink: 0 }}
                   />
                   <input
@@ -496,7 +501,9 @@ export default function PickTimeBottomSheet({
                     value={customDateTime}
                     min={minDateTime}
                     max={maxDateTime}
-                    onChange={(e) => setCustomDateTime(e.target.value)}
+                    onChange={(e) =>
+                      setCustomDateTime(e.target.value)
+                    }
                     style={{
                       flex: 1,
                       border: 'none',
@@ -504,14 +511,13 @@ export default function PickTimeBottomSheet({
                       backgroundColor: 'transparent',
                       fontSize: 16,
                       fontWeight: 600,
-                      color: '#1A1A1A',
+                      color: 'var(--text-primary)',
                       fontFamily: 'inherit',
                       minWidth: 0,
                     }}
                   />
                 </label>
 
-                {/* Confirm button */}
                 <button
                   type="button"
                   onClick={() => {
@@ -524,16 +530,24 @@ export default function PickTimeBottomSheet({
                     padding: '16px',
                     borderRadius: 14,
                     border: 'none',
-                    backgroundColor: customDateTime ? '#0504AA' : '#E5E7EB',
-                    color: customDateTime ? '#fff' : '#9CA3AF',
+                    background: customDateTime
+                      ? 'var(--brand-gradient)'
+                      : 'var(--bg-tertiary)',
+                    color: customDateTime
+                      ? 'var(--brand-on-gradient)'
+                      : 'var(--text-muted)',
                     fontSize: 16,
                     fontWeight: 700,
-                    cursor: customDateTime ? 'pointer' : 'not-allowed',
+                    cursor: customDateTime
+                      ? 'pointer'
+                      : 'not-allowed',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 8,
-                    transition: 'background-color 0.2s, color 0.2s',
+                    transition:
+                      'background-color 0.2s, color 0.2s',
+                    fontFamily: 'inherit',
                   }}
                 >
                   <MdCheck size={20} />

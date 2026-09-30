@@ -28,13 +28,19 @@ function ResetPasswordInner() {
   const [success, setSuccess] = useState(false);
 
   const canSubmit =
-    password.length >= 6 && password === confirm && !submitting && !!phone && !!otp;
+    password.length >= 6 &&
+    password === confirm &&
+    !submitting &&
+    !!phone &&
+    !!otp;
 
   const handleSubmit = async () => {
     setError(null);
 
     if (!phone || !otp) {
-      setError('Missing verification data. Please restart the reset flow.');
+      setError(
+        'Missing verification data. Please restart the reset flow.',
+      );
       return;
     }
     if (password.length < 6) {
@@ -63,7 +69,7 @@ function ResetPasswordInner() {
       <main style={styles.container}>
         <div style={styles.card}>
           <div style={styles.successIcon}>
-            <MdCheckCircle size={56} color="#2E7D32" />
+            <MdCheckCircle size={56} color="var(--success-fg)" />
           </div>
           <h2 style={styles.heading}>Password reset</h2>
           <p style={styles.subtitle}>Redirecting you to login…</p>
@@ -76,11 +82,12 @@ function ResetPasswordInner() {
     <main style={styles.container}>
       <div style={styles.card}>
         <div style={styles.iconWrap}>
-          <MdLockOutline size={32} color="#0504AA" />
+          <MdLockOutline size={32} color="var(--brand-primary)" />
         </div>
         <h1 style={styles.heading}>Set a new password</h1>
         <p style={styles.subtitle}>
-          Choose a password you don&apos;t use anywhere else. At least 6 characters.
+          Choose a password you don&apos;t use anywhere else. At least
+          6 characters.
         </p>
 
         <label style={styles.label}>
@@ -98,17 +105,27 @@ function ResetPasswordInner() {
               type="button"
               onClick={() => setShowPassword((s) => !s)}
               style={styles.eyeBtn}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={
+                showPassword ? 'Hide password' : 'Show password'
+              }
             >
               {showPassword ? (
-                <MdVisibilityOff size={20} color="#888" />
+                <MdVisibilityOff
+                  size={20}
+                  color="var(--text-tertiary)"
+                />
               ) : (
-                <MdVisibility size={20} color="#888" />
+                <MdVisibility
+                  size={20}
+                  color="var(--text-tertiary)"
+                />
               )}
             </button>
           </div>
           {password.length > 0 && password.length < 6 && (
-            <span style={styles.hint}>Too short ({password.length}/6)</span>
+            <span style={styles.hint}>
+              Too short ({password.length}/6)
+            </span>
           )}
         </label>
 
@@ -127,17 +144,25 @@ function ResetPasswordInner() {
               type="button"
               onClick={() => setShowConfirm((s) => !s)}
               style={styles.eyeBtn}
-              aria-label={showConfirm ? 'Hide password' : 'Show password'}
+              aria-label={
+                showConfirm ? 'Hide password' : 'Show password'
+              }
             >
               {showConfirm ? (
-                <MdVisibilityOff size={20} color="#888" />
+                <MdVisibilityOff
+                  size={20}
+                  color="var(--text-tertiary)"
+                />
               ) : (
-                <MdVisibility size={20} color="#888" />
+                <MdVisibility
+                  size={20}
+                  color="var(--text-tertiary)"
+                />
               )}
             </button>
           </div>
           {confirm.length > 0 && confirm !== password && (
-            <span style={{ ...styles.hint, color: '#C62828' }}>
+            <span style={{ ...styles.hint, color: 'var(--danger-fg)' }}>
               Passwords don&apos;t match
             </span>
           )}
@@ -179,6 +204,8 @@ export default function ResetPasswordPage() {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
+            background: 'var(--bg-primary)',
+            color: 'var(--text-tertiary)',
           }}
         >
           Loading...
@@ -209,33 +236,43 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   card: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 24,
     padding: 32,
-    boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+    boxShadow: 'var(--shadow-md)',
+    border: '1px solid var(--border-default)',
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   iconWrap: {
     width: 56,
     height: 56,
     borderRadius: '50%',
-    backgroundColor: '#0504AA10',
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     margin: '0 auto 12px',
   },
   successIcon: { marginBottom: 16 },
-  heading: { fontSize: 24, fontWeight: 800, color: '#1A1A1A', margin: 0 },
+  heading: {
+    fontSize: 24,
+    fontWeight: 800,
+    color: 'var(--text-primary)',
+    margin: 0,
+    letterSpacing: '-0.02em',
+  },
   subtitle: {
     fontSize: 14,
-    color: '#666',
+    color: 'var(--text-tertiary)',
     marginTop: 8,
     marginBottom: 24,
     lineHeight: 1.5,
@@ -244,7 +281,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'block',
     fontSize: 13,
     fontWeight: 600,
-    color: '#1A1A1A',
+    color: 'var(--text-secondary)',
     marginBottom: 14,
     textAlign: 'left',
   },
@@ -253,12 +290,14 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '12px 44px 12px 14px',
     borderRadius: 10,
-    border: '1px solid #e0e0e0',
+    border: '1px solid var(--border-default)',
     outline: 'none',
     fontSize: 15,
-    color: '#1A1A1A',
-    backgroundColor: '#fff',
+    color: 'var(--text-primary)',
+    backgroundColor: 'var(--bg-tertiary)',
     boxSizing: 'border-box',
+    fontFamily: 'inherit',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   eyeBtn: {
     position: 'absolute',
@@ -272,13 +311,18 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
   },
-  hint: { display: 'block', fontSize: 12, color: '#888', marginTop: 4 },
+  hint: {
+    display: 'block',
+    fontSize: 12,
+    color: 'var(--text-muted)',
+    marginTop: 4,
+  },
   error: {
     padding: '10px 12px',
-    backgroundColor: '#FFEBEE',
-    border: '1px solid #FFCDD2',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     borderRadius: 8,
-    color: '#B71C1C',
+    color: 'var(--danger-fg)',
     fontSize: 13,
     marginTop: 8,
     marginBottom: 4,
@@ -288,11 +332,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '14px',
     borderRadius: 10,
     border: 'none',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 15,
     fontWeight: 600,
     marginTop: 16,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: 'var(--shadow-brand)',
   },
   cancelBtn: {
     width: '100%',
@@ -300,8 +347,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 8,
     border: 'none',
     background: 'none',
-    color: '#666',
+    color: 'var(--text-tertiary)',
     fontSize: 13,
     cursor: 'pointer',
+    fontFamily: 'inherit',
   },
 };
