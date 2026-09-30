@@ -52,13 +52,16 @@ export default function WelcomePage() {
 
   return (
     <main style={styles.container}>
+      {/* Animated logo — uses the transparent symbol, not the PWA icon
+          (the PWA icon has a solid white background baked in, which
+          showed as a box on the dark theme). */}
       <motion.div
         initial={{ opacity: 0, scale: 0.5 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: 'easeOut' }}
       >
         <Image
-          src="/icons/icon-512x512.png"
+          src="/admerce_symbol.png"
           alt="Admerce"
           width={200}
           height={200}
