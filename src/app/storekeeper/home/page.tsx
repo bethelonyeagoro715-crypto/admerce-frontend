@@ -28,7 +28,6 @@ import {
   MdAccountBalanceWallet,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface Store {
   name?: string;
   store_image_url?: string;
@@ -72,7 +71,6 @@ type VerificationStatus =
   | 'rejected'
   | 'suspended';
 
-// ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string {
   if (!url) return '';
   if (
@@ -82,7 +80,9 @@ function resolveImageUrl(url: string | null | undefined): string {
   )
     return url;
   const base =
-    process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    '';
   if (!base) return url;
   if (url.startsWith('/')) return `${base}${url}`;
   return `${base}/${url}`;
@@ -144,36 +144,35 @@ const VERIFICATION_META: Record<
   unverified: {
     label: 'Store not verified',
     hint: 'Get the verified badge — buyers trust it',
-    color: '#64748B',
-    soft: '#F1F5F9',
+    color: 'var(--text-tertiary)',
+    soft: 'var(--bg-tertiary)',
   },
   pending: {
     label: 'Verification under review',
     hint: 'We received your submission',
-    color: '#D97706',
-    soft: '#FEF3C7',
+    color: 'var(--warning-fg)',
+    soft: 'var(--warning-bg)',
   },
   verified: {
     label: 'Store verified',
     hint: 'Buyers see the verified badge on your store',
-    color: '#16A34A',
-    soft: '#DCFCE7',
+    color: 'var(--success-fg)',
+    soft: 'var(--success-bg)',
   },
   rejected: {
     label: 'Verification not approved',
     hint: 'Review the reason and resubmit',
-    color: '#DC2626',
-    soft: '#FEE2E2',
+    color: 'var(--danger-fg)',
+    soft: 'var(--danger-bg)',
   },
   suspended: {
     label: 'Store suspended',
     hint: 'Contact support for details',
-    color: '#DC2626',
-    soft: '#FEE2E2',
+    color: 'var(--danger-fg)',
+    soft: 'var(--danger-bg)',
   },
 };
 
-// ─── Component ──────────────────────────────────────────────────────
 export default function StorekeeperDashboardPage() {
   useAuthGuard();
   const router = useRouter();
@@ -181,9 +180,8 @@ export default function StorekeeperDashboardPage() {
   const [store, setStore] = useState<Store | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<StoreStats>({});
-  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(
-    null,
-  );
+  const [communityStats, setCommunityStats] =
+    useState<CommunityStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errored, setErrored] = useState(false);
 
@@ -193,9 +191,9 @@ export default function StorekeeperDashboardPage() {
   const storeImageInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  const [storeImagePreview, setStoreImagePreview] = useState<string | null>(
-    null,
-  );
+  const [storeImagePreview, setStoreImagePreview] = useState<
+    string | null
+  >(null);
   const [storeImageFile, setStoreImageFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -235,7 +233,8 @@ export default function StorekeeperDashboardPage() {
     } catch {
       if (seq === reqSeq.current && isMountedRef.current) setErrored(true);
     } finally {
-      if (seq === reqSeq.current && isMountedRef.current) setIsLoading(false);
+      if (seq === reqSeq.current && isMountedRef.current)
+        setIsLoading(false);
     }
   }, []);
 
@@ -260,7 +259,9 @@ export default function StorekeeperDashboardPage() {
     setAvatarPreview(null);
   };
 
-  const handleStoreImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleStoreImageChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setStoreImageFile(file);
@@ -269,7 +270,9 @@ export default function StorekeeperDashboardPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setAvatarFile(file);
@@ -290,7 +293,10 @@ export default function StorekeeperDashboardPage() {
     } catch (err) {
       await alertDialog({
         title: 'Upload failed',
-        body: extractErrorDetail(err, 'Please try again in a moment.'),
+        body: extractErrorDetail(
+          err,
+          'Please try again in a moment.',
+        ),
         kind: 'danger',
       });
     } finally {
@@ -308,7 +314,10 @@ export default function StorekeeperDashboardPage() {
     } catch (err) {
       await alertDialog({
         title: 'Upload failed',
-        body: extractErrorDetail(err, 'Please try again in a moment.'),
+        body: extractErrorDetail(
+          err,
+          'Please try again in a moment.',
+        ),
         kind: 'danger',
       });
     } finally {
@@ -331,7 +340,6 @@ export default function StorekeeperDashboardPage() {
   const sold = stats.sold ?? 0;
   const revenue = stats.revenue ?? 0;
 
-  // ── Loading skeleton ──────────────────────────────────────────
   if (isLoading) {
     return (
       <main style={css.root} className="sk-dash">
@@ -364,60 +372,58 @@ export default function StorekeeperDashboardPage() {
     );
   }
 
-  // ── Error ─────────────────────────────────────────────────────
   if (errored) {
     return (
       <main style={css.errorRoot} className="sk-dash">
         <style>{CSS}</style>
         <div style={css.errorHalo}>
-          <MdErrorOutline size={40} color="#B91C1C" />
+          <MdErrorOutline size={40} color="var(--danger-fg)" />
         </div>
-        <h2 style={css.errorHeading}>Couldn&apos;t load your dashboard</h2>
+        <h2 style={css.errorHeading}>
+          Couldn&apos;t load your dashboard
+        </h2>
         <p style={css.errorBody}>
-          Check your connection and try again. If this keeps happening, sign
-          out and back in.
+          Check your connection and try again. If this keeps happening,
+          sign out and back in.
         </p>
         <button
           onClick={() => void loadDashboardData()}
           style={css.errorRetry}
         >
-          <MdRefresh size={18} color="#fff" />
+          <MdRefresh size={18} color="var(--brand-on-gradient)" />
           <span>Retry</span>
         </button>
       </main>
     );
   }
 
-  // ── No store yet ──────────────────────────────────────────────
   if (!store) {
     return (
       <main style={css.errorRoot} className="sk-dash">
         <style>{CSS}</style>
         <div style={css.setupHalo}>
-          <MdStorefront size={40} color="#0504AA" />
+          <MdStorefront size={40} color="var(--brand-primary)" />
         </div>
         <h2 style={css.errorHeading}>Set up your store</h2>
         <p style={css.errorBody}>
-          You don&apos;t have a store yet. Create one to start selling on
-          Admerce — it takes about two minutes.
+          You don&apos;t have a store yet. Create one to start selling
+          on Admerce — it takes about two minutes.
         </p>
         <button
           onClick={() => router.push('/storekeeper/onboarding')}
           style={css.errorRetry}
         >
           <span>Create my store</span>
-          <MdChevronRight size={18} color="#fff" />
+          <MdChevronRight size={18} color="var(--brand-on-gradient)" />
         </button>
       </main>
     );
   }
 
-  // ── Main dashboard ────────────────────────────────────────────
   return (
     <main style={css.root} className="sk-dash">
       <style>{CSS}</style>
 
-      {/* HERO */}
       <div style={css.hero} className="sk-hero">
         <div style={css.heroGlow} aria-hidden />
 
@@ -429,7 +435,7 @@ export default function StorekeeperDashboardPage() {
               style={css.ghostBtn}
               aria-label="Refresh"
             >
-              <MdRefresh size={20} color="#fff" />
+              <MdRefresh size={20} color="var(--brand-on-gradient)" />
             </button>
           </div>
 
@@ -442,24 +448,33 @@ export default function StorekeeperDashboardPage() {
             >
               {storeImageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={storeImageUrl} alt="" style={css.storeThumbImg} />
+                <img
+                  src={storeImageUrl}
+                  alt=""
+                  style={css.storeThumbImg}
+                />
               ) : (
                 <div style={css.storeThumbPlaceholder}>
-                  <MdStorefront size={30} color="rgba(255,255,255,0.85)" />
+                  <MdStorefront
+                    size={30}
+                    color="color-mix(in srgb, var(--brand-on-gradient) 85%, transparent)"
+                  />
                 </div>
               )}
               <span style={css.cameraBadge} aria-hidden>
-                <MdCameraAlt size={11} color="#0504AA" />
+                <MdCameraAlt size={11} color="var(--brand-primary)" />
               </span>
             </button>
 
             <div style={css.identityMeta}>
               <div style={css.nameRow}>
-                <span style={css.storeName}>{store.name || 'Your Store'}</span>
+                <span style={css.storeName}>
+                  {store.name || 'Your Store'}
+                </span>
                 {verificationStatus === 'verified' && (
                   <MdVerified
                     size={18}
-                    color="#7DD3FC"
+                    color="var(--info-fg)"
                     aria-label="Verified"
                   />
                 )}
@@ -478,15 +493,13 @@ export default function StorekeeperDashboardPage() {
         </div>
       </div>
 
-      {/* SHEET */}
       <div style={css.sheet} className="sk-sheet">
-        {/* REVENUE SPOTLIGHT */}
         <div style={css.revenueCard} className="sk-revenue-card">
           <div style={css.revenueTop}>
             <div style={css.revenueLabelRow}>
               <MdAccountBalanceWallet
                 size={14}
-                color="rgba(255,255,255,0.72)"
+                color="color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)"
               />
               <span style={css.revenueLabel}>Total revenue</span>
             </div>
@@ -496,7 +509,10 @@ export default function StorekeeperDashboardPage() {
               style={css.revenueLink}
             >
               <span>Wallet</span>
-              <MdChevronRight size={16} color="rgba(255,255,255,0.85)" />
+              <MdChevronRight
+                size={16}
+                color="color-mix(in srgb, var(--brand-on-gradient) 85%, transparent)"
+              />
             </button>
           </div>
           <div style={css.revenueAmount} className="sk-revenue-amount">
@@ -509,29 +525,27 @@ export default function StorekeeperDashboardPage() {
           </div>
         </div>
 
-        {/* PULSE ROW */}
         <div style={css.pulseRow} className="sk-pulse-row">
           <PulseTile
-            icon={<MdVisibility size={18} color="#0504AA" />}
-            tint="#EEF0FF"
+            icon={<MdVisibility size={18} color="var(--brand-primary)" />}
+            tint="var(--brand-soft)"
             label="Views"
             value={formatNumber(views)}
           />
           <PulseTile
-            icon={<MdChat size={18} color="#0891B2" />}
-            tint="#E0F2FE"
+            icon={<MdChat size={18} color="var(--info-fg)" />}
+            tint="var(--info-bg)"
             label="Inquiries"
             value={formatNumber(inquiries)}
           />
           <PulseTile
-            icon={<MdShoppingBag size={18} color="#16A34A" />}
-            tint="#DCFCE7"
+            icon={<MdShoppingBag size={18} color="var(--success-fg)" />}
+            tint="var(--success-bg)"
             label="Sold"
             value={formatNumber(sold)}
           />
         </div>
 
-        {/* STORE SETUP */}
         <h3 style={css.sectionLabel}>Store setup</h3>
         <div style={css.setupCard}>
           <button
@@ -550,14 +564,23 @@ export default function StorekeeperDashboardPage() {
                 <MdVerified size={18} color={verificationMeta.color} />
               )}
               {verificationStatus === 'pending' && (
-                <MdHourglassEmpty size={18} color={verificationMeta.color} />
+                <MdHourglassEmpty
+                  size={18}
+                  color={verificationMeta.color}
+                />
               )}
               {(verificationStatus === 'rejected' ||
                 verificationStatus === 'suspended') && (
-                <MdErrorOutline size={18} color={verificationMeta.color} />
+                <MdErrorOutline
+                  size={18}
+                  color={verificationMeta.color}
+                />
               )}
               {verificationStatus === 'unverified' && (
-                <MdInfoOutline size={18} color={verificationMeta.color} />
+                <MdInfoOutline
+                  size={18}
+                  color={verificationMeta.color}
+                />
               )}
             </span>
             <span style={css.setupText}>
@@ -571,7 +594,7 @@ export default function StorekeeperDashboardPage() {
               </span>
               <span style={css.setupHint}>{verificationMeta.hint}</span>
             </span>
-            <MdChevronRight size={18} color="#CBD5E1" />
+            <MdChevronRight size={18} color="var(--border-strong)" />
           </button>
 
           <button
@@ -583,13 +606,18 @@ export default function StorekeeperDashboardPage() {
             <span
               style={{
                 ...css.setupIcon,
-                backgroundColor: storeImageUrl ? '#DCFCE7' : '#FEF3C7',
+                backgroundColor: storeImageUrl
+                  ? 'var(--success-bg)'
+                  : 'var(--warning-bg)',
               }}
             >
               {storeImageUrl ? (
-                <MdImage size={18} color="#16A34A" />
+                <MdImage size={18} color="var(--success-fg)" />
               ) : (
-                <MdAddPhotoAlternate size={18} color="#D97706" />
+                <MdAddPhotoAlternate
+                  size={18}
+                  color="var(--warning-fg)"
+                />
               )}
             </span>
             <span style={css.setupText}>
@@ -602,11 +630,10 @@ export default function StorekeeperDashboardPage() {
                   : 'Buyers trust stores with photos'}
               </span>
             </span>
-            <MdChevronRight size={18} color="#CBD5E1" />
+            <MdChevronRight size={18} color="var(--border-strong)" />
           </button>
         </div>
 
-        {/* QUICK ACTIONS */}
         <h3 style={css.sectionLabel}>Quick actions</h3>
         <div style={css.actionGrid} className="sk-action-grid">
           <button
@@ -616,11 +643,13 @@ export default function StorekeeperDashboardPage() {
             className="sk-action-tile"
           >
             <span style={css.actionIconWrapPrimary}>
-              <MdAdd size={22} color="#0504AA" />
+              <MdAdd size={22} color="var(--brand-primary)" />
             </span>
             <span style={css.actionTextPrimary}>
               <span style={css.actionTitlePrimary}>Add item</span>
-              <span style={css.actionHintPrimary}>List a new product</span>
+              <span style={css.actionHintPrimary}>
+                List a new product
+              </span>
             </span>
           </button>
 
@@ -628,7 +657,9 @@ export default function StorekeeperDashboardPage() {
             type="button"
             onClick={() =>
               router.push(
-                `/storekeeper/arrange-store?store_id=${store?.store_id || ''}`,
+                `/storekeeper/arrange-store?store_id=${
+                  store?.store_id || ''
+                }`,
               )
             }
             style={css.actionTile}
@@ -637,10 +668,10 @@ export default function StorekeeperDashboardPage() {
             <span
               style={{
                 ...css.actionIconWrap,
-                backgroundColor: '#EEF0FF',
+                backgroundColor: 'var(--brand-soft)',
               }}
             >
-              <MdGridView size={22} color="#0504AA" />
+              <MdGridView size={22} color="var(--brand-primary)" />
             </span>
             <span style={css.actionText}>
               <span style={css.actionTitle}>Arrange</span>
@@ -657,10 +688,10 @@ export default function StorekeeperDashboardPage() {
             <span
               style={{
                 ...css.actionIconWrap,
-                backgroundColor: '#F3E8FF',
+                backgroundColor: 'var(--purple-bg)',
               }}
             >
-              <MdAutoAwesome size={22} color="#7E22CE" />
+              <MdAutoAwesome size={22} color="var(--purple-fg)" />
             </span>
             <span style={css.actionText}>
               <span style={css.actionTitle}>Ask SEAI</span>
@@ -677,10 +708,10 @@ export default function StorekeeperDashboardPage() {
             <span
               style={{
                 ...css.actionIconWrap,
-                backgroundColor: '#E0F2FE',
+                backgroundColor: 'var(--info-bg)',
               }}
             >
-              <MdCameraAlt size={22} color="#0891B2" />
+              <MdCameraAlt size={22} color="var(--info-fg)" />
             </span>
             <span style={css.actionText}>
               <span style={css.actionTitle}>Avatar</span>
@@ -689,7 +720,6 @@ export default function StorekeeperDashboardPage() {
           </button>
         </div>
 
-        {/* COMMUNITY */}
         <h3 style={css.sectionLabel}>Sellers only</h3>
         <button
           type="button"
@@ -698,7 +728,7 @@ export default function StorekeeperDashboardPage() {
           className="sk-community-card"
         >
           <span style={css.communityIcon}>
-            <MdGroups size={22} color="#0504AA" />
+            <MdGroups size={22} color="var(--brand-primary)" />
             <span style={css.communityDot} />
           </span>
           <span style={css.communityText}>
@@ -711,13 +741,12 @@ export default function StorekeeperDashboardPage() {
                 : 'Chat with other sellers'}
             </span>
           </span>
-          <MdChevronRight size={20} color="#CBD5E1" />
+          <MdChevronRight size={20} color="var(--border-strong)" />
         </button>
 
         <div style={{ height: 32 }} />
       </div>
 
-      {/* STORE IMAGE MODAL */}
       {showStoreImageModal && (
         <Modal onClose={closeStoreImageModal}>
           <h3 style={css.modalTitle}>Update store image</h3>
@@ -733,11 +762,18 @@ export default function StorekeeperDashboardPage() {
               <img
                 src={storeImageUrl}
                 alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
               />
             ) : (
               <div style={css.modalImagePlaceholder}>
-                <MdAddPhotoAlternate size={40} color="#94A3B8" />
+                <MdAddPhotoAlternate
+                  size={40}
+                  color="var(--text-muted)"
+                />
                 <span style={css.modalImagePlaceholderText}>
                   Tap to pick image
                 </span>
@@ -757,7 +793,7 @@ export default function StorekeeperDashboardPage() {
               onClick={() => storeImageInputRef.current?.click()}
               style={css.secondaryBtn}
             >
-              <MdPhotoLibrary size={18} color="#0504AA" />
+              <MdPhotoLibrary size={18} color="var(--brand-primary)" />
               <span>Choose from gallery</span>
             </button>
             <button
@@ -765,7 +801,7 @@ export default function StorekeeperDashboardPage() {
               onClick={() => storeImageInputRef.current?.click()}
               style={css.secondaryBtn}
             >
-              <MdCameraAlt size={18} color="#0504AA" />
+              <MdCameraAlt size={18} color="var(--brand-primary)" />
               <span>Take a photo</span>
             </button>
           </div>
@@ -786,7 +822,6 @@ export default function StorekeeperDashboardPage() {
         </Modal>
       )}
 
-      {/* AVATAR MODAL */}
       {showAvatarModal && (
         <Modal onClose={closeAvatarModal}>
           <h3 style={css.modalTitle}>Update avatar</h3>
@@ -802,10 +837,14 @@ export default function StorekeeperDashboardPage() {
               <img
                 src={avatarUrl}
                 alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
               />
             ) : (
-              <MdCameraAlt size={40} color="#94A3B8" />
+              <MdCameraAlt size={40} color="var(--text-muted)" />
             )}
           </div>
           <input
@@ -821,7 +860,7 @@ export default function StorekeeperDashboardPage() {
               onClick={() => avatarInputRef.current?.click()}
               style={css.secondaryBtn}
             >
-              <MdPhotoLibrary size={18} color="#0504AA" />
+              <MdPhotoLibrary size={18} color="var(--brand-primary)" />
               <span>Choose from gallery</span>
             </button>
             <button
@@ -829,7 +868,7 @@ export default function StorekeeperDashboardPage() {
               onClick={() => avatarInputRef.current?.click()}
               style={css.secondaryBtn}
             >
-              <MdCameraAlt size={18} color="#0504AA" />
+              <MdCameraAlt size={18} color="var(--brand-primary)" />
               <span>Take a photo</span>
             </button>
           </div>
@@ -853,7 +892,6 @@ export default function StorekeeperDashboardPage() {
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────
 function PulseTile({
   icon,
   tint,
@@ -867,7 +905,9 @@ function PulseTile({
 }) {
   return (
     <div style={css.pulseTile} className="sk-pulse-tile">
-      <div style={{ ...css.pulseIcon, backgroundColor: tint }}>{icon}</div>
+      <div style={{ ...css.pulseIcon, backgroundColor: tint }}>
+        {icon}
+      </div>
       <div style={css.pulseValue}>{value}</div>
       <div style={css.pulseLabel}>{label}</div>
     </div>
@@ -882,14 +922,18 @@ function Modal({
   onClose: () => void;
 }) {
   return (
-    <div style={css.modalOverlay} onClick={onClose}>
-      <div style={css.modalCard} onClick={(e) => e.stopPropagation()}>
+    <div style={css.modalOverlay} className="sk-modal-overlay" onClick={onClose}>
+      <div
+        style={css.modalCard}
+        className="sk-modal-card"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           style={css.modalClose}
           onClick={onClose}
           aria-label="Close"
         >
-          <MdClose size={20} color="#64748B" />
+          <MdClose size={20} color="var(--text-tertiary)" />
         </button>
         {children}
       </div>
@@ -897,7 +941,6 @@ function Modal({
   );
 }
 
-// ─── Keyframes + desktop layout ─────────────────────────────────────
 const CSS = `
   @keyframes skSpin { to { transform: rotate(360deg); } }
   @keyframes skShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
@@ -914,7 +957,6 @@ const CSS = `
     box-sizing: border-box;
   }
 
-  /* ── Centered column: hero content + sheet share the same width ── */
   .sk-hero-inner {
     position: relative;
     max-width: 720px;
@@ -929,15 +971,16 @@ const CSS = `
   }
 
   .sk-setup-row + .sk-setup-row {
-    border-top: 1px solid #F1F5F9;
+    border-top: 1px solid var(--border-subtle);
   }
-  .sk-setup-row:hover { background-color: #FAFBFF; }
+  .sk-setup-row:hover { background-color: var(--bg-hover); }
 
   .sk-action-tile {
     transition: transform 0.12s ease, box-shadow 0.15s ease;
   }
   .sk-action-tile:hover {
-    box-shadow: 0 10px 24px rgba(5,4,170,0.10);
+    box-shadow: 0 10px 24px
+      color-mix(in srgb, var(--brand-primary) 10%, transparent);
   }
   .sk-action-tile:active {
     transform: scale(0.98);
@@ -954,7 +997,6 @@ const CSS = `
     transform: scale(0.97);
   }
 
-  /* ── Desktop: widen the reading column, breathe more ── */
   @media (min-width: 1024px) {
     .sk-hero-inner {
       max-width: 960px;
@@ -985,27 +1027,35 @@ const CSS = `
     .sk-community-card {
       padding: 20px 22px !important;
     }
+    .sk-modal-overlay {
+      align-items: center !important;
+      padding: 24px;
+    }
+    .sk-modal-card {
+      border-radius: 24px !important;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
   }
 `;
 
-// ─── Styles ─────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F7F5F0',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
-  // HERO
   hero: {
     position: 'relative',
-    backgroundColor: '#0504AA',
-    backgroundImage:
-      'radial-gradient(ellipse at 80% 0%, #1A0FB8 0%, #0504AA 55%, #03037A 100%)',
+    background: 'var(--brand-gradient)',
     padding: '0 20px 76px',
     overflow: 'hidden',
+    transition: 'background 0.18s ease',
   },
   heroGlow: {
     position: 'absolute',
@@ -1015,7 +1065,7 @@ const css: Record<string, React.CSSProperties> = {
     height: 320,
     borderRadius: '50%',
     background:
-      'radial-gradient(circle, rgba(61,59,255,0.45) 0%, rgba(61,59,255,0) 70%)',
+      'radial-gradient(circle, color-mix(in srgb, var(--brand-on-gradient) 20%, transparent) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   topBar: {
@@ -1028,11 +1078,12 @@ const css: Record<string, React.CSSProperties> = {
   topTitle: {
     fontSize: 15,
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: 0.3,
   },
   ghostBtn: {
-    background: 'rgba(255,255,255,0.10)',
+    background:
+      'color-mix(in srgb, var(--brand-on-gradient) 10%, transparent)',
     border: 'none',
     cursor: 'pointer',
     padding: 8,
@@ -1056,8 +1107,10 @@ const css: Record<string, React.CSSProperties> = {
     height: 68,
     borderRadius: 20,
     overflow: 'hidden',
-    border: '3px solid rgba(255,255,255,0.18)',
-    background: 'rgba(255,255,255,0.08)',
+    border:
+      '3px solid color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
+    background:
+      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
     cursor: 'pointer',
     padding: 0,
     flexShrink: 0,
@@ -1082,7 +1135,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 22,
     height: 22,
     borderRadius: '50%',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1105,7 +1158,7 @@ const css: Record<string, React.CSSProperties> = {
   storeName: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: -0.4,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1114,15 +1167,18 @@ const css: Record<string, React.CSSProperties> = {
   },
   metaLine: {
     fontSize: 12.5,
-    color: 'rgba(255,255,255,0.72)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
     fontWeight: 600,
     display: 'flex',
     alignItems: 'center',
     gap: 6,
   },
-  metaDot: { color: 'rgba(255,255,255,0.4)' },
+  metaDot: {
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 40%, transparent)',
+  },
 
-  // SHEET — layout handled by `.sk-sheet` CSS class
   sheet: {
     flex: 1,
     marginTop: -52,
@@ -1130,14 +1186,12 @@ const css: Record<string, React.CSSProperties> = {
     padding: '0 20px 40px',
   },
 
-  // REVENUE
   revenueCard: {
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0B0B1A 0%, #0504AA 100%)',
+    background: 'var(--brand-gradient)',
     borderRadius: 22,
     padding: '20px 22px 22px',
-    color: '#fff',
-    boxShadow: '0 20px 40px rgba(5,4,170,0.28)',
+    color: 'var(--brand-on-gradient)',
+    boxShadow: 'var(--shadow-brand)',
   },
   revenueTop: {
     display: 'flex',
@@ -1155,13 +1209,15 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.75)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)',
   },
   revenueLink: {
-    background: 'rgba(255,255,255,0.10)',
+    background:
+      'color-mix(in srgb, var(--brand-on-gradient) 10%, transparent)',
     border: 'none',
     cursor: 'pointer',
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     fontFamily: 'inherit',
     fontSize: 12,
     fontWeight: 700,
@@ -1178,15 +1234,16 @@ const css: Record<string, React.CSSProperties> = {
     fontVariantNumeric: 'tabular-nums',
     marginTop: 12,
     lineHeight: 1.05,
+    color: 'var(--brand-on-gradient)',
   },
   revenueSub: {
     fontSize: 12.5,
-    color: 'rgba(255,255,255,0.72)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
     fontWeight: 500,
     marginTop: 6,
   },
 
-  // PULSE
   pulseRow: {
     display: 'flex',
     gap: 10,
@@ -1194,14 +1251,15 @@ const css: Record<string, React.CSSProperties> = {
   },
   pulseTile: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     padding: '14px 12px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-start',
     gap: 6,
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   pulseIcon: {
     width: 34,
@@ -1214,7 +1272,7 @@ const css: Record<string, React.CSSProperties> = {
   pulseValue: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.4,
     fontVariantNumeric: 'tabular-nums',
     marginTop: 2,
@@ -1222,27 +1280,26 @@ const css: Record<string, React.CSSProperties> = {
   pulseLabel: {
     fontSize: 11,
     fontWeight: 700,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.2,
     textTransform: 'uppercase',
   },
 
-  // SECTIONS
   sectionLabel: {
     fontSize: 11.5,
     fontWeight: 800,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     margin: '26px 0 10px 4px',
   },
 
-  // STORE SETUP
   setupCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     overflow: 'hidden',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   setupRow: {
     display: 'flex',
@@ -1276,18 +1333,17 @@ const css: Record<string, React.CSSProperties> = {
   setupTitle: {
     fontSize: 14.5,
     fontWeight: 700,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
   },
   setupHint: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
 
-  // QUICK ACTIONS
   actionGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -1300,20 +1356,20 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'flex-start',
     gap: 12,
     padding: '16px 16px 18px',
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 20,
     cursor: 'pointer',
     fontFamily: 'inherit',
     textAlign: 'left',
     minHeight: 128,
-    boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   actionTilePrimary: {
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    background: 'var(--brand-gradient)',
     border: 'none',
-    boxShadow: '0 12px 28px rgba(5,4,170,0.28)',
+    boxShadow: 'var(--shadow-brand)',
   },
   actionIconWrap: {
     width: 40,
@@ -1327,7 +1383,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 40,
     height: 40,
     borderRadius: 13,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1347,40 +1403,41 @@ const css: Record<string, React.CSSProperties> = {
   actionTitle: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.2,
   },
   actionTitlePrimary: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: -0.2,
   },
   actionHint: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 500,
   },
   actionHintPrimary: {
     fontSize: 11.5,
-    color: 'rgba(255,255,255,0.78)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
     fontWeight: 500,
   },
 
-  // COMMUNITY
   communityCard: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     width: '100%',
     padding: '16px 16px',
-    background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
-    border: '1px solid #DDE3F5',
+    background: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 20,
     cursor: 'pointer',
     fontFamily: 'inherit',
     textAlign: 'left',
-    boxShadow: '0 8px 22px rgba(5,4,170,0.06)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   communityIcon: {
     position: 'relative',
@@ -1388,7 +1445,7 @@ const css: Record<string, React.CSSProperties> = {
     height: 44,
     flexShrink: 0,
     borderRadius: 13,
-    background: 'linear-gradient(135deg, #EEF0FF, #E0E7FF)',
+    background: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1401,7 +1458,7 @@ const css: Record<string, React.CSSProperties> = {
     height: 9,
     borderRadius: '50%',
     backgroundColor: '#22C55E',
-    border: '2px solid #FFFFFF',
+    border: '2px solid var(--bg-secondary)',
     animation: 'skPulseDot 2s ease-in-out infinite',
   },
   communityText: {
@@ -1415,21 +1472,20 @@ const css: Record<string, React.CSSProperties> = {
     fontSize: 15,
     fontWeight: 800,
     letterSpacing: -0.1,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
   },
   communityHint: {
     fontSize: 12.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
 
-  // MODALS
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(15,23,42,0.48)',
+    backgroundColor: 'var(--overlay)',
     backdropFilter: 'blur(6px)',
     WebkitBackdropFilter: 'blur(6px)',
     display: 'flex',
@@ -1438,21 +1494,23 @@ const css: Record<string, React.CSSProperties> = {
     zIndex: 200,
   },
   modalCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-elevated)',
+    color: 'var(--text-primary)',
     padding: '24px 22px calc(28px + env(safe-area-inset-bottom))',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     width: '100%',
     maxWidth: 520,
     position: 'relative',
-    boxShadow: '0 -8px 40px rgba(5,4,170,0.2)',
+    boxShadow: 'var(--shadow-lg)',
     animation: 'skSheetUp 0.28s cubic-bezier(0.22,1,0.36,1)',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   modalClose: {
     position: 'absolute',
     top: 14,
     right: 14,
-    background: '#F1F5F9',
+    background: 'var(--bg-tertiary)',
     border: 'none',
     cursor: 'pointer',
     padding: 6,
@@ -1467,12 +1525,12 @@ const css: Record<string, React.CSSProperties> = {
     fontSize: 20,
     fontWeight: 800,
     margin: '0 0 4px',
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.3,
   },
   modalSub: {
     fontSize: 13,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     margin: '0 0 20px',
     lineHeight: 1.5,
   },
@@ -1480,21 +1538,21 @@ const css: Record<string, React.CSSProperties> = {
     width: 200,
     height: 200,
     borderRadius: 16,
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-tertiary)',
     margin: '0 auto 20px',
     cursor: 'pointer',
     overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: '2px solid #EAECF3',
+    border: '2px solid var(--border-default)',
   },
   modalImagePlaceholder: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: 8,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
   },
   modalImagePlaceholderText: {
     fontSize: 12.5,
@@ -1504,14 +1562,14 @@ const css: Record<string, React.CSSProperties> = {
     width: 140,
     height: 140,
     borderRadius: '50%',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-tertiary)',
     margin: '0 auto 20px',
     cursor: 'pointer',
     overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: '3px solid #EEF0FF',
+    border: '3px solid var(--brand-soft)',
   },
   modalActions: {
     display: 'flex',
@@ -1526,9 +1584,9 @@ const css: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '13px 16px',
     borderRadius: 14,
-    border: '1.5px solid #E6E8F0',
-    background: '#FFFFFF',
-    color: '#0504AA',
+    border: '1.5px solid var(--border-default)',
+    background: 'var(--bg-secondary)',
+    color: 'var(--brand-primary)',
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
@@ -1537,70 +1595,71 @@ const css: Record<string, React.CSSProperties> = {
   primaryBtn: {
     width: '100%',
     padding: 16,
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 14,
     fontSize: 15,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 10px 24px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // SKELETONS
   thumbSkeleton: {
     width: 68,
     height: 68,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
     flexShrink: 0,
   },
   skelLine: {
     height: 12,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
     width: 180,
   },
   revenueSkeleton: {
     height: 140,
     borderRadius: 22,
-    backgroundColor: '#EAECF3',
+    backgroundColor: 'var(--bg-tertiary)',
     animation: 'skShimmer 1.4s ease-in-out infinite',
   },
   pulseSkeleton: {
     height: 104,
     borderRadius: 18,
-    backgroundColor: '#EAECF3',
+    backgroundColor: 'var(--bg-tertiary)',
     marginTop: 16,
     animation: 'skShimmer 1.4s ease-in-out infinite',
   },
   sectionSkeleton: {
     height: 160,
     borderRadius: 18,
-    backgroundColor: '#EAECF3',
+    backgroundColor: 'var(--bg-tertiary)',
     marginTop: 20,
     animation: 'skShimmer 1.4s ease-in-out infinite',
   },
 
-  // ERROR / EMPTY STATES
   errorRoot: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F7F5F0',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   errorHalo: {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1610,8 +1669,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7D2FE',
+    backgroundColor: 'var(--brand-soft)',
+    border: '1px solid var(--brand-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1620,13 +1679,13 @@ const css: Record<string, React.CSSProperties> = {
   errorHeading: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   errorBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 8,
     maxWidth: 340,
     lineHeight: 1.55,
@@ -1638,14 +1697,13 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 800,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 };

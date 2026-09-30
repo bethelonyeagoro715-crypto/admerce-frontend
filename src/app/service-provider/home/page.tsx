@@ -4,17 +4,17 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api, { extractErrorDetail } from '../../../services/api';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
-import { alertDialog, confirmDialog } from '../../../components/ui/dialogs';
+import {
+  alertDialog,
+  confirmDialog,
+} from '../../../components/ui/dialogs';
 import {
   MdRefresh,
   MdAutoAwesome,
   MdEdit,
-  MdCheckCircle,
   MdAdd,
-  MdStorefront,
   MdCalendarToday,
   MdToday,
-  MdWallet,
   MdStar,
   MdAccountBalanceWallet,
   MdDesignServices,
@@ -23,12 +23,8 @@ import {
   MdGroups,
   MdChevronRight,
   MdErrorOutline,
-  MdImage,
-  MdSearch,
-  MdReceiptLong,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface ServiceItem {
   service_id: string;
   title?: string;
@@ -81,7 +77,6 @@ interface CommunityStatsApi {
   communityGetStats?: (room: string) => Promise<CommunityStats | null>;
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (
@@ -91,7 +86,9 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   )
     return url;
   const base =
-    process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    '';
   if (!base) return url;
   if (url.startsWith('/')) return `${base}${url}`;
   return `${base}/${url}`;
@@ -124,21 +121,40 @@ function bookingStatusMeta(status: string): {
 } {
   const s = (status || 'pending').toLowerCase();
   if (s === 'locked' || s === 'pending') {
-    return { label: 'New', bg: '#FEF3C7', fg: '#92400E' };
+    return {
+      label: 'New',
+      bg: 'var(--warning-bg)',
+      fg: 'var(--warning-fg)',
+    };
   }
   if (s === 'accepted') {
-    return { label: 'Confirmed', bg: '#E0F2FE', fg: '#075985' };
+    return {
+      label: 'Confirmed',
+      bg: 'var(--info-bg)',
+      fg: 'var(--info-fg)',
+    };
   }
   if (s === 'completed') {
-    return { label: 'Completed', bg: '#DCFCE7', fg: '#166534' };
+    return {
+      label: 'Completed',
+      bg: 'var(--success-bg)',
+      fg: 'var(--success-fg)',
+    };
   }
   if (s === 'cancelled' || s === 'declined') {
-    return { label: 'Cancelled', bg: '#FEE2E2', fg: '#991B1B' };
+    return {
+      label: 'Cancelled',
+      bg: 'var(--danger-bg)',
+      fg: 'var(--danger-fg)',
+    };
   }
-  return { label: status || 'Pending', bg: '#F1F5F9', fg: '#475569' };
+  return {
+    label: status || 'Pending',
+    bg: 'var(--bg-tertiary)',
+    fg: 'var(--text-secondary)',
+  };
 }
 
-// ─── Component ──────────────────────────────────────────────────────
 export default function ServiceProviderDashboardPage() {
   useAuthGuard();
   const router = useRouter();
@@ -147,13 +163,13 @@ export default function ServiceProviderDashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [stats, setStats] = useState<Stats>({});
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [communityStats, setCommunityStats] = useState<CommunityStats | null>(
-    null,
-  );
+  const [communityStats, setCommunityStats] =
+    useState<CommunityStats | null>(null);
   const [isAvailable, setIsAvailable] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [errored, setErrored] = useState(false);
-  const [togglingAvailability, setTogglingAvailability] = useState(false);
+  const [togglingAvailability, setTogglingAvailability] =
+    useState(false);
   const [busyBookingId, setBusyBookingId] = useState<string | null>(null);
 
   const reqSeq = useRef(0);
@@ -202,7 +218,8 @@ export default function ServiceProviderDashboardPage() {
     } catch {
       if (seq === reqSeq.current && isMountedRef.current) setErrored(true);
     } finally {
-      if (seq === reqSeq.current && isMountedRef.current) setIsLoading(false);
+      if (seq === reqSeq.current && isMountedRef.current)
+        setIsLoading(false);
     }
   }, []);
 
@@ -211,12 +228,11 @@ export default function ServiceProviderDashboardPage() {
     return () => window.clearTimeout(t);
   }, [loadDashboardData]);
 
-  // ── Actions ────────────────────────────────────────────────────
   const toggleAvailability = async (value: boolean) => {
     if (togglingAvailability) return;
     setTogglingAvailability(true);
     const previous = isAvailable;
-    setIsAvailable(value); // optimistic
+    setIsAvailable(value);
     try {
       await api.updateProviderAvailability(value);
     } catch (err) {
@@ -288,12 +304,12 @@ export default function ServiceProviderDashboardPage() {
   const goAddService = () => router.push('/service-provider/add-service');
   const goServices = () => router.push('/service-provider/services');
   const goBookings = () => router.push('/service-provider/bookings');
-  const goEditProfile = () => router.push('/service-provider/edit-profile');
+  const goEditProfile = () =>
+    router.push('/service-provider/edit-profile');
   const goSeai = () => router.push('/seai/ask?mode=agent');
   const goCommunity = () => router.push('/service-provider/community');
   const goSettings = () => router.push('/settings/service-provider');
 
-  // ── Derived ────────────────────────────────────────────────────
   const name =
     profile?.business_name ||
     profile?.nickname ||
@@ -310,7 +326,6 @@ export default function ServiceProviderDashboardPage() {
   const totalEarnings = Number(stats.total_earnings ?? 0);
   const rating = Number(stats.rating ?? 0);
 
-  // ── Loading skeleton ───────────────────────────────────────────
   if (isLoading) {
     return (
       <main style={css.root} className="sp-dash">
@@ -343,36 +358,35 @@ export default function ServiceProviderDashboardPage() {
     );
   }
 
-  // ── Error ──────────────────────────────────────────────────────
   if (errored) {
     return (
       <main style={css.centerRoot} className="sp-dash">
         <style>{CSS}</style>
         <div style={css.errorHalo}>
-          <MdErrorOutline size={40} color="#B91C1C" />
+          <MdErrorOutline size={40} color="var(--danger-fg)" />
         </div>
-        <h2 style={css.centerTitle}>Couldn&apos;t load your dashboard</h2>
+        <h2 style={css.centerTitle}>
+          Couldn&apos;t load your dashboard
+        </h2>
         <p style={css.centerBody}>
-          Check your connection and try again. If this keeps happening, sign
-          out and back in.
+          Check your connection and try again. If this keeps happening,
+          sign out and back in.
         </p>
         <button
           onClick={() => void loadDashboardData()}
           style={css.centerPrimary}
         >
-          <MdRefresh size={18} color="#fff" />
+          <MdRefresh size={18} color="var(--brand-on-gradient)" />
           <span>Retry</span>
         </button>
       </main>
     );
   }
 
-  // ── Main ───────────────────────────────────────────────────────
   return (
     <main style={css.root} className="sp-dash">
       <style>{CSS}</style>
 
-      {/* HERO */}
       <div style={css.hero}>
         <div style={css.heroGlow} aria-hidden />
 
@@ -386,7 +400,7 @@ export default function ServiceProviderDashboardPage() {
                 style={css.ghostBtn}
                 aria-label="Settings"
               >
-                <MdEdit size={18} color="#fff" />
+                <MdEdit size={18} color="var(--brand-on-gradient)" />
               </button>
               <button
                 type="button"
@@ -394,7 +408,7 @@ export default function ServiceProviderDashboardPage() {
                 style={css.ghostBtn}
                 aria-label="Refresh"
               >
-                <MdRefresh size={18} color="#fff" />
+                <MdRefresh size={18} color="var(--brand-on-gradient)" />
               </button>
             </div>
           </div>
@@ -429,9 +443,11 @@ export default function ServiceProviderDashboardPage() {
                   style={{
                     ...css.availabilityPill,
                     backgroundColor: isAvailable
-                      ? 'rgba(34,197,94,0.22)'
-                      : 'rgba(148,163,184,0.22)',
-                    color: isAvailable ? '#86EFAC' : '#CBD5E1',
+                      ? 'var(--success-bg)'
+                      : 'var(--bg-tertiary)',
+                    color: isAvailable
+                      ? 'var(--success-fg)'
+                      : 'var(--text-tertiary)',
                   }}
                 >
                   <span
@@ -439,7 +455,9 @@ export default function ServiceProviderDashboardPage() {
                       width: 7,
                       height: 7,
                       borderRadius: '50%',
-                      backgroundColor: isAvailable ? '#22C55E' : '#94A3B8',
+                      backgroundColor: isAvailable
+                        ? 'var(--success-fg)'
+                        : 'var(--text-muted)',
                       display: 'inline-block',
                     }}
                   />
@@ -451,25 +469,28 @@ export default function ServiceProviderDashboardPage() {
         </div>
       </div>
 
-      {/* SHEET */}
       <div style={css.sheet} className="sp-sheet">
-        {/* REVENUE SPOTLIGHT */}
         <div style={css.revenueCard} className="sp-revenue-card">
           <div style={css.revenueTop}>
             <div style={css.revenueLabelRow}>
               <MdAccountBalanceWallet
                 size={14}
-                color="rgba(255,255,255,0.72)"
+                color="color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)"
               />
               <span style={css.revenueLabel}>Total earnings</span>
             </div>
             <button
               type="button"
-              onClick={() => router.push('/service-provider/wallet')}
+              onClick={() =>
+                router.push('/service-provider/wallet')
+              }
               style={css.revenueLink}
             >
               <span>Wallet</span>
-              <MdChevronRight size={16} color="rgba(255,255,255,0.85)" />
+              <MdChevronRight
+                size={16}
+                color="color-mix(in srgb, var(--brand-on-gradient) 85%, transparent)"
+              />
             </button>
           </div>
           <div style={css.revenueAmount} className="sp-revenue-amount">
@@ -482,15 +503,18 @@ export default function ServiceProviderDashboardPage() {
           </div>
         </div>
 
-        {/* AVAILABILITY — hero control */}
         <button
           type="button"
           onClick={() => toggleAvailability(!isAvailable)}
           disabled={togglingAvailability}
           style={{
             ...css.availabilityCard,
-            borderColor: isAvailable ? '#86EFAC' : '#E6E8F0',
-            backgroundColor: isAvailable ? '#F0FDF4' : '#FFFFFF',
+            borderColor: isAvailable
+              ? 'var(--success-strong)'
+              : 'var(--border-default)',
+            backgroundColor: isAvailable
+              ? 'var(--success-bg)'
+              : 'var(--bg-secondary)',
             opacity: togglingAvailability ? 0.6 : 1,
           }}
           className="sp-availability-card"
@@ -498,20 +522,24 @@ export default function ServiceProviderDashboardPage() {
           <span
             style={{
               ...css.availabilityIcon,
-              backgroundColor: isAvailable ? '#DCFCE7' : '#F1F5F9',
+              backgroundColor: isAvailable
+                ? 'var(--success-bg)'
+                : 'var(--bg-tertiary)',
             }}
           >
             {isAvailable ? (
-              <MdToggleOn size={26} color="#16A34A" />
+              <MdToggleOn size={26} color="var(--success-fg)" />
             ) : (
-              <MdToggleOff size={26} color="#64748B" />
+              <MdToggleOff size={26} color="var(--text-tertiary)" />
             )}
           </span>
           <span style={css.availabilityText}>
             <span
               style={{
                 ...css.availabilityTitle,
-                color: isAvailable ? '#166534' : '#0B0B1A',
+                color: isAvailable
+                  ? 'var(--success-fg)'
+                  : 'var(--text-primary)',
               }}
             >
               {isAvailable ? 'Available now' : 'Paused'}
@@ -525,7 +553,9 @@ export default function ServiceProviderDashboardPage() {
           <span
             style={{
               ...css.miniSwitch,
-              backgroundColor: isAvailable ? '#16A34A' : '#CBD5E1',
+              backgroundColor: isAvailable
+                ? 'var(--success-fg)'
+                : 'var(--border-strong)',
             }}
             aria-hidden
           >
@@ -538,29 +568,29 @@ export default function ServiceProviderDashboardPage() {
           </span>
         </button>
 
-        {/* PULSE ROW */}
         <div style={css.pulseRow} className="sp-pulse-row">
           <PulseTile
-            icon={<MdToday size={18} color="#0504AA" />}
-            tint="#EEF0FF"
+            icon={<MdToday size={18} color="var(--brand-primary)" />}
+            tint="var(--brand-soft)"
             label="Today"
             value={String(todayBookings)}
           />
           <PulseTile
-            icon={<MdStar size={18} color="#D97706" />}
-            tint="#FEF3C7"
+            icon={<MdStar size={18} color="var(--warning-fg)" />}
+            tint="var(--warning-bg)"
             label="Rating"
             value={rating > 0 ? rating.toFixed(1) : '—'}
           />
           <PulseTile
-            icon={<MdDesignServices size={18} color="#7E22CE" />}
-            tint="#F3E8FF"
+            icon={
+              <MdDesignServices size={18} color="var(--purple-fg)" />
+            }
+            tint="var(--purple-bg)"
             label="Services"
             value={`${servicesActiveCount}/${services.length}`}
           />
         </div>
 
-        {/* PENDING BOOKINGS */}
         {pendingBookings.length > 0 && (
           <>
             <h3 style={css.sectionLabel}>
@@ -572,29 +602,40 @@ export default function ServiceProviderDashboardPage() {
                 const busy = busyBookingId === id;
                 const status = (b.status || 'pending').toLowerCase();
                 const meta = bookingStatusMeta(status);
-                const isPending = status === 'locked' || status === 'pending';
+                const isPending =
+                  status === 'locked' || status === 'pending';
                 const isAccepted = status === 'accepted';
                 const customer =
                   b.customer_name || b.user_name || 'Customer';
                 const when =
-                  b.scheduled_for || b.booking_date || 'Date not set';
+                  b.scheduled_for ||
+                  b.booking_date ||
+                  'Date not set';
 
                 return (
                   <div
                     key={id}
-                    style={{ ...css.bookingRow, opacity: busy ? 0.55 : 1 }}
+                    style={{
+                      ...css.bookingRow,
+                      opacity: busy ? 0.55 : 1,
+                    }}
                   >
                     <span style={css.bookingAvatar}>
                       {(customer.charAt(0) || '?').toUpperCase()}
                     </span>
                     <div style={css.bookingBody}>
-                      <div style={css.bookingService} title={b.service_title}>
+                      <div
+                        style={css.bookingService}
+                        title={b.service_title}
+                      >
                         {b.service_title || 'Service'}
                       </div>
                       <div style={css.bookingMeta}>
                         <span>{customer}</span>
                         <span style={css.bookingDot}>·</span>
-                        <span style={css.bookingDate}>{String(when)}</span>
+                        <span style={css.bookingDate}>
+                          {String(when)}
+                        </span>
                       </div>
                       <div style={css.bookingStatusRow}>
                         <span
@@ -651,14 +692,16 @@ export default function ServiceProviderDashboardPage() {
                   <span style={css.viewAllText}>
                     View all {pendingBookings.length} pending bookings
                   </span>
-                  <MdChevronRight size={18} color="#CBD5E1" />
+                  <MdChevronRight
+                    size={18}
+                    color="var(--border-strong)"
+                  />
                 </button>
               )}
             </div>
           </>
         )}
 
-        {/* QUICK ACTIONS */}
         <h3 style={css.sectionLabel}>Quick actions</h3>
         <div style={css.actionGrid} className="sp-action-grid">
           <button
@@ -668,11 +711,13 @@ export default function ServiceProviderDashboardPage() {
             className="sp-action-tile"
           >
             <span style={css.actionIconWrapPrimary}>
-              <MdAdd size={22} color="#0504AA" />
+              <MdAdd size={22} color="var(--brand-primary)" />
             </span>
             <span style={css.actionTextPrimary}>
               <span style={css.actionTitlePrimary}>Add service</span>
-              <span style={css.actionHintPrimary}>List a new offering</span>
+              <span style={css.actionHintPrimary}>
+                List a new offering
+              </span>
             </span>
           </button>
 
@@ -685,15 +730,19 @@ export default function ServiceProviderDashboardPage() {
             <span
               style={{
                 ...css.actionIconWrap,
-                backgroundColor: '#F3E8FF',
+                backgroundColor: 'var(--purple-bg)',
               }}
             >
-              <MdDesignServices size={22} color="#7E22CE" />
+              <MdDesignServices
+                size={22}
+                color="var(--purple-fg)"
+              />
             </span>
             <span style={css.actionText}>
               <span style={css.actionTitle}>My services</span>
               <span style={css.actionHint}>
-                {services.length} listing{services.length === 1 ? '' : 's'}
+                {services.length} listing
+                {services.length === 1 ? '' : 's'}
               </span>
             </span>
           </button>
@@ -707,10 +756,10 @@ export default function ServiceProviderDashboardPage() {
             <span
               style={{
                 ...css.actionIconWrap,
-                backgroundColor: '#E0F2FE',
+                backgroundColor: 'var(--info-bg)',
               }}
             >
-              <MdCalendarToday size={22} color="#0891B2" />
+              <MdCalendarToday size={22} color="var(--info-fg)" />
             </span>
             <span style={css.actionText}>
               <span style={css.actionTitle}>Bookings</span>
@@ -729,10 +778,13 @@ export default function ServiceProviderDashboardPage() {
             <span
               style={{
                 ...css.actionIconWrap,
-                backgroundColor: '#FEF3C7',
+                backgroundColor: 'var(--warning-bg)',
               }}
             >
-              <MdAutoAwesome size={22} color="#D97706" />
+              <MdAutoAwesome
+                size={22}
+                color="var(--warning-fg)"
+              />
             </span>
             <span style={css.actionText}>
               <span style={css.actionTitle}>Ask SEAI</span>
@@ -741,7 +793,6 @@ export default function ServiceProviderDashboardPage() {
           </button>
         </div>
 
-        {/* COMMUNITY */}
         <h3 style={css.sectionLabel}>Sellers only</h3>
         <button
           type="button"
@@ -750,11 +801,13 @@ export default function ServiceProviderDashboardPage() {
           className="sp-community-card"
         >
           <span style={css.communityIcon}>
-            <MdGroups size={22} color="#0504AA" />
+            <MdGroups size={22} color="var(--brand-primary)" />
             <span style={css.communityDot} />
           </span>
           <span style={css.communityText}>
-            <span style={css.communityTitle}>Sellers community</span>
+            <span style={css.communityTitle}>
+              Sellers community
+            </span>
             <span style={css.communityHint}>
               {communityStats && communityStats.active_senders_7d > 0
                 ? `${communityStats.active_senders_7d} seller${
@@ -763,7 +816,7 @@ export default function ServiceProviderDashboardPage() {
                 : 'Chat with other sellers'}
             </span>
           </span>
-          <MdChevronRight size={20} color="#CBD5E1" />
+          <MdChevronRight size={20} color="var(--border-strong)" />
         </button>
 
         <div style={{ height: 32 }} />
@@ -772,7 +825,6 @@ export default function ServiceProviderDashboardPage() {
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────
 function PulseTile({
   icon,
   tint,
@@ -786,14 +838,15 @@ function PulseTile({
 }) {
   return (
     <div style={css.pulseTile} className="sp-pulse-tile">
-      <div style={{ ...css.pulseIcon, backgroundColor: tint }}>{icon}</div>
+      <div style={{ ...css.pulseIcon, backgroundColor: tint }}>
+        {icon}
+      </div>
       <div style={css.pulseValue}>{value}</div>
       <div style={css.pulseLabel}>{label}</div>
     </div>
   );
 }
 
-// ─── CSS ────────────────────────────────────────────────────────────
 const CSS = `
   @keyframes spShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
   @keyframes spPulseDot {
@@ -827,7 +880,8 @@ const CSS = `
     transition: transform 0.12s ease, box-shadow 0.15s ease;
   }
   .sp-action-tile:hover {
-    box-shadow: 0 10px 24px rgba(5,4,170,0.10);
+    box-shadow: 0 10px 24px
+      color-mix(in srgb, var(--brand-primary) 10%, transparent);
   }
   .sp-action-tile:active { transform: scale(0.98); }
 
@@ -843,7 +897,7 @@ const CSS = `
   }
   .sp-booking-btn:active:not(:disabled) { transform: scale(0.97); }
 
-  .sp-row:hover { background-color: #FAFBFF; }
+  .sp-row:hover { background-color: var(--bg-hover); }
 
   @media (min-width: 1024px) {
     .sp-hero-inner {
@@ -878,24 +932,23 @@ const CSS = `
   }
 `;
 
-// ─── Styles ─────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
-  // HERO
   hero: {
     position: 'relative',
-    backgroundColor: '#0504AA',
-    backgroundImage:
-      'radial-gradient(ellipse at 80% 0%, #1A0FB8 0%, #0504AA 55%, #03037A 100%)',
+    background: 'var(--brand-gradient)',
     padding: '0 20px 76px',
     overflow: 'hidden',
+    transition: 'background 0.18s ease',
   },
   heroGlow: {
     position: 'absolute',
@@ -905,7 +958,7 @@ const css: Record<string, React.CSSProperties> = {
     height: 320,
     borderRadius: '50%',
     background:
-      'radial-gradient(circle, rgba(61,59,255,0.45) 0%, rgba(61,59,255,0) 70%)',
+      'radial-gradient(circle, color-mix(in srgb, var(--brand-on-gradient) 20%, transparent) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   topBar: {
@@ -918,11 +971,12 @@ const css: Record<string, React.CSSProperties> = {
   topTitle: {
     fontSize: 15,
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: 0.3,
   },
   ghostBtn: {
-    background: 'rgba(255,255,255,0.10)',
+    background:
+      'color-mix(in srgb, var(--brand-on-gradient) 10%, transparent)',
     border: 'none',
     cursor: 'pointer',
     padding: 8,
@@ -946,8 +1000,10 @@ const css: Record<string, React.CSSProperties> = {
     height: 72,
     borderRadius: 22,
     overflow: 'hidden',
-    border: '3px solid rgba(255,255,255,0.18)',
-    background: 'rgba(255,255,255,0.08)',
+    border:
+      '3px solid color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
+    background:
+      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
     cursor: 'pointer',
     padding: 0,
     flexShrink: 0,
@@ -965,12 +1021,12 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     background:
-      'linear-gradient(135deg, rgba(61,59,255,0.6) 0%, rgba(5,4,170,0.6) 100%)',
+      'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
   },
   bizThumbInitial: {
     fontSize: 30,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: -0.5,
   },
 
@@ -989,7 +1045,7 @@ const css: Record<string, React.CSSProperties> = {
   businessName: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: -0.4,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1013,7 +1069,6 @@ const css: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
   },
 
-  // SHEET
   sheet: {
     flex: 1,
     marginTop: -52,
@@ -1021,14 +1076,12 @@ const css: Record<string, React.CSSProperties> = {
     padding: '0 20px 40px',
   },
 
-  // REVENUE
   revenueCard: {
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0B0B1A 0%, #0504AA 100%)',
+    background: 'var(--brand-gradient)',
     borderRadius: 22,
     padding: '20px 22px 22px',
-    color: '#fff',
-    boxShadow: '0 20px 40px rgba(5,4,170,0.28)',
+    color: 'var(--brand-on-gradient)',
+    boxShadow: 'var(--shadow-brand)',
   },
   revenueTop: {
     display: 'flex',
@@ -1046,13 +1099,15 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.75)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)',
   },
   revenueLink: {
-    background: 'rgba(255,255,255,0.10)',
+    background:
+      'color-mix(in srgb, var(--brand-on-gradient) 10%, transparent)',
     border: 'none',
     cursor: 'pointer',
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     fontFamily: 'inherit',
     fontSize: 12,
     fontWeight: 700,
@@ -1069,15 +1124,16 @@ const css: Record<string, React.CSSProperties> = {
     fontVariantNumeric: 'tabular-nums',
     marginTop: 12,
     lineHeight: 1.05,
+    color: 'var(--brand-on-gradient)',
   },
   revenueSub: {
     fontSize: 12.5,
-    color: 'rgba(255,255,255,0.72)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
     fontWeight: 500,
     marginTop: 6,
   },
 
-  // AVAILABILITY
   availabilityCard: {
     display: 'flex',
     alignItems: 'center',
@@ -1115,7 +1171,7 @@ const css: Record<string, React.CSSProperties> = {
   },
   availabilityHint: {
     fontSize: 12,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1135,12 +1191,11 @@ const css: Record<string, React.CSSProperties> = {
     width: 18,
     height: 18,
     borderRadius: '50%',
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
     transition: 'left 0.18s',
   },
 
-  // PULSE
   pulseRow: {
     display: 'flex',
     gap: 10,
@@ -1148,14 +1203,15 @@ const css: Record<string, React.CSSProperties> = {
   },
   pulseTile: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     padding: '14px 12px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-start',
     gap: 6,
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   pulseIcon: {
     width: 34,
@@ -1168,7 +1224,7 @@ const css: Record<string, React.CSSProperties> = {
   pulseValue: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.4,
     fontVariantNumeric: 'tabular-nums',
     marginTop: 2,
@@ -1176,41 +1232,40 @@ const css: Record<string, React.CSSProperties> = {
   pulseLabel: {
     fontSize: 11,
     fontWeight: 700,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.2,
     textTransform: 'uppercase',
   },
 
-  // SECTION LABEL
   sectionLabel: {
     fontSize: 11.5,
     fontWeight: 800,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     margin: '26px 0 10px 4px',
   },
   section: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     overflow: 'hidden',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
 
-  // BOOKING ROW
   bookingRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     padding: '14px 16px',
-    borderBottom: '1px solid #F1F5F9',
+    borderBottom: '1px solid var(--border-subtle)',
   },
   bookingAvatar: {
     width: 40,
     height: 40,
     borderRadius: 13,
-    backgroundColor: '#EEF0FF',
-    color: '#0504AA',
+    backgroundColor: 'var(--brand-soft)',
+    color: 'var(--brand-primary)',
     fontSize: 16,
     fontWeight: 800,
     display: 'flex',
@@ -1228,7 +1283,7 @@ const css: Record<string, React.CSSProperties> = {
   bookingService: {
     fontSize: 14.5,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1239,14 +1294,14 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 6,
     fontSize: 12,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  bookingDot: { color: '#CBD5E1' },
-  bookingDate: { color: '#94A3B8' },
+  bookingDot: { color: 'var(--border-strong)' },
+  bookingDate: { color: 'var(--text-muted)' },
   bookingStatusRow: { marginTop: 4 },
   bookingChip: {
     display: 'inline-block',
@@ -1265,8 +1320,8 @@ const css: Record<string, React.CSSProperties> = {
   },
   bookingPrimary: {
     padding: '9px 16px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 10,
     fontSize: 13,
@@ -1277,8 +1332,8 @@ const css: Record<string, React.CSSProperties> = {
   },
   bookingSuccess: {
     padding: '9px 16px',
-    backgroundColor: '#16A34A',
-    color: '#fff',
+    backgroundColor: 'var(--success-fg)',
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: 10,
     fontSize: 13,
@@ -1302,10 +1357,9 @@ const css: Record<string, React.CSSProperties> = {
   viewAllText: {
     fontSize: 13.5,
     fontWeight: 700,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
   },
 
-  // QUICK ACTIONS
   actionGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -1318,20 +1372,20 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'flex-start',
     gap: 12,
     padding: '16px 16px 18px',
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 20,
     cursor: 'pointer',
     fontFamily: 'inherit',
     textAlign: 'left',
     minHeight: 128,
-    boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   actionTilePrimary: {
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    background: 'var(--brand-gradient)',
     border: 'none',
-    boxShadow: '0 12px 28px rgba(5,4,170,0.28)',
+    boxShadow: 'var(--shadow-brand)',
   },
   actionIconWrap: {
     width: 40,
@@ -1345,7 +1399,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 40,
     height: 40,
     borderRadius: 13,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1365,40 +1419,41 @@ const css: Record<string, React.CSSProperties> = {
   actionTitle: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.2,
   },
   actionTitlePrimary: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: -0.2,
   },
   actionHint: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 500,
   },
   actionHintPrimary: {
     fontSize: 11.5,
-    color: 'rgba(255,255,255,0.78)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
     fontWeight: 500,
   },
 
-  // COMMUNITY
   communityCard: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     width: '100%',
     padding: '16px 16px',
-    background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 100%)',
-    border: '1px solid #DDE3F5',
+    background: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 20,
     cursor: 'pointer',
     fontFamily: 'inherit',
     textAlign: 'left',
-    boxShadow: '0 8px 22px rgba(5,4,170,0.06)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   communityIcon: {
     position: 'relative',
@@ -1406,7 +1461,7 @@ const css: Record<string, React.CSSProperties> = {
     height: 44,
     flexShrink: 0,
     borderRadius: 13,
-    background: 'linear-gradient(135deg, #EEF0FF, #E0E7FF)',
+    background: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1419,7 +1474,7 @@ const css: Record<string, React.CSSProperties> = {
     height: 9,
     borderRadius: '50%',
     backgroundColor: '#22C55E',
-    border: '2px solid #FFFFFF',
+    border: '2px solid var(--bg-secondary)',
     animation: 'spPulseDot 2s ease-in-out infinite',
   },
   communityText: {
@@ -1433,33 +1488,34 @@ const css: Record<string, React.CSSProperties> = {
     fontSize: 15,
     fontWeight: 800,
     letterSpacing: -0.1,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
   },
   communityHint: {
     fontSize: 12.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
 
-  // CENTER SCREENS
   centerRoot: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   errorHalo: {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1468,13 +1524,13 @@ const css: Record<string, React.CSSProperties> = {
   centerTitle: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   centerBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 8,
     maxWidth: 340,
     lineHeight: 1.55,
@@ -1486,37 +1542,38 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 800,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // SKELETONS
   thumbSkeleton: {
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
     flexShrink: 0,
   },
   skelLine: {
     height: 12,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
     width: 180,
   },
   blockSkeleton: {
     height: 120,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 16,
     animation: 'spShimmer 1.4s ease-in-out infinite',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
 };

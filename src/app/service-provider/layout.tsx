@@ -13,38 +13,50 @@ import {
 } from 'react-icons/md';
 import type { IconType } from 'react-icons';
 
-// ─── Colors ─────────────────────────────────────────────────────────
-const NAV_BG = '#FFFFFF';
-const NAV_BORDER = '#E5E5E5';
-const ACTIVE_COLOR = '#0504AA';
-const INACTIVE_COLOR = 'rgba(26, 26, 26, 0.55)';
-const ACTIVE_AVATAR_RING = '#0504AA';
+type NavEntry = { Icon: IconType; label: string; path: string };
+
+const NAV_ENTRIES: NavEntry[] = [
+  { Icon: MdDashboard,            label: 'Home',     path: '/service-provider/home'     },
+  { Icon: MdCalendarToday,        label: 'Bookings', path: '/service-provider/bookings' },
+  { Icon: MdDesignServices,       label: 'Services', path: '/service-provider/services' },
+  { Icon: MdChatBubbleOutline,    label: 'Inbox',    path: '/service-provider/inbox'    },
+  { Icon: MdAccountBalanceWallet, label: 'Wallet',   path: '/service-provider/wallet'   },
+];
+
+const PROFILE_PATH = '/service-provider/profile';
+const PROFILE_LABEL = 'Profile';
 
 function UserAvatar({
   imageUrl,
   name,
   active,
+  size = 28,
 }: {
   imageUrl?: string;
   name: string;
   active: boolean;
+  size?: number;
 }) {
   const initials = (name || '?')[0].toUpperCase();
   return (
     <div
       style={{
-        width: 28,
-        height: 28,
+        width: size,
+        height: size,
         borderRadius: '50%',
         overflow: 'hidden',
-        backgroundColor: '#F0F0F0',
+        backgroundColor: 'var(--bg-tertiary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: 12,
-        color: '#0504AA',
-        border: active ? `2px solid ${ACTIVE_AVATAR_RING}` : '2px solid transparent',
+        fontSize: Math.round(size * 0.42),
+        color: 'var(--brand-primary)',
+        border: active
+          ? '2px solid var(--brand-primary)'
+          : '2px solid transparent',
         boxSizing: 'border-box',
+        transition:
+          'background-color 0.18s ease, border-color 0.18s ease',
       }}
     >
       {imageUrl ? (
@@ -54,13 +66,17 @@ function UserAvatar({
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       ) : (
-        <span style={{ fontWeight: 'bold' }}>{initials}</span>
+        <span style={{ fontWeight: 800 }}>{initials}</span>
       )}
     </div>
   );
 }
 
-export default function ServiceProviderLayout({ children }: { children: React.ReactNode }) {
+export default function ServiceProviderLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -84,17 +100,14 @@ export default function ServiceProviderLayout({ children }: { children: React.Re
   const checkSetup = async () => {
     setIsLoading(true);
     try {
-      // CHANGED: getProviderServices() scopes to *this* provider.
-      // listServices() returned every active service platform-wide,
-      // which made hasSetup = true for a fresh provider as soon as
-      // any other provider existed.
       const services = await api.getProviderServices();
       const servicesList = Array.isArray(services) ? services : [];
       const has = servicesList.length > 0;
       setHasSetup(has);
 
-      // CHANGED: guard against redirect loop when already onboarding.
-      const onOnboarding = pathname?.startsWith('/service-provider/onboarding');
+      const onOnboarding = pathname?.startsWith(
+        '/service-provider/onboarding',
+      );
       if (!has && !onOnboarding) {
         router.replace('/service-provider/onboarding');
         return;
@@ -108,24 +121,28 @@ export default function ServiceProviderLayout({ children }: { children: React.Re
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadProfile();
-      checkSetup();
+      void loadProfile();
+      void checkSetup();
     }, 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  let currentIndex = 0;
-  if (pathname.startsWith('/service-provider/bookings')) currentIndex = 1;
-  else if (pathname.startsWith('/service-provider/services')) currentIndex = 2;
-  else if (pathname.startsWith('/service-provider/inbox')) currentIndex = 3;
-  else if (pathname.startsWith('/service-provider/wallet')) currentIndex = 4;
-  else if (pathname.startsWith('/service-provider/profile')) currentIndex = 5;
+  let activeIndex = 0;
+  for (let i = 0; i < NAV_ENTRIES.length; i++) {
+    if (pathname.startsWith(NAV_ENTRIES[i].path)) {
+      activeIndex = i;
+      break;
+    }
+  }
+  if (pathname.startsWith(PROFILE_PATH)) activeIndex = NAV_ENTRIES.length;
+
+  const avatarName = profile?.nickname || profile?.phone || '';
 
   const navigate = async (index: number) => {
-    // CHANGED: block is now on Bookings + Services (both need a catalog
-    // to be meaningful). Wallet no longer blocked — you can receive a
-    // top-up or refund even with no services.
+    // Block is on Bookings + Services (both need a catalog to be
+    // meaningful). Wallet is unlocked — you can receive a top-up or
+    // refund even with no services listed.
     if ((index === 1 || index === 2) && hasSetup !== true) {
       await alertDialog({
         title: 'Complete setup first',
@@ -134,13 +151,10 @@ export default function ServiceProviderLayout({ children }: { children: React.Re
       });
       return;
     }
-    switch (index) {
-      case 0: router.replace('/service-provider/home'); break;
-      case 1: router.replace('/service-provider/bookings'); break;
-      case 2: router.replace('/service-provider/services'); break;
-      case 3: router.replace('/service-provider/inbox'); break;
-      case 4: router.replace('/service-provider/wallet'); break;
-      case 5: router.replace('/service-provider/profile'); break;
+    if (index < NAV_ENTRIES.length) {
+      router.replace(NAV_ENTRIES[index].path);
+    } else {
+      router.replace(PROFILE_PATH);
     }
   };
 
@@ -152,14 +166,15 @@ export default function ServiceProviderLayout({ children }: { children: React.Re
           justifyContent: 'center',
           alignItems: 'center',
           height: '100vh',
+          background: 'var(--bg-primary)',
         }}
       >
         <div
           style={{
             width: 36,
             height: 36,
-            border: '4px solid #eee',
-            borderTopColor: '#0504AA',
+            border: '4px solid var(--border-default)',
+            borderTopColor: 'var(--brand-primary)',
             borderRadius: '50%',
             animation: 'spin 0.8s linear infinite',
           }}
@@ -169,139 +184,222 @@ export default function ServiceProviderLayout({ children }: { children: React.Re
     );
   }
 
-  const avatarName = profile?.nickname || profile?.phone || '';
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 64 }}>
-        {children}
-      </div>
+    <div className="spl-root">
+      <style>{CSS}</style>
+
+      <aside className="spl-rail" aria-label="Service provider navigation">
+        <nav className="spl-rail-nav">
+          {NAV_ENTRIES.map((entry, i) => {
+            const active = activeIndex === i;
+            return (
+              <button
+                key={entry.path}
+                type="button"
+                onClick={() => void navigate(i)}
+                className={
+                  active
+                    ? 'spl-rail-item spl-rail-item-active'
+                    : 'spl-rail-item'
+                }
+                aria-current={active ? 'page' : undefined}
+                title={entry.label}
+              >
+                <entry.Icon size={22} />
+                <span className="spl-rail-label">{entry.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <button
+          type="button"
+          onClick={() => void navigate(NAV_ENTRIES.length)}
+          className={
+            activeIndex === NAV_ENTRIES.length
+              ? 'spl-rail-item spl-rail-profile spl-rail-item-active'
+              : 'spl-rail-item spl-rail-profile'
+          }
+          aria-current={
+            activeIndex === NAV_ENTRIES.length ? 'page' : undefined
+          }
+          title={PROFILE_LABEL}
+        >
+          <UserAvatar
+            imageUrl={profile?.avatar_url}
+            name={avatarName}
+            active={activeIndex === NAV_ENTRIES.length}
+            size={24}
+          />
+          <span className="spl-rail-label">{PROFILE_LABEL}</span>
+        </button>
+      </aside>
+
+      <main className="spl-content">{children}</main>
 
       {hasSetup !== false && (
-        <nav style={styles.navBar}>
-          <NavItem
-            Icon={MdDashboard}
-            label="Home"
-            active={currentIndex === 0}
-            onTap={() => navigate(0)}
-          />
-          <NavItem
-            Icon={MdCalendarToday}
-            label="Bookings"
-            active={currentIndex === 1}
-            onTap={() => navigate(1)}
-          />
-          <NavItem
-            Icon={MdDesignServices}
-            label="Services"
-            active={currentIndex === 2}
-            onTap={() => navigate(2)}
-          />
-          <NavItem
-            Icon={MdChatBubbleOutline}
-            label="Inbox"
-            active={currentIndex === 3}
-            onTap={() => navigate(3)}
-          />
-          <NavItem
-            Icon={MdAccountBalanceWallet}
-            label="Wallet"
-            active={currentIndex === 4}
-            onTap={() => navigate(4)}
-          />
+        <nav className="spl-bottom" aria-label="Service provider navigation">
+          {NAV_ENTRIES.map((entry, i) => {
+            const active = activeIndex === i;
+            return (
+              <button
+                key={entry.path}
+                type="button"
+                onClick={() => void navigate(i)}
+                className={active ? 'spl-tab spl-tab-active' : 'spl-tab'}
+                aria-current={active ? 'page' : undefined}
+              >
+                <entry.Icon size={22} />
+                <span className="spl-tab-label">{entry.label}</span>
+              </button>
+            );
+          })}
 
-          <div
-            onClick={() => navigate(5)}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              flex: 1,
-              gap: 2,
-            }}
+          <button
+            type="button"
+            onClick={() => void navigate(NAV_ENTRIES.length)}
+            className={
+              activeIndex === NAV_ENTRIES.length
+                ? 'spl-tab spl-tab-active'
+                : 'spl-tab'
+            }
+            aria-current={
+              activeIndex === NAV_ENTRIES.length ? 'page' : undefined
+            }
           >
             <UserAvatar
               imageUrl={profile?.avatar_url}
               name={avatarName}
-              active={currentIndex === 5}
+              active={activeIndex === NAV_ENTRIES.length}
             />
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: currentIndex === 5 ? 600 : 400,
-                color: currentIndex === 5 ? ACTIVE_COLOR : INACTIVE_COLOR,
-                lineHeight: 1,
-              }}
-            >
-              Profile
-            </span>
-          </div>
+            <span className="spl-tab-label">{PROFILE_LABEL}</span>
+          </button>
         </nav>
       )}
     </div>
   );
 }
 
-// ─── NavItem ────────────────────────────────────────────────────────
-function NavItem({
-  Icon,
-  label,
-  active,
-  onTap,
-}: {
-  Icon: IconType;
-  label: string;
-  active: boolean;
-  onTap: () => void;
-}) {
-  return (
-    <div
-      onClick={onTap}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        flex: 1,
-        gap: 2,
-        padding: '4px 0',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      <Icon size={22} color={active ? ACTIVE_COLOR : INACTIVE_COLOR} />
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: active ? 600 : 400,
-          color: active ? ACTIVE_COLOR : INACTIVE_COLOR,
-          lineHeight: 1,
-        }}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
+const CSS = `
+  .spl-root {
+    display: flex;
+    height: 100dvh;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.18s ease, color 0.18s ease;
+  }
 
-// ─── Styles ────────────────────────────────────────────────────────
-const styles = {
-  navBar: {
-    position: 'fixed',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    display: 'flex',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: NAV_BG,
-    borderTop: `1px solid ${NAV_BORDER}`,
-    paddingTop: 10,
-    paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
-    paddingLeft: 'env(safe-area-inset-left)',
-    paddingRight: 'env(safe-area-inset-right)',
-    zIndex: 100,
-  } as React.CSSProperties,
-};
+  .spl-content {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding-bottom: 72px;
+    transition: padding 0.18s ease;
+  }
+
+  .spl-rail {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    width: 88px;
+    flex: 0 0 88px;
+    padding: 16px 8px 18px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-default);
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .spl-rail-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+  .spl-rail-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 68px;
+    padding: 10px 4px;
+    border: none;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s, transform 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .spl-rail-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .spl-rail-item:active { transform: scale(0.97); }
+  .spl-rail-item-active,
+  .spl-rail-item-active:hover {
+    background: var(--brand-soft);
+    color: var(--brand-primary);
+  }
+  .spl-rail-item:focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
+  }
+  .spl-rail-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.2px;
+  }
+  .spl-rail-profile { margin-top: auto; }
+
+  .spl-bottom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-default);
+    padding: 10px 0 max(8px, env(safe-area-inset-bottom));
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    z-index: 100;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .spl-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 2px;
+    padding: 4px 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s;
+  }
+  .spl-tab-active { color: var(--brand-primary); }
+  .spl-tab-label {
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1;
+  }
+  .spl-tab-active .spl-tab-label { font-weight: 600; }
+
+  @media (min-width: 1024px) {
+    .spl-rail { display: flex; }
+    .spl-bottom { display: none; }
+    .spl-content { padding-bottom: 0; }
+  }
+`;

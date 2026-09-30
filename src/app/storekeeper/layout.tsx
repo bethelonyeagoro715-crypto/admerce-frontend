@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import api from '../../services/api';
+import { alertDialog } from '../../components/ui/dialogs';
 import {
   MdDashboard,
   MdInventory,
@@ -12,38 +13,51 @@ import {
 } from 'react-icons/md';
 import type { IconType } from 'react-icons';
 
-// ─── Colors ─────────────────────────────────────────────────────────
-const NAV_BG = '#FFFFFF';
-const NAV_BORDER = '#E5E5E5';
-const ACTIVE_COLOR = '#0504AA';
-const INACTIVE_COLOR = 'rgba(26, 26, 26, 0.55)';
-const ACTIVE_AVATAR_RING = '#0504AA';
+// ─── Nav entries (shared by rail and bottom nav) ────────────────────
+type NavEntry = { Icon: IconType; label: string; path: string };
+
+const NAV_ENTRIES: NavEntry[] = [
+  { Icon: MdDashboard,            label: 'Home',   path: '/storekeeper/home'   },
+  { Icon: MdInventory,            label: 'Items',  path: '/storekeeper/items'  },
+  { Icon: MdReceipt,              label: 'Orders', path: '/storekeeper/orders' },
+  { Icon: MdChatBubbleOutline,    label: 'Inbox',  path: '/storekeeper/inbox'  },
+  { Icon: MdAccountBalanceWallet, label: 'Wallet', path: '/storekeeper/wallet' },
+];
+
+const PROFILE_PATH = '/storekeeper/profile';
+const PROFILE_LABEL = 'Profile';
 
 function UserAvatar({
   imageUrl,
   name,
   active,
+  size = 28,
 }: {
   imageUrl?: string;
   name: string;
   active: boolean;
+  size?: number;
 }) {
   const initials = (name || '?')[0].toUpperCase();
   return (
     <div
       style={{
-        width: 28,
-        height: 28,
+        width: size,
+        height: size,
         borderRadius: '50%',
         overflow: 'hidden',
-        backgroundColor: '#F0F0F0',
+        backgroundColor: 'var(--bg-tertiary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: 12,
-        color: '#0504AA',
-        border: active ? `2px solid ${ACTIVE_AVATAR_RING}` : '2px solid transparent',
+        fontSize: Math.round(size * 0.42),
+        color: 'var(--brand-primary)',
+        border: active
+          ? '2px solid var(--brand-primary)'
+          : '2px solid transparent',
         boxSizing: 'border-box',
+        transition:
+          'background-color 0.18s ease, border-color 0.18s ease',
       }}
     >
       {imageUrl ? (
@@ -53,13 +67,17 @@ function UserAvatar({
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       ) : (
-        <span style={{ fontWeight: 'bold' }}>{initials}</span>
+        <span style={{ fontWeight: 800 }}>{initials}</span>
       )}
     </div>
   );
 }
 
-export default function StorekeeperLayout({ children }: { children: React.ReactNode }) {
+export default function StorekeeperLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -95,45 +113,55 @@ export default function StorekeeperLayout({ children }: { children: React.ReactN
         err &&
         typeof err === 'object' &&
         'response' in err &&
-        (err as { response?: { status?: number } }).response?.status === 404
+        (err as { response?: { status?: number } }).response
+          ?.status === 404
       ) {
         setHasStore(false);
         setIsLoading(false);
         router.replace('/storekeeper/onboarding/personal-info');
       } else {
         setIsLoading(false);
-        alert('Error loading store. Please retry.');
+        await alertDialog({
+          title: 'Could not load store',
+          body: 'Please check your connection and try again.',
+          kind: 'danger',
+        });
       }
     }
   };
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadProfile();
-      checkSetup();
+      void loadProfile();
+      void checkSetup();
     }, 0);
     return () => clearTimeout(timer);
   }, []);
 
-  let currentIndex = 0;
-  if (pathname.startsWith('/storekeeper/items')) currentIndex = 1;
-  else if (pathname.startsWith('/storekeeper/orders')) currentIndex = 2;
-  else if (pathname.startsWith('/storekeeper/inbox')) currentIndex = 3;
-  else if (pathname.startsWith('/storekeeper/wallet')) currentIndex = 4;
-  else if (pathname.startsWith('/storekeeper/profile')) currentIndex = 5;
+  let activeIndex = 0;
+  for (let i = 0; i < NAV_ENTRIES.length; i++) {
+    if (pathname.startsWith(NAV_ENTRIES[i].path)) {
+      activeIndex = i;
+      break;
+    }
+  }
+  if (pathname.startsWith(PROFILE_PATH)) activeIndex = NAV_ENTRIES.length;
 
-  const navigate = (index: number) => {
+  const avatarName = profile?.nickname || profile?.phone || '';
+
+  const navigate = async (index: number) => {
     if (index === 4 && hasStore !== true) {
-      alert('Please complete store setup first.');
+      await alertDialog({
+        title: 'Complete setup first',
+        body: 'Add your store details to unlock your wallet.',
+        kind: 'warning',
+      });
       return;
     }
-    switch (index) {
-      case 0: router.replace('/storekeeper/home'); break;
-      case 1: router.replace('/storekeeper/items'); break;
-      case 2: router.replace('/storekeeper/orders'); break;
-      case 3: router.replace('/storekeeper/inbox'); break;
-      case 4: router.replace('/storekeeper/wallet'); break;
-      case 5: router.replace('/storekeeper/profile'); break;
+    if (index < NAV_ENTRIES.length) {
+      router.replace(NAV_ENTRIES[index].path);
+    } else {
+      router.replace(PROFILE_PATH);
     }
   };
 
@@ -145,14 +173,15 @@ export default function StorekeeperLayout({ children }: { children: React.ReactN
           justifyContent: 'center',
           alignItems: 'center',
           height: '100vh',
+          background: 'var(--bg-primary)',
         }}
       >
         <div
           style={{
             width: 36,
             height: 36,
-            border: '4px solid #eee',
-            borderTopColor: '#0504AA',
+            border: '4px solid var(--border-default)',
+            borderTopColor: 'var(--brand-primary)',
             borderRadius: '50%',
             animation: 'spin 0.8s linear infinite',
           }}
@@ -162,139 +191,227 @@ export default function StorekeeperLayout({ children }: { children: React.ReactN
     );
   }
 
-  const avatarName = profile?.nickname || profile?.phone || '';
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 64 }}>
-        {children}
-      </div>
+    <div className="skl-root">
+      <style>{CSS}</style>
 
+      {/* ── Desktop side rail ─────────────────────────────── */}
+      <aside className="skl-rail" aria-label="Storekeeper navigation">
+        <nav className="skl-rail-nav">
+          {NAV_ENTRIES.map((entry, i) => {
+            const active = activeIndex === i;
+            return (
+              <button
+                key={entry.path}
+                type="button"
+                onClick={() => void navigate(i)}
+                className={
+                  active
+                    ? 'skl-rail-item skl-rail-item-active'
+                    : 'skl-rail-item'
+                }
+                aria-current={active ? 'page' : undefined}
+                title={entry.label}
+              >
+                <entry.Icon size={22} />
+                <span className="skl-rail-label">{entry.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <button
+          type="button"
+          onClick={() => void navigate(NAV_ENTRIES.length)}
+          className={
+            activeIndex === NAV_ENTRIES.length
+              ? 'skl-rail-item skl-rail-profile skl-rail-item-active'
+              : 'skl-rail-item skl-rail-profile'
+          }
+          aria-current={
+            activeIndex === NAV_ENTRIES.length ? 'page' : undefined
+          }
+          title={PROFILE_LABEL}
+        >
+          <UserAvatar
+            imageUrl={profile?.avatar_url}
+            name={avatarName}
+            active={activeIndex === NAV_ENTRIES.length}
+            size={24}
+          />
+          <span className="skl-rail-label">{PROFILE_LABEL}</span>
+        </button>
+      </aside>
+
+      {/* ── Content ──────────────────────────────────────── */}
+      <main className="skl-content">{children}</main>
+
+      {/* ── Mobile bottom nav ────────────────────────────── */}
       {hasStore !== false && (
-        <nav style={styles.navBar}>
-          <NavItem
-            Icon={MdDashboard}
-            label="Home"
-            active={currentIndex === 0}
-            onTap={() => navigate(0)}
-          />
-          <NavItem
-            Icon={MdInventory}
-            label="Items"
-            active={currentIndex === 1}
-            onTap={() => navigate(1)}
-          />
-          <NavItem
-            Icon={MdReceipt}
-            label="Orders"
-            active={currentIndex === 2}
-            onTap={() => navigate(2)}
-          />
-          <NavItem
-            Icon={MdChatBubbleOutline}
-            label="Inbox"
-            active={currentIndex === 3}
-            onTap={() => navigate(3)}
-          />
-          <NavItem
-            Icon={MdAccountBalanceWallet}
-            label="Wallet"
-            active={currentIndex === 4}
-            onTap={() => navigate(4)}
-          />
+        <nav className="skl-bottom" aria-label="Storekeeper navigation">
+          {NAV_ENTRIES.map((entry, i) => {
+            const active = activeIndex === i;
+            return (
+              <button
+                key={entry.path}
+                type="button"
+                onClick={() => void navigate(i)}
+                className={active ? 'skl-tab skl-tab-active' : 'skl-tab'}
+                aria-current={active ? 'page' : undefined}
+              >
+                <entry.Icon size={22} />
+                <span className="skl-tab-label">{entry.label}</span>
+              </button>
+            );
+          })}
 
-          <div
-            onClick={() => navigate(5)}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              flex: 1,
-              gap: 2,
-            }}
+          <button
+            type="button"
+            onClick={() => void navigate(NAV_ENTRIES.length)}
+            className={
+              activeIndex === NAV_ENTRIES.length
+                ? 'skl-tab skl-tab-active'
+                : 'skl-tab'
+            }
+            aria-current={
+              activeIndex === NAV_ENTRIES.length ? 'page' : undefined
+            }
           >
             <UserAvatar
               imageUrl={profile?.avatar_url}
               name={avatarName}
-              active={currentIndex === 5}
+              active={activeIndex === NAV_ENTRIES.length}
             />
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: currentIndex === 5 ? 600 : 400,
-                color: currentIndex === 5 ? ACTIVE_COLOR : INACTIVE_COLOR,
-                lineHeight: 1,
-              }}
-            >
-              Profile
-            </span>
-          </div>
+            <span className="skl-tab-label">{PROFILE_LABEL}</span>
+          </button>
         </nav>
       )}
     </div>
   );
 }
 
-// ─── NavItem ────────────────────────────────────────────────────────
-function NavItem({
-  Icon,
-  label,
-  active,
-  onTap,
-}: {
-  Icon: IconType;
-  label: string;
-  active: boolean;
-  onTap: () => void;
-}) {
-  return (
-    <div
-      onClick={onTap}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        flex: 1,
-        gap: 2,
-        padding: '4px 0',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      <Icon size={22} color={active ? ACTIVE_COLOR : INACTIVE_COLOR} />
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: active ? 600 : 400,
-          color: active ? ACTIVE_COLOR : INACTIVE_COLOR,
-          lineHeight: 1,
-        }}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
+const CSS = `
+  .skl-root {
+    display: flex;
+    height: 100dvh;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.18s ease, color 0.18s ease;
+  }
 
-// ─── Styles ────────────────────────────────────────────────────────
-const styles = {
-  navBar: {
-    position: 'fixed',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    display: 'flex',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: NAV_BG,
-    borderTop: `1px solid ${NAV_BORDER}`,
-    paddingTop: 10,
-    paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
-    paddingLeft: 'env(safe-area-inset-left)',
-    paddingRight: 'env(safe-area-inset-right)',
-    zIndex: 100,
-  } as React.CSSProperties,
-};
+  .skl-content {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding-bottom: 72px;
+    transition: padding 0.18s ease;
+  }
+
+  /* ── Desktop side rail (hidden by default) ───────────── */
+  .skl-rail {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    width: 88px;
+    flex: 0 0 88px;
+    padding: 16px 8px 18px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-default);
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .skl-rail-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+  }
+  .skl-rail-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 68px;
+    padding: 10px 4px;
+    border: none;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s, transform 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .skl-rail-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .skl-rail-item:active { transform: scale(0.97); }
+  .skl-rail-item-active,
+  .skl-rail-item-active:hover {
+    background: var(--brand-soft);
+    color: var(--brand-primary);
+  }
+  .skl-rail-item:focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
+  }
+  .skl-rail-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.2px;
+  }
+  .skl-rail-profile { margin-top: auto; }
+
+  /* ── Mobile bottom nav (shown by default) ────────────── */
+  .skl-bottom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-default);
+    padding: 10px 0 max(8px, env(safe-area-inset-bottom));
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    z-index: 100;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .skl-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 2px;
+    padding: 4px 0;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s;
+  }
+  .skl-tab-active { color: var(--brand-primary); }
+  .skl-tab-label {
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1;
+  }
+  .skl-tab-active .skl-tab-label { font-weight: 600; }
+
+  @media (min-width: 1024px) {
+    .skl-rail { display: flex; }
+    .skl-bottom { display: none; }
+    .skl-content { padding-bottom: 0; }
+  }
+`;
