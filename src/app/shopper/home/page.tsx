@@ -2512,7 +2512,7 @@ const CSS = `
   }
 
   .sh-panel-inner {
-    padding: 40px 6px 40px;
+    padding: 80px 6px 80px;
   }
   .sh-tabs-inner {
     padding: 12px 16px 10px;
