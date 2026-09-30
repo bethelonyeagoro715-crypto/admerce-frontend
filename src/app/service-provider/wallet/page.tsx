@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useReducer, useEffect, useCallback, useMemo } from 'react';
+import {
+  useState,
+  useReducer,
+  useEffect,
+  useCallback,
+  useMemo,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
 import { initializePaystack } from '../../../services/paymentService';
@@ -26,7 +32,6 @@ import {
   MdPersonOutline,
 } from 'react-icons/md';
 
-// ─── Types ────────────────────────────────────────────────────────────
 interface BalanceResponse { balance?: number }
 interface ProfileResponse { email?: string }
 interface RawTransaction {
@@ -120,14 +125,12 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
   }
 }
 
-// ─── Constants ────────────────────────────────────────────────────────
 const PRESET_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
 const MIN_TOPUP = 100;
 const MAX_TOPUP = 100_000_000;
 
 const PENDING_BOOKING_STATUSES = new Set(['locked', 'accepted']);
 
-// ─── Helpers ──────────────────────────────────────────────────────────
 const fmt = (v: number) =>
   '₦' +
   v.toLocaleString('en-NG', {
@@ -239,18 +242,28 @@ function pendingStatusColor(status: string): {
 } {
   switch (status) {
     case 'locked':
-      return { bg: '#EEF0FF', fg: '#0504AA', border: '#C7CCFF' };
+      return {
+        bg: 'var(--brand-soft)',
+        fg: 'var(--brand-primary)',
+        border: 'color-mix(in srgb, var(--brand-primary) 30%, transparent)',
+      };
     case 'accepted':
-      return { bg: '#F3E8FF', fg: '#7E22CE', border: '#D8B4FE' };
+      return {
+        bg: 'var(--purple-bg)',
+        fg: 'var(--purple-fg)',
+        border: 'color-mix(in srgb, var(--purple-fg) 30%, transparent)',
+      };
     default:
-      return { bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1' };
+      return {
+        bg: 'var(--bg-tertiary)',
+        fg: 'var(--text-secondary)',
+        border: 'var(--border-default)',
+      };
   }
 }
 
-// ─── Component ────────────────────────────────────────────────────────
 export default function ServiceProviderWalletPage() {
   useAuthGuard();
-
   const router = useRouter();
 
   const [state, dispatch] = useReducer(walletReducer, initialState);
@@ -302,9 +315,7 @@ export default function ServiceProviderWalletPage() {
       await navigator.clipboard.writeText(balance.toFixed(2));
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // clipboard blocked — silent
-    }
+    } catch {}
   };
 
   const amountNum = useMemo(
@@ -346,77 +357,46 @@ export default function ServiceProviderWalletPage() {
     [pendingBookings],
   );
 
-  // ── Loading ────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={css.root}>
+      <div style={css.root} className="sp-wallet-root">
         <style>{KF}</style>
-        <div style={css.hero}>
-          <div style={css.topBar}>
-            <div style={{ width: 38 }} />
-            <span style={css.heroTitle}>Earnings</span>
-            <div style={{ width: 38 }} />
+        <style>{SHELL_CSS}</style>
+        <div className="sp-wallet-shell">
+          <div style={css.hero}>
+            <div style={css.topBar}>
+              <div style={{ width: 38 }} />
+              <span style={css.heroTitle}>Earnings</span>
+              <div style={{ width: 38 }} />
+            </div>
+            <div style={{ padding: '8px 0 26px' }}>
+              <div style={{ width: 140, height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)' }} />
+              <div style={{ width: 200, height: 42, borderRadius: 6, background: 'color-mix(in srgb, var(--brand-on-gradient) 24%, transparent)', marginTop: 16 }} />
+            </div>
           </div>
-          <div style={{ padding: '8px 0 26px' }}>
-            <div
-              style={{
-                width: 140,
-                height: 10,
-                borderRadius: 6,
-                background: 'rgba(255,255,255,0.18)',
-              }}
-            />
-            <div
-              style={{
-                width: 200,
-                height: 42,
-                borderRadius: 6,
-                background: 'rgba(255,255,255,0.24)',
-                marginTop: 16,
-              }}
-            />
-          </div>
-        </div>
-        <div style={css.sheet}>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+          <div style={css.sheet}>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={{ flex: 1, height: 52, borderRadius: 14, background: 'var(--bg-tertiary)', animation: 'spWalletShimmer 1.4s ease-in-out infinite' }} />
+              ))}
+            </div>
+            <div style={{ height: 1, background: 'var(--border-subtle)', margin: '20px 0' }} />
             {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  height: 52,
-                  borderRadius: 14,
-                  background: '#EEF2FF',
-                  animation: 'spWalletShimmer 1.4s ease-in-out infinite',
-                }}
-              />
+              <div key={i} style={{ height: 56, borderRadius: 12, background: 'var(--bg-tertiary)', marginBottom: 10, animation: 'spWalletShimmer 1.4s ease-in-out infinite' }} />
             ))}
           </div>
-          <div style={{ height: 1, background: '#F1F5F9', margin: '20px 0' }} />
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              style={{
-                height: 56,
-                borderRadius: 12,
-                background: '#EEF2FF',
-                marginBottom: 10,
-                animation: 'spWalletShimmer 1.4s ease-in-out infinite',
-              }}
-            />
-          ))}
         </div>
       </div>
     );
   }
 
-  // ── Error ──────────────────────────────────────────────────────────
   if (errored) {
     return (
       <div style={css.errorRoot}>
         <style>{KF}</style>
+        <style>{SHELL_CSS}</style>
         <div style={css.errorHalo}>
-          <MdErrorOutline size={44} color="#B91C1C" />
+          <MdErrorOutline size={44} color="var(--danger-fg)" />
         </div>
         <h2 style={css.errorHeading}>Couldn&apos;t load your wallet</h2>
         <p style={css.errorBody}>
@@ -424,7 +404,7 @@ export default function ServiceProviderWalletPage() {
           out and back in.
         </p>
         <button onClick={handleRefresh} style={css.errorRetry}>
-          <MdRefresh size={18} color="#fff" />
+          <MdRefresh size={18} color="var(--brand-on-gradient)" />
           <span>Retry</span>
         </button>
         <button onClick={() => router.back()} style={css.errorBack}>
@@ -434,303 +414,252 @@ export default function ServiceProviderWalletPage() {
     );
   }
 
-  // ── Main ───────────────────────────────────────────────────────────
   return (
-    <div style={css.root}>
+    <div style={css.root} className="sp-wallet-root">
       <style>{KF}</style>
+      <style>{SHELL_CSS}</style>
 
-      {/* HERO */}
-      <div style={css.hero}>
-        <div style={css.heroGlow} aria-hidden />
+      <div className="sp-wallet-shell">
+        <div style={css.hero}>
+          <div style={css.heroGlow} aria-hidden />
 
-        <div style={css.topBar}>
-          <button
-            style={css.ghostBtn}
-            onClick={() => router.back()}
-            aria-label="Back"
-          >
-            <MdArrowBack size={22} color="#fff" />
-          </button>
-          <span style={css.heroTitle}>Earnings</span>
-          <button
-            style={css.ghostBtn}
-            onClick={handleRefresh}
-            disabled={refreshing}
-            aria-label="Refresh"
-          >
-            <MdRefresh
-              size={22}
-              color="#fff"
-              style={{
-                animation: refreshing ? 'spin 0.8s linear infinite' : 'none',
-              }}
-            />
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleCopyBalance}
-          style={css.balanceBlock}
-          aria-label="Copy available balance"
-        >
-          <span style={css.balLabel}>
-            Available to withdraw
-            <button
-              type="button"
-              style={css.eyeBtn}
-              onClick={(e) => {
-                e.stopPropagation();
-                setBalanceVisible((v) => !v);
-              }}
-              aria-label={balanceVisible ? 'Hide balance' : 'Show balance'}
-            >
-              {balanceVisible ? (
-                <MdVisibility size={16} color="rgba(255,255,255,0.75)" />
-              ) : (
-                <MdVisibilityOff size={16} color="rgba(255,255,255,0.75)" />
-              )}
+          <div style={css.topBar}>
+            <button style={css.ghostBtn} onClick={() => router.back()} aria-label="Back">
+              <MdArrowBack size={22} color="var(--brand-on-gradient)" />
             </button>
-          </span>
+            <span style={css.heroTitle}>Earnings</span>
+            <button style={css.ghostBtn} onClick={handleRefresh} disabled={refreshing} aria-label="Refresh">
+              <MdRefresh
+                size={22}
+                color="var(--brand-on-gradient)"
+                style={{ animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}
+              />
+            </button>
+          </div>
 
-          <span style={css.balValue}>
-            {balanceVisible ? fmt(balance) : '₦ ••••••'}
-          </span>
-
-          <span style={css.copyHint}>
-            {copied ? (
-              <>
-                <MdCheck size={13} color="#4CDE80" />
-                <span style={{ color: '#4CDE80' }}>Copied</span>
-              </>
-            ) : (
-              <>
-                <MdContentCopy size={13} color="rgba(255,255,255,0.55)" />
-                <span>Tap to copy</span>
-              </>
-            )}
-          </span>
-        </button>
-
-        {pendingBookings.length > 0 && (
-          <div style={css.pendingPill}>
-            <MdHourglassEmpty size={14} color="#FDE68A" />
-            <span style={css.pendingPillText}>
-              <strong>{fmtShort(pendingTotal)}</strong> in escrow
-              <span style={css.pendingPillCount}>
-                · {pendingBookings.length}
-              </span>
+          <button type="button" onClick={handleCopyBalance} style={css.balanceBlock} aria-label="Copy available balance">
+            <span style={css.balLabel}>
+              Available to withdraw
+              <button
+                type="button"
+                style={css.eyeBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBalanceVisible((v) => !v);
+                }}
+                aria-label={balanceVisible ? 'Hide balance' : 'Show balance'}
+              >
+                {balanceVisible ? (
+                  <MdVisibility size={16} color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)" />
+                ) : (
+                  <MdVisibilityOff size={16} color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)" />
+                )}
+              </button>
             </span>
-          </div>
-        )}
-      </div>
 
-      {/* SHEET */}
-      <div style={css.sheet}>
-        <button
-          type="button"
-          onClick={() => router.push('/service-provider/wallet/withdraw')}
-          style={css.primaryWithdraw}
-          className="sp-primary-withdraw"
-        >
-          <MdArrowOutward size={20} color="#FFFFFF" />
-          <span>Withdraw to bank</span>
-        </button>
+            <span style={css.balValue}>
+              {balanceVisible ? fmt(balance) : '₦ ••••••'}
+            </span>
 
-        <div style={css.secondaryRow}>
-          <button
-            type="button"
-            onClick={() => setShowTopUp(true)}
-            style={css.secondaryBtn}
-            className="sp-secondary"
-          >
-            <div style={css.secondaryIconAdd}>
-              <MdAdd size={16} color="#0504AA" />
-            </div>
-            <span style={css.secondaryLabel}>Top up</span>
+            <span style={css.copyHint}>
+              {copied ? (
+                <>
+                  <MdCheck size={13} color="var(--success-fg)" />
+                  <span style={{ color: 'var(--success-fg)' }}>Copied</span>
+                </>
+              ) : (
+                <>
+                  <MdContentCopy size={13} color="color-mix(in srgb, var(--brand-on-gradient) 55%, transparent)" />
+                  <span>Tap to copy</span>
+                </>
+              )}
+            </span>
           </button>
-          <button
-            type="button"
-            onClick={() => router.push('/service-provider/wallet/history')}
-            style={css.secondaryBtn}
-            className="sp-secondary"
-          >
-            <div style={css.secondaryIconHistory}>
-              <MdHistory size={16} color="#0891B2" />
-            </div>
-            <span style={css.secondaryLabel}>History</span>
-          </button>
-        </div>
 
-        <div style={css.divider} />
-
-        {/* Awaiting completion */}
-        <div style={css.secHead}>
-          <div style={css.secHeadLeft}>
-            <span style={css.secTitle}>Awaiting completion</span>
-            {pendingBookings.length > 0 && (
-              <span style={css.secCount}>{pendingBookings.length}</span>
-            )}
-          </div>
           {pendingBookings.length > 0 && (
-            <span style={css.secSub}>{fmtShort(pendingTotal)}</span>
+            <div style={css.pendingPill}>
+              <MdHourglassEmpty size={14} color="var(--warning-fg)" />
+              <span style={css.pendingPillText}>
+                <strong>{fmtShort(pendingTotal)}</strong> in escrow
+                <span style={css.pendingPillCount}>· {pendingBookings.length}</span>
+              </span>
+            </div>
           )}
         </div>
 
-        {pendingBookings.length === 0 ? (
-          <div style={css.emptySmall}>
-            <div style={css.emptySmallIcon}>
-              <MdWallet size={22} color="#94A3B8" />
-            </div>
-            <div>
-              <div style={css.emptySmallTitle}>Nothing pending</div>
-              <div style={css.emptySmallBody}>
-                Bookings you haven&apos;t completed will show here until the
-                funds release.
+        <div style={css.sheet}>
+          <button
+            type="button"
+            onClick={() => router.push('/service-provider/wallet/withdraw')}
+            style={css.primaryWithdraw}
+            className="sp-primary-withdraw"
+          >
+            <MdArrowOutward size={20} color="var(--brand-on-gradient)" />
+            <span>Withdraw to bank</span>
+          </button>
+
+          <div style={css.secondaryRow}>
+            <button type="button" onClick={() => setShowTopUp(true)} style={css.secondaryBtn} className="sp-secondary">
+              <div style={css.secondaryIconAdd}>
+                <MdAdd size={16} color="var(--brand-primary)" />
               </div>
-            </div>
+              <span style={css.secondaryLabel}>Top up</span>
+            </button>
+            <button type="button" onClick={() => router.push('/service-provider/wallet/history')} style={css.secondaryBtn} className="sp-secondary">
+              <div style={css.secondaryIconHistory}>
+                <MdHistory size={16} color="var(--info-fg)" />
+              </div>
+              <span style={css.secondaryLabel}>History</span>
+            </button>
           </div>
-        ) : (
-          <div style={css.pendingList}>
-            {pendingBookings.slice(0, 5).map((b) => {
-              const color = pendingStatusColor(b.status);
-              return (
-                <button
-                  key={b.booking_id}
-                  type="button"
-                  onClick={() => router.push('/service-provider/bookings')}
-                  style={css.pendingCard}
-                  className="sp-pending-card"
-                >
-                  <div style={css.pendingAvatar}>
-                    {b.customer.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={css.pendingBody}>
-                    <div style={css.pendingTopRow}>
-                      <span style={css.pendingCustomer} title={b.service_title}>
-                        {b.service_title}
-                      </span>
-                      <span
-                        style={{
-                          ...css.pendingChip,
-                          background: color.bg,
-                          color: color.fg,
-                          borderColor: color.border,
-                        }}
-                      >
-                        {pendingStatusLabel(b.status)}
-                      </span>
-                    </div>
-                    <div style={css.pendingMeta}>
-                      <MdPersonOutline size={11} color="#94A3B8" />
-                      <span style={css.pendingCustomerName}>{b.customer}</span>
-                      <span style={css.pendingDot}>·</span>
-                      <span style={css.pendingAmount}>
-                        {fmtShort(b.amount)}
-                      </span>
-                      {b.scheduled_for && (
-                        <>
-                          <span style={css.pendingDot}>·</span>
-                          <MdCalendarToday size={11} color="#94A3B8" />
-                          <span style={css.pendingExpiry}>
-                            {fmtDateTime(b.scheduled_for)}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <MdChevronRight size={18} color="#94A3B8" />
-                </button>
-              );
-            })}
-            {pendingBookings.length > 5 && (
-              <button
-                type="button"
-                onClick={() => router.push('/service-provider/bookings')}
-                style={css.viewAllBtn}
-              >
-                View all {pendingBookings.length} bookings →
-              </button>
+
+          <div style={css.divider} />
+
+          <div style={css.secHead}>
+            <div style={css.secHeadLeft}>
+              <span style={css.secTitle}>Awaiting completion</span>
+              {pendingBookings.length > 0 && (
+                <span style={css.secCount}>{pendingBookings.length}</span>
+              )}
+            </div>
+            {pendingBookings.length > 0 && (
+              <span style={css.secSub}>{fmtShort(pendingTotal)}</span>
             )}
           </div>
-        )}
 
-        <div style={css.divider} />
-
-        {/* Recent activity */}
-        <div style={css.secHead}>
-          <span style={css.secTitle}>Recent activity</span>
-          <button
-            style={css.seeAll}
-            onClick={() => router.push('/service-provider/wallet/history')}
-          >
-            See all →
-          </button>
-        </div>
-
-        <div style={css.txnList}>
-          {transactions.length === 0 ? (
+          {pendingBookings.length === 0 ? (
             <div style={css.emptySmall}>
               <div style={css.emptySmallIcon}>
-                <MdAccountBalanceWallet size={22} color="#94A3B8" />
+                <MdWallet size={22} color="var(--text-muted)" />
               </div>
               <div>
-                <div style={css.emptySmallTitle}>No activity yet</div>
+                <div style={css.emptySmallTitle}>Nothing pending</div>
                 <div style={css.emptySmallBody}>
-                  Completed bookings and withdrawals will show here.
+                  Bookings you haven&apos;t completed will show here until the
+                  funds release.
                 </div>
               </div>
             </div>
           ) : (
-            transactions.map((txn, i) => {
-              const isCredit = txn.type === 'credit';
-              return (
-                <div
-                  key={txn.id}
-                  style={{
-                    ...css.txnCard,
-                    borderLeft: `3px solid ${
-                      isCredit ? '#4CDE80' : '#FF5757'
-                    }`,
-                    animationDelay: `${i * 30}ms`,
-                  }}
-                >
-                  <div
-                    style={{
-                      ...css.txnIconWrap,
-                      backgroundColor: isCredit ? '#DCFCE7' : '#FEE2E2',
-                    }}
+            <div style={css.pendingList}>
+              {pendingBookings.slice(0, 5).map((b) => {
+                const color = pendingStatusColor(b.status);
+                return (
+                  <button
+                    key={b.booking_id}
+                    type="button"
+                    onClick={() => router.push('/service-provider/bookings')}
+                    style={css.pendingCard}
+                    className="sp-pending-card"
                   >
-                    {isCredit ? (
-                      <MdTrendingUp size={18} color="#16A34A" />
-                    ) : (
-                      <MdTrendingDown size={18} color="#DC2626" />
-                    )}
-                  </div>
-                  <div style={css.txnMeta}>
-                    <span style={css.txnDesc}>{txn.description}</span>
-                    <span style={css.txnDate}>{fmtDate(txn.date)}</span>
-                  </div>
-                  <span
-                    style={{
-                      ...css.txnAmt,
-                      color: isCredit ? '#16A34A' : '#DC2626',
-                    }}
-                  >
-                    {isCredit ? '+' : '−'}
-                    {fmtShort(txn.amount)}
-                  </span>
-                </div>
-              );
-            })
+                    <div style={css.pendingAvatar}>
+                      {b.customer.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={css.pendingBody}>
+                      <div style={css.pendingTopRow}>
+                        <span style={css.pendingCustomer} title={b.service_title}>
+                          {b.service_title}
+                        </span>
+                        <span style={{ ...css.pendingChip, background: color.bg, color: color.fg, borderColor: color.border }}>
+                          {pendingStatusLabel(b.status)}
+                        </span>
+                      </div>
+                      <div style={css.pendingMeta}>
+                        <MdPersonOutline size={11} color="var(--text-muted)" />
+                        <span style={css.pendingCustomerName}>{b.customer}</span>
+                        <span style={css.pendingDot}>·</span>
+                        <span style={css.pendingAmount}>{fmtShort(b.amount)}</span>
+                        {b.scheduled_for && (
+                          <>
+                            <span style={css.pendingDot}>·</span>
+                            <MdCalendarToday size={11} color="var(--text-muted)" />
+                            <span style={css.pendingExpiry}>{fmtDateTime(b.scheduled_for)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <MdChevronRight size={18} color="var(--text-muted)" />
+                  </button>
+                );
+              })}
+              {pendingBookings.length > 5 && (
+                <button type="button" onClick={() => router.push('/service-provider/bookings')} style={css.viewAllBtn}>
+                  View all {pendingBookings.length} bookings →
+                </button>
+              )}
+            </div>
           )}
+
+          <div style={css.divider} />
+
+          <div style={css.secHead}>
+            <span style={css.secTitle}>Recent activity</span>
+            <button style={css.seeAll} onClick={() => router.push('/service-provider/wallet/history')}>
+              See all →
+            </button>
+          </div>
+
+          <div style={css.txnList}>
+            {transactions.length === 0 ? (
+              <div style={css.emptySmall}>
+                <div style={css.emptySmallIcon}>
+                  <MdAccountBalanceWallet size={22} color="var(--text-muted)" />
+                </div>
+                <div>
+                  <div style={css.emptySmallTitle}>No activity yet</div>
+                  <div style={css.emptySmallBody}>
+                    Completed bookings and withdrawals will show here.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              transactions.map((txn, i) => {
+                const isCredit = txn.type === 'credit';
+                return (
+                  <div
+                    key={txn.id}
+                    style={{
+                      ...css.txnCard,
+                      borderLeft: `3px solid ${isCredit ? 'var(--success-fg)' : 'var(--danger-fg)'}`,
+                      animationDelay: `${i * 30}ms`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...css.txnIconWrap,
+                        backgroundColor: isCredit ? 'var(--success-bg)' : 'var(--danger-bg)',
+                      }}
+                    >
+                      {isCredit ? (
+                        <MdTrendingUp size={18} color="var(--success-fg)" />
+                      ) : (
+                        <MdTrendingDown size={18} color="var(--danger-fg)" />
+                      )}
+                    </div>
+                    <div style={css.txnMeta}>
+                      <span style={css.txnDesc}>{txn.description}</span>
+                      <span style={css.txnDate}>{fmtDate(txn.date)}</span>
+                    </div>
+                    <span
+                      style={{
+                        ...css.txnAmt,
+                        color: isCredit ? 'var(--success-fg)' : 'var(--danger-fg)',
+                      }}
+                    >
+                      {isCredit ? '+' : '−'}
+                      {fmtShort(txn.amount)}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
-      {/* TOP-UP MODAL */}
       {showTopUp && (
-        <div style={css.overlay} onClick={closeTopUp}>
-          <div style={css.bottomSheet} onClick={(e) => e.stopPropagation()}>
+        <div style={css.overlay} className="sp-wallet-overlay" onClick={closeTopUp}>
+          <div style={css.bottomSheet} className="sp-wallet-sheet" onClick={(e) => e.stopPropagation()}>
             <div style={css.sheetHandle} />
             <h2 style={css.modalTitle}>Add money</h2>
             <p style={css.modalSub}>
@@ -753,8 +682,8 @@ export default function ServiceProviderWalletPage() {
                     type="button"
                     style={{
                       ...css.preset,
-                      backgroundColor: active ? '#0504AA' : '#EEF2FF',
-                      color: active ? '#fff' : '#0504AA',
+                      background: active ? 'var(--brand-gradient)' : 'var(--brand-soft)',
+                      color: active ? 'var(--brand-on-gradient)' : 'var(--brand-primary)',
                     }}
                     onClick={() => {
                       setAmount(p.toLocaleString('en-NG'));
@@ -772,8 +701,8 @@ export default function ServiceProviderWalletPage() {
                 ...css.inputWrap,
                 borderColor:
                   belowMin || (amountTouched && !amountNum)
-                    ? '#FCA5A5'
-                    : '#E2E8F0',
+                    ? 'var(--danger-fg)'
+                    : 'var(--border-default)',
               }}
             >
               <span style={css.inputPrefix}>₦</span>
@@ -832,35 +761,61 @@ export default function ServiceProviderWalletPage() {
   );
 }
 
-// ─── Keyframes ────────────────────────────────────────────────────────
 const KF = `
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes spWalletShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
   @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
-  .sp-primary-withdraw:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(5, 4, 170, 0.32); }
+  .sp-primary-withdraw:hover { transform: translateY(-2px); box-shadow: 0 14px 30px color-mix(in srgb, var(--brand-primary) 32%, transparent); }
   .sp-primary-withdraw:active { transform: translateY(0) scale(0.985); }
-  .sp-secondary:hover { background-color: #F6F7FB; }
-  .sp-pending-card:hover { border-color: #C7CCFF; }
+  .sp-secondary:hover { background-color: var(--bg-hover); }
+  .sp-pending-card:hover { border-color: var(--brand-primary); }
 `;
 
-// ─── Styles ───────────────────────────────────────────────────────────
+const SHELL_CSS = `
+  .sp-wallet-root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    transition: background-color 0.18s ease, color 0.18s ease;
+    justify-content: center;
+  }
+  .sp-wallet-shell {
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .sp-wallet-overlay { align-items: flex-end; }
+  @media (min-width: 1024px) {
+    .sp-wallet-overlay { align-items: center !important; padding: 24px; }
+    .sp-wallet-sheet { border-radius: 24px !important; max-height: 80vh; overflow-y: auto; }
+  }
+`;
+
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F0F4FF',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   hero: {
     position: 'relative',
-    backgroundColor: '#0504AA',
-    backgroundImage:
-      'radial-gradient(ellipse at 80% 0%, #1A0FB8 0%, #0504AA 55%, #03037A 100%)',
+    background: 'var(--brand-gradient)',
     padding: '0 20px 30px',
     overflow: 'hidden',
+    transition: 'background 0.18s ease',
   },
   heroGlow: {
     position: 'absolute',
@@ -869,8 +824,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 260,
     height: 260,
     borderRadius: '50%',
-    background:
-      'radial-gradient(circle, rgba(61,59,255,0.35) 0%, rgba(61,59,255,0) 70%)',
+    background: 'radial-gradient(circle, color-mix(in srgb, var(--brand-on-gradient) 18%, transparent) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   topBar: {
@@ -881,7 +835,7 @@ const css: Record<string, React.CSSProperties> = {
     paddingBottom: 18,
   },
   ghostBtn: {
-    background: 'rgba(255,255,255,0.08)',
+    background: 'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
     border: 'none',
     cursor: 'pointer',
     padding: 8,
@@ -895,7 +849,7 @@ const css: Record<string, React.CSSProperties> = {
   heroTitle: {
     fontSize: 15,
     fontWeight: 600,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: 0.3,
   },
   balanceBlock: {
@@ -912,7 +866,7 @@ const css: Record<string, React.CSSProperties> = {
   },
   balLabel: {
     fontSize: 11.5,
-    color: 'rgba(255,255,255,0.65)',
+    color: 'color-mix(in srgb, var(--brand-on-gradient) 65%, transparent)',
     letterSpacing: 1,
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -933,7 +887,7 @@ const css: Record<string, React.CSSProperties> = {
   balValue: {
     fontSize: 40,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: -1,
     lineHeight: 1.1,
     fontVariantNumeric: 'tabular-nums',
@@ -944,7 +898,7 @@ const css: Record<string, React.CSSProperties> = {
     gap: 5,
     fontSize: 11.5,
     fontWeight: 600,
-    color: 'rgba(255,255,255,0.55)',
+    color: 'color-mix(in srgb, var(--brand-on-gradient) 55%, transparent)',
     marginTop: 8,
     letterSpacing: 0.2,
   },
@@ -954,28 +908,29 @@ const css: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '7px 14px',
     borderRadius: 999,
-    backgroundColor: 'rgba(217, 119, 6, 0.18)',
-    border: '1px solid rgba(253, 230, 138, 0.35)',
+    backgroundColor: 'color-mix(in srgb, var(--warning-fg) 18%, transparent)',
+    border: '1px solid color-mix(in srgb, var(--warning-fg) 35%, transparent)',
   },
   pendingPillText: {
     fontSize: 12.5,
     fontWeight: 600,
-    color: 'rgba(255,255,255,0.92)',
+    color: 'color-mix(in srgb, var(--brand-on-gradient) 92%, transparent)',
   },
   pendingPillCount: {
-    color: 'rgba(255,255,255,0.6)',
+    color: 'color-mix(in srgb, var(--brand-on-gradient) 60%, transparent)',
     fontWeight: 500,
     marginLeft: 4,
   },
 
   sheet: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: '24px 24px 0 0',
     marginTop: -16,
     padding: '24px 20px 120px',
-    boxShadow: '0 -4px 30px rgba(5,4,170,0.08)',
+    boxShadow: 'var(--shadow-sm)',
     position: 'relative',
+    transition: 'background-color 0.18s ease',
   },
 
   primaryWithdraw: {
@@ -987,21 +942,17 @@ const css: Record<string, React.CSSProperties> = {
     padding: '16px 20px',
     borderRadius: 16,
     border: 'none',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#FFFFFF',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 16,
     fontWeight: 700,
     letterSpacing: -0.1,
     cursor: 'pointer',
-    boxShadow: '0 10px 24px rgba(5, 4, 170, 0.28)',
+    boxShadow: 'var(--shadow-brand)',
     fontFamily: 'inherit',
     transition: 'transform 0.15s, box-shadow 0.2s',
   },
-  secondaryRow: {
-    display: 'flex',
-    gap: 10,
-    marginTop: 12,
-  },
+  secondaryRow: { display: 'flex', gap: 10, marginTop: 12 },
   secondaryBtn: {
     flex: 1,
     display: 'flex',
@@ -1010,8 +961,8 @@ const css: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '13px 14px',
     borderRadius: 14,
-    border: '1.5px solid #E6E8F0',
-    backgroundColor: '#FFFFFF',
+    border: '1.5px solid var(--border-default)',
+    backgroundColor: 'var(--bg-secondary)',
     cursor: 'pointer',
     fontFamily: 'inherit',
     transition: 'background-color 0.15s',
@@ -1020,7 +971,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1029,7 +980,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: '#E0F2FE',
+    backgroundColor: 'var(--info-bg)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1037,13 +988,13 @@ const css: Record<string, React.CSSProperties> = {
   secondaryLabel: {
     fontSize: 14,
     fontWeight: 700,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
   },
 
   divider: {
     height: 1,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--border-subtle)',
     margin: '22px 0',
   },
 
@@ -1053,15 +1004,11 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     marginBottom: 14,
   },
-  secHeadLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  },
+  secHeadLeft: { display: 'flex', alignItems: 'center', gap: 8 },
   secTitle: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0F172A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.2,
   },
   secCount: {
@@ -1072,15 +1019,15 @@ const css: Record<string, React.CSSProperties> = {
     height: 20,
     padding: '0 6px',
     borderRadius: 999,
-    backgroundColor: '#F1F5F9',
-    color: '#475569',
+    backgroundColor: 'var(--bg-tertiary)',
+    color: 'var(--text-secondary)',
     fontSize: 11.5,
     fontWeight: 800,
   },
   secSub: {
     fontSize: 13,
     fontWeight: 700,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontVariantNumeric: 'tabular-nums',
   },
   seeAll: {
@@ -1088,17 +1035,13 @@ const css: Record<string, React.CSSProperties> = {
     border: 'none',
     cursor: 'pointer',
     fontSize: 13,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontWeight: 700,
     fontFamily: 'inherit',
     padding: 4,
   },
 
-  pendingList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
+  pendingList: { display: 'flex', flexDirection: 'column', gap: 8 },
   pendingCard: {
     display: 'flex',
     alignItems: 'center',
@@ -1106,20 +1049,20 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '12px 14px',
     borderRadius: 14,
-    border: '1px solid #EEF2FF',
-    backgroundColor: '#FAFBFF',
+    border: '1px solid var(--border-default)',
+    backgroundColor: 'var(--bg-tertiary)',
     cursor: 'pointer',
     textAlign: 'left',
     fontFamily: 'inherit',
-    transition: 'border-color 0.15s',
+    transition: 'border-color 0.15s, background-color 0.18s ease',
   },
   pendingAvatar: {
     width: 38,
     height: 38,
     flex: '0 0 38px',
     borderRadius: 12,
-    background: 'linear-gradient(135deg, #EEF0FF 0%, #E0E7FF 100%)',
-    color: '#0504AA',
+    background: 'var(--brand-soft)',
+    color: 'var(--brand-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1133,16 +1076,11 @@ const css: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 3,
   },
-  pendingTopRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    minWidth: 0,
-  },
+  pendingTopRow: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
   pendingCustomer: {
     fontSize: 14,
     fontWeight: 700,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1164,43 +1102,35 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 5,
     fontSize: 12,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     minWidth: 0,
     flexWrap: 'wrap',
   },
   pendingCustomerName: {
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   pendingAmount: {
     fontWeight: 700,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontVariantNumeric: 'tabular-nums',
   },
-  pendingDot: {
-    color: '#CBD5E1',
-  },
-  pendingExpiry: {
-    fontWeight: 500,
-    color: '#94A3B8',
-  },
+  pendingDot: { color: 'var(--border-strong)' },
+  pendingExpiry: { fontWeight: 500, color: 'var(--text-muted)' },
 
-  txnList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  },
+  txnList: { display: 'flex', flexDirection: 'column', gap: 10 },
   txnCard: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     padding: '14px 14px 14px 12px',
-    backgroundColor: '#FAFBFF',
+    backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 12,
     animation: 'fadeUp 0.3s ease both',
-    border: '1px solid #EEF2FF',
+    border: '1px solid var(--border-default)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   txnIconWrap: {
     width: 38,
@@ -1221,14 +1151,14 @@ const css: Record<string, React.CSSProperties> = {
   txnDesc: {
     fontSize: 14,
     fontWeight: 600,
-    color: '#0F172A',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   txnDate: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     letterSpacing: 0.2,
   },
   txnAmt: {
@@ -1244,16 +1174,16 @@ const css: Record<string, React.CSSProperties> = {
     gap: 12,
     padding: '16px 14px',
     borderRadius: 14,
-    backgroundColor: '#F8FAFC',
-    border: '1px dashed #E2E8F0',
+    backgroundColor: 'var(--bg-tertiary)',
+    border: '1px dashed var(--border-default)',
   },
   emptySmallIcon: {
     width: 44,
     height: 44,
     flex: '0 0 44px',
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EEF0F7',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1261,22 +1191,21 @@ const css: Record<string, React.CSSProperties> = {
   emptySmallTitle: {
     fontSize: 13.5,
     fontWeight: 700,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
   },
   emptySmallBody: {
     fontSize: 12.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     marginTop: 2,
     lineHeight: 1.4,
   },
-
   viewAllBtn: {
     alignSelf: 'flex-start',
     padding: '8px 4px',
     background: 'none',
     border: 'none',
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontWeight: 700,
     fontSize: 13,
     cursor: 'pointer',
@@ -1286,7 +1215,7 @@ const css: Record<string, React.CSSProperties> = {
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(3,3,90,0.5)',
+    backgroundColor: 'var(--overlay)',
     backdropFilter: 'blur(6px)',
     WebkitBackdropFilter: 'blur(6px)',
     zIndex: 200,
@@ -1297,39 +1226,41 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     maxWidth: 520,
     margin: '0 auto',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-primary)',
     borderRadius: '24px 24px 0 0',
     padding: '12px 24px calc(32px + env(safe-area-inset-bottom))',
-    boxShadow: '0 -8px 40px rgba(5,4,170,0.2)',
+    boxShadow: 'var(--shadow-lg)',
     animation: 'sheetUp 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   sheetHandle: {
     width: 40,
     height: 4,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: 'var(--border-default)',
     borderRadius: 2,
     margin: '0 auto 20px',
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#0F172A',
+    color: 'var(--text-primary)',
     margin: '0 0 4px',
     letterSpacing: -0.3,
   },
   modalSub: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     margin: '0 0 20px',
   },
   warnBox: {
     padding: '12px 14px',
     borderRadius: 12,
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #FDE68A',
+    backgroundColor: 'var(--warning-bg)',
+    border: '1px solid var(--warning-strong)',
     marginBottom: 18,
     fontSize: 12.5,
-    color: '#92400E',
+    color: 'var(--warning-fg)',
     lineHeight: 1.5,
     fontWeight: 500,
   },
@@ -1351,16 +1282,16 @@ const css: Record<string, React.CSSProperties> = {
   inputWrap: {
     display: 'flex',
     alignItems: 'center',
-    border: '1.5px solid #E2E8F0',
+    border: '1.5px solid var(--border-default)',
     borderRadius: 14,
     padding: '0 16px',
     marginBottom: 8,
-    backgroundColor: '#F8FAFF',
+    backgroundColor: 'var(--bg-tertiary)',
   },
   inputPrefix: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     marginRight: 8,
   },
   amtInput: {
@@ -1371,13 +1302,13 @@ const css: Record<string, React.CSSProperties> = {
     border: 'none',
     outline: 'none',
     backgroundColor: 'transparent',
-    color: '#0F172A',
+    color: 'var(--text-primary)',
     fontFamily: 'inherit',
     fontVariantNumeric: 'tabular-nums',
   },
   inlineError: {
     fontSize: 12,
-    color: '#B91C1C',
+    color: 'var(--danger-fg)',
     fontWeight: 600,
     marginBottom: 14,
     paddingLeft: 4,
@@ -1386,21 +1317,21 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: 16,
     marginTop: 8,
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 14,
     fontSize: 15,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
   cancelBtn: {
     width: '100%',
     padding: 14,
     backgroundColor: 'transparent',
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     border: 'none',
     borderRadius: 14,
     fontSize: 14,
@@ -1415,16 +1346,18 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F0F4FF',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   errorHalo: {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1433,13 +1366,13 @@ const css: Record<string, React.CSSProperties> = {
   errorHeading: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   errorBody: {
     fontSize: 14,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     marginTop: 8,
     maxWidth: 320,
     lineHeight: 1.5,
@@ -1451,21 +1384,21 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 700,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
   errorBack: {
     marginTop: 12,
     padding: 10,
     background: 'none',
     border: 'none',
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontWeight: 700,
     fontSize: 13.5,
     textDecoration: 'underline',
