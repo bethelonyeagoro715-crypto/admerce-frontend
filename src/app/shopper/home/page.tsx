@@ -1827,7 +1827,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '12px 16px',
+    padding: '8px 16px',
     maxWidth: CONTENT_MAX_WIDTH,
     margin: '0 auto',
     width: '100%',
