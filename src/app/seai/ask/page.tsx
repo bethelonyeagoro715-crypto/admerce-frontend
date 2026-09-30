@@ -42,23 +42,26 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+// All values resolve via CSS vars so both themes share one code path.
+// Light theme resolves to the same blue palette as before; dark theme
+// resolves to charcoal + silver.
 const Brand = {
-  bg: '#FBFAF7',
-  bgWarm: '#F8F9FC',
-  cardBg: '#FFFFFF',
-  sidebarBg: '#F6F7FB',
-  textPrimary: '#0A0A14',
-  textSecondary: '#545B6E',
-  textMuted: '#8F96A8',
-  accent: '#0504AA',
-  accentLight: '#3D3BFF',
-  accentBg: '#EEEDFF',
-  border: '#E6E8F0',
-  borderSoft: '#EEF0F7',
-  shadowSm: '0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.04)',
-  shadowMd: '0 2px 6px rgba(15,23,42,0.05), 0 6px 20px rgba(15,23,42,0.06)',
-  shadowLg: '0 8px 24px rgba(5,4,170,0.10), 0 2px 6px rgba(15,23,42,0.05)',
-  shadowBloom: '0 0 0 4px rgba(5,4,170,0.10), 0 8px 24px rgba(5,4,170,0.14)',
+  bg: 'var(--bg-primary)',
+  bgWarm: 'var(--bg-secondary)',
+  cardBg: 'var(--bg-secondary)',
+  sidebarBg: 'var(--bg-secondary)',
+  textPrimary: 'var(--text-primary)',
+  textSecondary: 'var(--text-secondary)',
+  textMuted: 'var(--text-muted)',
+  accent: 'var(--brand-primary)',
+  accentLight: 'var(--brand-primary)',
+  accentBg: 'var(--brand-soft)',
+  border: 'var(--border-default)',
+  borderSoft: 'var(--border-subtle)',
+  shadowSm: 'var(--shadow-sm)',
+  shadowMd: 'var(--shadow-md)',
+  shadowLg: 'var(--shadow-lg)',
+  shadowBloom: 'var(--shadow-brand)',
 };
 
 type Role = 'user' | 'seai';
@@ -158,6 +161,8 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   return url.startsWith('/') ? `${base}${url}` : `${base}/${url}`;
 }
 
+// Type-badge colors are semantic (what kind of result) not theme colors —
+// they sit on top of an image and always carry white text. Kept hardcoded.
 function typeBadgeColor(type: string | undefined): string {
   if (type === 'service') return '#7C3AED';
   if (type === 'store') return '#059669';
@@ -318,9 +323,9 @@ function SeaiResultCard({
             <img src={image} alt="" style={styles.tileImage} />
           ) : (
             <div style={styles.tilePlaceholder}>
-              {isStore ? <MdStore size={40} color="#C7D2FE" />
-                : isService ? <MdBuild size={40} color="#C7D2FE" />
-                : <MdImage size={40} color="#C7D2FE" />}
+              {isStore ? <MdStore size={40} color="var(--text-muted)" />
+                : isService ? <MdBuild size={40} color="var(--text-muted)" />
+                : <MdImage size={40} color="var(--text-muted)" />}
             </div>
           )}
           <div style={styles.tileImageOverlay} />
@@ -329,7 +334,7 @@ function SeaiResultCard({
           </span>
           {verified && (
             <span style={styles.tileVerified} title="Verified">
-              <MdVerified size={14} color="#0504AA" />
+              <MdVerified size={14} color="var(--brand-primary)" />
             </span>
           )}
           {showPrice && (
@@ -349,7 +354,7 @@ function SeaiResultCard({
           <div style={styles.tileTitle} title={card.title || ''}>{card.title || 'Untitled'}</div>
           {subtitle && (
             <div style={styles.tileSubtitle} title={subtitle}>
-              <MdStore size={11} color="#94A3B8" />
+              <MdStore size={11} color="var(--text-muted)" />
               <span style={{ marginLeft: 4 }}>{subtitle}</span>
             </div>
           )}
@@ -365,19 +370,19 @@ function SeaiResultCard({
       <div style={styles.tileFooter}>
         {directions && (
           <button type="button" onClick={handleDirections} style={styles.tileFooterBtn} aria-label="Directions">
-            <MdNavigation size={14} color={Brand.accent} />
+            <MdNavigation size={14} color="var(--brand-primary)" />
             <span>Directions</span>
           </button>
         )}
         <button type="button" onClick={handleSave} style={styles.tileFooterBtn} aria-label={saved ? 'Remove from saved' : 'Save'}>
           {saved ? (
             <>
-              <MdBookmark size={14} color={Brand.accent} />
+              <MdBookmark size={14} color="var(--brand-primary)" />
               <span>Saved</span>
             </>
           ) : (
             <>
-              <MdBookmarkBorder size={14} color={Brand.accent} />
+              <MdBookmarkBorder size={14} color="var(--brand-primary)" />
               <span>Save</span>
             </>
           )}
@@ -704,9 +709,6 @@ function SeaiAskContent() {
         (Array.isArray(res?.items) && res.items) ||
         [];
 
-      // Build the best possible intro message from whatever the
-      // backend returned. Priority order reflects how specific each
-      // field is.
       const description = res?.description || res?.diagnostics?.description;
 
       let intro = '';
@@ -1023,10 +1025,10 @@ function SeaiAskContent() {
                 style={{ ...styles.suggestionChip, animationDelay: `${120 + i * 70}ms` }}
               >
                 <span style={styles.chipIconWrap}>
-                  <Icon size={16} color={Brand.accent} />
+                  <Icon size={16} color="var(--brand-primary)" />
                 </span>
                 <span style={styles.chipText}>{s.text}</span>
-                <MdChevronRight size={16} color="#B6BCCB" />
+                <MdChevronRight size={16} color="var(--text-muted)" />
               </button>
             );
           })}
@@ -1051,7 +1053,7 @@ function SeaiAskContent() {
       <div style={styles.editActions}>
         <button onClick={cancelEdit} style={styles.editCancel}>Cancel</button>
         <button onClick={saveEdit} style={styles.editSave}>
-          <MdCheck size={16} color="#fff" />
+          <MdCheck size={16} color="var(--brand-on-gradient)" />
           <span style={{ marginLeft: 4 }}>
             {msg.role === 'user' ? 'Save & resend' : 'Save'}
           </span>
@@ -1074,10 +1076,10 @@ function SeaiAskContent() {
                 {!isEditing && !msg.isStreaming && msg.text && (
                   <div style={{ ...styles.actionBar, justifyContent: 'flex-end' }}>
                     <button onClick={() => copyText(msg.text, i)} style={styles.actionBtn} title="Copy" aria-label="Copy message">
-                      {copiedIndex === i ? <MdCheck size={14} color={Brand.accent} /> : <MdContentCopy size={14} color="#666" />}
+                      {copiedIndex === i ? <MdCheck size={14} color="var(--brand-primary)" /> : <MdContentCopy size={14} color="var(--text-tertiary)" />}
                     </button>
                     <button onClick={() => startEdit(i)} style={styles.actionBtn} title="Edit" aria-label="Edit message">
-                      <MdEdit size={14} color="#666" />
+                      <MdEdit size={14} color="var(--text-tertiary)" />
                     </button>
                   </div>
                 )}
@@ -1087,7 +1089,7 @@ function SeaiAskContent() {
                 <div style={styles.aiAvatarWrap}>
                   <div className="seai-ai-ring" style={styles.aiAvatarRing} aria-hidden />
                   <div style={styles.aiAvatar}>
-                    <MdSearch size={14} color="#FFFFFF" />
+                    <MdSearch size={14} color="var(--brand-on-gradient)" />
                   </div>
                 </div>
                 <div style={styles.aiBubble} aria-live="polite">
@@ -1122,10 +1124,10 @@ function SeaiAskContent() {
                   {!msg.isThinking && !msg.isStreaming && msg.text && !isEditing && (
                     <div style={styles.actionBar}>
                       <button onClick={() => copyText(msg.text, i)} style={styles.actionBtn} title="Copy" aria-label="Copy response">
-                        {copiedIndex === i ? <MdCheck size={15} color={Brand.accent} /> : <MdContentCopy size={15} color="#666" />}
+                        {copiedIndex === i ? <MdCheck size={15} color="var(--brand-primary)" /> : <MdContentCopy size={15} color="var(--text-tertiary)" />}
                       </button>
                       <button onClick={() => retryMessage(i)} style={styles.actionBtn} title="Retry" aria-label="Retry">
-                        <MdRefresh size={15} color="#666" />
+                        <MdRefresh size={15} color="var(--text-tertiary)" />
                       </button>
                       <button
                         onClick={() => {
@@ -1136,13 +1138,13 @@ function SeaiAskContent() {
                         title="Share"
                         aria-label="Share response"
                       >
-                        <MdShare size={15} color="#666" />
+                        <MdShare size={15} color="var(--text-tertiary)" />
                       </button>
                       <button style={styles.actionBtn} title="Good response" aria-label="Good response">
-                        <MdThumbUp size={15} color="#666" />
+                        <MdThumbUp size={15} color="var(--text-tertiary)" />
                       </button>
                       <button style={styles.actionBtn} title="Bad response" aria-label="Bad response">
-                        <MdThumbDown size={15} color="#666" />
+                        <MdThumbDown size={15} color="var(--text-tertiary)" />
                       </button>
                     </div>
                   )}
@@ -1166,7 +1168,7 @@ function SeaiAskContent() {
                 onClick={() => sendMessage(r.query)}
                 disabled={isStreaming}
               >
-                <Icon size={13} color={Brand.accent} />
+                <Icon size={13} color="var(--brand-primary)" />
                 <span>{r.label}</span>
               </button>
             );
@@ -1209,7 +1211,7 @@ function SeaiAskContent() {
             title={isUploadingImage ? 'Analyzing…' : 'Attach an image'}
             aria-label="Attach an image"
           >
-            {isUploadingImage ? <span className="seai-mini-spinner" /> : <MdAdd size={20} color="#666" />}
+            {isUploadingImage ? <span className="seai-mini-spinner" /> : <MdAdd size={20} color="var(--text-tertiary)" />}
           </button>
 
           <button
@@ -1219,7 +1221,7 @@ function SeaiAskContent() {
             title={isTranscribing ? 'Transcribing…' : isRecording ? 'Stop recording' : 'Voice input'}
             aria-label={isRecording ? 'Stop recording' : 'Start voice input'}
           >
-            {isTranscribing ? <span className="seai-mini-spinner" /> : isRecording ? <MdStop size={20} color="#fff" /> : <MdMic size={20} color="#666" />}
+            {isTranscribing ? <span className="seai-mini-spinner" /> : isRecording ? <MdStop size={20} color="#fff" /> : <MdMic size={20} color="var(--text-tertiary)" />}
           </button>
 
           <div style={{ flex: 1 }} />
@@ -1234,7 +1236,10 @@ function SeaiAskContent() {
             }}
             aria-label="Send"
           >
-            <MdArrowUpward size={18} color={inputHasText && !isStreaming ? '#fff' : Brand.textMuted} />
+            <MdArrowUpward
+              size={18}
+              color={inputHasText && !isStreaming ? 'var(--brand-on-gradient)' : 'var(--text-muted)'}
+            />
           </button>
         </div>
       </div>
@@ -1267,9 +1272,9 @@ function SeaiAskContent() {
         <div style={styles.sidebarHeader}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/admerce_symbol.png" alt="" className="seai-sidebar-logo" style={styles.sidebarLogo} />
-          <span style={{ fontWeight: 700, fontSize: 14, color: Brand.textPrimary }}>SEAI</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>SEAI</span>
           <button onClick={() => setDrawerOpen(false)} style={styles.closeBtn} aria-label="Close drawer">
-            <MdClose size={20} color="#666" />
+            <MdClose size={20} color="var(--text-tertiary)" />
           </button>
         </div>
 
@@ -1277,12 +1282,12 @@ function SeaiAskContent() {
           onClick={() => { clearConversation(); setDrawerOpen(false); }}
           style={styles.newChatBtn}
         >
-          <MdEdit size={16} color={Brand.accent} style={{ marginRight: 8 }} />
+          <MdEdit size={16} color="var(--brand-primary)" style={{ marginRight: 8 }} />
           New chat
         </button>
 
         <div style={styles.recentLabel}>
-          <MdHistory size={12} color={Brand.textMuted} />
+          <MdHistory size={12} color="var(--text-muted)" />
           <span style={{ marginLeft: 6 }}>Recent</span>
         </div>
         <div style={styles.conversationList}>
@@ -1295,7 +1300,7 @@ function SeaiAskContent() {
           ) : conversations.length === 0 ? (
             <div style={styles.emptyRecents}>
               <div style={styles.emptyRecentsIcon}>
-                <MdChatBubbleOutline size={18} color={Brand.accent} />
+                <MdChatBubbleOutline size={18} color="var(--brand-primary)" />
               </div>
               <div style={styles.emptyRecentsTitle}>No conversations yet</div>
               <div style={styles.emptyRecentsSub}>Your chat history will live here.</div>
@@ -1308,7 +1313,7 @@ function SeaiAskContent() {
                 className="seai-recent-item"
                 style={styles.conversationItem}
               >
-                <MdChatBubbleOutline size={14} color={Brand.textMuted} style={{ flexShrink: 0, marginRight: 8 }} />
+                <MdChatBubbleOutline size={14} color="var(--text-muted)" style={{ flexShrink: 0, marginRight: 8 }} />
                 <span style={styles.conversationItemText}>{c.title || `Conversation ${c.id}`}</span>
               </button>
             ))
@@ -1341,45 +1346,47 @@ function SeaiAskContent() {
 
       <div className="seai-main" style={styles.main}>
         <div className="seai-header" style={styles.header}>
-          <button onClick={() => setDrawerOpen(!drawerOpen)} style={styles.iconBtn} aria-label="Open menu">
-            <MdMenu size={22} color="#666" />
-          </button>
-
-          <div style={styles.headerBrand}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/admerce_symbol.png" alt="" className="seai-header-logo" style={styles.headerBrandMark} />
-            <span className="seai-header-brand-text" style={styles.headerBrandText}>SEAI</span>
-          </div>
-
-          <div style={{ flex: 1 }} />
-
-          <button
-            onClick={() => setIsCortexMode(!isCortexMode)}
-            style={styles.modelToggle}
-            aria-label={`Switch to ${isCortexMode ? 'SEAI' : 'SEAI Cortex'}`}
-          >
-            <span
-              className="seai-model-dot"
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                backgroundColor: isCortexMode ? Brand.accentLight : Brand.accent,
-                marginRight: 7,
-              }}
-            />
-            <span style={{ fontWeight: 600, fontSize: 12.5 }}>
-              {isCortexMode ? 'Cortex' : 'SEAI'}
-            </span>
-          </button>
-
-          {inChat ? (
-            <button onClick={clearConversation} style={styles.iconBtn} title="New chat" aria-label="New chat">
-              <MdEdit size={20} color="#666" />
+          <div className="seai-header-inner" style={styles.headerInner}>
+            <button onClick={() => setDrawerOpen(!drawerOpen)} style={styles.iconBtn} aria-label="Open menu">
+              <MdMenu size={22} color="var(--text-tertiary)" />
             </button>
-          ) : (
-            <div style={{ width: 40 }} />
-          )}
+
+            <div style={styles.headerBrand}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/admerce_symbol.png" alt="" className="seai-header-logo" style={styles.headerBrandMark} />
+              <span className="seai-header-brand-text" style={styles.headerBrandText}>SEAI</span>
+            </div>
+
+            <div style={{ flex: 1 }} />
+
+            <button
+              onClick={() => setIsCortexMode(!isCortexMode)}
+              style={styles.modelToggle}
+              aria-label={`Switch to ${isCortexMode ? 'SEAI' : 'SEAI Cortex'}`}
+            >
+              <span
+                className="seai-model-dot"
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: isCortexMode ? 'var(--purple-fg)' : 'var(--brand-primary)',
+                  marginRight: 7,
+                }}
+              />
+              <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--text-primary)' }}>
+                {isCortexMode ? 'Cortex' : 'SEAI'}
+              </span>
+            </button>
+
+            {inChat ? (
+              <button onClick={clearConversation} style={styles.iconBtn} title="New chat" aria-label="New chat">
+                <MdEdit size={20} color="var(--text-tertiary)" />
+              </button>
+            ) : (
+              <div style={{ width: 40 }} />
+            )}
+          </div>
         </div>
 
         <div className="seai-body" style={styles.body} onScroll={onScroll} ref={scrollContainerRef}>
@@ -1402,7 +1409,7 @@ export default function SeaiAskPage() {
             justifyContent: 'center',
             alignItems: 'center',
             height: '100vh',
-            backgroundColor: Brand.bg,
+            backgroundColor: 'var(--bg-primary)',
           }}
         >
           <div style={styles.spinner} />
@@ -1421,7 +1428,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100vh',
     width: '100%',
     maxWidth: '100vw',
-    backgroundColor: Brand.bg,
+    backgroundColor: 'var(--bg-primary)',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -1432,7 +1439,7 @@ const styles: Record<string, React.CSSProperties> = {
     right: 0,
     height: 2,
     background:
-      'linear-gradient(90deg, rgba(5,4,170,0) 0%, rgba(5,4,170,0.55) 20%, rgba(61,59,255,0.95) 50%, rgba(5,4,170,0.55) 80%, rgba(5,4,170,0) 100%)',
+      'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--brand-primary) 55%, transparent) 20%, var(--brand-primary) 50%, color-mix(in srgb, var(--brand-primary) 55%, transparent) 80%, transparent 100%)',
     zIndex: 30,
     pointerEvents: 'none',
   },
@@ -1440,26 +1447,26 @@ const styles: Record<string, React.CSSProperties> = {
     width: 32,
     height: 32,
     borderRadius: '50%',
-    border: '3px solid #E6E8F0',
-    borderTopColor: Brand.accent,
+    border: '3px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     animation: 'seaiSpin 0.9s linear infinite',
   },
   sidebar: {
     position: 'absolute',
     top: 0, left: 0, bottom: 0,
     width: 300,
-    backgroundColor: Brand.sidebarBg,
+    backgroundColor: 'var(--bg-secondary)',
     padding: '16px',
     zIndex: 20,
     transition: 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
     display: 'flex',
     flexDirection: 'column',
-    borderRight: `1px solid ${Brand.borderSoft}`,
+    borderRight: '1px solid var(--border-subtle)',
   },
   sidebarOverlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(15,23,42,0.38)',
+    backgroundColor: 'var(--overlay)',
     zIndex: 15,
     animation: 'seaiFade 200ms ease-out both',
   },
@@ -1471,14 +1478,14 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '10px 12px',
-    backgroundColor: Brand.cardBg,
-    border: `1px solid ${Brand.border}`,
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 12,
-    boxShadow: Brand.shadowSm,
+    boxShadow: 'var(--shadow-sm)',
     cursor: 'pointer',
     fontSize: 13.5,
     fontWeight: 600,
-    color: Brand.textPrimary,
+    color: 'var(--text-primary)',
     width: '100%',
     marginBottom: 14,
     fontFamily: 'inherit',
@@ -1488,7 +1495,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     fontSize: 11,
     fontWeight: 700,
-    color: Brand.textMuted,
+    color: 'var(--text-muted)',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 8,
@@ -1506,7 +1513,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     textAlign: 'left',
     fontSize: 13,
-    color: Brand.textSecondary,
+    color: 'var(--text-secondary)',
     overflow: 'hidden',
     fontFamily: 'inherit',
   },
@@ -1515,23 +1522,30 @@ const styles: Record<string, React.CSSProperties> = {
   emptyRecents: { padding: '24px 12px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' },
   emptyRecentsIcon: {
     width: 44, height: 44, borderRadius: 14,
-    background: Brand.accentBg,
+    background: 'var(--brand-soft)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     marginBottom: 10,
   },
-  emptyRecentsTitle: { fontSize: 13, fontWeight: 700, color: Brand.textPrimary },
-  emptyRecentsSub: { fontSize: 11.5, color: Brand.textMuted, marginTop: 4, lineHeight: 1.5, maxWidth: 200 },
+  emptyRecentsTitle: { fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' },
+  emptyRecentsSub: { fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5, maxWidth: 200 },
   main: { flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' },
   header: {
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
     padding: '10px 14px',
-    backgroundColor: Brand.bg,
+    backgroundColor: 'var(--bg-primary)',
     flexShrink: 0,
     position: 'relative',
     zIndex: 10,
-    borderBottom: `1px solid ${Brand.borderSoft}`,
+    borderBottom: '1px solid var(--border-subtle)',
+  },
+  headerInner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+    maxWidth: 860,
+    margin: '0 auto',
   },
   iconBtn: {
     background: 'none',
@@ -1545,15 +1559,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   headerBrand: { display: 'flex', alignItems: 'center', gap: 8 },
   headerBrandMark: { width: 26, height: 26, display: 'block', objectFit: 'contain' },
-  headerBrandText: { fontSize: 14, fontWeight: 800, color: Brand.textPrimary, letterSpacing: -0.2 },
+  headerBrandText: { fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: -0.2 },
   modelToggle: {
     display: 'flex',
     alignItems: 'center',
     padding: '6px 12px',
-    backgroundColor: Brand.cardBg,
-    border: `1px solid ${Brand.border}`,
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 20,
-    boxShadow: Brand.shadowSm,
+    boxShadow: 'var(--shadow-sm)',
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
@@ -1588,14 +1602,15 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'absolute',
     inset: -12,
     borderRadius: '50%',
-    background: 'radial-gradient(circle, rgba(5,4,170,0.24) 0%, rgba(5,4,170,0.08) 45%, rgba(5,4,170,0) 72%)',
+    background:
+      'radial-gradient(circle, color-mix(in srgb, var(--brand-primary) 24%, transparent) 0%, color-mix(in srgb, var(--brand-primary) 8%, transparent) 45%, transparent 72%)',
     pointerEvents: 'none',
   },
   logoImg: { position: 'relative', width: 96, height: 96, display: 'block', objectFit: 'contain' },
   greeting: {
     fontSize: 34,
     fontWeight: 600,
-    color: Brand.textPrimary,
+    color: 'var(--text-primary)',
     letterSpacing: -1,
     margin: 0,
     lineHeight: 1.1,
@@ -1603,7 +1618,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   subGreeting: {
     fontSize: 16,
-    color: Brand.textSecondary,
+    color: 'var(--text-secondary)',
     margin: '12px 0 40px',
     lineHeight: 1.5,
     maxWidth: 400,
@@ -1613,21 +1628,21 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     padding: '14px 14px',
-    backgroundColor: Brand.cardBg,
-    border: `1px solid ${Brand.border}`,
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 14,
-    boxShadow: Brand.shadowSm,
+    boxShadow: 'var(--shadow-sm)',
     cursor: 'pointer',
     fontSize: 13.5,
     fontWeight: 500,
-    color: Brand.textPrimary,
+    color: 'var(--text-primary)',
     textAlign: 'left',
     gap: 10,
     fontFamily: 'inherit',
   },
   chipIconWrap: {
     width: 28, height: 28, borderRadius: 9,
-    backgroundColor: Brand.accentBg,
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
   },
@@ -1640,11 +1655,11 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '12px 16px',
     borderRadius: 18,
     borderTopRightRadius: 6,
-    background: `linear-gradient(135deg, ${Brand.accent} 0%, ${Brand.accentLight} 100%)`,
-    color: '#FFFFFF',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 15,
     lineHeight: 1.55,
-    boxShadow: '0 6px 16px rgba(5,4,170,0.22), inset 0 1px 0 rgba(255,255,255,0.14)',
+    boxShadow: 'var(--shadow-brand)',
     wordBreak: 'break-word',
     overflowWrap: 'anywhere',
     whiteSpace: 'pre-wrap',
@@ -1656,22 +1671,23 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'absolute',
     inset: -3,
     borderRadius: '50%',
-    background: 'radial-gradient(circle, rgba(5,4,170,0.24) 0%, rgba(5,4,170,0) 70%)',
+    background:
+      'radial-gradient(circle, color-mix(in srgb, var(--brand-primary) 24%, transparent) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   aiAvatar: {
     position: 'relative',
     width: 30, height: 30,
     borderRadius: '50%',
-    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
+    background: 'var(--brand-gradient)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    boxShadow: '0 3px 8px rgba(5,4,170,0.28)',
+    boxShadow: 'var(--shadow-brand)',
   },
   aiBubble: {
     flex: 1,
     position: 'relative',
     paddingLeft: 14,
-    color: Brand.textPrimary,
+    color: 'var(--text-primary)',
     fontSize: 15,
     lineHeight: 1.68,
     overflowWrap: 'anywhere',
@@ -1683,10 +1699,10 @@ const styles: Record<string, React.CSSProperties> = {
   errorLine: {
     marginTop: 10,
     padding: '9px 12px',
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     borderRadius: 10,
-    color: '#991B1B',
+    color: 'var(--danger-fg)',
     fontSize: 12,
     fontWeight: 500,
   },
@@ -1697,22 +1713,22 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 15,
     lineHeight: 1.5,
     borderRadius: 12,
-    border: `1.5px solid ${Brand.accent}`,
+    border: '1.5px solid var(--brand-primary)',
     outline: 'none',
     resize: 'vertical',
     fontFamily: 'inherit',
-    color: Brand.textPrimary,
-    backgroundColor: '#fff',
+    color: 'var(--text-primary)',
+    backgroundColor: 'var(--bg-secondary)',
     boxSizing: 'border-box',
-    boxShadow: '0 0 0 4px rgba(5,4,170,0.08)',
+    boxShadow: 'var(--shadow-brand)',
   },
   editActions: { display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' },
   editCancel: {
     padding: '8px 14px',
     borderRadius: 10,
-    border: `1px solid ${Brand.border}`,
-    backgroundColor: '#fff',
-    color: Brand.textSecondary,
+    border: '1px solid var(--border-default)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-secondary)',
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
@@ -1724,13 +1740,13 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 14px',
     borderRadius: 10,
     border: 'none',
-    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 4px 12px rgba(5,4,170,0.25)',
+    boxShadow: 'var(--shadow-brand)',
   },
   cardStack: {
     display: 'grid',
@@ -1745,9 +1761,9 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#fff',
-    border: `1px solid ${Brand.borderSoft}`,
-    boxShadow: Brand.shadowSm,
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-subtle)',
+    boxShadow: 'var(--shadow-sm)',
     width: '100%',
     transition: 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms',
   },
@@ -1760,71 +1776,73 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     width: '100%',
     aspectRatio: '1 / 1',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
   tileImage: { width: '100%', height: '100%', objectFit: 'cover' },
   tileImageOverlay: {
     position: 'absolute', inset: 0,
-    background: 'linear-gradient(180deg, rgba(15,23,42,0) 45%, rgba(15,23,42,0.42) 100%)',
+    background:
+      'linear-gradient(180deg, transparent 45%, color-mix(in srgb, #000 42%, transparent) 100%)',
     pointerEvents: 'none',
   },
   tilePlaceholder: {
     width: '100%', height: '100%',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: 'var(--brand-soft)',
   },
   tileBadge: {
     position: 'absolute', top: 10, left: 10,
     fontSize: 9, fontWeight: 800, letterSpacing: 0.7,
     color: '#fff', padding: '4px 8px', borderRadius: 7,
     textTransform: 'uppercase',
-    boxShadow: '0 2px 6px rgba(15,23,42,0.15)',
+    boxShadow: 'var(--shadow-md)',
   },
   tileVerified: {
     position: 'absolute', top: 10, right: 10,
     width: 24, height: 24, borderRadius: '50%',
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: 'var(--bg-elevated)',
     backdropFilter: 'blur(6px)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    boxShadow: '0 2px 6px rgba(15,23,42,0.15)',
+    boxShadow: 'var(--shadow-md)',
   },
   tilePriceChip: {
     position: 'absolute', bottom: 10, right: 10,
     padding: '5px 10px', borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: 'var(--bg-elevated)',
     backdropFilter: 'blur(6px)',
-    color: Brand.accent, fontSize: 12, fontWeight: 800, letterSpacing: -0.1,
-    boxShadow: '0 2px 8px rgba(15,23,42,0.12)',
+    color: 'var(--brand-primary)', fontSize: 12, fontWeight: 800, letterSpacing: -0.1,
+    boxShadow: 'var(--shadow-md)',
+    fontVariantNumeric: 'tabular-nums',
   },
   tileDistancePill: {
     position: 'absolute', bottom: 10, left: 10,
     display: 'flex', alignItems: 'center',
     padding: '4px 8px', borderRadius: 8,
-    backgroundColor: 'rgba(15,23,42,0.72)',
+    backgroundColor: 'var(--overlay)',
     backdropFilter: 'blur(6px)',
     color: '#fff', fontSize: 10, fontWeight: 700,
   },
   tileBody: { padding: '12px 14px 10px', display: 'flex', flexDirection: 'column', gap: 5 },
   tileTitle: {
-    fontSize: 14, fontWeight: 700, color: Brand.textPrimary, lineHeight: 1.3,
+    fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3,
     overflow: 'hidden', textOverflow: 'ellipsis',
     display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
     letterSpacing: -0.1,
   },
   tileSubtitle: {
-    fontSize: 12, color: '#64748B',
+    fontSize: 12, color: 'var(--text-tertiary)',
     display: 'flex', alignItems: 'center',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
     marginTop: 2,
   },
   tileTravel: {
-    fontSize: 11, color: '#94A3B8', fontWeight: 600,
+    fontSize: 11, color: 'var(--text-muted)', fontWeight: 600,
     display: 'flex', alignItems: 'center', gap: 6, marginTop: 2,
   },
-  tileTravelDot: { width: 5, height: 5, borderRadius: '50%', backgroundColor: '#10B981' },
-  tileFooter: { display: 'flex', borderTop: `1px solid ${Brand.borderSoft}` },
+  tileTravelDot: { width: 5, height: 5, borderRadius: '50%', backgroundColor: 'var(--success-fg)' },
+  tileFooter: { display: 'flex', borderTop: '1px solid var(--border-subtle)' },
   tileFooterBtn: {
     flex: 1,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1832,7 +1850,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 8px',
     backgroundColor: 'transparent',
     border: 'none', cursor: 'pointer',
-    fontSize: 12, fontWeight: 700, color: Brand.accent,
+    fontSize: 12, fontWeight: 700, color: 'var(--brand-primary)',
     fontFamily: 'inherit',
   },
   refineRow: {
@@ -1849,14 +1867,14 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
     padding: '7px 12px',
     borderRadius: 999,
-    border: `1px solid ${Brand.border}`,
-    backgroundColor: Brand.cardBg,
-    color: Brand.textPrimary,
+    border: '1px solid var(--border-default)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-primary)',
     fontSize: 12.5,
     fontWeight: 600,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: Brand.shadowSm,
+    boxShadow: 'var(--shadow-sm)',
   },
   actionBar: { display: 'flex', gap: 2, marginTop: 8, flexWrap: 'wrap' },
   actionBtn: {
@@ -1866,7 +1884,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   inputArea: {
     padding: '8px 16px 12px',
-    backgroundColor: Brand.bg,
+    backgroundColor: 'var(--bg-primary)',
     flexShrink: 0,
     width: '100%',
     boxSizing: 'border-box',
@@ -1874,14 +1892,17 @@ const styles: Record<string, React.CSSProperties> = {
   inputBox: {
     maxWidth: 860,
     margin: '0 auto',
-    backgroundColor: Brand.cardBg,
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 22,
-    border: `1px solid ${Brand.border}`,
-    boxShadow: Brand.shadowMd,
+    border: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-md)',
     padding: '4px 6px 0',
     transition: 'box-shadow 220ms, border-color 220ms',
   },
-  inputBoxFocused: { borderColor: '#C7CCFF', boxShadow: Brand.shadowBloom },
+  inputBoxFocused: {
+    borderColor: 'color-mix(in srgb, var(--brand-primary) 40%, transparent)',
+    boxShadow: 'var(--shadow-brand)',
+  },
   textarea: {
     width: '100%',
     border: 'none',
@@ -1889,7 +1910,7 @@ const styles: Record<string, React.CSSProperties> = {
     resize: 'none',
     fontSize: 15,
     lineHeight: 1.55,
-    color: Brand.textPrimary,
+    color: 'var(--text-primary)',
     padding: '14px 16px 0',
     background: 'transparent',
     fontFamily: 'inherit',
@@ -1903,7 +1924,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     transition: 'background 0.15s',
   },
-  inputIconBtnRecording: { background: '#DC2626' },
+  inputIconBtnRecording: { background: 'var(--danger-fg)' },
   sendBtn: {
     width: 38, height: 38, borderRadius: 12, border: 'none',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1911,13 +1932,13 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   sendBtnActive: {
-    background: `linear-gradient(135deg, ${Brand.accent}, ${Brand.accentLight})`,
-    boxShadow: '0 6px 16px rgba(5,4,170,0.30)',
+    background: 'var(--brand-gradient)',
+    boxShadow: 'var(--shadow-brand)',
   },
-  sendBtnDisabled: { backgroundColor: '#E6E8F0', cursor: 'not-allowed' },
+  sendBtnDisabled: { backgroundColor: 'var(--bg-tertiary)', cursor: 'not-allowed' },
   disclaimer: {
     fontSize: 11,
-    color: Brand.textMuted,
+    color: 'var(--text-muted)',
     textAlign: 'center',
     marginTop: 10,
     letterSpacing: 0.1,
@@ -1941,35 +1962,43 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     border: '1px solid transparent',
-    boxShadow: '0 6px 18px rgba(15,23,42,0.10)',
+    boxShadow: 'var(--shadow-md)',
     cursor: 'pointer',
     maxWidth: 320,
     fontFamily: 'inherit',
     animation: 'seaiToastIn 220ms ease-out both',
   },
-  toastSuccess: { backgroundColor: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0' },
-  toastError: { backgroundColor: '#FEF2F2', color: '#991B1B', borderColor: '#FECACA' },
+  toastSuccess: {
+    backgroundColor: 'var(--success-bg)',
+    color: 'var(--success-fg)',
+    borderColor: 'var(--success-strong)',
+  },
+  toastError: {
+    backgroundColor: 'var(--danger-bg)',
+    color: 'var(--danger-fg)',
+    borderColor: 'var(--danger-strong)',
+  },
 };
 
 // ─── Global CSS ─────────────────────────────────────────────────────
 const GLOBAL_CSS = `
   html, body { overflow-x: hidden; max-width: 100vw; }
 
-  .seai-md-bold { font-weight: 700; color: #0A0A14; letter-spacing: -0.01em; }
-  .seai-md-italic { font-style: italic; color: #545B6E; }
+  .seai-md-bold { font-weight: 700; color: var(--text-primary); letter-spacing: -0.01em; }
+  .seai-md-italic { font-style: italic; color: var(--text-secondary); }
   .seai-md-code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.92em;
     padding: 1px 6px;
     border-radius: 6px;
-    background: #F1F5F9;
-    color: #0504AA;
-    border: 1px solid #E2E8F0;
+    background: var(--bg-tertiary);
+    color: var(--brand-primary);
+    border: 1px solid var(--border-default);
   }
   .seai-md-price {
     font-weight: 800;
-    color: #0504AA;
-    background: linear-gradient(180deg, #EEEDFF 0%, #E0DFFF 100%);
+    color: var(--brand-primary);
+    background: var(--brand-soft);
     padding: 1px 7px;
     border-radius: 6px;
     font-variant-numeric: tabular-nums;
@@ -1979,8 +2008,8 @@ const GLOBAL_CSS = `
   .seai-mini-spinner {
     display: inline-block;
     width: 16px; height: 16px; border-radius: 50%;
-    border: 2px solid #E2E8F0;
-    border-top-color: #0504AA;
+    border: 2px solid var(--border-default);
+    border-top-color: var(--brand-primary);
     animation: seaiSpin 0.7s linear infinite;
   }
 
@@ -1995,12 +2024,16 @@ const GLOBAL_CSS = `
   }
   .seai-orb-a {
     width: 340px; height: 340px; top: -100px; left: -100px;
-    background: radial-gradient(circle, rgba(5,4,170,0.22) 0%, rgba(5,4,170,0) 68%);
+    background: radial-gradient(circle,
+      color-mix(in srgb, var(--brand-primary) 22%, transparent) 0%,
+      transparent 68%);
     animation: seaiFloatOrb 24s ease-in-out infinite;
   }
   .seai-orb-b {
     width: 420px; height: 420px; bottom: -140px; right: -140px;
-    background: radial-gradient(circle, rgba(61,59,255,0.18) 0%, rgba(61,59,255,0) 68%);
+    background: radial-gradient(circle,
+      color-mix(in srgb, var(--brand-primary) 18%, transparent) 0%,
+      transparent 68%);
     animation: seaiFloatOrb 30s ease-in-out infinite reverse;
   }
   @keyframes seaiFloatOrb {
@@ -2027,8 +2060,8 @@ const GLOBAL_CSS = `
   }
   .seai-chip:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 26px rgba(5,4,170,0.10), 0 2px 6px rgba(15,23,42,0.05);
-    border-color: #C7CCFF;
+    box-shadow: var(--shadow-md);
+    border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
   }
   .seai-chip:active { transform: translateY(0) scale(0.985); }
   @keyframes seaiChipIn {
@@ -2049,14 +2082,14 @@ const GLOBAL_CSS = `
   .seai-thinking-orb {
     position: relative;
     width: 18px; height: 18px; border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #3D3BFF 0%, #0504AA 70%);
-    box-shadow: 0 0 12px rgba(5,4,170,0.45);
+    background: var(--brand-primary);
+    box-shadow: var(--shadow-brand);
     flex-shrink: 0;
   }
   .seai-thinking-orbInner {
     position: absolute; inset: -4px;
     border-radius: 50%;
-    border: 1.5px solid rgba(5,4,170,0.35);
+    border: 1.5px solid color-mix(in srgb, var(--brand-primary) 35%, transparent);
     animation: seaiOrbPulse 1.6s ease-out infinite;
   }
   @keyframes seaiOrbPulse {
@@ -2066,7 +2099,7 @@ const GLOBAL_CSS = `
   .seai-thinking-text {
     display: inline-block;
     font-size: 14px; font-weight: 500;
-    color: #5A6178; letter-spacing: 0.01em;
+    color: var(--text-secondary); letter-spacing: 0.01em;
     animation: seaiVerbSwap 420ms ease both;
   }
   @keyframes seaiVerbSwap {
@@ -2084,20 +2117,23 @@ const GLOBAL_CSS = `
     border-radius: 3px;
     margin-left: 4px;
     vertical-align: text-bottom;
-    background: linear-gradient(180deg, #3D3BFF 0%, #0504AA 100%);
-    box-shadow: 0 0 10px rgba(5,4,170,0.5);
+    background: var(--brand-primary);
+    box-shadow: var(--shadow-brand);
     animation: seaiCursorPulse 1.05s ease-in-out infinite;
   }
 
   .seai-tile:hover {
     transform: translateY(-3px);
-    box-shadow: 0 12px 30px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06);
-    border-color: #DDE3F5;
+    box-shadow: var(--shadow-md);
+    border-color: var(--border-strong);
   }
   .seai-tile:active { transform: translateY(-1px); }
 
   .seai-refine-chip { transition: background 150ms, border-color 150ms, transform 120ms; }
-  .seai-refine-chip:hover { border-color: #C7CCFF; background: #FAFAFF; }
+  .seai-refine-chip:hover {
+    border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
+    background: var(--bg-hover);
+  }
   .seai-refine-chip:active { transform: scale(0.97); }
   .seai-refine-chip:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -2105,11 +2141,11 @@ const GLOBAL_CSS = `
   .seai-send:active:not(:disabled) { transform: scale(0.96); }
 
   .seai-recent-item { transition: background-color 140ms, color 140ms; }
-  .seai-recent-item:hover { background-color: #EEEDFF; color: #0504AA; }
-  .seai-recent-item:active { background-color: #E2E1FF; }
+  .seai-recent-item:hover { background-color: var(--brand-soft); color: var(--brand-primary); }
+  .seai-recent-item:active { background-color: var(--brand-soft-strong); }
 
   .seai-skel {
-    background: linear-gradient(90deg, #E9ECF3 25%, #F4F6FB 50%, #E9ECF3 75%);
+    background: var(--skeleton);
     background-size: 200% 100%;
     animation: seaiShimmer 1.4s linear infinite;
     border-radius: 8px;

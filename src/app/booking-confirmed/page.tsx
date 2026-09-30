@@ -68,7 +68,6 @@ function shortId(id: string): string {
 }
 
 // Conversation ID convention — matches item-detail and chat pages.
-// Sorted user-ID pair joined with underscore.
 function buildConversationId(myUserId: string, otherUserId: string): string {
   const pair = [myUserId || 'me', otherUserId].sort();
   return `${pair[0]}_${pair[1]}`;
@@ -96,7 +95,11 @@ function ConfettiBurst({ active }: { active: boolean }) {
         const distance = 90 + (i % 4) * 22;
         const rotate = (i * 47) % 360;
         const color =
-          i % 3 === 0 ? '#0504AA' : i % 3 === 1 ? '#3D3BFF' : '#16A34A';
+          i % 3 === 0
+            ? 'var(--brand-primary)'
+            : i % 3 === 1
+              ? 'var(--purple-fg)'
+              : 'var(--success-fg)';
         return (
           <span
             key={i}
@@ -214,13 +217,9 @@ function BookingConfirmedContent() {
   );
 
   // ── Enrichment ──
-  // We ALWAYS fetch, even when the URL carries everything — the URL is an
-  // optimistic preview, but the backend is the source of truth for IDs
-  // (provider_id, customer_id) that aren't in the URL at all.
   useEffect(() => {
     if (!bookingIdFromUrl) return;
 
-    // Only show the full-page spinner if we have nothing to render yet.
     let cancelled = false;
 
     (async () => {
@@ -246,7 +245,6 @@ function BookingConfirmedContent() {
         if (data.status) setStatus(data.status);
       } catch (err: unknown) {
         if (cancelled || !isMountedRef.current) return;
-        // Only surface a hard error when we have nothing to show.
         if (!hasUrlDisplayData) {
           setEnrichError(extractErrorDetail(err, 'Could not load booking details.'));
         }
@@ -352,7 +350,7 @@ function BookingConfirmedContent() {
     }
   }, [bookingId, router, pushToast]);
 
-  // ── Message the other party — direct chat, not inbox ──
+  // ── Message the other party ──
   const handleMessageAboutBooking = useCallback(async () => {
     if (openingChat) return;
     if (!bookingId) {
@@ -360,7 +358,6 @@ function BookingConfirmedContent() {
       return;
     }
 
-    // If we somehow never got the IDs (failed enrichment), fall back to inbox.
     if (!providerId && !customerId) {
       pushToast('info', 'Opening your inbox');
       router.push('/shopper/inbox');
@@ -377,8 +374,6 @@ function BookingConfirmedContent() {
         return;
       }
 
-      // Determine the other party.
-      // This page can be reached by either the customer or the provider.
       let otherId = '';
       let otherName = '';
       if (myId === customerId && providerId) {
@@ -388,7 +383,6 @@ function BookingConfirmedContent() {
         otherId = customerId;
         otherName = customerName || 'Customer';
       } else if (providerId) {
-        // Fallback: assume the "other" is the provider
         otherId = providerId;
         otherName = providerName || 'Provider';
       } else if (customerId) {
@@ -468,7 +462,7 @@ function BookingConfirmedContent() {
         <AmbientBackground />
         <div style={{ ...styles.content, alignItems: 'center' }}>
           <div style={styles.errorHalo}>
-            <MdErrorOutline size={44} color="#B91C1C" />
+            <MdErrorOutline size={44} color="var(--danger-fg)" />
           </div>
           <h2 style={styles.errorHeading}>We couldn&rsquo;t load this booking</h2>
           <p style={styles.errorBody}>{enrichError}</p>
@@ -521,33 +515,29 @@ function BookingConfirmedContent() {
             style={{
               ...styles.heroIconRing,
               borderColor: isCompleted
-                ? 'rgba(22,163,74,0.28)'
+                ? 'color-mix(in srgb, var(--success-fg) 30%, transparent)'
                 : isCancelled
-                  ? 'rgba(148,163,184,0.28)'
-                  : 'rgba(217,119,6,0.28)',
+                  ? 'color-mix(in srgb, var(--text-muted) 30%, transparent)'
+                  : 'color-mix(in srgb, var(--warning-fg) 30%, transparent)',
             }}
           >
             <div
               style={{
                 ...styles.heroIcon,
                 background: isCompleted
-                  ? 'linear-gradient(135deg, #16A34A 0%, #22C55E 100%)'
+                  ? 'var(--success-fg)'
                   : isCancelled
-                    ? 'linear-gradient(135deg, #64748B 0%, #94A3B8 100%)'
-                    : 'linear-gradient(135deg, #D97706 0%, #F59E0B 100%)',
-                boxShadow: isCompleted
-                  ? '0 14px 32px rgba(22,163,74,0.32), inset 0 1px 0 rgba(255,255,255,0.28)'
-                  : isCancelled
-                    ? '0 14px 32px rgba(100,116,139,0.28), inset 0 1px 0 rgba(255,255,255,0.28)'
-                    : '0 14px 32px rgba(217,119,6,0.32), inset 0 1px 0 rgba(255,255,255,0.28)',
+                    ? 'var(--text-tertiary)'
+                    : 'var(--warning-fg)',
+                boxShadow: 'var(--shadow-md)',
               }}
             >
               {isCompleted ? (
-                <MdCheckCircle size={40} color="#fff" />
+                <MdCheckCircle size={40} color="var(--brand-on-primary)" />
               ) : isCancelled ? (
-                <MdClose size={40} color="#fff" />
+                <MdClose size={40} color="var(--brand-on-primary)" />
               ) : (
-                <MdAccessTime size={40} color="#fff" />
+                <MdAccessTime size={40} color="var(--brand-on-primary)" />
               )}
             </div>
           </motion.div>
@@ -590,35 +580,35 @@ function BookingConfirmedContent() {
           style={{
             ...styles.statusChip,
             backgroundColor: isCompleted
-              ? '#ECFDF5'
+              ? 'var(--success-bg)'
               : isCancelled
-                ? '#F1F5F9'
-                : '#FEF3C7',
+                ? 'var(--bg-tertiary)'
+                : 'var(--warning-bg)',
             borderColor: isCompleted
-              ? '#A7F3D0'
+              ? 'var(--success-strong)'
               : isCancelled
-                ? '#CBD5E1'
-                : '#FDE68A',
+                ? 'var(--border-strong)'
+                : 'var(--warning-strong)',
           }}
         >
           <span
             className="bc-status-dot"
             style={{
               backgroundColor: isCompleted
-                ? '#16A34A'
+                ? 'var(--success-fg)'
                 : isCancelled
-                  ? '#64748B'
-                  : '#D97706',
+                  ? 'var(--text-tertiary)'
+                  : 'var(--warning-fg)',
             }}
           />
           <span
             style={{
               ...styles.statusChipText,
               color: isCompleted
-                ? '#065F46'
+                ? 'var(--success-fg)'
                 : isCancelled
-                  ? '#334155'
-                  : '#92400E',
+                  ? 'var(--text-secondary)'
+                  : 'var(--warning-fg)',
             }}
           >
             {isCompleted
@@ -637,14 +627,14 @@ function BookingConfirmedContent() {
           style={styles.card}
         >
           <DetailRow
-            icon={<MdStore size={16} color="#0504AA" />}
+            icon={<MdStore size={16} color="var(--brand-primary)" />}
             label="Service"
             value={serviceName}
             emphasis
           />
           <Divider />
           <DetailRow
-            icon={<MdPerson size={16} color="#0504AA" />}
+            icon={<MdPerson size={16} color="var(--brand-primary)" />}
             label="Provider"
             value={providerName}
           />
@@ -652,7 +642,7 @@ function BookingConfirmedContent() {
             <>
               <Divider />
               <DetailRow
-                icon={<MdPerson size={16} color="#0504AA" />}
+                icon={<MdPerson size={16} color="var(--brand-primary)" />}
                 label="Customer"
                 value={customerName}
               />
@@ -660,16 +650,16 @@ function BookingConfirmedContent() {
           )}
           <Divider />
           <DetailRow
-            icon={<MdCalendarToday size={16} color="#0504AA" />}
+            icon={<MdCalendarToday size={16} color="var(--brand-primary)" />}
             label="When"
             value={formattedDate}
           />
           <Divider />
           <DetailRow
-            icon={<MdReceiptLong size={16} color="#0504AA" />}
+            icon={<MdReceiptLong size={16} color="var(--brand-primary)" />}
             label="Amount"
             value={`₦${amountNumber.toLocaleString('en-NG')}`}
-            valueColor="#0504AA"
+            valueColor="var(--brand-primary)"
             emphasis
           />
           {bookingId && (
@@ -685,9 +675,9 @@ function BookingConfirmedContent() {
                 >
                   <code style={styles.idCode}>{shortId(bookingId)}</code>
                   {copied ? (
-                    <MdCheck size={14} color="#16A34A" />
+                    <MdCheck size={14} color="var(--success-fg)" />
                   ) : (
-                    <MdContentCopy size={14} color="#94A3B8" />
+                    <MdContentCopy size={14} color="var(--text-muted)" />
                   )}
                 </button>
               </div>
@@ -709,7 +699,7 @@ function BookingConfirmedContent() {
                 className="bc-primary"
                 style={styles.primaryBtn}
               >
-                <MdReceiptLong size={20} color="#fff" />
+                <MdReceiptLong size={20} color="var(--brand-on-gradient)" />
                 <span>View Receipt</span>
               </button>
             )
@@ -719,7 +709,7 @@ function BookingConfirmedContent() {
               className="bc-primary"
               style={styles.primaryBtn}
             >
-              <MdHome size={20} color="#fff" />
+              <MdHome size={20} color="var(--brand-on-gradient)" />
               <span>Back to Home</span>
             </button>
           ) : (
@@ -731,18 +721,16 @@ function BookingConfirmedContent() {
                 style={{
                   ...styles.primaryBtn,
                   background: completing
-                    ? '#9AA1B2'
-                    : 'linear-gradient(135deg, #16A34A 0%, #22C55E 100%)',
-                  boxShadow: completing
-                    ? 'none'
-                    : '0 10px 24px rgba(22,163,74,0.30)',
+                    ? 'var(--text-muted)'
+                    : 'var(--success-fg)',
+                  boxShadow: completing ? 'none' : 'var(--shadow-md)',
                   cursor: completing ? 'not-allowed' : 'pointer',
                 }}
               >
                 {completing ? (
                   <span style={styles.inlineSpinner} />
                 ) : (
-                  <MdWork size={20} color="#fff" />
+                  <MdWork size={20} color="var(--brand-on-primary)" />
                 )}
                 <span>{completing ? 'Completing…' : 'Job Done'}</span>
               </button>
@@ -757,7 +745,7 @@ function BookingConfirmedContent() {
                 className="bc-secondary"
                 style={styles.secondaryBtn}
               >
-                <MdListAlt size={18} color="#0504AA" />
+                <MdListAlt size={18} color="var(--brand-primary)" />
                 <span>All bookings</span>
               </button>
               <button
@@ -765,13 +753,13 @@ function BookingConfirmedContent() {
                 className="bc-secondary"
                 style={styles.secondaryBtn}
               >
-                <MdHome size={18} color="#0504AA" />
+                <MdHome size={18} color="var(--brand-primary)" />
                 <span>Home</span>
               </button>
             </div>
           )}
 
-          {/* ✅ Message — routes directly to chat with the other party */}
+          {/* Message — routes directly to chat with the other party */}
           {bookingId && !isCancelled && (
             <button
               onClick={handleMessageAboutBooking}
@@ -786,7 +774,7 @@ function BookingConfirmedContent() {
               {openingChat ? (
                 <span style={styles.inlineSpinnerSmall} />
               ) : (
-                <MdChat size={16} color="#5A6178" />
+                <MdChat size={16} color="var(--text-secondary)" />
               )}
               <span>
                 {openingChat ? 'Opening chat…' : 'Message about this booking'}
@@ -804,7 +792,7 @@ function BookingConfirmedContent() {
               : 'You\u2019ll be able to view the receipt once the job is complete.'}
         </p>
 
-        {/* Cancel link — tertiary, only on the confirmed state */}
+        {/* Cancel link */}
         {!isCompleted && !isCancelled && bookingId && (
           <button
             onClick={() => setShowCancelModal(true)}
@@ -839,7 +827,7 @@ function BookingConfirmedContent() {
               onClick={(e) => e.stopPropagation()}
             >
               <div style={styles.modalIconWrap}>
-                <MdWarning size={26} color="#B45309" />
+                <MdWarning size={26} color="var(--warning-fg)" />
               </div>
 
               <h3 style={styles.modalTitle}>Cancel this booking?</h3>
@@ -918,7 +906,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     minHeight: '100vh',
-    backgroundColor: '#FAFAFC',
+    backgroundColor: 'var(--bg-primary)',
     padding: '32px 24px 48px',
     overflow: 'hidden',
   },
@@ -941,8 +929,8 @@ const styles: Record<string, React.CSSProperties> = {
   spinner: {
     width: 36,
     height: 36,
-    border: '3px solid #E6E8F0',
-    borderTopColor: '#0504AA',
+    border: '3px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'bcSpin 0.9s linear infinite',
   },
@@ -960,8 +948,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-block',
     width: 14,
     height: 14,
-    border: '2px solid rgba(90,97,120,0.3)',
-    borderTopColor: '#5A6178',
+    border: '2px solid var(--border-strong)',
+    borderTopColor: 'var(--text-secondary)',
     borderRadius: '50%',
     animation: 'bcSpin 0.7s linear infinite',
     marginRight: 6,
@@ -970,8 +958,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-block',
     width: 14,
     height: 14,
-    border: '2px solid rgba(153,27,27,0.3)',
-    borderTopColor: '#991B1B',
+    border: '2px solid var(--danger-strong)',
+    borderTopColor: 'var(--danger-fg)',
     borderRadius: '50%',
     animation: 'bcSpin 0.7s linear infinite',
     marginRight: 8,
@@ -994,7 +982,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'color-mix(in srgb, var(--bg-elevated) 60%, transparent)',
     backdropFilter: 'blur(6px)',
   },
   heroIcon: {
@@ -1018,14 +1006,14 @@ const styles: Record<string, React.CSSProperties> = {
   heading: {
     fontSize: 30,
     fontWeight: 800,
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.8,
     textAlign: 'center',
   },
   subheading: {
     fontSize: 15,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     marginTop: 8,
     textAlign: 'center',
     lineHeight: 1.5,
@@ -1051,11 +1039,10 @@ const styles: Record<string, React.CSSProperties> = {
   card: {
     width: '100%',
     marginTop: 24,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 22,
-    border: '1px solid #EEF0F7',
-    boxShadow:
-      '0 1px 2px rgba(15,23,42,0.03), 0 8px 28px rgba(15,23,42,0.06)',
+    border: '1px solid var(--border-subtle)',
+    boxShadow: 'var(--shadow-md)',
     padding: '6px 18px',
   },
   row: {
@@ -1073,13 +1060,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   rowLabelText: {
     fontSize: 13,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     fontWeight: 600,
   },
   rowValue: {
     fontSize: 14,
     fontWeight: 600,
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     textAlign: 'right',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1092,7 +1079,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   divider: {
     height: 1,
-    backgroundColor: '#F1F3F9',
+    backgroundColor: 'var(--border-subtle)',
     margin: 0,
   },
   idRow: {
@@ -1104,15 +1091,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   idLabel: {
     fontSize: 13,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     fontWeight: 600,
   },
   idValueBtn: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    background: '#F6F7FB',
-    border: '1px solid #EEF0F7',
+    background: 'var(--bg-tertiary)',
+    border: '1px solid var(--border-subtle)',
     borderRadius: 10,
     padding: '7px 12px',
     cursor: 'pointer',
@@ -1123,7 +1110,7 @@ const styles: Record<string, React.CSSProperties> = {
       'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     fontSize: 13,
     fontWeight: 700,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     letterSpacing: 0.2,
   },
 
@@ -1145,9 +1132,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 16,
     fontWeight: 700,
     letterSpacing: -0.1,
-    color: '#fff',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    boxShadow: '0 10px 24px rgba(5,4,170,0.28)',
+    color: 'var(--brand-on-gradient)',
+    background: 'var(--brand-gradient)',
+    boxShadow: 'var(--shadow-brand)',
     cursor: 'pointer',
     transition: 'transform 160ms, box-shadow 200ms',
   },
@@ -1160,9 +1147,9 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     fontSize: 15,
     fontWeight: 700,
-    color: '#fff',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    color: 'var(--brand-on-gradient)',
+    background: 'var(--brand-gradient)',
+    boxShadow: 'var(--shadow-brand)',
     cursor: 'pointer',
     marginTop: 20,
   },
@@ -1178,9 +1165,9 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '13px 14px',
     borderRadius: 14,
-    border: '1.5px solid #0504AA',
-    backgroundColor: '#FFFFFF',
-    color: '#0504AA',
+    border: '1.5px solid var(--brand-primary)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--brand-primary)',
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
@@ -1195,7 +1182,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 12,
     border: 'none',
     backgroundColor: 'transparent',
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
@@ -1205,7 +1192,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 20,
     background: 'none',
     border: 'none',
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontSize: 12.5,
     fontWeight: 600,
     textDecoration: 'underline',
@@ -1219,8 +1206,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1229,14 +1216,14 @@ const styles: Record<string, React.CSSProperties> = {
   errorHeading: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     margin: 0,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   errorBody: {
     fontSize: 14,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     marginTop: 8,
     textAlign: 'center',
     maxWidth: 320,
@@ -1244,7 +1231,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   footerNote: {
     fontSize: 12,
-    color: '#9AA1B2',
+    color: 'var(--text-muted)',
     textAlign: 'center',
     marginTop: 24,
     maxWidth: 320,
@@ -1254,7 +1241,7 @@ const styles: Record<string, React.CSSProperties> = {
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(15,23,42,0.48)',
+    backgroundColor: 'var(--overlay)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1264,10 +1251,10 @@ const styles: Record<string, React.CSSProperties> = {
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 22,
     padding: '28px 24px 22px',
-    boxShadow: '0 24px 60px rgba(15,23,42,0.24)',
+    boxShadow: 'var(--shadow-lg)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -1277,8 +1264,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 60,
     height: 60,
     borderRadius: 18,
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #FDE68A',
+    backgroundColor: 'var(--warning-bg)',
+    border: '1px solid var(--warning-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1287,19 +1274,19 @@ const styles: Record<string, React.CSSProperties> = {
   modalTitle: {
     fontSize: 19,
     fontWeight: 800,
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   modalBody: {
     fontSize: 14,
-    color: '#5A6178',
+    color: 'var(--text-secondary)',
     marginTop: 10,
     lineHeight: 1.55,
     maxWidth: 300,
   },
   modalAmount: {
-    color: '#0F0F1A',
+    color: 'var(--text-primary)',
     fontWeight: 800,
   },
   modalActions: {
@@ -1313,12 +1300,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '13px 16px',
     borderRadius: 14,
     border: 'none',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
     fontFamily: 'inherit',
   },
   modalCancelBtn: {
@@ -1328,9 +1315,9 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     padding: '13px 16px',
     borderRadius: 14,
-    border: '1.5px solid #FCA5A5',
-    backgroundColor: '#FFFFFF',
-    color: '#991B1B',
+    border: '1.5px solid var(--danger-strong)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--danger-fg)',
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
@@ -1355,35 +1342,35 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     border: '1px solid transparent',
-    boxShadow: '0 6px 18px rgba(15,23,42,0.10)',
+    boxShadow: 'var(--shadow-md)',
     cursor: 'pointer',
     maxWidth: 320,
     animation: 'bcToastIn 220ms ease-out both',
   },
   toastSuccess: {
-    backgroundColor: '#ECFDF5',
-    color: '#065F46',
-    borderColor: '#A7F3D0',
+    backgroundColor: 'var(--success-bg)',
+    color: 'var(--success-fg)',
+    borderColor: 'var(--success-strong)',
   },
   toastError: {
-    backgroundColor: '#FEF2F2',
-    color: '#991B1B',
-    borderColor: '#FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    color: 'var(--danger-fg)',
+    borderColor: 'var(--danger-strong)',
   },
   toastInfo: {
-    backgroundColor: '#EEF0FF',
-    color: '#0504AA',
-    borderColor: '#C7CCFF',
+    backgroundColor: 'var(--brand-soft)',
+    color: 'var(--brand-primary)',
+    borderColor: 'var(--brand-soft-strong)',
   },
 };
 
-// ─── Global CSS (single injection) ────────────────────────────────
+// ─── Global CSS ────────────────────────────────────────────────────
 const GLOBAL_CSS = `
   .bc-grid {
     position: absolute;
     inset: 0;
     background-image:
-      radial-gradient(circle, rgba(15,23,42,0.06) 1px, transparent 1px);
+      radial-gradient(circle, color-mix(in srgb, var(--text-primary) 6%, transparent) 1px, transparent 1px);
     background-size: 22px 22px;
     mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 40%, transparent 100%);
     -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, black 40%, transparent 100%);
@@ -1401,7 +1388,9 @@ const GLOBAL_CSS = `
     height: 340px;
     top: -120px;
     left: -120px;
-    background: radial-gradient(circle, rgba(5,4,170,0.20) 0%, rgba(5,4,170,0) 70%);
+    background: radial-gradient(circle,
+      color-mix(in srgb, var(--brand-primary) 20%, transparent) 0%,
+      transparent 70%);
     animation: bcFloatA 22s ease-in-out infinite;
   }
   .bc-orb-b {
@@ -1409,7 +1398,9 @@ const GLOBAL_CSS = `
     height: 400px;
     bottom: -140px;
     right: -140px;
-    background: radial-gradient(circle, rgba(61,59,255,0.16) 0%, rgba(61,59,255,0) 70%);
+    background: radial-gradient(circle,
+      color-mix(in srgb, var(--brand-primary) 16%, transparent) 0%,
+      transparent 70%);
     animation: bcFloatB 28s ease-in-out infinite;
   }
   @keyframes bcFloatA {
@@ -1430,7 +1421,7 @@ const GLOBAL_CSS = `
     margin-left: -48px;
     margin-top: -48px;
     border-radius: 50%;
-    border: 2px solid rgba(5,4,170,0.22);
+    border: 2px solid color-mix(in srgb, var(--brand-primary) 22%, transparent);
     pointer-events: none;
   }
   .bc-pulse-1 { animation: bcPulse 2.6s ease-out infinite; }
@@ -1483,33 +1474,33 @@ const GLOBAL_CSS = `
 
   .bc-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 14px 30px rgba(5,4,170,0.32);
+    box-shadow: var(--shadow-brand);
   }
   .bc-primary:active {
     transform: translateY(0) scale(0.985);
   }
-  .bc-secondary:hover { background-color: #EEF0FF; }
-  .bc-secondary:active { background-color: #E2E1FF; }
-  .bc-ghost:hover { color: #0504AA; }
+  .bc-secondary:hover { background-color: var(--brand-soft); }
+  .bc-secondary:active { background-color: var(--brand-soft-strong); }
+  .bc-ghost:hover { color: var(--brand-primary); }
   .bc-copy-btn:hover {
-    background-color: #EEF0FF;
-    border-color: #C7CCFF;
+    background-color: var(--brand-soft);
+    border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
   }
   .bc-cancel-link:hover {
-    color: #DC2626;
+    color: var(--danger-fg);
   }
   .bc-modal-keep:hover {
     transform: translateY(-1px);
-    box-shadow: 0 10px 24px rgba(5,4,170,0.30);
+    box-shadow: var(--shadow-brand);
   }
   .bc-modal-keep:active {
     transform: translateY(0) scale(0.985);
   }
   .bc-modal-cancel:hover {
-    background-color: #FEF2F2;
+    background-color: var(--danger-bg);
   }
   .bc-modal-cancel:active {
-    background-color: #FEE2E2;
+    background-color: var(--danger-bg);
   }
 
   @keyframes bcSpin { to { transform: rotate(360deg); } }

@@ -36,29 +36,160 @@ interface Suggestion {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
-  container: { display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#FFFFFF', position: 'relative' },
-  appBar: { display: 'flex', alignItems: 'center', padding: '12px 8px', backgroundColor: '#FFFFFF', borderBottom: '1px solid #F0F0F0', gap: 8, zIndex: 10 },
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100vh',
+    backgroundColor: 'var(--bg-primary)',
+    position: 'relative',
+  },
+  shell: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    width: '100%',
+    maxWidth: 880,
+    margin: '0 auto',
+    minHeight: 0,
+  },
+  appBar: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '12px 8px',
+    backgroundColor: 'var(--bg-primary)',
+    borderBottom: '1px solid var(--border-subtle)',
+    gap: 8,
+    zIndex: 10,
+  },
   backBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' },
-  searchBox: { flex: 1, display: 'flex', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 10, height: 40, position: 'relative' },
-  searchInput: { flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 15, color: '#1A1A1A', padding: '0 12px' },
+  searchBox: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    backgroundColor: 'var(--bg-tertiary)',
+    borderRadius: 10,
+    height: 40,
+    position: 'relative',
+  },
+  searchInput: {
+    flex: 1,
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    fontSize: 15,
+    color: 'var(--text-primary)',
+    padding: '0 12px',
+  },
   suffixContainer: { position: 'absolute', right: 8, display: 'flex', alignItems: 'center' },
   suffixBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' },
   aiPill: { display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 16, border: '1px solid', cursor: 'pointer' },
   searchBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center' },
-  suggestionsDropdown: { backgroundColor: '#FFFFFF', borderBottom: '1px solid #F0F0F0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', zIndex: 9 },
-  suggestionItem: { display: 'flex', alignItems: 'center', width: '100%', padding: '12px 16px', background: 'none', border: 'none', borderBottom: '1px solid #F5F5F5', cursor: 'pointer', fontSize: 14, color: '#1A1A1A', textAlign: 'left' },
+  suggestionsDropdown: {
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-subtle)',
+    boxShadow: 'var(--shadow-md)',
+    zIndex: 9,
+  },
+  suggestionItem: {
+    display: 'flex',
+    alignItems: 'center',
+    width: '100%',
+    padding: '12px 16px',
+    background: 'none',
+    border: 'none',
+    borderBottom: '1px solid var(--border-subtle)',
+    cursor: 'pointer',
+    fontSize: 14,
+    color: 'var(--text-primary)',
+    textAlign: 'left',
+  },
   body: { flex: 1, overflowY: 'auto' },
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 20, textAlign: 'center' },
-  spinner: { width: 36, height: 36, border: '4px solid #eee', borderTopColor: '#0504AA', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
-  retryBtn: { marginTop: 16, padding: '10px 20px', backgroundColor: '#0504AA', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 },
+  center: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    padding: 20,
+    textAlign: 'center',
+  },
+  spinner: {
+    width: 36,
+    height: 36,
+    border: '4px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  retryBtn: {
+    marginTop: 16,
+    padding: '10px 20px',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
+    border: 'none',
+    borderRadius: 8,
+    cursor: 'pointer',
+    fontWeight: 600,
+  },
   resultsList: { padding: '12px 16px' },
-  resultItem: { display: 'flex', gap: 12, padding: 12, marginBottom: 12, backgroundColor: '#FFFFFF', borderRadius: 12, border: '1px solid #EEEEEE', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', cursor: 'pointer' },
-  resultImage: { width: 60, height: 60, borderRadius: 8, overflow: 'hidden', backgroundColor: '#F5F5F5', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  resultItem: {
+    display: 'flex',
+    gap: 12,
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: 'var(--bg-secondary)',
+    borderRadius: 12,
+    border: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-sm)',
+    cursor: 'pointer',
+  },
+  resultImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: 'var(--bg-tertiary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   resultInfo: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' },
-  resultTitle: { fontSize: 15, fontWeight: 500, color: '#1A1A1A', margin: 0, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  resultPrice: { fontSize: 14, fontWeight: 600, color: '#0504AA', margin: '4px 0 0' },
-  resultStore: { fontSize: 12, color: '#757575', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  typeBadge: { display: 'inline-block', marginTop: 4, padding: '2px 8px', backgroundColor: '#F0F0F0', borderRadius: 10, fontSize: 10, fontWeight: 500, color: '#666666', alignSelf: 'flex-start' },
+  resultTitle: {
+    fontSize: 15,
+    fontWeight: 500,
+    color: 'var(--text-primary)',
+    margin: 0,
+    lineHeight: 1.3,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  resultPrice: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: 'var(--brand-primary)',
+    margin: '4px 0 0',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  resultStore: {
+    fontSize: 12,
+    color: 'var(--text-secondary)',
+    margin: '2px 0 0',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  typeBadge: {
+    display: 'inline-block',
+    marginTop: 4,
+    padding: '2px 8px',
+    backgroundColor: 'var(--bg-tertiary)',
+    borderRadius: 10,
+    fontSize: 10,
+    fontWeight: 500,
+    color: 'var(--text-tertiary)',
+    alignSelf: 'flex-start',
+  },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -81,8 +212,8 @@ function SearchResultItem({ item, onPress }: { item: SearchResult; onPress: () =
         {image
           ? <img src={image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : type === 'service'
-            ? <MdBuild size={28} color="#9E9E9E" />
-            : <MdStore size={28} color="#9E9E9E" />
+            ? <MdBuild size={28} color="var(--text-muted)" />
+            : <MdStore size={28} color="var(--text-muted)" />
         }
       </div>
       <div style={styles.resultInfo}>
@@ -114,6 +245,15 @@ function SeaiSearchContent() {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -126,9 +266,11 @@ function SeaiSearchContent() {
     debounceRef.current = setTimeout(async () => {
       try {
         const data = (await api.suggest(query.trim(), lat, lng, 500, 10)) as Suggestion[];
+        if (!isMountedRef.current) return;
         setSuggestions(data);
         setShowSuggestions(data.length > 0);
       } catch {
+        if (!isMountedRef.current) return;
         setSuggestions([]);
         setShowSuggestions(false);
       }
@@ -145,11 +287,13 @@ function SeaiSearchContent() {
     setError(null);
     try {
       const data = (await api.search(text, lat, lng, 500, 0, 50)) as SearchResult[];
+      if (!isMountedRef.current) return;
       setResults(data);
     } catch (err: unknown) {
+      if (!isMountedRef.current) return;
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) setIsLoading(false);
     }
   };
 
@@ -201,7 +345,7 @@ function SeaiSearchContent() {
     if (query) {
       return (
         <button onClick={clearSearch} style={styles.suffixBtn} title="Clear">
-          <MdClear size={20} color="#9E9E9E" />
+          <MdClear size={20} color="var(--text-muted)" />
         </button>
       );
     }
@@ -210,12 +354,16 @@ function SeaiSearchContent() {
         onClick={toggleAIMode}
         style={{
           ...styles.aiPill,
-          backgroundColor: isAIMode ? '#0504AA' : '#F0F0F0',
-          borderColor: isAIMode ? 'transparent' : '#E0E0E0',
+          backgroundColor: isAIMode ? 'var(--brand-primary)' : 'var(--bg-tertiary)',
+          borderColor: isAIMode ? 'transparent' : 'var(--border-default)',
         }}
       >
-        <MdAutoAwesome size={16} color={isAIMode ? '#FFFFFF' : '#0504AA'} />
-        <span style={{ color: isAIMode ? '#FFFFFF' : '#0504AA', fontWeight: 500, fontSize: 13 }}>
+        <MdAutoAwesome size={16} color={isAIMode ? 'var(--brand-on-primary)' : 'var(--brand-primary)'} />
+        <span style={{
+          color: isAIMode ? 'var(--brand-on-primary)' : 'var(--brand-primary)',
+          fontWeight: 500,
+          fontSize: 13,
+        }}>
           AI Mode
         </span>
       </button>
@@ -228,24 +376,24 @@ function SeaiSearchContent() {
     );
     if (error) return (
       <div style={styles.center}>
-        <MdErrorOutline size={48} color="#ef9a9a" />
-        <p style={{ fontSize: 16, fontWeight: 500 }}>Something went wrong</p>
-        <p style={{ color: '#9E9E9E', fontSize: 14, textAlign: 'center' }}>{error}</p>
+        <MdErrorOutline size={48} color="var(--danger-fg)" />
+        <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>Something went wrong</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center' }}>{error}</p>
         <button onClick={performSearch} style={styles.retryBtn}>Retry</button>
       </div>
     );
     if (!hasSearched) return (
       <div style={styles.center}>
-        <MdSearch size={64} color="#e0e0e0" />
-        <p style={{ fontSize: 18, fontWeight: 500, color: '#1A1A1A' }}>Search for anything</p>
-        <p style={{ fontSize: 14, color: '#9E9E9E' }}>Items, stores, services near you</p>
+        <MdSearch size={64} color="var(--border-strong)" />
+        <p style={{ fontSize: 18, fontWeight: 500, color: 'var(--text-primary)' }}>Search for anything</p>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Items, stores, services near you</p>
       </div>
     );
     if (results.length === 0) return (
       <div style={styles.center}>
-        <MdSearchOff size={48} color="#bdbdbd" />
-        <p style={{ fontSize: 16, fontWeight: 500 }}>No results found</p>
-        <p style={{ fontSize: 14, color: '#9E9E9E' }}>Try a different keyword or location</p>
+        <MdSearchOff size={48} color="var(--border-strong)" />
+        <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>No results found</p>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Try a different keyword or location</p>
       </div>
     );
     return (
@@ -259,66 +407,77 @@ function SeaiSearchContent() {
 
   return (
     <main style={styles.container}>
-      {/* App Bar */}
-      <div style={styles.appBar}>
-        <button style={styles.backBtn} onClick={() => router.back()}>
-          <MdArrowBack size={24} color="#1A1A1A" />
-        </button>
+      <div style={styles.shell}>
+        {/* App Bar */}
+        <div style={styles.appBar}>
+          <button style={styles.backBtn} onClick={() => router.back()}>
+            <MdArrowBack size={24} color="var(--text-primary)" />
+          </button>
 
-        <div style={styles.searchBox}>
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setSuggestions([]);
-              setShowSuggestions(false);
-            }}
-            onKeyDown={(e) => { if (e.key === 'Enter') performSearch(); }}
-            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-            placeholder={isAIMode ? 'Ask SEAI anything…' : 'Search items, stores, services…'}
-            style={styles.searchInput}
-            autoComplete="off"
-          />
-          <div style={styles.suffixContainer}>{renderSuffix()}</div>
+          <div style={styles.searchBox}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setSuggestions([]);
+                setShowSuggestions(false);
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') performSearch(); }}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              placeholder={isAIMode ? 'Ask SEAI anything…' : 'Search items, stores, services…'}
+              style={styles.searchInput}
+              autoComplete="off"
+            />
+            <div style={styles.suffixContainer}>{renderSuffix()}</div>
+          </div>
+
+          <button style={styles.searchBtn} onClick={performSearch}>
+            <MdSearch size={24} color="var(--brand-primary)" />
+          </button>
         </div>
 
-        <button style={styles.searchBtn} onClick={performSearch}>
-          <MdSearch size={24} color="#0504AA" />
-        </button>
+        {/* Autocomplete dropdown */}
+        {showSuggestions && suggestions.length > 0 && (
+          <div style={styles.suggestionsDropdown}>
+            {suggestions.map((s, idx) => (
+              <button
+                key={idx}
+                style={styles.suggestionItem}
+                onMouseDown={(e) => { e.preventDefault(); handleSuggestionTap(s); }}
+              >
+                <span style={{ marginRight: 8, display: 'flex', alignItems: 'center' }}>
+                  {s.type === 'service' ? <MdBuild size={18} color="var(--text-muted)" /> :
+                   s.type === 'store'   ? <MdStore size={18} color="var(--text-muted)" /> :
+                                          <MdSearch size={18} color="var(--text-muted)" />}
+                </span>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Body */}
+        <div style={styles.body}>{renderBody()}</div>
       </div>
-
-      {/* Autocomplete dropdown */}
-      {showSuggestions && suggestions.length > 0 && (
-        <div style={styles.suggestionsDropdown}>
-          {suggestions.map((s, idx) => (
-            <button
-              key={idx}
-              style={styles.suggestionItem}
-              onMouseDown={(e) => { e.preventDefault(); handleSuggestionTap(s); }}
-            >
-              <span style={{ marginRight: 8, display: 'flex', alignItems: 'center' }}>
-                {s.type === 'service' ? <MdBuild size={18} color="#999" /> :
-                 s.type === 'store'   ? <MdStore size={18} color="#999" /> :
-                                        <MdSearch size={18} color="#999" />}
-              </span>
-              {s.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Body */}
-      <div style={styles.body}>{renderBody()}</div>
     </main>
   );
 }
 
 export default function SeaiSearchPage() {
   return (
-    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading search…</div>}>
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--text-primary)' }}>Loading search…</div>}>
       <SeaiSearchContent />
     </Suspense>
   );
+}
+
+// Inject the `spin` keyframe — the original file referenced it but never defined it,
+// so the spinner never animated. Folded into the dark-theme pass.
+if (typeof document !== 'undefined' && !document.getElementById('seai-search-global-css')) {
+  const s = document.createElement('style');
+  s.id = 'seai-search-global-css';
+  s.textContent = `@keyframes spin { to { transform: rotate(360deg); } }`;
+  document.head.appendChild(s);
 }
