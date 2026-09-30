@@ -36,7 +36,7 @@ const SERVICE_ASPECT = 9 / 16; // services are video-only, always 9:16
 
 // Column gap = horizontal space between side-by-side cards
 // Row gap    = vertical space between cards in the same column
-const COL_GAP_MOBILE = 10;
+const COL_GAP_MOBILE = 6;
 const ROW_GAP_MOBILE = 20;
 const COL_GAP_DESKTOP = 16;
 const ROW_GAP_DESKTOP = 30;
