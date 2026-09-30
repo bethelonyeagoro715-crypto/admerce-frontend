@@ -45,8 +45,6 @@ type FilterKey = 'all' | 'stores' | 'services' | 'in_stock';
 type MapModule = typeof import('leaflet');
 type ClusterGroup = ReturnType<MapModule['markerClusterGroup']>;
 
-// Owerri — matches where launch listings live. Users who grant
-// geolocation override this on first fix.
 const DEFAULT_LAT = 5.5103;
 const DEFAULT_LNG = 7.0265;
 const RADIUS_OPTIONS = [2, 5, 10, 25] as const;
@@ -75,19 +73,21 @@ function resolveImageUrl(url?: string): string | null {
 function statusColor(status: string): { bg: string; fg: string; border: string; label: string } {
   switch (status) {
     case 'in_stock':
-      return { bg: '#ECFDF5', fg: '#065F46', border: '#A7F3D0', label: 'In stock' };
+      return { bg: 'var(--success-bg)', fg: 'var(--success-fg)', border: 'var(--success-strong)', label: 'In stock' };
     case 'low_stock':
-      return { bg: '#FEF3C7', fg: '#92400E', border: '#FDE68A', label: 'Low stock' };
+      return { bg: 'var(--warning-bg)', fg: 'var(--warning-fg)', border: 'var(--warning-strong)', label: 'Low stock' };
     case 'out_of_stock':
-      return { bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1', label: 'Out of stock' };
+      return { bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-strong)', label: 'Out of stock' };
     case 'available':
-      return { bg: '#EEF0FF', fg: '#0504AA', border: '#C7CCFF', label: 'Available' };
+      return { bg: 'var(--brand-soft)', fg: 'var(--brand-primary)', border: 'var(--brand-soft-strong)', label: 'Available' };
     default:
-      return { bg: '#F1F5F9', fg: '#475569', border: '#CBD5E1', label: status };
+      return { bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-strong)', label: status };
   }
 }
 
 // ─── SVG marker generator ───────────────────────────────────────────
+// Marker colors sit on OSM standard tiles, which are always light.
+// Keep them vivid and hardcoded — do NOT convert to theme vars.
 function markerSvg(type: 'store' | 'service', status: string): string {
   const isService = type === 'service';
   const fill = isService
@@ -198,17 +198,13 @@ export default function ShopperMapPage() {
     });
     mapRef.current = map;
 
-    // OpenStreetMap standard tiles — keyless, free, no vendor lock-in.
-    // Usage policy allows this traffic level at Admerce's launch scale.
-    // If you outgrow it, swap the URL for a paid provider (MapTiler,
-    // Stadia, or self-hosted tiles).
+    // OpenStreetMap standard tiles — always light, no dark variant.
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(map);
 
-    // Cluster group
     const cluster = (L as unknown as {
       markerClusterGroup: (options: Record<string, unknown>) => ClusterGroup;
     })
@@ -220,6 +216,8 @@ export default function ShopperMapPage() {
           const n = c.getChildCount();
           const size = n < 10 ? 36 : n < 100 ? 44 : 52;
           return L.divIcon({
+            // Cluster renders on OSM tiles (always light) — keep the
+            // vivid blue gradient so it stays legible in both themes.
             html: `<div style="
               width:${size}px;height:${size}px;border-radius:50%;
               background:linear-gradient(135deg,#0504AA 0%,#3D3BFF 100%);
@@ -352,7 +350,7 @@ export default function ShopperMapPage() {
 
       <div className="ad-mapTopBar">
         <div className="ad-mapSearch">
-          <MdSearch size={18} color="#94A3B8" aria-hidden />
+          <MdSearch size={18} color="var(--text-muted)" aria-hidden />
           <input
             type="text"
             className="ad-mapSearchInput"
@@ -370,7 +368,7 @@ export default function ShopperMapPage() {
               onClick={handleClearSearch}
               aria-label="Clear search"
             >
-              <MdClose size={14} color="#64748B" />
+              <MdClose size={14} color="var(--text-tertiary)" />
             </button>
           )}
         </div>
@@ -411,7 +409,7 @@ export default function ShopperMapPage() {
       {error && !loading && (
         <div className="ad-mapError" role="alert">
           <div className="ad-mapErrorIcon">
-            <MdErrorOutline size={26} color="#B91C1C" />
+            <MdErrorOutline size={26} color="var(--danger-fg)" />
           </div>
           <div className="ad-mapErrorBody">
             <div className="ad-mapErrorTitle">Couldn&apos;t load the map</div>
@@ -431,7 +429,7 @@ export default function ShopperMapPage() {
       {!loading && !error && visibleLocations.length === 0 && (
         <div className="ad-mapEmpty">
           <div className="ad-mapEmptyIcon">
-            <MdLocationOn size={26} color="#0504AA" />
+            <MdLocationOn size={26} color="var(--brand-primary)" />
           </div>
           <div className="ad-mapEmptyTitle">
             {query || filter !== 'all' ? 'No matches' : 'Nothing nearby'}
@@ -467,7 +465,7 @@ export default function ShopperMapPage() {
         aria-label="Center on my location"
         title="Center on my location"
       >
-        <MdMyLocation size={22} color="#0504AA" />
+        <MdMyLocation size={22} color="var(--brand-primary)" />
       </button>
 
       {selected && (
@@ -488,7 +486,7 @@ export default function ShopperMapPage() {
               onClick={() => setSelected(null)}
               aria-label="Close"
             >
-              <MdClose size={18} color="#64748B" />
+              <MdClose size={18} color="var(--text-tertiary)" />
             </button>
 
             <div className="ad-mapSheetMedia">
@@ -502,12 +500,14 @@ export default function ShopperMapPage() {
               ) : (
                 <div className="ad-mapSheetImgFallback">
                   {selected.type === 'service' ? (
-                    <MdBuild size={34} color="#7C3AED" />
+                    <MdBuild size={34} color="var(--purple-fg)" />
                   ) : (
-                    <MdStorefront size={34} color="#0504AA" />
+                    <MdStorefront size={34} color="var(--brand-primary)" />
                   )}
                 </div>
               )}
+              {/* Type badge — semantic category color, sits on the media
+                  block, stays vivid in both themes. */}
               <span className="ad-mapSheetTypeBadge" data-type={selected.type}>
                 {selected.type === 'service' ? (
                   <>
@@ -525,7 +525,7 @@ export default function ShopperMapPage() {
               <div className="ad-mapSheetTitleRow">
                 <h3 className="ad-mapSheetTitle">{selected.name}</h3>
                 {selected.verification_status === 'verified' && (
-                  <MdVerified size={16} color="#0504AA" />
+                  <MdVerified size={16} color="var(--brand-primary)" />
                 )}
               </div>
 
@@ -554,7 +554,7 @@ export default function ShopperMapPage() {
 
               {selected.address && (
                 <div className="ad-mapSheetAddress">
-                  <MdLocationOn size={13} color="#94A3B8" />
+                  <MdLocationOn size={13} color="var(--text-muted)" />
                   <span>{selected.address}</span>
                 </div>
               )}
@@ -580,12 +580,12 @@ export default function ShopperMapPage() {
                 {selected.type === 'service' ? (
                   <>
                     View service
-                    <MdChevronRight size={18} color="#fff" />
+                    <MdChevronRight size={18} color="var(--brand-on-gradient)" />
                   </>
                 ) : (
                   <>
                     Visit store
-                    <MdChevronRight size={18} color="#fff" />
+                    <MdChevronRight size={18} color="var(--brand-on-gradient)" />
                   </>
                 )}
               </button>
@@ -605,6 +605,8 @@ const MAP_CSS = `
 
   .ad-mapPin { background: none !important; border: none !important; }
 
+  /* Leaflet controls render on top of OSM tiles (always light) — keep
+     them light so they read correctly against the map. */
   .leaflet-container {
     font-family: inherit;
     background: #F4F5FB;
@@ -638,7 +640,7 @@ const MAP_CSS = `
     width: 100%;
     height: 100vh;
     overflow: hidden;
-    background: #F4F5FB;
+    background: var(--bg-primary);
   }
   .ad-mapCanvas {
     position: absolute;
@@ -653,7 +655,12 @@ const MAP_CSS = `
     right: 0;
     z-index: 20;
     padding: 14px 14px 10px;
-    background: linear-gradient(180deg, rgba(244,245,251,0.98) 0%, rgba(244,245,251,0.85) 70%, rgba(244,245,251,0) 100%);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-primary) 98%, transparent) 0%,
+      color-mix(in srgb, var(--bg-primary) 85%, transparent) 70%,
+      transparent 100%
+    );
     pointer-events: none;
   }
   .ad-mapTopBar > * { pointer-events: auto; }
@@ -663,15 +670,15 @@ const MAP_CSS = `
     align-items: center;
     gap: 10px;
     padding: 10px 12px 10px 14px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 14px;
-    box-shadow: 0 6px 20px rgba(15,23,42,0.06);
+    box-shadow: var(--shadow-md);
     transition: border-color 0.15s, box-shadow 0.15s;
   }
   .ad-mapSearch:focus-within {
-    border-color: #C7CCFF;
-    box-shadow: 0 6px 20px rgba(5,4,170,0.12);
+    border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
+    box-shadow: var(--shadow-brand);
   }
   .ad-mapSearchInput {
     flex: 1;
@@ -680,16 +687,16 @@ const MAP_CSS = `
     outline: none;
     background: transparent;
     font-size: 15px;
-    color: #0B0B1A;
+    color: var(--text-primary);
     font-family: inherit;
   }
-  .ad-mapSearchInput::placeholder { color: #94A3B8; }
+  .ad-mapSearchInput::placeholder { color: var(--text-muted); }
   .ad-mapSearchClear {
     width: 22px;
     height: 22px;
     border-radius: 50%;
     border: none;
-    background: #E2E8F0;
+    background: var(--bg-pressed);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -709,23 +716,26 @@ const MAP_CSS = `
     flex-shrink: 0;
     padding: 7px 14px;
     border-radius: 999px;
-    border: 1px solid #E6E8F0;
-    background: #fff;
-    color: #64748B;
+    border: 1px solid var(--border-default);
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
     font-family: inherit;
-    box-shadow: 0 2px 6px rgba(15,23,42,0.04);
+    box-shadow: var(--shadow-sm);
     transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
-  .ad-mapPill:hover { border-color: #C7CCFF; color: #0504AA; }
-  .ad-mapPillOn {
-    background: #0504AA;
-    border-color: #0504AA;
-    color: #fff;
+  .ad-mapPill:hover {
+    border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
+    color: var(--brand-primary);
   }
-  .ad-mapPillOn:hover { color: #fff; }
+  .ad-mapPillOn {
+    background: var(--brand-primary);
+    border-color: var(--brand-primary);
+    color: var(--brand-on-primary);
+  }
+  .ad-mapPillOn:hover { color: var(--brand-on-primary); }
 
   .ad-mapLoading {
     position: absolute;
@@ -737,20 +747,20 @@ const MAP_CSS = `
     align-items: center;
     gap: 10px;
     padding: 12px 18px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 14px;
-    box-shadow: 0 8px 24px rgba(15,23,42,0.10);
+    box-shadow: var(--shadow-md);
     font-size: 13.5px;
     font-weight: 600;
-    color: #334155;
+    color: var(--text-secondary);
   }
   .ad-mapSpinner {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 2.5px solid #E2E8F0;
-    border-top-color: #0504AA;
+    border: 2.5px solid var(--border-default);
+    border-top-color: var(--brand-primary);
     animation: adMapSpin 0.7s linear infinite;
   }
 
@@ -764,17 +774,17 @@ const MAP_CSS = `
     align-items: center;
     gap: 12px;
     padding: 12px 14px;
-    background: #FEF2F2;
-    border: 1px solid #FECACA;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-strong);
     border-radius: 14px;
-    box-shadow: 0 8px 24px rgba(185,28,28,0.10);
+    box-shadow: var(--shadow-md);
     animation: adMapFadeIn 0.2s ease both;
   }
   .ad-mapErrorIcon {
     width: 34px;
     height: 34px;
     border-radius: 10px;
-    background: #fff;
+    background: var(--bg-elevated);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -784,12 +794,12 @@ const MAP_CSS = `
   .ad-mapErrorTitle {
     font-size: 13.5px;
     font-weight: 800;
-    color: #991B1B;
+    color: var(--danger-fg);
     letter-spacing: -0.01em;
   }
   .ad-mapErrorSub {
     font-size: 12px;
-    color: #B91C1C;
+    color: var(--danger-fg);
     margin-top: 2px;
     opacity: 0.85;
   }
@@ -813,11 +823,11 @@ const MAP_CSS = `
     transform: translate(-50%, -50%);
     z-index: 10;
     width: min(320px, calc(100% - 40px));
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 18px;
     padding: 20px 20px 22px;
-    box-shadow: 0 12px 34px rgba(15,23,42,0.12);
+    box-shadow: var(--shadow-lg);
     text-align: center;
     animation: adMapFadeIn 0.22s ease both;
   }
@@ -825,7 +835,7 @@ const MAP_CSS = `
     width: 54px;
     height: 54px;
     border-radius: 18px;
-    background: linear-gradient(135deg, #EEF0FF 0%, #E0E7FF 100%);
+    background: linear-gradient(135deg, var(--brand-soft) 0%, var(--brand-soft-strong) 100%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -834,12 +844,12 @@ const MAP_CSS = `
   .ad-mapEmptyTitle {
     font-size: 15px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     letter-spacing: -0.01em;
   }
   .ad-mapEmptyBody {
     font-size: 12.5px;
-    color: #64748B;
+    color: var(--text-tertiary);
     margin-top: 5px;
     line-height: 1.5;
   }
@@ -854,10 +864,10 @@ const MAP_CSS = `
     align-items: center;
     gap: 6px;
     padding: 6px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
     border-radius: 999px;
-    box-shadow: 0 8px 24px rgba(15,23,42,0.10);
+    box-shadow: var(--shadow-md);
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -866,7 +876,7 @@ const MAP_CSS = `
     padding: 0 6px 0 10px;
     font-size: 11.5px;
     font-weight: 700;
-    color: #64748B;
+    color: var(--text-tertiary);
     letter-spacing: 0.03em;
     text-transform: uppercase;
     flex-shrink: 0;
@@ -876,7 +886,7 @@ const MAP_CSS = `
     border-radius: 999px;
     border: none;
     background: transparent;
-    color: #475569;
+    color: var(--text-secondary);
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
@@ -884,10 +894,10 @@ const MAP_CSS = `
     flex-shrink: 0;
     transition: background 0.15s, color 0.15s;
   }
-  .ad-mapRadiusBtn:hover { background: #F1F5F9; }
+  .ad-mapRadiusBtn:hover { background: var(--bg-hover); }
   .ad-mapRadiusBtnOn {
-    background: #EEF0FF;
-    color: #0504AA;
+    background: var(--brand-soft);
+    color: var(--brand-primary);
   }
 
   .ad-mapFab {
@@ -898,25 +908,25 @@ const MAP_CSS = `
     width: 48px;
     height: 48px;
     border-radius: 14px;
-    border: 1px solid #EAECF3;
-    background: #fff;
+    border: 1px solid var(--border-default);
+    background: var(--bg-secondary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 8px 24px rgba(15,23,42,0.12);
+    box-shadow: var(--shadow-md);
     transition: transform 0.12s, box-shadow 0.15s;
   }
   .ad-mapFab:hover {
     transform: translateY(-1px);
-    box-shadow: 0 12px 30px rgba(15,23,42,0.16);
+    box-shadow: var(--shadow-lg);
   }
   .ad-mapFab:active { transform: translateY(0) scale(0.97); }
 
   .ad-mapSheetOverlay {
     position: fixed;
     inset: 0;
-    background: rgba(3,3,90,0.45);
+    background: var(--overlay);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     z-index: 300;
@@ -928,10 +938,10 @@ const MAP_CSS = `
     position: relative;
     width: 100%;
     max-width: 520px;
-    background: #fff;
+    background: var(--bg-secondary);
     border-radius: 24px 24px 0 0;
     padding: 10px 0 calc(28px + env(safe-area-inset-bottom));
-    box-shadow: 0 -10px 40px rgba(5,4,170,0.18);
+    box-shadow: var(--shadow-lg);
     animation: adMapSheetUp 0.26s cubic-bezier(0.22, 1, 0.36, 1);
     overflow: hidden;
   }
@@ -939,7 +949,7 @@ const MAP_CSS = `
     width: 40px;
     height: 4px;
     border-radius: 2px;
-    background: #E2E8F0;
+    background: var(--border-strong);
     margin: 0 auto 12px;
   }
   .ad-mapSheetClose {
@@ -950,15 +960,13 @@ const MAP_CSS = `
     height: 32px;
     border-radius: 10px;
     border: none;
-    background: rgba(255,255,255,0.94);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: var(--bg-elevated);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     z-index: 2;
-    box-shadow: 0 2px 8px rgba(15,23,42,0.12);
+    box-shadow: var(--shadow-md);
   }
   .ad-mapSheetMedia {
     position: relative;
@@ -966,7 +974,7 @@ const MAP_CSS = `
     height: 156px;
     border-radius: 16px;
     overflow: hidden;
-    background: #F1F5F9;
+    background: var(--bg-tertiary);
   }
   .ad-mapSheetImg {
     width: 100%;
@@ -980,8 +988,10 @@ const MAP_CSS = `
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #EEF0FF 0%, #F3E8FF 100%);
+    background: linear-gradient(135deg, var(--brand-soft) 0%, var(--purple-bg) 100%);
   }
+  /* Category badge — semantic (STORE vs SERVICE), stays saturated on
+     the media block; do not theme. */
   .ad-mapSheetTypeBadge {
     position: absolute;
     top: 10px;
@@ -1012,7 +1022,7 @@ const MAP_CSS = `
   .ad-mapSheetTitle {
     font-size: 18px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0;
     letter-spacing: -0.02em;
     overflow: hidden;
@@ -1041,12 +1051,12 @@ const MAP_CSS = `
   .ad-mapSheetDistance {
     font-size: 12.5px;
     font-weight: 700;
-    color: #64748B;
+    color: var(--text-tertiary);
   }
   .ad-mapSheetPrice {
     font-size: 12.5px;
     font-weight: 800;
-    color: #0504AA;
+    color: var(--brand-primary);
     font-variant-numeric: tabular-nums;
   }
   .ad-mapSheetAddress {
@@ -1055,13 +1065,13 @@ const MAP_CSS = `
     gap: 5px;
     margin-top: 10px;
     font-size: 12.5px;
-    color: #64748B;
+    color: var(--text-tertiary);
     line-height: 1.45;
   }
   .ad-mapSheetListings {
     margin-top: 6px;
     font-size: 12px;
-    color: #94A3B8;
+    color: var(--text-muted);
     font-weight: 600;
   }
   .ad-mapSheetCta {
@@ -1074,21 +1084,47 @@ const MAP_CSS = `
     margin-top: 18px;
     border-radius: 14px;
     border: none;
-    background: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
-    color: #fff;
+    background: var(--brand-gradient);
+    color: var(--brand-on-gradient);
     font-size: 15px;
     font-weight: 700;
     font-family: inherit;
     cursor: pointer;
     letter-spacing: -0.01em;
-    box-shadow: 0 10px 24px rgba(5,4,170,0.26);
+    box-shadow: var(--shadow-brand);
     transition: transform 0.12s, box-shadow 0.15s;
   }
   .ad-mapSheetCta:hover {
     transform: translateY(-1px);
-    box-shadow: 0 14px 30px rgba(5,4,170,0.32);
+    box-shadow: var(--shadow-brand);
   }
   .ad-mapSheetCta:active { transform: translateY(0) scale(0.985); }
+
+  /* Desktop: sheet becomes a centered modal, top-bar content caps. */
+  @media (min-width: 1024px) {
+    .ad-mapSearch,
+    .ad-mapFilters {
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .ad-mapFilters { justify-content: center; }
+    .ad-mapRadiusBar {
+      left: 50%;
+      right: auto;
+      transform: translateX(-50%);
+      width: auto;
+      max-width: 520px;
+    }
+    .ad-mapSheetOverlay { align-items: center; }
+    .ad-mapSheet {
+      border-radius: 24px;
+      max-width: 480px;
+      padding: 0 0 24px;
+      animation: none;
+    }
+    .ad-mapSheetHandle { display: none; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     * {
