@@ -33,7 +33,8 @@ export default function PermissionPage() {
     return () => clearTimeout(t);
   }, [message]);
 
-  const showSuccess = (text: string) => setMessage({ text, kind: 'success' });
+  const showSuccess = (text: string) =>
+    setMessage({ text, kind: 'success' });
   const showError = (text: string) => setMessage({ text, kind: 'error' });
 
   const requestLocation = async () => {
@@ -53,7 +54,9 @@ export default function PermissionPage() {
     } catch (err: unknown) {
       const code = (err as { code?: number })?.code;
       if (code === 1) {
-        showError('Location was denied. Please allow it in your browser settings.');
+        showError(
+          'Location was denied. Please allow it in your browser settings.',
+        );
       } else if (code === 2) {
         showError('Location is unavailable. Try again in a moment.');
       } else if (code === 3) {
@@ -61,21 +64,27 @@ export default function PermissionPage() {
       } else if (err instanceof Error) {
         showError(`Location error: ${err.message}`);
       } else {
-        showError('Unable to access location. Check your device permissions.');
+        showError(
+          'Unable to access location. Check your device permissions.',
+        );
       }
     }
   };
 
   const requestCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+      });
       stream.getTracks().forEach((t) => t.stop());
       setCameraGranted(true);
       showSuccess('Camera granted');
     } catch (err: unknown) {
       const name = (err as { name?: string })?.name;
       if (name === 'NotAllowedError') {
-        showError('Camera was denied. Please allow it in your browser settings.');
+        showError(
+          'Camera was denied. Please allow it in your browser settings.',
+        );
       } else if (err instanceof Error) {
         showError(`Camera error: ${err.message}`);
       } else {
@@ -86,14 +95,18 @@ export default function PermissionPage() {
 
   const requestMicrophone = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
       stream.getTracks().forEach((t) => t.stop());
       setMicGranted(true);
       showSuccess('Microphone granted');
     } catch (err: unknown) {
       const name = (err as { name?: string })?.name;
       if (name === 'NotAllowedError') {
-        showError('Microphone was denied. Please allow it in your browser settings.');
+        showError(
+          'Microphone was denied. Please allow it in your browser settings.',
+        );
       } else if (err instanceof Error) {
         showError(`Microphone error: ${err.message}`);
       } else {
@@ -109,7 +122,8 @@ export default function PermissionPage() {
       <div style={styles.card}>
         <h1 style={styles.heading}>We need a few permissions</h1>
         <p style={styles.subheading}>
-          You can grant them one at a time. Nothing is shared without your say.
+          You can grant them one at a time. Nothing is shared without
+          your say.
         </p>
 
         <PermissionTile
@@ -149,19 +163,25 @@ export default function PermissionPage() {
             style={{
               ...styles.snackbar,
               backgroundColor:
-                message.kind === 'success' ? '#ECFDF5' : '#FEF2F2',
+                message.kind === 'success'
+                  ? 'var(--success-bg)'
+                  : 'var(--danger-bg)',
               borderColor:
-                message.kind === 'success' ? '#A7F3D0' : '#FECACA',
+                message.kind === 'success'
+                  ? 'var(--success-strong)'
+                  : 'var(--danger-strong)',
               color:
-                message.kind === 'success' ? '#065F46' : '#991B1B',
+                message.kind === 'success'
+                  ? 'var(--success-fg)'
+                  : 'var(--danger-fg)',
             }}
             role="status"
             aria-live="polite"
           >
             {message.kind === 'success' ? (
-              <MdCheckCircle size={18} color="#16A34A" />
+              <MdCheckCircle size={18} color="var(--success-fg)" />
             ) : (
-              <MdErrorOutline size={18} color="#DC2626" />
+              <MdErrorOutline size={18} color="var(--danger-fg)" />
             )}
             <span>{message.text}</span>
           </div>
@@ -203,10 +223,17 @@ function PermissionTile({
       <span
         style={{
           ...styles.tileIcon,
-          backgroundColor: granted ? '#DCFCE7' : '#EEF0FF',
+          backgroundColor: granted
+            ? 'var(--success-bg)'
+            : 'var(--brand-soft)',
         }}
       >
-        <Icon size={30} color={granted ? '#16A34A' : '#0504AA'} />
+        <Icon
+          size={30}
+          color={
+            granted ? 'var(--success-fg)' : 'var(--brand-primary)'
+          }
+        />
       </span>
       <div style={styles.tileText}>
         <div style={styles.tileTitle}>{title}</div>
@@ -216,9 +243,12 @@ function PermissionTile({
       </div>
       <span style={styles.tileStatus}>
         {granted ? (
-          <MdCheckCircle size={24} color="#16A34A" />
+          <MdCheckCircle size={24} color="var(--success-fg)" />
         ) : (
-          <MdAddCircleOutline size={24} color="#0504AA" />
+          <MdAddCircleOutline
+            size={24}
+            color="var(--brand-primary)"
+          />
         )}
       </span>
     </div>
@@ -231,8 +261,10 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: '24px',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   card: {
     maxWidth: '440px',
@@ -241,14 +273,14 @@ const styles: Record<string, React.CSSProperties> = {
   heading: {
     fontSize: '26px',
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: '-0.02em',
     textAlign: 'center',
   },
   subheading: {
     fontSize: '14px',
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     lineHeight: 1.5,
     textAlign: 'center',
     margin: '10px 0 28px',
@@ -258,17 +290,18 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     padding: '16px',
     marginBottom: '14px',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: '16px',
-    boxShadow: '0 1px 3px rgba(11, 11, 26, 0.04)',
+    boxShadow: 'var(--shadow-sm)',
     cursor: 'pointer',
-    border: '1px solid #EAECF3',
-    transition: 'border-color 0.18s, background 0.18s, transform 0.18s',
+    border: '1px solid var(--border-default)',
+    transition:
+      'border-color 0.18s, background 0.18s, transform 0.18s',
     fontFamily: 'inherit',
   },
   tileGranted: {
-    borderColor: '#BBF7D0',
-    backgroundColor: '#F0FDF4',
+    borderColor: 'var(--success-strong)',
+    backgroundColor: 'var(--success-bg)',
   },
   tileIcon: {
     width: 48,
@@ -288,12 +321,12 @@ const styles: Record<string, React.CSSProperties> = {
   tileTitle: {
     fontWeight: 800,
     fontSize: '16px',
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     marginBottom: '2px',
     letterSpacing: '-0.01em',
   },
   tileSubtitle: {
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     fontSize: '13px',
     lineHeight: 1.4,
   },
@@ -305,21 +338,23 @@ const styles: Record<string, React.CSSProperties> = {
   continueButton: {
     width: '100%',
     padding: '16px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
-    borderRadius: 14,                    // ✅ rounded-rectangle, not pill
+    borderRadius: 14,
     fontSize: '16px',
     fontWeight: 800,
     cursor: 'pointer',
     marginTop: '36px',
-    boxShadow: '0 6px 18px rgba(5, 4, 170, 0.25)',
-    transition: 'background 0.2s, box-shadow 0.2s, transform 0.2s',
+    boxShadow: 'var(--shadow-brand)',
+    transition:
+      'background 0.2s, box-shadow 0.2s, transform 0.2s',
     fontFamily: 'inherit',
   },
   continueButtonReady: {
-    backgroundColor: '#16A34A',
-    boxShadow: '0 6px 18px rgba(22, 163, 74, 0.30)',
+    background: 'var(--success-fg)',
+    boxShadow:
+      '0 6px 18px color-mix(in srgb, var(--success-fg) 30%, transparent)',
   },
   snackbar: {
     display: 'flex',

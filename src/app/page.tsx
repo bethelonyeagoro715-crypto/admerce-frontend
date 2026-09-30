@@ -52,13 +52,11 @@ export default function WelcomePage() {
 
   return (
     <main style={styles.container}>
-      {/* Animated logo */}
       <motion.div
         initial={{ opacity: 0, scale: 0.5 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: 'easeOut' }}
       >
-        {/* ✅ Fixed: was /admerce_symbol.png (missing). Now uses the live PWA icon. */}
         <Image
           src="/icons/icon-512x512.png"
           alt="Admerce"
@@ -69,7 +67,6 @@ export default function WelcomePage() {
         />
       </motion.div>
 
-      {/* App name (fade in after logo) */}
       <motion.h1
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -79,7 +76,6 @@ export default function WelcomePage() {
         Admerce
       </motion.h1>
 
-      {/* Loading indicator – pulsing dots */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -111,11 +107,10 @@ const styles = {
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     height: '100vh',
-    backgroundColor: 'white',
+    backgroundColor: 'var(--bg-primary)',
+    transition: 'background-color 0.18s ease',
   },
   logo: {
-    // ✅ Fixed: was 800x300 (mismatched the 200x200 props and squashed the pin).
-    // The icon is square — style it square.
     height: 200,
     width: 200,
     objectFit: 'contain' as const,
@@ -123,8 +118,8 @@ const styles = {
   appName: {
     marginTop: 16,
     fontSize: 28,
-    fontWeight: 800, // ✅ was 1000 — not a valid font-weight in most browsers
-    color: '#0f06b1',
+    fontWeight: 800,
+    color: 'var(--brand-primary)',
   },
   dotsContainer: {
     display: 'flex' as const,
@@ -135,6 +130,6 @@ const styles = {
     width: 10,
     height: 10,
     borderRadius: '50%',
-    backgroundColor: '#0504AA',
+    backgroundColor: 'var(--brand-primary)',
   },
 };
