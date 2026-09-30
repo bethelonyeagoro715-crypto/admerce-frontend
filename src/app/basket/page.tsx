@@ -15,7 +15,6 @@ import {
   MdErrorOutline,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface BasketItem {
   id: number;
   listing_id?: string;
@@ -74,8 +73,8 @@ function itemPrice(item: BasketItem): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-// Inject `spin` once at module scope — original only rendered the keyframe
-// inside the *loaded* branch, so loading/empty/error spinners never spun.
+// Inject `spin` once — original only rendered the keyframe in the loaded
+// branch, so loading/empty/error spinners never animated.
 if (typeof document !== 'undefined' && !document.getElementById('basket-spin-kf')) {
   const s = document.createElement('style');
   s.id = 'basket-spin-kf';
@@ -85,7 +84,6 @@ if (typeof document !== 'undefined' && !document.getElementById('basket-spin-kf'
 
 export default function BasketPage() {
   useAuthGuard();
-
   const router = useRouter();
 
   const [basket, setBasket] = useState<BasketData>({});
@@ -193,7 +191,6 @@ export default function BasketPage() {
     return [];
   })();
 
-  // ── Loading ────────────────────────────────────────────────
   if (isLoading) {
     return (
       <main style={styles.center}>
@@ -202,7 +199,6 @@ export default function BasketPage() {
     );
   }
 
-  // ── Error state ────────────────────────────────────────────
   if (error && storeGroups.length === 0) {
     return (
       <main style={styles.center}>
@@ -216,7 +212,6 @@ export default function BasketPage() {
     );
   }
 
-  // ── Empty state ────────────────────────────────────────────
   if (storeGroups.length === 0) {
     return (
       <main style={styles.center}>
@@ -233,7 +228,6 @@ export default function BasketPage() {
     );
   }
 
-  // ── Loaded ────────────────────────────────────────────────
   return (
     <main className="basket-container" style={styles.container}>
       <style>{`
@@ -243,7 +237,6 @@ export default function BasketPage() {
         }
       `}</style>
 
-      {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.headerTitle}>Your Basket</h1>
         <button
@@ -262,7 +255,6 @@ export default function BasketPage() {
         </button>
       </div>
 
-      {/* Inline error banner */}
       {error && (
         <div style={styles.errorBanner}>
           <MdErrorOutline size={16} color="var(--danger-fg)" />
@@ -277,7 +269,6 @@ export default function BasketPage() {
         </div>
       )}
 
-      {/* Store groups */}
       <div style={styles.scrollArea}>
         {storeGroups.map((group) => (
           <div key={group.store_id} style={styles.storeCard}>
@@ -374,7 +365,6 @@ export default function BasketPage() {
         ))}
       </div>
 
-      {/* Checkout bar */}
       <div style={styles.checkoutBar}>
         <div style={{ flex: 1 }}>
           <div style={styles.totalLabel}>Total</div>
@@ -396,7 +386,6 @@ export default function BasketPage() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -547,10 +536,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     flexShrink: 0,
   },
-  itemInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
+  itemInfo: { flex: 1, minWidth: 0 },
   itemName: {
     fontSize: 15,
     fontWeight: 500,
@@ -559,10 +545,7 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  itemPrice: {
-    fontSize: 13,
-    color: 'var(--text-muted)',
-  },
+  itemPrice: { fontSize: 13, color: 'var(--text-muted)' },
   qtyControl: {
     display: 'flex',
     alignItems: 'center',
@@ -594,7 +577,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 6,
     display: 'flex',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: 10,
     flexShrink: 0,
   },
   checkoutBar: {
@@ -606,10 +589,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: 'var(--shadow-md)',
     flexShrink: 0,
   },
-  totalLabel: {
-    fontSize: 12,
-    color: 'var(--text-muted)',
-  },
+  totalLabel: { fontSize: 12, color: 'var(--text-muted)' },
   totalValue: {
     fontSize: 24,
     fontWeight: 'bold',

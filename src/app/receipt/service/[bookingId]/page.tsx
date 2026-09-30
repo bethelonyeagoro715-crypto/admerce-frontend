@@ -128,17 +128,14 @@ function ServiceReceiptContent() {
         setNotes(data.notes || '');
       } catch (err: unknown) {
         if (cancelled) return;
-        const msg =
-          err instanceof Error ? err.message : 'Could not load receipt.';
+        const msg = err instanceof Error ? err.message : 'Could not load receipt.';
         setError(msg);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [bookingId]);
 
   const handlePrint = () => window.print();
@@ -157,10 +154,9 @@ function ServiceReceiptContent() {
         });
         return;
       } catch {
-        // User cancelled or share failed — fall through to copy
+        // Fall through to copy
       }
     }
-    // Fallback: copy link
     try {
       await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
       alert('Receipt link copied to clipboard');
@@ -220,7 +216,6 @@ function ServiceReceiptContent() {
 
       <div style={styles.cardWrapper}>
         <div style={styles.receiptCard}>
-          {/* Gradient header */}
           <div style={styles.cardHeader}>
             <div style={styles.iconWrapper}>
               <MdReceiptLong size={32} color="var(--brand-on-gradient)" />
@@ -342,7 +337,6 @@ export default function ServiceReceiptPage() {
   );
 }
 
-/* ─── Styles ─────────────────────────────────────────────────── */
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -399,10 +393,7 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     color: 'var(--text-primary)',
   },
-  headerActions: {
-    display: 'flex',
-    gap: 8,
-  },
+  headerActions: { display: 'flex', gap: 8 },
   iconBtn: {
     background: 'none',
     border: 'none',
@@ -443,21 +434,9 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     margin: '0 auto 12px',
   },
-  cardTitle: {
-    fontSize: 22,
-    fontWeight: 800,
-    margin: 0,
-  },
-  orderId: {
-    fontSize: 14,
-    opacity: 0.9,
-    marginTop: 4,
-  },
-  dateTime: {
-    fontSize: 12,
-    opacity: 0.8,
-    marginTop: 2,
-  },
+  cardTitle: { fontSize: 22, fontWeight: 800, margin: 0 },
+  orderId: { fontSize: 14, opacity: 0.9, marginTop: 4 },
+  dateTime: { fontSize: 12, opacity: 0.8, marginTop: 2 },
   statusRow: {
     display: 'flex',
     justifyContent: 'center',
@@ -472,9 +451,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     letterSpacing: 0.3,
   },
-  infoSection: {
-    padding: '4px 0',
-  },
+  infoSection: { padding: '4px 0' },
   infoRow: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -559,7 +536,7 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: 0.3,
   },
   footerSub: {
-    fontSize: 11,
+    fontSize: 10,
     color: 'var(--text-muted)',
     marginTop: 2,
   },

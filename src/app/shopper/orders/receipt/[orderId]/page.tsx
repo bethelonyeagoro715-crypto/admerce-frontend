@@ -16,7 +16,6 @@ import api from '../../../../../services/api';
 
 export const dynamic = 'force-dynamic';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface OrderItem {
   name: string;
   price: number;
@@ -62,7 +61,6 @@ interface OrderDetailResponse extends Record<string, unknown> {
   items?: OrderItem[];
 }
 
-// ─── Reducer ───────────────────────────────────────────────────────
 interface PageState {
   orderData: OrderDetail | null;
   loading: boolean;
@@ -79,7 +77,6 @@ function reducer(state: PageState, action: PageAction): PageState {
   }
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────
 function shortenId(id: string, head = 8): string {
   if (!id) return '';
   return id.length > head ? id.slice(0, head) : id;
@@ -91,7 +88,6 @@ function safeNumber(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-// ─── Component Content ──────────────────────────────────────────
 function ReceiptContent() {
   const router = useRouter();
   const params = useParams<{ orderId: string }>();
@@ -215,7 +211,6 @@ function ReceiptContent() {
     <main style={css.container}>
       <style>{KF}</style>
 
-      {/* Header */}
       <div style={css.header}>
         <button onClick={() => router.back()} style={css.backBtn}>←</button>
         <h1 style={css.title}>Receipt</h1>
@@ -226,7 +221,6 @@ function ReceiptContent() {
         </div>
       </div>
 
-      {/* Receipt Card */}
       <div style={css.receiptCard}>
         <div style={css.cardHeader}>
           <div style={css.receiptIconWrapper}>
@@ -299,10 +293,8 @@ export default function ReceiptPage() {
   );
 }
 
-// ─── Keyframes ───────────────────────────────────────────────────────
 const KF = `@keyframes spin { to { transform: rotate(360deg); } }`;
 
-// ─── Styles ──────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   container:        { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-primary)', paddingBottom: 20 },
   loadScreen:       { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: 'var(--bg-primary)' },
@@ -324,7 +316,7 @@ const css: Record<string, React.CSSProperties> = {
   infoValue:        { color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right', maxWidth: '60%' },
   itemsSection:     { marginTop: 20 },
   itemsTitle:       { fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 },
-  itemsList:        { display: 'flex', flexDirection: 'column', gap: 8 },
+  itemsList:        { display: 'flex', flexDirection: 'column', gap: 6 },
   itemRow:          { display: 'flex', alignItems: 'center', gap: 12 },
   itemName:         { flex: 2, fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' },
   itemQty:          { fontSize: 14, color: 'var(--text-tertiary)' },

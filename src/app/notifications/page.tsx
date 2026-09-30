@@ -139,10 +139,6 @@ function classify(n: NotificationItem): NotificationKind {
   return 'system';
 }
 
-// Icons sit on a tinted rounded square. Colors are semantic type colors,
-// not theme colors — where a token exists we use it, otherwise we keep
-// the vivid hue and switch the "soft" background to a translucent tint
-// so it renders correctly on both light and dark surfaces.
 const KIND_META: Record<
   NotificationKind,
   { color: string; soft: string; Icon: React.ComponentType<{ size: number; color: string }> }
@@ -257,7 +253,6 @@ export default function NotificationsPage() {
     if (unread.length === 0 || markingAll) return;
     setMarkingAll(true);
     try {
-      // Fan-out: no backend bulk endpoint exists yet.
       await Promise.all(
         unread.map((n) => api.markNotificationRead(n.id).catch(() => null)),
       );
@@ -456,7 +451,6 @@ const CSS = `
     background: var(--bg-primary);
   }
 
-  /* Header */
   .nf-header {
     display: flex;
     align-items: center;
@@ -522,7 +516,6 @@ const CSS = `
   .nf-iconBtn:hover:not(:disabled) { background: var(--bg-hover); }
   .nf-iconBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* Actions bar */
   .nf-actionsBar {
     display: flex;
     justify-content: flex-end;
@@ -549,13 +542,11 @@ const CSS = `
   }
   .nf-markAllBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-  /* Body */
   .nf-body {
     flex: 1;
     padding: 12px 14px 40px;
   }
 
-  /* Group */
   .nf-group { margin-bottom: 20px; }
   .nf-groupLabel {
     font-size: 11px;
@@ -566,7 +557,6 @@ const CSS = `
     padding: 4px 4px 10px;
   }
 
-  /* Card */
   .nf-card {
     display: flex;
     align-items: flex-start;
@@ -662,7 +652,6 @@ const CSS = `
     align-self: center;
   }
 
-  /* Center states */
   .nf-center {
     display: flex;
     flex-direction: column;
@@ -709,10 +698,9 @@ const CSS = `
     font-family: inherit;
   }
 
-  /* Skeleton */
   .nf-skeletonCard {
     display: flex;
-    gap: 12px;
+    gap: 14px;
     padding: 14px;
     margin-bottom: 8px;
     border-radius: 14px;
