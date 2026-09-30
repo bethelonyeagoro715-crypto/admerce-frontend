@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
-import { alertDialog } from '../../../components/ui/dialogs';
+import { alertDialog, confirmDialog } from '../../../components/ui/dialogs';
+import { useAuthGuard } from '../../../hooks/useAuthGuard';
 import {
   MdAdd,
   MdRefresh,
@@ -17,11 +18,9 @@ import {
   MdSearch,
   MdClose,
   MdEventNote,
-  MdStar,
   MdChevronRight,
 } from 'react-icons/md';
 
-// ─── Types ────────────────────────────────────────────────────────────
 interface RawService {
   service_id: string;
   title?: string;
@@ -60,12 +59,18 @@ interface ServiceWithStats {
 
 type StatusFilter = 'all' | 'active' | 'paused';
 
-// ─── Helpers ──────────────────────────────────────────────────────────
 function resolveImageUrl(url?: string | null): string | null {
   if (!url) return null;
-  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
+  if (
+    url.startsWith('http') ||
+    url.startsWith('blob:') ||
+    url.startsWith('data:')
+  )
+    return url;
   const base =
-    process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    '';
   if (!base) return url;
   if (url.startsWith('/')) return `${base}${url}`;
   return `${base}/${url}`;
@@ -92,7 +97,11 @@ function buildStats(
   for (const b of bookings) {
     const sid = String(b.service_id || '');
     if (!sid) continue;
-    const cur = byService.get(sid) || { all: 0, completed: 0, pending: 0 };
+    const cur = byService.get(sid) || {
+      all: 0,
+      completed: 0,
+      pending: 0,
+    };
     cur.all++;
     const status = (b.status || '').toLowerCase();
     if (status === 'completed') cur.completed++;
@@ -123,8 +132,8 @@ function buildStats(
   });
 }
 
-// ─── Component ────────────────────────────────────────────────────────
 export default function ServiceProviderServicesPage() {
+  useAuthGuard();
   const router = useRouter();
 
   const [services, setServices] = useState<ServiceWithStats[]>([]);
@@ -163,10 +172,13 @@ export default function ServiceProviderServicesPage() {
     } catch (err: unknown) {
       if (seq !== reqSeq.current || !isMountedRef.current) return;
       setError(
-        err instanceof Error ? err.message : 'Failed to load your services',
+        err instanceof Error
+          ? err.message
+          : 'Failed to load your services',
       );
     } finally {
-      if (seq === reqSeq.current && isMountedRef.current) setLoading(false);
+      if (seq === reqSeq.current && isMountedRef.current)
+        setLoading(false);
     }
   }, []);
 
@@ -200,7 +212,10 @@ export default function ServiceProviderServicesPage() {
 
   const totals = useMemo(() => {
     const active = services.filter((s) => s.isActive).length;
-    const bookings = services.reduce((sum, s) => sum + s.bookingsAll, 0);
+    const bookings = services.reduce(
+      (sum, s) => sum + s.bookingsAll,
+      0,
+    );
     const revenue = services.reduce(
       (sum, s) => sum + s.bookingsCompleted * s.price,
       0,
@@ -232,7 +247,13 @@ export default function ServiceProviderServicesPage() {
   };
 
   const handleDelete = async (service: ServiceWithStats) => {
-    const confirmed = await confirmDelete(service.title);
+    const confirmed = await confirmDialog({
+      title: 'Delete this service?',
+      body: `"${service.title}" will be removed from your menu. Existing bookings are kept.`,
+      kind: 'danger',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep',
+    });
     if (!confirmed) return;
     setBusyId(service.service_id);
     try {
@@ -251,200 +272,181 @@ export default function ServiceProviderServicesPage() {
     }
   };
 
-  const confirmDelete = (title: string): Promise<boolean> =>
-    new Promise((resolve) => {
-      const id = `del-${Date.now()}`;
-      const overlay = document.createElement('div');
-      overlay.id = id;
-      overlay.style.cssText = `
-        position: fixed; inset: 0; z-index: 9999;
-        background: rgba(11,11,26,0.55); backdrop-filter: blur(6px);
-        display: flex; align-items: center; justify-content: center; padding: 20px;
-      `;
-      overlay.innerHTML = `
-        <div style="
-          width: 100%; max-width: 380px; background: #FFF; border-radius: 22px;
-          padding: 26px 24px 20px; text-align: center;
-          box-shadow: 0 24px 60px rgba(15,23,42,0.24);
-          font-family: inherit;
-        ">
-          <div style="
-            width: 60px; height: 60px; margin: 0 auto 16px;
-            border-radius: 18px; background: #FEF2F2; border: 1px solid #FECACA;
-            display: flex; align-items: center; justify-content: center;
-            color: #B91C1C; font-size: 26px;
-          ">⚠</div>
-          <h3 style="margin: 0; font-size: 19px; font-weight: 800; color: #0B0B1A; letter-spacing: -0.02em;">Delete this service?</h3>
-          <p style="margin: 10px 0 0; font-size: 14px; color: #5A6178; line-height: 1.55;">"${title}" will be removed from your menu. Existing bookings are kept.</p>
-          <div style="display: flex; gap: 10px; margin-top: 22px;">
-            <button id="${id}-keep" style="
-              flex: 1; padding: 13px 16px; border-radius: 14px; border: 1px solid #E6E8F0;
-              background: #FFF; color: #5A6178; font-size: 14px; font-weight: 700;
-              cursor: pointer; font-family: inherit;
-            ">Keep</button>
-            <button id="${id}-del" style="
-              flex: 1; padding: 13px 16px; border-radius: 14px; border: none;
-              background: linear-gradient(135deg, #DC2626 0%, #EF4444 100%);
-              color: #FFF; font-size: 14px; font-weight: 700; cursor: pointer;
-              font-family: inherit;
-            ">Delete</button>
-          </div>
-        </div>
-      `;
-      const cleanup = (v: boolean) => {
-        overlay.remove();
-        resolve(v);
-      };
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) cleanup(false);
-      });
-      document.body.appendChild(overlay);
-      overlay.querySelector(`#${id}-keep`)?.addEventListener('click', () => cleanup(false));
-      overlay.querySelector(`#${id}-del`)?.addEventListener('click', () => cleanup(true));
-    });
-
   return (
-    <main style={styles.container}>
+    <main style={styles.container} className="sp-services-root">
       <style>{PAGE_CSS}</style>
 
-      {/* Header */}
-      <header style={styles.header}>
-        <div>
-          <h1 style={styles.title}>My Services</h1>
-          {!loading && !error && services.length > 0 && (
-            <p style={styles.subtitle}>
-              {totals.active} active · {totals.bookings} booking
-              {totals.bookings === 1 ? '' : 's'} · {fmtNaira(totals.revenue)} earned
-            </p>
-          )}
-        </div>
-        <button
-          onClick={handleRefresh}
-          style={styles.refreshBtn}
-          disabled={refreshing}
-          aria-label="Refresh"
-        >
-          <MdRefresh
-            size={22}
-            color="#0504AA"
-            style={{
-              animation: refreshing ? 'spServicesSpin 0.8s linear infinite' : 'none',
-            }}
-          />
-        </button>
-      </header>
+      <div className="sp-services-shell">
+        <header style={styles.header}>
+          <div>
+            <h1 style={styles.title}>My Services</h1>
+            {!loading && !error && services.length > 0 && (
+              <p style={styles.subtitle}>
+                {totals.active} active · {totals.bookings} booking
+                {totals.bookings === 1 ? '' : 's'} ·{' '}
+                {fmtNaira(totals.revenue)} earned
+              </p>
+            )}
+          </div>
+          <button
+            onClick={handleRefresh}
+            style={styles.refreshBtn}
+            disabled={refreshing}
+            aria-label="Refresh"
+          >
+            <MdRefresh
+              size={22}
+              color="var(--brand-primary)"
+              style={{
+                animation: refreshing
+                  ? 'spServicesSpin 0.8s linear infinite'
+                  : 'none',
+              }}
+            />
+          </button>
+        </header>
 
-      {/* Search */}
-      {!loading && !error && services.length > 0 && (
-        <>
-          <div style={styles.searchWrap}>
-            <div style={styles.searchBox}>
-              <MdSearch size={18} color="#94A3B8" />
-              <input
-                type="text"
-                placeholder="Search services"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={styles.searchInput}
-              />
-              {query && (
-                <button
-                  onClick={() => setQuery('')}
-                  style={styles.searchClear}
-                  aria-label="Clear search"
-                >
-                  <MdClose size={14} color="#94A3B8" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div style={styles.pillRow}>
-            <Pill label="All" active={filter === 'all'} onClick={() => setFilter('all')} />
-            <Pill label="Active" active={filter === 'active'} onClick={() => setFilter('active')} />
-            <Pill label="Paused" active={filter === 'paused'} onClick={() => setFilter('paused')} />
-          </div>
-        </>
-      )}
-
-      {/* Body */}
-      <div style={styles.body}>
-        {loading ? (
-          <div style={styles.skeletonList}>
-            {[0, 1, 2].map((i) => (
-              <div key={i} style={styles.skeletonCard} />
-            ))}
-          </div>
-        ) : error ? (
-          <div style={styles.center}>
-            <div style={styles.errorHalo}>
-              <MdErrorOutline size={34} color="#B91C1C" />
-            </div>
-            <h3 style={styles.stateTitle}>Couldn&apos;t load your services</h3>
-            <p style={styles.stateBody}>{error}</p>
-            <button onClick={() => loadData()} style={styles.retryBtn}>
-              Try again
-            </button>
-          </div>
-        ) : services.length === 0 ? (
-          <div style={styles.center}>
-            <div style={styles.emptyHalo}>
-              <MdPlayCircleOutline size={34} color="#0504AA" />
-            </div>
-            <h3 style={styles.stateTitle}>Your menu is empty</h3>
-            <p style={styles.stateBody}>
-              Add your first service to start receiving bookings.
-            </p>
-            <button
-              onClick={() => router.push('/service-provider/add-service')}
-              style={styles.retryBtn}
-            >
-              <MdAdd size={18} color="#fff" />
-              <span>Add a service</span>
-            </button>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={styles.center}>
-            <h3 style={styles.stateTitle}>No matches</h3>
-            <p style={styles.stateBody}>
-              {query
-                ? `Nothing matches "${query}"`
-                : 'No services in this filter.'}
-            </p>
-          </div>
-        ) : (
+        {!loading && !error && services.length > 0 && (
           <>
-            <div style={styles.list}>
-              {filtered.map((s) => (
-                <ServiceCard
-                  key={s.service_id}
-                  service={s}
-                  busy={busyId === s.service_id}
-                  onEdit={() =>
-                    router.push(`/service-provider/edit-service/${s.service_id}`)
-                  }
-                  onToggle={() => handleToggleActive(s)}
-                  onDelete={() => handleDelete(s)}
+            <div style={styles.searchWrap}>
+              <div style={styles.searchBox}>
+                <MdSearch size={18} color="var(--text-muted)" />
+                <input
+                  type="text"
+                  placeholder="Search services"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  style={styles.searchInput}
                 />
-              ))}
+                {query && (
+                  <button
+                    onClick={() => setQuery('')}
+                    style={styles.searchClear}
+                    aria-label="Clear search"
+                  >
+                    <MdClose size={14} color="var(--text-muted)" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            <button
-              onClick={() => router.push('/service-provider/add-service')}
-              style={styles.addBtn}
-              className="sp-add-service"
-            >
-              <MdAdd size={20} color="#fff" />
-              <span>Add another service</span>
-            </button>
+            <div style={styles.pillRow}>
+              <Pill
+                label="All"
+                active={filter === 'all'}
+                onClick={() => setFilter('all')}
+              />
+              <Pill
+                label="Active"
+                active={filter === 'active'}
+                onClick={() => setFilter('active')}
+              />
+              <Pill
+                label="Paused"
+                active={filter === 'paused'}
+                onClick={() => setFilter('paused')}
+              />
+            </div>
           </>
         )}
+
+        <div style={styles.body}>
+          {loading ? (
+            <div style={styles.skeletonList}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} style={styles.skeletonCard} />
+              ))}
+            </div>
+          ) : error ? (
+            <div style={styles.center}>
+              <div style={styles.errorHalo}>
+                <MdErrorOutline
+                  size={34}
+                  color="var(--danger-fg)"
+                />
+              </div>
+              <h3 style={styles.stateTitle}>
+                Couldn&apos;t load your services
+              </h3>
+              <p style={styles.stateBody}>{error}</p>
+              <button
+                onClick={() => loadData()}
+                style={styles.retryBtn}
+              >
+                Try again
+              </button>
+            </div>
+          ) : services.length === 0 ? (
+            <div style={styles.center}>
+              <div style={styles.emptyHalo}>
+                <MdPlayCircleOutline
+                  size={34}
+                  color="var(--brand-primary)"
+                />
+              </div>
+              <h3 style={styles.stateTitle}>Your menu is empty</h3>
+              <p style={styles.stateBody}>
+                Add your first service to start receiving bookings.
+              </p>
+              <button
+                onClick={() =>
+                  router.push('/service-provider/add-service')
+                }
+                style={styles.retryBtn}
+              >
+                <MdAdd size={18} color="var(--brand-on-gradient)" />
+                <span>Add a service</span>
+              </button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={styles.center}>
+              <h3 style={styles.stateTitle}>No matches</h3>
+              <p style={styles.stateBody}>
+                {query
+                  ? `Nothing matches "${query}"`
+                  : 'No services in this filter.'}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div style={styles.list}>
+                {filtered.map((s) => (
+                  <ServiceCard
+                    key={s.service_id}
+                    service={s}
+                    busy={busyId === s.service_id}
+                    onEdit={() =>
+                      router.push(
+                        `/service-provider/edit-service/${s.service_id}`,
+                      )
+                    }
+                    onToggle={() => handleToggleActive(s)}
+                    onDelete={() => handleDelete(s)}
+                  />
+                ))}
+              </div>
+
+              <button
+                onClick={() =>
+                  router.push('/service-provider/add-service')
+                }
+                style={styles.addBtn}
+                className="sp-add-service"
+              >
+                <MdAdd
+                  size={20}
+                  color="var(--brand-on-gradient)"
+                />
+                <span>Add another service</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </main>
   );
 }
 
-// ─── Service card ─────────────────────────────────────────────────────
 function ServiceCard({
   service,
   busy,
@@ -469,7 +471,6 @@ function ServiceCard({
         pointerEvents: busy ? 'none' : 'auto',
       }}
     >
-      {/* Media + info row — tappable to edit */}
       <button
         type="button"
         onClick={onEdit}
@@ -492,7 +493,7 @@ function ServiceCard({
             )
           ) : (
             <div style={styles.thumbEmpty}>
-              <MdImage size={22} color="#94A3B8" />
+              <MdImage size={22} color="var(--text-muted)" />
             </div>
           )}
           {isVideo && (
@@ -520,13 +521,17 @@ function ServiceCard({
           </div>
 
           <div style={styles.priceLine}>
-            <span style={styles.priceText}>{fmtNaira(service.price)}</span>
+            <span style={styles.priceText}>
+              {fmtNaira(service.price)}
+            </span>
             <span style={styles.priceDot}>·</span>
-            <span style={styles.durationText}>{service.duration} min</span>
+            <span style={styles.durationText}>
+              {service.duration} min
+            </span>
           </div>
 
           <div style={styles.statsLine}>
-            <MdEventNote size={12} color="#64748B" />
+            <MdEventNote size={12} color="var(--text-tertiary)" />
             <span style={styles.statsText}>
               {service.bookingsAll === 0
                 ? 'No bookings yet'
@@ -545,10 +550,9 @@ function ServiceCard({
           </div>
         </div>
 
-        <MdChevronRight size={18} color="#94A3B8" />
+        <MdChevronRight size={18} color="var(--text-muted)" />
       </button>
 
-      {/* Actions row */}
       <div style={styles.actionsRow}>
         <button
           type="button"
@@ -558,13 +562,16 @@ function ServiceCard({
         >
           {service.isActive ? (
             <>
-              <MdPauseCircle size={16} color="#B45309" />
-              <span style={{ color: '#B45309' }}>Pause</span>
+              <MdPauseCircle size={16} color="var(--warning-fg)" />
+              <span style={{ color: 'var(--warning-fg)' }}>Pause</span>
             </>
           ) : (
             <>
-              <MdPlayCircleFilled size={16} color="#16A34A" />
-              <span style={{ color: '#16A34A' }}>Resume</span>
+              <MdPlayCircleFilled
+                size={16}
+                color="var(--success-fg)"
+              />
+              <span style={{ color: 'var(--success-fg)' }}>Resume</span>
             </>
           )}
         </button>
@@ -575,8 +582,8 @@ function ServiceCard({
           style={styles.actionBtn}
           className="sp-action-btn"
         >
-          <MdEdit size={16} color="#0504AA" />
-          <span style={{ color: '#0504AA' }}>Edit</span>
+          <MdEdit size={16} color="var(--brand-primary)" />
+          <span style={{ color: 'var(--brand-primary)' }}>Edit</span>
         </button>
         <div style={styles.actionsDivider} />
         <button
@@ -585,15 +592,14 @@ function ServiceCard({
           style={styles.actionBtn}
           className="sp-action-btn"
         >
-          <MdDeleteOutline size={16} color="#991B1B" />
-          <span style={{ color: '#991B1B' }}>Delete</span>
+          <MdDeleteOutline size={16} color="var(--danger-fg)" />
+          <span style={{ color: 'var(--danger-fg)' }}>Delete</span>
         </button>
       </div>
     </div>
   );
 }
 
-// ─── Pill ─────────────────────────────────────────────────────────────
 function Pill({
   label,
   active,
@@ -624,7 +630,6 @@ function Pill({
   );
 }
 
-// ─── CSS ──────────────────────────────────────────────────────────────
 const PAGE_CSS = `
   @keyframes spServicesSpin { to { transform: rotate(360deg); } }
   @keyframes spServicesShimmer {
@@ -632,21 +637,44 @@ const PAGE_CSS = `
     100% { background-position: 200% 0; }
   }
 
-  .sp-service-card:hover { background-color: #F8FAFC; }
-  .sp-service-card:active { background-color: #F1F5F9; }
-  .sp-action-btn:hover { background-color: #F8FAFC; }
-  .sp-add-service:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(5, 4, 170, 0.32); }
+  .sp-services-root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.18s ease, color 0.18s ease;
+    justify-content: center;
+  }
+
+  .sp-services-shell {
+    width: 100%;
+    max-width: 1080px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+
+  .sp-service-card:hover { background-color: var(--bg-hover); }
+  .sp-service-card:active { background-color: var(--bg-tertiary); }
+  .sp-action-btn:hover { background-color: var(--bg-hover); }
+  .sp-add-service:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px
+      color-mix(in srgb, var(--brand-primary) 32%, transparent);
+  }
   .sp-services-pill:active { transform: scale(0.97); }
 `;
 
-// ─── Styles ───────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    height: '100%',
-    backgroundColor: '#FFFFFF',
     minHeight: '100vh',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   header: {
     display: 'flex',
@@ -657,13 +685,13 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: 24,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.6,
   },
   subtitle: {
     fontSize: 13,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     margin: '4px 0 0 0',
   },
   refreshBtn: {
@@ -686,8 +714,9 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '10px 14px',
     borderRadius: 14,
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-tertiary)',
     border: '1.5px solid transparent',
+    transition: 'background-color 0.18s ease',
   },
   searchInput: {
     flex: 1,
@@ -695,7 +724,7 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     background: 'transparent',
     fontSize: 15,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     fontFamily: 'inherit',
     minWidth: 0,
   },
@@ -704,7 +733,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 22,
     borderRadius: '50%',
     border: 'none',
-    backgroundColor: '#E2E8F0',
+    backgroundColor: 'var(--border-default)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -724,26 +753,35 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     padding: '7px 14px',
     borderRadius: 999,
-    border: '1px solid #E6E8F0',
-    backgroundColor: '#FFFFFF',
+    border: '1px solid var(--border-default)',
+    backgroundColor: 'var(--bg-secondary)',
     cursor: 'pointer',
     fontFamily: 'inherit',
     flexShrink: 0,
-    transition: 'background-color 0.15s, border-color 0.15s, transform 0.12s',
+    transition:
+      'background-color 0.15s, border-color 0.15s, transform 0.12s',
   },
-  pillActive: { backgroundColor: '#EEF0FF', borderColor: '#C7CCFF' },
-  pillLabel: { fontSize: 13, fontWeight: 700, color: '#64748B' },
-  pillLabelActive: { color: '#0504AA' },
+  pillActive: {
+    backgroundColor: 'var(--brand-soft)',
+    borderColor: 'var(--brand-primary)',
+  },
+  pillLabel: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: 'var(--text-tertiary)',
+  },
+  pillLabelActive: { color: 'var(--brand-primary)' },
 
   body: { flex: 1, overflowY: 'auto', padding: '0 12px 32px' },
   list: { display: 'flex', flexDirection: 'column', gap: 12 },
 
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 16,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     overflow: 'hidden',
-    boxShadow: '0 1px 2px rgba(15,23,42,0.03)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   cardTap: {
     display: 'flex',
@@ -763,7 +801,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 64,
     flex: '0 0 64px',
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     overflow: 'hidden',
     position: 'relative',
     display: 'flex',
@@ -811,7 +849,7 @@ const styles: Record<string, React.CSSProperties> = {
   serviceTitle: {
     fontSize: 15,
     fontWeight: 700,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -829,14 +867,14 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   statusChipActive: {
-    backgroundColor: '#ECFDF5',
-    color: '#065F46',
-    borderColor: '#A7F3D0',
+    backgroundColor: 'var(--success-bg)',
+    color: 'var(--success-fg)',
+    borderColor: 'var(--success-strong)',
   },
   statusChipPaused: {
-    backgroundColor: '#F1F5F9',
-    color: '#475569',
-    borderColor: '#CBD5E1',
+    backgroundColor: 'var(--bg-tertiary)',
+    color: 'var(--text-secondary)',
+    borderColor: 'var(--border-default)',
   },
   priceLine: {
     display: 'flex',
@@ -845,18 +883,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
   },
   priceText: {
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontWeight: 700,
     fontVariantNumeric: 'tabular-nums',
   },
-  priceDot: { color: '#CBD5E1' },
-  durationText: { color: '#64748B', fontWeight: 500 },
+  priceDot: { color: 'var(--border-strong)' },
+  durationText: {
+    color: 'var(--text-tertiary)',
+    fontWeight: 500,
+  },
   statsLine: {
     display: 'flex',
     alignItems: 'center',
     gap: 5,
     fontSize: 12,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 2,
     minWidth: 0,
   },
@@ -865,9 +906,9 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  statsDot: { color: '#CBD5E1' },
+  statsDot: { color: 'var(--border-strong)' },
   statsPending: {
-    color: '#B45309',
+    color: 'var(--warning-fg)',
     fontWeight: 700,
     flexShrink: 0,
   },
@@ -875,7 +916,7 @@ const styles: Record<string, React.CSSProperties> = {
   actionsRow: {
     display: 'flex',
     alignItems: 'center',
-    borderTop: '1px solid #F1F5F9',
+    borderTop: '1px solid var(--border-subtle)',
   },
   actionBtn: {
     flex: 1,
@@ -895,7 +936,7 @@ const styles: Record<string, React.CSSProperties> = {
   actionsDivider: {
     width: 1,
     height: 22,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--border-subtle)',
   },
 
   addBtn: {
@@ -908,14 +949,14 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 16,
     borderRadius: 16,
     border: 'none',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#FFFFFF',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 15,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
     letterSpacing: -0.1,
-    boxShadow: '0 10px 24px rgba(5, 4, 170, 0.24)',
+    boxShadow: 'var(--shadow-brand)',
     transition: 'transform 0.15s, box-shadow 0.2s',
   },
 
@@ -931,8 +972,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -942,23 +983,24 @@ const styles: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 22,
-    background: 'linear-gradient(135deg, #EEF0FF 0%, #E0E7FF 100%)',
+    background: 'var(--brand-soft)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    boxShadow: '0 10px 28px rgba(5, 4, 170, 0.08)',
+    boxShadow:
+      '0 10px 28px color-mix(in srgb, var(--brand-primary) 10%, transparent)',
   },
   stateTitle: {
     fontSize: 16,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.2,
   },
   stateBody: {
     fontSize: 13.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 6,
     lineHeight: 1.5,
     maxWidth: 300,
@@ -971,13 +1013,13 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '12px 22px',
     borderRadius: 14,
     border: 'none',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#FFFFFF',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5, 4, 170, 0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
   skeletonList: {
@@ -988,8 +1030,7 @@ const styles: Record<string, React.CSSProperties> = {
   skeletonCard: {
     height: 140,
     borderRadius: 16,
-    background:
-      'linear-gradient(90deg, #EEF2F6 25%, #F8FAFC 50%, #EEF2F6 75%)',
+    background: 'var(--skeleton)',
     backgroundSize: '200% 100%',
     animation: 'spServicesShimmer 1.4s linear infinite',
   },
