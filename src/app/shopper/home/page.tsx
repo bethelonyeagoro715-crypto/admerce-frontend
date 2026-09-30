@@ -1827,7 +1827,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '6px 16px',
+    padding: '8px 16px',
     maxWidth: CONTENT_MAX_WIDTH,
     margin: '0 auto',
     width: '100%',
@@ -1898,7 +1898,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    padding: '0 16px 10px',
+    padding: '0 16px 8px',
     flexWrap: 'wrap',
   },
   activeFiltersLabel: {
