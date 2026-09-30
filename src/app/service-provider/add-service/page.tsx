@@ -18,7 +18,6 @@ import {
   MdDesignServices,
 } from 'react-icons/md';
 
-// ─── Constants ──────────────────────────────────────────────────────
 interface ServiceCategory {
   id: string;
   label: string;
@@ -37,9 +36,8 @@ const SERVICE_CATEGORIES: ServiceCategory[] = [
   { id: 'digital_creative', label: 'Digital & Creative', emoji: '🎨' },
 ];
 
-const MAX_VIDEO_BYTES = 30 * 1024 * 1024; // 30 MB
+const MAX_VIDEO_BYTES = 30 * 1024 * 1024;
 
-// ─── Component ──────────────────────────────────────────────────────
 export default function CreateServicePage() {
   useAuthGuard();
   const router = useRouter();
@@ -48,9 +46,8 @@ export default function CreateServicePage() {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | null>(
-    null,
-  );
+  const [selectedCategory, setSelectedCategory] =
+    useState<ServiceCategory | null>(null);
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
@@ -92,7 +89,6 @@ export default function CreateServicePage() {
     );
   }, []);
 
-  // Revoke blob URL on unmount
   useEffect(() => {
     return () => {
       if (videoPreview && videoPreview.startsWith('blob:')) {
@@ -101,8 +97,9 @@ export default function CreateServicePage() {
     };
   }, [videoPreview]);
 
-  // ── Video handlers ─────────────────────────────────────────────
-  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_VIDEO_BYTES) {
@@ -133,7 +130,6 @@ export default function CreateServicePage() {
     if (videoInputRef.current) videoInputRef.current.value = '';
   };
 
-  // ── Validation ─────────────────────────────────────────────────
   const priceNum = Number(price);
   const durationNum = Number(duration);
 
@@ -142,14 +138,17 @@ export default function CreateServicePage() {
     if (!selectedCategory) return 'Pick a category to continue';
     if (!price.trim() || !Number.isFinite(priceNum) || priceNum <= 0)
       return 'Enter how much you charge';
-    if (!duration.trim() || !Number.isFinite(durationNum) || durationNum <= 0)
+    if (
+      !duration.trim() ||
+      !Number.isFinite(durationNum) ||
+      durationNum <= 0
+    )
       return 'Enter how long this service takes';
     return null;
   };
 
   const ready = missingField() === null;
 
-  // ── Submit ─────────────────────────────────────────────────────
   const submitService = async () => {
     const missing = missingField();
     if (missing) {
@@ -175,9 +174,9 @@ export default function CreateServicePage() {
       )) as { service_id?: string };
 
       const serviceId = result.service_id;
-      if (!serviceId) throw new Error('Service created but no ID returned');
+      if (!serviceId)
+        throw new Error('Service created but no ID returned');
 
-      // Video upload is best-effort — the service already exists.
       let videoWarning: string | null = null;
       if (videoFile) {
         try {
@@ -218,19 +217,20 @@ export default function CreateServicePage() {
   };
 
   const goBack = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
+    if (
+      typeof window !== 'undefined' &&
+      window.history.length > 1
+    ) {
       router.back();
     } else {
       router.push('/service-provider/home');
     }
   };
 
-  // ── Main ───────────────────────────────────────────────────────
   return (
     <main style={css.root} className="sp-add">
       <style>{CSS}</style>
 
-      {/* HEADER */}
       <div style={css.headerWrap}>
         <div style={css.headerInner}>
           <button
@@ -239,7 +239,7 @@ export default function CreateServicePage() {
             style={css.backBtn}
             aria-label="Back"
           >
-            <MdArrowBack size={20} color="#fff" />
+            <MdArrowBack size={20} color="var(--brand-on-gradient)" />
           </button>
           <div style={css.headerText}>
             <h1 style={css.headerTitle}>Add service</h1>
@@ -252,7 +252,6 @@ export default function CreateServicePage() {
       </div>
 
       <div style={css.sheet}>
-        {/* VIDEO HERO */}
         <h3 style={css.sectionLabel}>Service reel</h3>
 
         <div style={css.videoCard} className="sp-video-card">
@@ -284,19 +283,22 @@ export default function CreateServicePage() {
               aria-label="Add vertical video"
             >
               <div style={css.videoPlaceholderHalo}>
-                <MdVideocam size={38} color="#fff" />
+                <MdVideocam
+                  size={38}
+                  color="var(--brand-on-gradient)"
+                />
               </div>
               <div style={css.videoPlaceholderTitle}>
                 Add a vertical video
               </div>
               <div style={css.videoPlaceholderHint}>
-                This is what shoppers see in the feed · 9:16 · under 30 MB
+                This is what shoppers see in the feed · 9:16 · under 30
+                MB
               </div>
             </button>
           )}
         </div>
 
-        {/* Video controls */}
         <div style={css.mediaControls}>
           <button
             type="button"
@@ -304,7 +306,7 @@ export default function CreateServicePage() {
             style={css.mediaBtn}
             className="sp-media-btn"
           >
-            <MdVideocam size={16} color="#0504AA" />
+            <MdVideocam size={16} color="var(--brand-primary)" />
             <span>{videoFile ? 'Change video' : 'Add video'}</span>
           </button>
           {videoFile && (
@@ -314,7 +316,7 @@ export default function CreateServicePage() {
               style={{ ...css.mediaBtn, ...css.mediaBtnDanger }}
               className="sp-media-btn"
             >
-              <MdClose size={16} color="#DC2626" />
+              <MdClose size={16} color="var(--danger-fg)" />
               <span>Remove</span>
             </button>
           )}
@@ -330,7 +332,10 @@ export default function CreateServicePage() {
 
         {videoFile && (
           <div style={css.fileChip}>
-            <MdInsertDriveFile size={14} color="#0504AA" />
+            <MdInsertDriveFile
+              size={14}
+              color="var(--brand-primary)"
+            />
             <span style={css.fileChipText} title={videoFile.name}>
               {videoFile.name}
             </span>
@@ -340,12 +345,11 @@ export default function CreateServicePage() {
               style={css.fileChipRemove}
               aria-label="Remove video"
             >
-              <MdClose size={14} color="#64748B" />
+              <MdClose size={14} color="var(--text-tertiary)" />
             </button>
           </div>
         )}
 
-        {/* THE BASICS */}
         <h3 style={css.sectionLabel}>The basics</h3>
         <div style={css.card}>
           <div style={css.fieldWrap}>
@@ -382,17 +386,22 @@ export default function CreateServicePage() {
               <span style={css.fieldHint}>
                 Optional — but services with details get booked 2× more
               </span>
-              <span style={css.charCount}>{description.length}/800</span>
+              <span style={css.charCount}>
+                {description.length}/800
+              </span>
             </div>
           </div>
         </div>
 
-        {/* PRICE & DURATION */}
         <h3 style={css.sectionLabel}>Price & duration</h3>
         <div style={css.card}>
           <div style={css.fieldWrap}>
             <label style={css.fieldLabel}>
-              <MdOutlineAttachMoney size={14} color="#0504AA" /> Price (₦)
+              <MdOutlineAttachMoney
+                size={14}
+                color="var(--brand-primary)"
+              />{' '}
+              Price (₦)
             </label>
             <div style={css.currencyRow}>
               <span style={css.currencySymbol}>₦</span>
@@ -418,7 +427,8 @@ export default function CreateServicePage() {
 
           <div style={css.fieldWrap}>
             <label style={css.fieldLabel}>
-              <MdAccessTime size={14} color="#0891B2" /> Duration (minutes)
+              <MdAccessTime size={14} color="var(--info-fg)" />{' '}
+              Duration (minutes)
             </label>
             <input
               type="number"
@@ -444,7 +454,6 @@ export default function CreateServicePage() {
           </div>
         </div>
 
-        {/* CATEGORY */}
         <h3 style={css.sectionLabel}>Category</h3>
         <div style={css.chipsWrap}>
           {SERVICE_CATEGORIES.map((cat) => {
@@ -456,9 +465,15 @@ export default function CreateServicePage() {
                 onClick={() => setSelectedCategory(cat)}
                 style={{
                   ...css.chip,
-                  borderColor: active ? '#0504AA' : '#E6E8F0',
-                  backgroundColor: active ? '#EEF0FF' : '#FFFFFF',
-                  color: active ? '#0504AA' : '#475569',
+                  borderColor: active
+                    ? 'var(--brand-primary)'
+                    : 'var(--border-default)',
+                  backgroundColor: active
+                    ? 'var(--brand-soft)'
+                    : 'var(--bg-secondary)',
+                  color: active
+                    ? 'var(--brand-primary)'
+                    : 'var(--text-secondary)',
                 }}
                 className="sp-chip"
               >
@@ -468,29 +483,35 @@ export default function CreateServicePage() {
                 <span style={{ fontWeight: active ? 800 : 700 }}>
                   {cat.label}
                 </span>
-                {active && <MdCheck size={14} color="#0504AA" />}
+                {active && (
+                  <MdCheck size={14} color="var(--brand-primary)" />
+                )}
               </button>
             );
           })}
         </div>
 
-        {/* MISSING NUDGE */}
         {!ready && (
           <div style={css.missingNudge}>
-            <MdErrorOutline size={16} color="#92400E" />
+            <MdErrorOutline size={16} color="var(--warning-fg)" />
             <span>{missingField()}</span>
           </div>
         )}
 
-        {/* LOCATION PILL */}
         <div style={css.locationPill}>
           <MdLocationOn
             size={16}
-            color={locationReady ? '#16A34A' : '#94A3B8'}
+            color={
+              locationReady
+                ? 'var(--success-fg)'
+                : 'var(--text-muted)'
+            }
           />
           <div style={css.locationText}>
             <div style={css.locationTitle}>
-              {locationReady ? 'Location set' : 'Fetching location…'}
+              {locationReady
+                ? 'Location set'
+                : 'Fetching location…'}
             </div>
             <div style={css.locationHint}>
               {locationReady
@@ -502,7 +523,6 @@ export default function CreateServicePage() {
           </div>
         </div>
 
-        {/* SUBMIT */}
         <button
           type="button"
           onClick={submitService}
@@ -521,7 +541,10 @@ export default function CreateServicePage() {
             </>
           ) : (
             <>
-              <MdDesignServices size={20} color="#fff" />
+              <MdDesignServices
+                size={20}
+                color="var(--brand-on-gradient)"
+              />
               <span>{ready ? 'Publish service' : 'Continue'}</span>
             </>
           )}
@@ -533,7 +556,6 @@ export default function CreateServicePage() {
   );
 }
 
-// ─── CSS ────────────────────────────────────────────────────────────
 const CSS = `
   @keyframes spSpin { to { transform: rotate(360deg); } }
 
@@ -542,8 +564,9 @@ const CSS = `
   }
 
   .sp-input:focus {
-    border-color: #0504AA !important;
-    box-shadow: 0 0 0 3px rgba(5,4,170,0.10);
+    border-color: var(--brand-primary) !important;
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--brand-primary) 12%, transparent);
   }
 
   .sp-chip {
@@ -560,39 +583,34 @@ const CSS = `
     transition: box-shadow 0.15s;
   }
   .sp-video-card:hover {
-    box-shadow: 0 12px 32px rgba(5,4,170,0.08);
+    box-shadow: 0 12px 32px
+      color-mix(in srgb, var(--brand-primary) 10%, transparent);
   }
 
   .sp-submit {
     transition: transform 0.12s;
   }
   .sp-submit:active:not(:disabled) { transform: scale(0.98); }
-
-  @media (min-width: 1024px) {
-    .sp-add-sheet {
-      max-width: 880px;
-    }
-  }
 `;
 
-// ─── Styles ─────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
-  // HEADER
   headerWrap: {
     position: 'sticky',
     top: 0,
     zIndex: 20,
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    background: 'var(--brand-gradient)',
     padding: '12px 20px',
+    transition: 'background 0.18s ease',
   },
   headerInner: {
     display: 'flex',
@@ -606,7 +624,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 12%, transparent)',
     border: 'none',
     display: 'flex',
     alignItems: 'center',
@@ -624,19 +643,19 @@ const css: Record<string, React.CSSProperties> = {
   headerTitle: {
     fontSize: 17,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     margin: 0,
     letterSpacing: -0.3,
   },
   headerSub: {
     fontSize: 11.5,
-    color: 'rgba(255,255,255,0.72)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
     fontWeight: 600,
     letterSpacing: 0.2,
   },
   headerSpacer: { width: 38, flexShrink: 0 },
 
-  // SHEET
   sheet: {
     flex: 1,
     padding: '20px 20px 40px',
@@ -645,17 +664,15 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
   },
 
-  // SECTION LABEL
   sectionLabel: {
     fontSize: 11.5,
     fontWeight: 800,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     margin: '20px 0 10px 4px',
   },
 
-  // VIDEO
   videoCard: {
     position: 'relative',
     width: '100%',
@@ -663,9 +680,10 @@ const css: Record<string, React.CSSProperties> = {
     aspectRatio: '9 / 16',
     margin: '0 auto 14px',
     borderRadius: 22,
-    backgroundColor: '#0B0B1A',
+    backgroundColor: 'var(--bg-tertiary)',
     overflow: 'hidden',
-    boxShadow: '0 12px 32px rgba(5,4,170,0.10)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease',
   },
   videoEl: {
     position: 'absolute',
@@ -681,8 +699,8 @@ const css: Record<string, React.CSSProperties> = {
     left: 12,
     padding: '4px 9px',
     borderRadius: 8,
-    backgroundColor: 'rgba(5,4,170,0.85)',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     fontSize: 10,
     fontWeight: 800,
     letterSpacing: 0.5,
@@ -715,17 +733,18 @@ const css: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     padding: 24,
     gap: 8,
-    background: 'linear-gradient(135deg, #0B0B1A 0%, #0504AA 100%)',
+    background: 'var(--brand-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontFamily: 'inherit',
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
   },
   videoPlaceholderHalo: {
     width: 76,
     height: 76,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 14%, transparent)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -734,18 +753,18 @@ const css: Record<string, React.CSSProperties> = {
   videoPlaceholderTitle: {
     fontSize: 16,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     letterSpacing: -0.2,
   },
   videoPlaceholderHint: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.72)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
     fontWeight: 500,
     lineHeight: 1.5,
     maxWidth: 240,
   },
 
-  // MEDIA CONTROLS
   mediaControls: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -759,29 +778,29 @@ const css: Record<string, React.CSSProperties> = {
     gap: 6,
     padding: '10px 14px',
     borderRadius: 12,
-    border: '1.5px solid #E6E8F0',
-    backgroundColor: '#FFFFFF',
-    color: '#0B0B1A',
+    border: '1.5px solid var(--border-default)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-primary)',
     fontSize: 13,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
   mediaBtnDanger: {
-    borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
-    color: '#DC2626',
+    borderColor: 'var(--danger-strong)',
+    backgroundColor: 'var(--danger-bg)',
+    color: 'var(--danger-fg)',
   },
 
-  // FILE CHIP
   fileChip: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
     padding: '8px 12px',
     marginTop: 12,
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7CCFF',
+    backgroundColor: 'var(--brand-soft)',
+    border:
+      '1px solid color-mix(in srgb, var(--brand-primary) 40%, transparent)',
     borderRadius: 10,
   },
   fileChipText: {
@@ -789,7 +808,7 @@ const css: Record<string, React.CSSProperties> = {
     minWidth: 0,
     fontSize: 12.5,
     fontWeight: 600,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -804,24 +823,24 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
   },
 
-  // CARD
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     overflow: 'hidden',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   fieldWrap: {
     display: 'flex',
     flexDirection: 'column',
     gap: 6,
     padding: '16px',
-    borderBottom: '1px solid #F1F5F9',
+    borderBottom: '1px solid var(--border-subtle)',
   },
   fieldLabel: {
     fontSize: 12.5,
     fontWeight: 700,
-    color: '#334155',
+    color: 'var(--text-secondary)',
     letterSpacing: 0.1,
     marginBottom: 2,
     display: 'inline-flex',
@@ -832,31 +851,33 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '12px 14px',
     borderRadius: 12,
-    border: '1.5px solid #E6E8F0',
+    border: '1.5px solid var(--border-default)',
     fontSize: 14.5,
     fontWeight: 500,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontFamily: 'inherit',
-    backgroundColor: '#FFFFFF',
-    transition: 'border-color 0.15s, box-shadow 0.15s',
+    backgroundColor: 'var(--bg-tertiary)',
+    transition:
+      'border-color 0.15s, box-shadow 0.15s, background-color 0.18s ease',
     boxSizing: 'border-box',
   },
   textarea: {
     width: '100%',
     padding: '12px 14px',
     borderRadius: 12,
-    border: '1.5px solid #E6E8F0',
+    border: '1.5px solid var(--border-default)',
     fontSize: 14.5,
     fontWeight: 500,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontFamily: 'inherit',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-tertiary)',
     resize: 'vertical',
     lineHeight: 1.5,
     minHeight: 110,
-    transition: 'border-color 0.15s, box-shadow 0.15s',
+    transition:
+      'border-color 0.15s, box-shadow 0.15s, background-color 0.18s ease',
     boxSizing: 'border-box',
   },
   currencyRow: {
@@ -872,7 +893,7 @@ const css: Record<string, React.CSSProperties> = {
     transform: 'translateY(-50%)',
     fontSize: 15,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     pointerEvents: 'none',
   },
   fieldFooter: {
@@ -884,19 +905,18 @@ const css: Record<string, React.CSSProperties> = {
   },
   fieldHint: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 500,
     lineHeight: 1.4,
   },
   charCount: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontVariantNumeric: 'tabular-nums',
     fontWeight: 600,
     marginLeft: 'auto',
   },
 
-  // CHIPS
   chipsWrap: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -920,32 +940,31 @@ const css: Record<string, React.CSSProperties> = {
     lineHeight: 1,
   },
 
-  // MISSING NUDGE
   missingNudge: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
     marginTop: 20,
     padding: '12px 14px',
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #FDE68A',
+    backgroundColor: 'var(--warning-bg)',
+    border: '1px solid var(--warning-strong)',
     borderRadius: 12,
-    color: '#92400E',
+    color: 'var(--warning-fg)',
     fontSize: 12.5,
     fontWeight: 600,
     lineHeight: 1.4,
   },
 
-  // LOCATION PILL
   locationPill: {
     display: 'flex',
     alignItems: 'flex-start',
     gap: 10,
     marginTop: 16,
     padding: '12px 14px',
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 14,
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   locationText: {
     flex: 1,
@@ -957,17 +976,16 @@ const css: Record<string, React.CSSProperties> = {
   locationTitle: {
     fontSize: 13.5,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
   },
   locationHint: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 500,
     lineHeight: 1.45,
   },
 
-  // SUBMIT
   submitBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -976,9 +994,8 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     marginTop: 20,
     padding: 17,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 16,
     fontSize: 15.5,
@@ -986,14 +1003,15 @@ const css: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
     letterSpacing: -0.1,
-    boxShadow: '0 14px 28px rgba(5,4,170,0.28)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
   spinnerWhite: {
     width: 18,
     height: 18,
-    border: '2px solid rgba(255,255,255,0.4)',
-    borderTopColor: '#fff',
+    border:
+      '2px solid color-mix(in srgb, var(--brand-on-gradient) 40%, transparent)',
+    borderTopColor: 'var(--brand-on-gradient)',
     borderRadius: '50%',
     animation: 'spSpin 0.8s linear infinite',
   },

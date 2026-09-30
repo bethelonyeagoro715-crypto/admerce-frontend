@@ -15,10 +15,8 @@ import {
   MdErrorOutline,
   MdDesignServices,
   MdAccessTime,
-  MdPerson,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface Booking {
   booking_id?: string;
   id?: string;
@@ -44,7 +42,6 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'cancelled', label: 'Cancelled' },
 ];
 
-// ─── Helpers ────────────────────────────────────────────────────────
 function formatNaira(v: number): string {
   if (!Number.isFinite(v) || v <= 0) return '₦0';
   return `₦${Math.round(v).toLocaleString('en-NG')}`;
@@ -105,21 +102,40 @@ interface StatusMeta {
 function statusMeta(status: string): StatusMeta {
   const s = (status || 'pending').toLowerCase();
   if (s === 'locked' || s === 'pending') {
-    return { label: 'New', bg: '#FEF3C7', fg: '#92400E' };
+    return {
+      label: 'New',
+      bg: 'var(--warning-bg)',
+      fg: 'var(--warning-fg)',
+    };
   }
   if (s === 'accepted') {
-    return { label: 'Confirmed', bg: '#E0F2FE', fg: '#075985' };
+    return {
+      label: 'Confirmed',
+      bg: 'var(--info-bg)',
+      fg: 'var(--info-fg)',
+    };
   }
   if (s === 'completed') {
-    return { label: 'Completed', bg: '#DCFCE7', fg: '#166534' };
+    return {
+      label: 'Completed',
+      bg: 'var(--success-bg)',
+      fg: 'var(--success-fg)',
+    };
   }
   if (s === 'cancelled' || s === 'declined') {
-    return { label: 'Cancelled', bg: '#FEE2E2', fg: '#991B1B' };
+    return {
+      label: 'Cancelled',
+      bg: 'var(--danger-bg)',
+      fg: 'var(--danger-fg)',
+    };
   }
-  return { label: status || 'Pending', bg: '#F1F5F9', fg: '#475569' };
+  return {
+    label: status || 'Pending',
+    bg: 'var(--bg-tertiary)',
+    fg: 'var(--text-secondary)',
+  };
 }
 
-// ─── Component ──────────────────────────────────────────────────────
 export default function ServiceProviderBookingsPage() {
   useAuthGuard();
   const router = useRouter();
@@ -161,7 +177,6 @@ export default function ServiceProviderBookingsPage() {
     return () => window.clearTimeout(t);
   }, [loadBookings]);
 
-  // ── Derived buckets + counts ───────────────────────────────────
   const buckets = useMemo(() => {
     const newB: Booking[] = [];
     const confirmed: Booking[] = [];
@@ -216,7 +231,6 @@ export default function ServiceProviderBookingsPage() {
     });
   }, [activeFilter, buckets, bookings, searchQuery]);
 
-  // ── Actions ────────────────────────────────────────────────────
   const handleConfirm = async (b: Booking) => {
     const id = bookingId(b);
     if (!id) return;
@@ -263,6 +277,9 @@ export default function ServiceProviderBookingsPage() {
     if (!ok) return;
     setBusyId(id);
     try {
+      // NOTE: kept as confirmServiceBooking — the original file used the
+      // same endpoint here. If the backend expects a separate
+      // completeServiceBooking call, swap this line.
       await api.confirmServiceBooking(id);
       await loadBookings(false);
       await alertDialog({
@@ -281,7 +298,6 @@ export default function ServiceProviderBookingsPage() {
     }
   };
 
-  // ── Loading skeleton ───────────────────────────────────────────
   if (loading) {
     return (
       <main style={css.root} className="sp-bookings">
@@ -303,13 +319,12 @@ export default function ServiceProviderBookingsPage() {
     );
   }
 
-  // ── Error ──────────────────────────────────────────────────────
   if (errored) {
     return (
       <main style={css.centerRoot} className="sp-bookings">
         <style>{CSS}</style>
         <div style={css.errorHalo}>
-          <MdErrorOutline size={40} color="#B91C1C" />
+          <MdErrorOutline size={40} color="var(--danger-fg)" />
         </div>
         <h2 style={css.centerTitle}>Couldn&apos;t load your bookings</h2>
         <p style={css.centerBody}>
@@ -320,7 +335,7 @@ export default function ServiceProviderBookingsPage() {
           onClick={() => void loadBookings()}
           style={css.centerPrimary}
         >
-          <MdRefresh size={18} color="#fff" />
+          <MdRefresh size={18} color="var(--brand-on-gradient)" />
           <span>Retry</span>
         </button>
       </main>
@@ -334,7 +349,6 @@ export default function ServiceProviderBookingsPage() {
     <main style={css.root} className="sp-bookings">
       <style>{CSS}</style>
 
-      {/* HEADER */}
       <div style={css.headerWrap}>
         <div style={css.headerInner}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -356,17 +370,16 @@ export default function ServiceProviderBookingsPage() {
             aria-label="Refresh"
             className="sp-refresh"
           >
-            <MdRefresh size={20} color="#fff" />
+            <MdRefresh size={20} color="var(--brand-on-gradient)" />
           </button>
         </div>
       </div>
 
       <div style={css.sheet}>
         {hasNoBookings ? (
-          // ── EMPTY ────────────────────────────────────────────
           <div style={css.emptyState}>
             <div style={css.emptyHalo}>
-              <MdCalendarToday size={44} color="#0504AA" />
+              <MdCalendarToday size={44} color="var(--brand-primary)" />
             </div>
             <h2 style={css.emptyTitle}>No bookings yet</h2>
             <p style={css.emptyBody}>
@@ -377,15 +390,17 @@ export default function ServiceProviderBookingsPage() {
               onClick={() => router.push('/service-provider/services')}
               style={css.emptyPrimary}
             >
-              <MdDesignServices size={20} color="#fff" />
+              <MdDesignServices
+                size={20}
+                color="var(--brand-on-gradient)"
+              />
               <span>Manage my services</span>
             </button>
           </div>
         ) : (
           <>
-            {/* SEARCH */}
             <div style={css.searchWrap}>
-              <MdSearch size={18} color="#94A3B8" />
+              <MdSearch size={18} color="var(--text-muted)" />
               <input
                 type="text"
                 placeholder="Search by customer, service or ID"
@@ -402,12 +417,11 @@ export default function ServiceProviderBookingsPage() {
                   style={css.searchClear}
                   aria-label="Clear search"
                 >
-                  <MdClose size={14} color="#64748B" />
+                  <MdClose size={14} color="var(--text-tertiary)" />
                 </button>
               )}
             </div>
 
-            {/* FILTER PILLS */}
             <div style={css.pillRow}>
               {FILTERS.map((f) => {
                 const active = activeFilter === f.key;
@@ -419,14 +433,20 @@ export default function ServiceProviderBookingsPage() {
                     onClick={() => setActiveFilter(f.key)}
                     style={{
                       ...css.pill,
-                      borderColor: active ? '#0504AA' : '#E6E8F0',
-                      backgroundColor: active ? '#EEF0FF' : '#FFFFFF',
+                      borderColor: active
+                        ? 'var(--brand-primary)'
+                        : 'var(--border-default)',
+                      backgroundColor: active
+                        ? 'var(--brand-soft)'
+                        : 'var(--bg-secondary)',
                     }}
                     className="sp-pill"
                   >
                     <span
                       style={{
-                        color: active ? '#0504AA' : '#475569',
+                        color: active
+                          ? 'var(--brand-primary)'
+                          : 'var(--text-secondary)',
                         fontWeight: active ? 800 : 700,
                         fontSize: 12.5,
                       }}
@@ -436,8 +456,12 @@ export default function ServiceProviderBookingsPage() {
                     <span
                       style={{
                         ...css.pillCount,
-                        backgroundColor: active ? '#FFFFFF' : '#F1F5F9',
-                        color: active ? '#0504AA' : '#64748B',
+                        backgroundColor: active
+                          ? 'var(--bg-secondary)'
+                          : 'var(--bg-tertiary)',
+                        color: active
+                          ? 'var(--brand-primary)'
+                          : 'var(--text-tertiary)',
                       }}
                     >
                       {count}
@@ -447,11 +471,10 @@ export default function ServiceProviderBookingsPage() {
               })}
             </div>
 
-            {/* LIST */}
             {hasNoMatches ? (
               <div style={css.noMatchWrap}>
                 <div style={css.noMatchHalo}>
-                  <MdSearch size={32} color="#94A3B8" />
+                  <MdSearch size={32} color="var(--text-muted)" />
                 </div>
                 <div style={css.noMatchTitle}>No matches</div>
                 <div style={css.noMatchBody}>
@@ -489,7 +512,6 @@ export default function ServiceProviderBookingsPage() {
   );
 }
 
-// ─── Booking card ───────────────────────────────────────────────────
 function BookingCard({
   booking,
   busy,
@@ -518,7 +540,6 @@ function BookingCard({
       style={{ ...css.card, opacity: busy ? 0.55 : 1 }}
       className="sp-booking-card"
     >
-      {/* TOP */}
       <div style={css.cardTop}>
         <div style={css.avatar}>
           {(customer.charAt(0) || '?').toUpperCase()}
@@ -542,33 +563,28 @@ function BookingCard({
         </span>
       </div>
 
-      {/* SERVICE */}
       <div style={css.serviceRow}>
-        <MdDesignServices size={14} color="#0504AA" />
+        <MdDesignServices size={14} color="var(--brand-primary)" />
         <span style={css.serviceText} title={service}>
           {service}
         </span>
       </div>
 
-      {/* DATE */}
       {dateStr && (
         <div style={css.dateRow}>
-          <MdAccessTime size={14} color="#94A3B8" />
+          <MdAccessTime size={14} color="var(--text-muted)" />
           <span style={css.dateText}>{fmtDate(dateStr)}</span>
         </div>
       )}
 
-      {/* AMOUNT */}
       <div style={css.amount}>{formatNaira(total)}</div>
 
-      {/* NOTES */}
       {booking.notes && (
         <div style={css.notesRow}>
           <span style={css.notesText}>{String(booking.notes)}</span>
         </div>
       )}
 
-      {/* ACTIONS */}
       {(isNew || isConfirmed) && (
         <div style={css.actions}>
           {isNew && (
@@ -579,7 +595,10 @@ function BookingCard({
               style={{ ...css.primaryBtn, opacity: busy ? 0.6 : 1 }}
               className="sp-action-btn"
             >
-              <MdCheckCircle size={18} color="#fff" />
+              <MdCheckCircle
+                size={18}
+                color="var(--brand-on-gradient)"
+              />
               <span>Confirm booking</span>
             </button>
           )}
@@ -591,31 +610,31 @@ function BookingCard({
               style={{ ...css.successBtn, opacity: busy ? 0.6 : 1 }}
               className="sp-action-btn"
             >
-              <MdCheckCircle size={18} color="#fff" />
+              <MdCheckCircle size={18} color="#FFFFFF" />
               <span>Mark complete</span>
             </button>
           )}
         </div>
       )}
 
-      {/* TERMINAL FOOTNOTES */}
       {isCompleted && (
         <div style={css.doneRow}>
-          <MdCheckCircle size={18} color="#166534" />
+          <MdCheckCircle size={18} color="var(--success-fg)" />
           <span style={css.doneText}>Completed · Payment released</span>
         </div>
       )}
       {isCancelled && (
         <div style={css.cancelledRow}>
-          <MdCancel size={18} color="#991B1B" />
-          <span style={css.cancelledText}>Cancelled · No payment due</span>
+          <MdCancel size={18} color="var(--danger-fg)" />
+          <span style={css.cancelledText}>
+            Cancelled · No payment due
+          </span>
         </div>
       )}
     </div>
   );
 }
 
-// ─── CSS ────────────────────────────────────────────────────────────
 const CSS = `
   @keyframes spSpin { to { transform: rotate(360deg); } }
   @keyframes spShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
@@ -627,14 +646,18 @@ const CSS = `
   .sp-refresh {
     transition: transform 0.12s, background-color 0.15s;
   }
-  .sp-refresh:hover { background-color: rgba(255,255,255,0.18); }
+  .sp-refresh:hover {
+    background-color:
+      color-mix(in srgb, var(--brand-on-gradient) 18%, transparent);
+  }
   .sp-refresh:active { transform: scale(0.94); }
 
   .sp-pill { transition: background-color 0.15s, border-color 0.15s; }
   .sp-pill:active { transform: scale(0.97); }
 
   .sp-booking-card {
-    transition: box-shadow 0.15s ease;
+    transition: box-shadow 0.15s ease, background-color 0.18s ease,
+      border-color 0.18s ease;
   }
   .sp-booking-card:hover {
     box-shadow: 0 10px 24px rgba(15,23,42,0.06) !important;
@@ -655,24 +678,24 @@ const CSS = `
   }
 `;
 
-// ─── Styles ─────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
-  // HEADER
   headerWrap: {
     position: 'sticky',
     top: 0,
     zIndex: 20,
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    background: 'var(--brand-gradient)',
     padding: '14px 20px',
+    transition: 'background 0.18s ease',
   },
   headerInner: {
     display: 'flex',
@@ -685,13 +708,14 @@ const css: Record<string, React.CSSProperties> = {
   title: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     margin: 0,
     letterSpacing: -0.4,
   },
   subtitle: {
     fontSize: 12.5,
-    color: 'rgba(255,255,255,0.78)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
     fontWeight: 600,
     marginTop: 3,
   },
@@ -699,7 +723,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 12%, transparent)',
     border: 'none',
     display: 'flex',
     alignItems: 'center',
@@ -711,10 +736,10 @@ const css: Record<string, React.CSSProperties> = {
     height: 20,
     width: 180,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
   },
 
-  // SHEET
   sheet: {
     flex: 1,
     padding: '16px 20px 40px',
@@ -723,15 +748,15 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
   },
 
-  // SEARCH
   searchWrap: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
     padding: '12px 16px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 14,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   searchInput: {
     flex: 1,
@@ -739,7 +764,7 @@ const css: Record<string, React.CSSProperties> = {
     outline: 'none',
     background: 'transparent',
     fontSize: 14.5,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     fontFamily: 'inherit',
     fontWeight: 500,
   },
@@ -747,7 +772,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     border: 'none',
     cursor: 'pointer',
     display: 'flex',
@@ -755,7 +780,6 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
   },
 
-  // PILLS
   pillRow: {
     display: 'flex',
     gap: 8,
@@ -786,7 +810,6 @@ const css: Record<string, React.CSSProperties> = {
     fontVariantNumeric: 'tabular-nums',
   },
 
-  // LIST
   list: {
     display: 'flex',
     flexDirection: 'column',
@@ -794,13 +817,13 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 16,
   },
 
-  // CARD
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     padding: '16px 18px',
-    boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   cardTop: {
     display: 'flex',
@@ -811,8 +834,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: '#EEF0FF',
-    color: '#0504AA',
+    backgroundColor: 'var(--brand-soft)',
+    color: 'var(--brand-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -830,7 +853,7 @@ const css: Record<string, React.CSSProperties> = {
   customerName: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -838,7 +861,7 @@ const css: Record<string, React.CSSProperties> = {
   },
   bookingId: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
   },
@@ -852,26 +875,24 @@ const css: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
 
-  // SERVICE ROW
   serviceRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
     marginTop: 12,
     padding: '8px 10px',
-    backgroundColor: '#F8FAFF',
+    backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 10,
   },
   serviceText: {
     fontSize: 13,
     fontWeight: 600,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
 
-  // DATE
   dateRow: {
     display: 'flex',
     alignItems: 'center',
@@ -881,37 +902,34 @@ const css: Record<string, React.CSSProperties> = {
   },
   dateText: {
     fontSize: 12.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     fontWeight: 500,
   },
 
-  // AMOUNT
   amount: {
     fontSize: 24,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     letterSpacing: -0.6,
     fontVariantNumeric: 'tabular-nums',
     marginTop: 12,
     lineHeight: 1.1,
   },
 
-  // NOTES
   notesRow: {
     marginTop: 10,
     padding: '10px 12px',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 10,
-    borderLeft: '3px solid #CBD5E1',
+    borderLeft: '3px solid var(--border-strong)',
   },
   notesText: {
     fontSize: 12.5,
-    color: '#475569',
+    color: 'var(--text-secondary)',
     lineHeight: 1.5,
     fontWeight: 500,
   },
 
-  // ACTIONS
   actions: {
     display: 'flex',
     gap: 8,
@@ -924,16 +942,15 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 8,
     padding: '12px 16px',
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 12,
     fontSize: 14,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 18px rgba(5,4,170,0.22)',
+    boxShadow: 'var(--shadow-brand)',
   },
   successBtn: {
     flex: 1,
@@ -942,30 +959,30 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 8,
     padding: '12px 16px',
-    backgroundColor: '#16A34A',
-    color: '#fff',
+    backgroundColor: 'var(--success-fg)',
+    color: '#FFFFFF',
     border: 'none',
     borderRadius: 12,
     fontSize: 14,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 18px rgba(22,163,74,0.22)',
+    boxShadow:
+      '0 8px 18px color-mix(in srgb, var(--success-fg) 22%, transparent)',
   },
 
-  // DONE / CANCELLED FOOTERS
   doneRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
     marginTop: 12,
     padding: '10px 12px',
-    backgroundColor: '#DCFCE7',
+    backgroundColor: 'var(--success-bg)',
     borderRadius: 10,
   },
   doneText: {
     fontSize: 13,
-    color: '#166534',
+    color: 'var(--success-fg)',
     fontWeight: 700,
   },
   cancelledRow: {
@@ -974,16 +991,15 @@ const css: Record<string, React.CSSProperties> = {
     gap: 6,
     marginTop: 12,
     padding: '10px 12px',
-    backgroundColor: '#FEE2E2',
+    backgroundColor: 'var(--danger-bg)',
     borderRadius: 10,
   },
   cancelledText: {
     fontSize: 13,
-    color: '#991B1B',
+    color: 'var(--danger-fg)',
     fontWeight: 700,
   },
 
-  // EMPTY
   emptyState: {
     display: 'flex',
     flexDirection: 'column',
@@ -996,8 +1012,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 96,
     height: 96,
     borderRadius: 28,
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7D2FE',
+    backgroundColor: 'var(--brand-soft)',
+    border: '1px solid var(--brand-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1006,13 +1022,13 @@ const css: Record<string, React.CSSProperties> = {
   emptyTitle: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   emptyBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     margin: '8px 0 24px',
     maxWidth: 340,
     lineHeight: 1.55,
@@ -1023,18 +1039,16 @@ const css: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '14px 22px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     fontSize: 15,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 12px 24px rgba(5,4,170,0.28)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // NO MATCH
   noMatchWrap: {
     display: 'flex',
     flexDirection: 'column',
@@ -1046,7 +1060,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1055,11 +1069,11 @@ const css: Record<string, React.CSSProperties> = {
   noMatchTitle: {
     fontSize: 16,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
   },
   noMatchBody: {
     fontSize: 13.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 4,
     lineHeight: 1.5,
   },
@@ -1067,8 +1081,8 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 16,
     padding: '10px 18px',
     borderRadius: 12,
-    backgroundColor: '#EEF0FF',
-    color: '#0504AA',
+    backgroundColor: 'var(--brand-soft)',
+    color: 'var(--brand-primary)',
     border: 'none',
     fontSize: 13.5,
     fontWeight: 800,
@@ -1076,23 +1090,24 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
 
-  // CENTER SCREENS
   centerRoot: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   errorHalo: {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1101,13 +1116,13 @@ const css: Record<string, React.CSSProperties> = {
   centerTitle: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   centerBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 8,
     maxWidth: 340,
     lineHeight: 1.55,
@@ -1119,30 +1134,28 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 800,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // SKELETONS
   searchSkeleton: {
     height: 46,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     animation: 'spShimmer 1.4s ease-in-out infinite',
   },
   pillRowSkeleton: {
     height: 36,
     borderRadius: 999,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 12,
     maxWidth: 480,
     animation: 'spShimmer 1.4s ease-in-out infinite',
@@ -1150,8 +1163,8 @@ const css: Record<string, React.CSSProperties> = {
   cardSkeleton: {
     height: 200,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 12,
     animation: 'spShimmer 1.4s ease-in-out infinite',
   },
