@@ -119,7 +119,7 @@ const styles = {
     objectFit: 'contain' as const,
   },
   appName: {
-    marginTop: 16,
+    marginTop: 15,
     fontSize: 28,
     fontWeight: 800,
     color: 'var(--brand-primary)',
