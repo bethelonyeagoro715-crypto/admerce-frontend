@@ -28,14 +28,11 @@ const SPOTLIGHT_INTERVAL_MS = 4200;
 
 const CONTENT_MAX_WIDTH = 1440;
 
-// Aspect ratio bounds — width / height.
-const MIN_ASPECT = 9 / 16; // 0.5625 — tallest (reels)
-const MAX_ASPECT = 4 / 5; // 0.8 — shortest (Instagram portrait)
-const DEFAULT_ASPECT = 3 / 4; // 0.75 — when dims are missing
-const SERVICE_ASPECT = 9 / 16; // services are video-only, always 9:16
+const MIN_ASPECT = 9 / 16;
+const MAX_ASPECT = 4 / 5;
+const DEFAULT_ASPECT = 3 / 4;
+const SERVICE_ASPECT = 9 / 16;
 
-// Column gap = horizontal space between side-by-side cards
-// Row gap    = vertical space between cards in the same column
 const COL_GAP_MOBILE = 6;
 const ROW_GAP_MOBILE = 28;
 const COL_GAP_DESKTOP = 16;
@@ -140,7 +137,6 @@ function interleave<T>(a: T[], b: T[]): T[] {
   return out;
 }
 
-// ─── Brand icon components ─────────────────────────────────────────────────
 function LensIcon({
   size = 18,
   color = 'currentColor',
@@ -187,7 +183,6 @@ function LensIcon({
   );
 }
 
-// ─── Types ─────────────────────────────────────────────────────────────────
 interface RecallCandidate {
   listing_id: string | number;
 }
@@ -255,7 +250,6 @@ interface Provider {
   aspect: number;
 }
 
-// ─── Height-balanced masonry (separate column / row gaps) ─────────────────
 function MasonryColumns<T>({
   items,
   columns,
@@ -321,7 +315,6 @@ function MasonryColumns<T>({
   );
 }
 
-// ─── LocationBanner ────────────────────────────────────────────────────────
 function LocationBanner({
   locationDenied,
   onEnableLocation,
@@ -369,7 +362,6 @@ function LocationBanner({
   );
 }
 
-// ─── StoreSpotlight ────────────────────────────────────────────────────────
 function StoreSpotlight({
   stores,
   collapsed,
@@ -485,7 +477,6 @@ function StoreSpotlight({
   );
 }
 
-// ─── ReelCard ──────────────────────────────────────────────────────────────
 function ReelCard({
   image,
   aspect,
@@ -556,7 +547,6 @@ function ReelCard({
   );
 }
 
-// ─── ItemCard ──────────────────────────────────────────────────────────────
 function ItemCard({
   item,
   onPress,
@@ -603,7 +593,6 @@ function ItemCard({
   );
 }
 
-// ─── StoreCard ─────────────────────────────────────────────────────────────
 function StoreCard({
   store,
   onPress,
@@ -624,7 +613,6 @@ function StoreCard({
   );
 }
 
-// ─── ProviderCard ──────────────────────────────────────────────────────────
 function ProviderCard({
   provider,
   onPress,
@@ -653,7 +641,6 @@ function ProviderCard({
   );
 }
 
-// ─── FeedEmpty ─────────────────────────────────────────────────────────────
 function FeedEmpty({
   icon,
   title,
@@ -685,7 +672,6 @@ function FeedEmpty({
   );
 }
 
-// ─── Skeleton ──────────────────────────────────────────────────────────────
 function FeedSkeleton({
   columns,
   columnGap,
@@ -722,7 +708,6 @@ function FeedSkeleton({
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────
 export default function ShopperHomePage() {
   const router = useRouter();
 
@@ -778,20 +763,42 @@ export default function ShopperHomePage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const totalRef = useRef(0);
 
-  const getScrollPositions = () => {
-    const panelTop = activePanelRef.current?.scrollTop ?? 0;
-    const windowTop =
-      typeof window !== 'undefined'
-        ? window.scrollY ||
-          document.documentElement.scrollTop ||
-          0
-        : 0;
-    return { panelTop, windowTop };
-  };
-
+  // ─── isAtTop ──────────────────────────────────────────────────────
+  // True only when the user is genuinely at the top of the feed.
+  //
+  // The panel itself may not be the actual scroll container — the
+  // layout wraps it in another scrollable element. In that case
+  // panel.scrollTop stays at 0 forever, isAtTop() always returns
+  // true, and pull-to-refresh fires on every upward swipe.
+  //
+  // Fix: walk up from the panel and check every ancestor's scrollTop
+  // too, plus the window/document scroll.
   const isAtTop = () => {
-    const { panelTop, windowTop } = getScrollPositions();
-    return panelTop <= 0 && windowTop <= 0;
+    const panel = activePanelRef.current;
+
+    if (panel && panel.scrollTop > 0) return false;
+
+    if (panel && typeof document !== 'undefined') {
+      let el: HTMLElement | null = panel.parentElement;
+      while (
+        el &&
+        el !== document.body &&
+        el !== document.documentElement
+      ) {
+        if (el.scrollTop > 0) return false;
+        el = el.parentElement;
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      const w =
+        window.scrollY ||
+        document.documentElement.scrollTop ||
+        0;
+      if (w > 0) return false;
+    }
+
+    return true;
   };
 
   useEffect(() => {
@@ -1261,7 +1268,6 @@ export default function ShopperHomePage() {
     <div style={styles.container} className="sh-home">
       <style>{CSS}</style>
 
-      {/* App bar */}
       <div style={styles.appBar}>
         <div style={styles.appBarInner}>
           <div style={styles.brand}>
@@ -1339,7 +1345,6 @@ export default function ShopperHomePage() {
           />
         )}
 
-        {/* ── PILL TABS ──────────────────────────────────────── */}
         <div
           style={styles.tabsWrap}
           className="sh-tabs-wrap"
@@ -1378,7 +1383,6 @@ export default function ShopperHomePage() {
           </div>
         </div>
 
-        {/* Active filter chip strip */}
         {currentTab === 0 && hasActiveFilters && (
           <div style={styles.activeFilters}>
             <span style={styles.activeFiltersLabel}>Showing:</span>
@@ -1424,7 +1428,6 @@ export default function ShopperHomePage() {
           </div>
         )}
 
-        {/* Panels */}
         <div
           style={styles.tabContent}
           onTouchStart={handleTouchStart}
@@ -1451,7 +1454,6 @@ export default function ShopperHomePage() {
               touchAction: 'pan-y',
             }}
           >
-            {/* Tab 0 — feed */}
             <div
               ref={currentTab === 0 ? activePanelRef : null}
               style={styles.panel}
@@ -1519,7 +1521,6 @@ export default function ShopperHomePage() {
               </div>
             </div>
 
-            {/* Tab 1 — stores */}
             <div
               ref={currentTab === 1 ? activePanelRef : null}
               style={styles.panel}
@@ -1564,7 +1565,6 @@ export default function ShopperHomePage() {
               </div>
             </div>
 
-            {/* Tab 2 — providers */}
             <div
               ref={currentTab === 2 ? activePanelRef : null}
               style={styles.panel}
@@ -1612,7 +1612,6 @@ export default function ShopperHomePage() {
         </div>
       </div>
 
-      {/* Feed options sheet */}
       {showFilter && (
         <div
           style={styles.modalOverlay}
@@ -1810,7 +1809,6 @@ export default function ShopperHomePage() {
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
