@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
+import ServiceReelCard from '../../../components/ServiceReelCard';
 import {
   MdSearch,
   MdShoppingBasket,
@@ -10,8 +11,6 @@ import {
   MdTune,
   MdImage,
   MdStorefront,
-  MdBuild,
-  MdPlayArrow,
   MdExpandLess,
   MdExpandMore,
   MdClose,
@@ -29,9 +28,10 @@ const SPOTLIGHT_INTERVAL_MS = 4200;
 
 const CONTENT_MAX_WIDTH = 1440;
 
-// Pinterest-standard portrait ratio (1000 × 1500)
-const CARD_ASPECT = '2 / 3';
-const CARD_WEIGHT = 3 / 2; // height / width
+// Reels-style portrait ratio — matches Instagram Reels / Facebook Reels /
+// Pinterest's newer reel grid.
+const CARD_ASPECT = '9 / 16';
+const CARD_WEIGHT = 16 / 9; // height / width
 
 type FeedFilter = 'mixed' | 'items' | 'services';
 
@@ -82,12 +82,35 @@ function formatPrice(raw: unknown): string {
   return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
 }
 
+/**
+ * Distribute `b` evenly through `a`.
+ *
+ * Old implementation pushed b[0] after a[0], b[1] after a[1], etc — which
+ * clumps every b into the first `2 * b.length` positions when b.length is
+ * much smaller than a.length. This version inserts b items at evenly-
+ * spaced indices across the whole output, so a handful of services end up
+ * spread through the entire feed instead of stacked at the top.
+ */
 function interleave<T>(a: T[], b: T[]): T[] {
+  if (b.length === 0) return [...a];
+  if (a.length === 0) return [...b];
+
   const out: T[] = [];
-  const max = Math.max(a.length, b.length);
-  for (let i = 0; i < max; i++) {
-    if (i < a.length) out.push(a[i]);
-    if (i < b.length) out.push(b[i]);
+  const total = a.length + b.length;
+  const step = total / b.length;
+  let nextBAt = step / 2; // first b placed at half-step
+  let aIdx = 0;
+  let bIdx = 0;
+
+  for (let pos = 0; pos < total; pos++) {
+    if (bIdx < b.length && pos >= nextBAt) {
+      out.push(b[bIdx++]);
+      nextBAt += step;
+    } else if (aIdx < a.length) {
+      out.push(a[aIdx++]);
+    } else {
+      out.push(b[bIdx++]);
+    }
   }
   return out;
 }
@@ -425,7 +448,7 @@ function StoreSpotlight({
   );
 }
 
-// ─── ReelCard (unified 2:3) ────────────────────────────────────────────────
+// ─── ReelCard (item / store / provider — 9:16) ────────────────────────────
 function ReelCard({
   image,
   placeholder,
@@ -437,7 +460,6 @@ function ReelCard({
   title,
   price,
   ariaLabel,
-  isVideo,
 }: {
   image: string | null;
   placeholder: React.ReactNode;
@@ -449,7 +471,6 @@ function ReelCard({
   title: string;
   price?: string;
   ariaLabel?: string;
-  isVideo?: boolean;
 }) {
   return (
     <button
@@ -471,12 +492,6 @@ function ReelCard({
       <div style={{ ...styles.reelBadge, backgroundColor: badgeBg }}>
         {badge}
       </div>
-
-      {isVideo && (
-        <div style={styles.reelPlayBadge} aria-hidden>
-          <MdPlayArrow size={18} color="#fff" />
-        </div>
-      )}
 
       {onSearch && (
         <div
@@ -513,18 +528,24 @@ function ItemCard({
   onVisualSearch: (image: string | null) => void;
 }) {
   if (item.kind === 'service') {
+    // ServiceReelCard owns the video playback. We wrap it in a fixed
+    // 9:16 container so its height is deterministic and the masonry
+    // balancer can place it correctly. The wrapper also clips the card
+    // to the same corner radius as every other tile.
     return (
-      <ReelCard
-        image={item.image}
-        placeholder={<MdBuild size={40} color="var(--text-muted)" />}
-        badge="SERVICE"
-        badgeBg="rgba(126,34,206,0.9)"
-        onPress={() => onPress(item)}
-        store={item.storeName}
-        title={item.title}
-        price={item.price}
-        isVideo={Boolean(item.video)}
-      />
+      <div className="sh-svc-wrap">
+        <ServiceReelCard
+          service={{
+            id: item.id,
+            title: item.title,
+            price: item.price,
+            videoUrl: item.video,
+            imageUrl: item.image,
+            providerName: item.storeName,
+          }}
+          onOpen={() => onPress(item)}
+        />
+      </div>
     );
   }
 
@@ -1853,7 +1874,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
 
-  // ── Reel card (unified 2:3) ─────────────────────────────────
+  // ── Reel card (item / store / provider — 9:16) ──────────────
   reelCard: {
     position: 'relative',
     width: '100%',
@@ -1922,22 +1943,6 @@ const styles: Record<string, React.CSSProperties> = {
     WebkitBackdropFilter: 'blur(8px)',
     boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
     pointerEvents: 'none',
-  },
-  reelPlayBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: '50%',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    pointerEvents: 'none',
-    boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
   },
   reelSearch: {
     position: 'absolute',
@@ -2243,6 +2248,34 @@ const CSS = `
     box-shadow: 0 14px 30px rgba(0, 0, 0, 0.20);
   }
 
+  /* ─── Service wrapper — forces ServiceReelCard into 9:16 ──── */
+  .sh-svc-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 9 / 16;
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    transition: transform 0.16s ease, box-shadow 0.22s ease;
+  }
+  .sh-svc-wrap:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.20);
+  }
+  .sh-svc-wrap:active {
+    transform: scale(0.985);
+  }
+  /* Force the child card to fill the wrapper regardless of any
+     internal aspect-ratio, width, or height the component declares. */
+  .sh-svc-wrap > * {
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 18px !important;
+    overflow: hidden !important;
+    display: block !important;
+  }
+
   /* ─── Pill tabs — full-width equal thirds ─────────────── */
   .sh-tab-pill {
     flex: 1;
@@ -2435,7 +2468,6 @@ const CSS = `
       padding: 0 24px 24px;
     }
 
-    /* Spotlight: shorter, tighter padding */
     .sh-spotlight-pad {
       padding: 0 24px;
     }
