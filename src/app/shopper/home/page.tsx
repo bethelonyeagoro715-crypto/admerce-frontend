@@ -34,9 +34,9 @@ const MAX_ASPECT = 4 / 5; // 0.8 — shortest (Instagram portrait)
 const DEFAULT_ASPECT = 3 / 4; // 0.75 — when dims are missing
 const SERVICE_ASPECT = 9 / 16; // services are video-only, always 9:16
 
-// Gap between cards, in pixels. Bumped to match Pinterest spacing.
-const GRID_GAP_MOBILE = 14;
-const GRID_GAP_DESKTOP = 22;
+// Gap between cards, in pixels.
+const GRID_GAP_MOBILE = 18;
+const GRID_GAP_DESKTOP = 30;
 
 type FeedFilter = 'mixed' | 'items' | 'services';
 
@@ -1950,7 +1950,6 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
 
-  // ── Reel card ────────────────────────────────────────────────
   reelCard: {
     position: 'relative',
     width: '100%',
@@ -2078,7 +2077,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 2,
   },
 
-  // ── Empty states ────────────────────────────────────────────
   emptyState: {
     display: 'flex',
     flexDirection: 'column',
@@ -2122,7 +2120,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
 
-  // ── Skeleton ────────────────────────────────────────────────
   skeletonCard: {
     width: '100%',
     aspectRatio: '3 / 4',
@@ -2139,7 +2136,6 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'shimmer 1.4s infinite linear',
   },
 
-  // ── Filter sheet ────────────────────────────────────────────
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -2323,7 +2319,6 @@ const CSS = `
     box-shadow: 0 14px 30px rgba(0, 0, 0, 0.20);
   }
 
-  /* ─── Service wrapper — forces ServiceReelCard into 9:16 ──── */
   .sh-svc-wrap {
     position: relative;
     width: 100%;
@@ -2348,14 +2343,12 @@ const CSS = `
     display: block !important;
   }
 
-  /* ─── Pill tabs ───────────────────────────────────────── */
   .sh-tab-pill {
     flex: 1;
     padding: 11px 10px;
   }
 
-  /* ─── Spotlight ──────────────────────────────────────── */
-  .sh-spotlight-wrap { margin-bottom: 8px; }
+  .sh-spotlight-wrap { margin-bottom: 14px; }
   .sh-spotlight-pad { padding: 0 16px; }
   .sh-spotlight-rel {
     position: relative;
@@ -2490,7 +2483,6 @@ const CSS = `
     color: var(--text-primary);
   }
 
-  /* ─── Pill tab hover ─────────────────────────────────── */
   .sh-tab-pill:hover:not([aria-selected="true"]) {
     background-color: var(--bg-hover) !important;
     border-color: var(--border-strong) !important;
@@ -2504,12 +2496,11 @@ const CSS = `
     transform: scale(0.97);
   }
 
-  /* ─── Mobile panel padding ───────────────────────────── */
   .sh-panel-inner {
-    padding: 14px 16px 32px;
+    padding: 20px 16px 40px;
   }
   .sh-tabs-inner {
-    padding: 10px 16px 8px;
+    padding: 12px 16px 10px;
   }
 
   .sh-modal-overlay {
@@ -2521,7 +2512,6 @@ const CSS = `
     max-height: 88vh;
   }
 
-  /* ─── Desktop ────────────────────────────────────────── */
   @media (min-width: 1024px) {
     .sh-modal-overlay {
       align-items: center;
@@ -2532,10 +2522,10 @@ const CSS = `
       max-height: 80vh;
     }
     .sh-panel-inner {
-      padding: 20px 24px 48px;
+      padding: 30px 24px 64px;
     }
 
-    .sh-spotlight-wrap { margin-bottom: 12px; }
+    .sh-spotlight-wrap { margin-bottom: 20px; }
     .sh-spotlight-pad {
       padding: 0 24px;
     }
@@ -2550,13 +2540,12 @@ const CSS = `
       font-size: 22px;
     }
 
-    /* Tab strip: more vertical breathing room, larger gap between pills */
     .sh-tabs-wrap {
       border-bottom: 1px solid var(--border-default);
     }
     .sh-tabs-inner {
-      padding: 22px 24px 20px;
-      gap: 14px;
+      padding: 26px 24px 24px;
+      gap: 16px;
     }
     .sh-tab-pill {
       flex: 1;
