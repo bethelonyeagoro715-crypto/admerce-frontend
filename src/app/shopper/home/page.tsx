@@ -37,7 +37,7 @@ const SERVICE_ASPECT = 9 / 16; // services are video-only, always 9:16
 // Column gap = horizontal space between side-by-side cards
 // Row gap    = vertical space between cards in the same column
 const COL_GAP_MOBILE = 6;
-const ROW_GAP_MOBILE = 20;
+const ROW_GAP_MOBILE = 60;
 const COL_GAP_DESKTOP = 16;
 const ROW_GAP_DESKTOP = 30;
 
@@ -2512,7 +2512,7 @@ const CSS = `
   }
 
   .sh-panel-inner {
-    padding: 80px 6px 80px;
+    padding: 10px 6px 80px;
   }
   .sh-tabs-inner {
     padding: 12px 16px 10px;
