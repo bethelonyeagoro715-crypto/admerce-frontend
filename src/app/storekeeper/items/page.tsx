@@ -18,7 +18,6 @@ import {
   MdStorefront,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface StoreItem {
   listing_id: string;
   title?: string;
@@ -35,7 +34,6 @@ interface StoreItem {
 
 type StockFilter = 'all' | 'in' | 'low' | 'out';
 
-// ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (
@@ -45,7 +43,9 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   )
     return url;
   const base =
-    process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '';
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    '';
   if (!base) return url;
   if (url.startsWith('/')) return `${base}${url}`;
   return `${base}/${url}`;
@@ -67,7 +67,6 @@ function stockState(item: StoreItem): 'in' | 'low' | 'out' {
   return 'in';
 }
 
-// ─── Component ──────────────────────────────────────────────────────
 export default function StorekeeperItemsPage() {
   useAuthGuard();
   const router = useRouter();
@@ -96,7 +95,9 @@ export default function StorekeeperItemsPage() {
     if (showSpinner) setLoading(true);
     setErrored(false);
     try {
-      const store = (await api.getMyStore()) as { store_id?: string } | null;
+      const store = (await api.getMyStore()) as {
+        store_id?: string;
+      } | null;
       if (seq !== reqSeq.current || !isMountedRef.current) return;
       if (!store?.store_id) {
         setStoreId(null);
@@ -104,13 +105,17 @@ export default function StorekeeperItemsPage() {
         return;
       }
       setStoreId(store.store_id);
-      const items = (await api.getStoreItems(store.store_id)) as StoreItem[];
+      const items = (await api.getStoreItems(
+        store.store_id,
+      )) as StoreItem[];
       if (seq !== reqSeq.current || !isMountedRef.current) return;
       setAllItems(Array.isArray(items) ? items : []);
     } catch {
-      if (seq === reqSeq.current && isMountedRef.current) setErrored(true);
+      if (seq === reqSeq.current && isMountedRef.current)
+        setErrored(true);
     } finally {
-      if (seq === reqSeq.current && isMountedRef.current) setLoading(false);
+      if (seq === reqSeq.current && isMountedRef.current)
+        setLoading(false);
     }
   }, []);
 
@@ -121,7 +126,6 @@ export default function StorekeeperItemsPage() {
     return () => clearTimeout(timer);
   }, [loadItems]);
 
-  // ── Derived ────────────────────────────────────────────────────
   const counts = useMemo(() => {
     let inStock = 0;
     let low = 0;
@@ -144,12 +148,12 @@ export default function StorekeeperItemsPage() {
         if (stockFilter === 'low' && s !== 'low') return false;
         if (stockFilter === 'out' && s !== 'out') return false;
       }
-      if (q && !(item.title || '').toLowerCase().includes(q)) return false;
+      if (q && !(item.title || '').toLowerCase().includes(q))
+        return false;
       return true;
     });
   }, [allItems, searchQuery, stockFilter]);
 
-  // ── Actions ────────────────────────────────────────────────────
   const handleEdit = (id: string) => {
     router.push(`/storekeeper/edit-item/${id}`);
   };
@@ -163,7 +167,6 @@ export default function StorekeeperItemsPage() {
     if (!ok) return;
 
     setDeletingId(item.listing_id);
-    // Optimistic removal
     const previous = allItems;
     setAllItems((prev) =>
       prev.filter((it) => it.listing_id !== item.listing_id),
@@ -172,7 +175,6 @@ export default function StorekeeperItemsPage() {
     try {
       await api.deleteListing(item.listing_id);
     } catch (err) {
-      // Roll back
       if (isMountedRef.current) setAllItems(previous);
       await alertDialog({
         title: 'Could not delete',
@@ -189,7 +191,6 @@ export default function StorekeeperItemsPage() {
 
   const goToAddItem = () => router.push('/storekeeper/add-item');
 
-  // ── Loading skeleton ───────────────────────────────────────────
   if (loading) {
     return (
       <main style={css.root} className="sk-items">
@@ -211,34 +212,32 @@ export default function StorekeeperItemsPage() {
     );
   }
 
-  // ── Error ──────────────────────────────────────────────────────
   if (errored) {
     return (
       <main style={css.centerRoot}>
         <style>{CSS}</style>
         <div style={css.errorHalo}>
-          <MdErrorOutline size={40} color="#B91C1C" />
+          <MdErrorOutline size={40} color="var(--danger-fg)" />
         </div>
         <h2 style={css.centerTitle}>Couldn&apos;t load your items</h2>
         <p style={css.centerBody}>
-          Check your connection and try again. If this keeps happening, sign
-          out and back in.
+          Check your connection and try again. If this keeps happening,
+          sign out and back in.
         </p>
         <button onClick={() => void loadItems()} style={css.retryBtn}>
-          <MdRefresh size={18} color="#fff" />
+          <MdRefresh size={18} color="var(--brand-on-gradient)" />
           <span>Retry</span>
         </button>
       </main>
     );
   }
 
-  // ── No store yet ───────────────────────────────────────────────
   if (!storeId && allItems.length === 0) {
     return (
       <main style={css.centerRoot}>
         <style>{CSS}</style>
         <div style={css.setupHalo}>
-          <MdStorefront size={40} color="#0504AA" />
+          <MdStorefront size={40} color="var(--brand-primary)" />
         </div>
         <h2 style={css.centerTitle}>No store yet</h2>
         <p style={css.centerBody}>
@@ -254,7 +253,6 @@ export default function StorekeeperItemsPage() {
     );
   }
 
-  // ── Main ───────────────────────────────────────────────────────
   const hasNoItems = allItems.length === 0;
   const hasNoMatches = !hasNoItems && filteredItems.length === 0;
 
@@ -262,7 +260,6 @@ export default function StorekeeperItemsPage() {
     <main style={css.root} className="sk-items">
       <style>{CSS}</style>
 
-      {/* HEADER */}
       <div style={css.headerWrap}>
         <div style={css.headerInner}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -270,9 +267,9 @@ export default function StorekeeperItemsPage() {
             <div style={css.subtitle}>
               {hasNoItems
                 ? 'List your first product'
-                : `${counts.total} item${counts.total === 1 ? '' : 's'} · ${
-                    counts.inStock
-                  } in stock`}
+                : `${counts.total} item${
+                    counts.total === 1 ? '' : 's'
+                  } · ${counts.inStock} in stock`}
             </div>
           </div>
           {!hasNoItems && (
@@ -282,7 +279,7 @@ export default function StorekeeperItemsPage() {
               style={css.addBtn}
               className="sk-add-btn"
             >
-              <MdAdd size={20} color="#fff" />
+              <MdAdd size={20} color="var(--brand-primary)" />
               <span className="sk-add-label">Add</span>
             </button>
           )}
@@ -291,26 +288,24 @@ export default function StorekeeperItemsPage() {
 
       <div style={css.sheet}>
         {hasNoItems ? (
-          // ── EMPTY STATE ──────────────────────────────────────
           <div style={css.emptyState}>
             <div style={css.emptyHalo}>
-              <MdInventory2 size={44} color="#0504AA" />
+              <MdInventory2 size={44} color="var(--brand-primary)" />
             </div>
             <h2 style={css.emptyTitle}>No items yet</h2>
             <p style={css.emptyBody}>
-              Add your first product to start selling on Admerce. It takes
-              about 30 seconds — photo, title, price.
+              Add your first product to start selling on Admerce. It
+              takes about 30 seconds — photo, title, price.
             </p>
             <button onClick={goToAddItem} style={css.emptyPrimary}>
-              <MdAdd size={20} color="#fff" />
+              <MdAdd size={20} color="var(--brand-on-gradient)" />
               <span>Add your first item</span>
             </button>
           </div>
         ) : (
           <>
-            {/* SEARCH */}
             <div style={css.searchWrap}>
-              <MdSearch size={18} color="#94A3B8" />
+              <MdSearch size={18} color="var(--text-muted)" />
               <input
                 ref={searchInputRef}
                 type="text"
@@ -328,12 +323,11 @@ export default function StorekeeperItemsPage() {
                   style={css.searchClear}
                   aria-label="Clear search"
                 >
-                  <MdClose size={14} color="#64748B" />
+                  <MdClose size={14} color="var(--text-tertiary)" />
                 </button>
               )}
             </div>
 
-            {/* STOCK FILTER PILLS */}
             <div style={css.pillRow}>
               <FilterPill
                 label="All"
@@ -345,30 +339,38 @@ export default function StorekeeperItemsPage() {
                 label="In stock"
                 count={counts.inStock}
                 active={stockFilter === 'in'}
-                tint={{ bg: '#DCFCE7', color: '#166534' }}
+                tint={{
+                  bg: 'var(--success-bg)',
+                  color: 'var(--success-fg)',
+                }}
                 onClick={() => setStockFilter('in')}
               />
               <FilterPill
                 label="Low"
                 count={counts.low}
                 active={stockFilter === 'low'}
-                tint={{ bg: '#FEF3C7', color: '#92400E' }}
+                tint={{
+                  bg: 'var(--warning-bg)',
+                  color: 'var(--warning-fg)',
+                }}
                 onClick={() => setStockFilter('low')}
               />
               <FilterPill
                 label="Out"
                 count={counts.out}
                 active={stockFilter === 'out'}
-                tint={{ bg: '#FEE2E2', color: '#991B1B' }}
+                tint={{
+                  bg: 'var(--danger-bg)',
+                  color: 'var(--danger-fg)',
+                }}
                 onClick={() => setStockFilter('out')}
               />
             </div>
 
-            {/* LIST */}
             {hasNoMatches ? (
               <div style={css.noMatchWrap}>
                 <div style={css.noMatchHalo}>
-                  <MdSearch size={32} color="#94A3B8" />
+                  <MdSearch size={32} color="var(--text-muted)" />
                 </div>
                 <div style={css.noMatchTitle}>No matches</div>
                 <div style={css.noMatchBody}>
@@ -406,7 +408,6 @@ export default function StorekeeperItemsPage() {
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────
 function FilterPill({
   label,
   count,
@@ -426,13 +427,19 @@ function FilterPill({
       onClick={onClick}
       style={{
         ...css.pill,
-        borderColor: active ? '#0504AA' : '#E6E8F0',
-        backgroundColor: active ? '#EEF0FF' : '#FFFFFF',
+        borderColor: active
+          ? 'var(--brand-primary)'
+          : 'var(--border-default)',
+        backgroundColor: active
+          ? 'var(--brand-soft)'
+          : 'var(--bg-secondary)',
       }}
     >
       <span
         style={{
-          color: active ? '#0504AA' : '#475569',
+          color: active
+            ? 'var(--brand-primary)'
+            : 'var(--text-secondary)',
           fontWeight: active ? 800 : 700,
           fontSize: 12.5,
         }}
@@ -442,8 +449,12 @@ function FilterPill({
       <span
         style={{
           ...css.pillCount,
-          backgroundColor: tint?.bg ?? (active ? '#FFFFFF' : '#F1F5F9'),
-          color: tint?.color ?? (active ? '#0504AA' : '#64748B'),
+          backgroundColor:
+            tint?.bg ??
+            (active ? 'var(--bg-secondary)' : 'var(--bg-tertiary)'),
+          color: tint?.color ?? (active
+            ? 'var(--brand-primary)'
+            : 'var(--text-tertiary)'),
         }}
       >
         {count}
@@ -469,10 +480,22 @@ function ItemRow({
 
   const stockBadge =
     state === 'out'
-      ? { text: 'Out of stock', bg: '#FEE2E2', color: '#991B1B' }
+      ? {
+          text: 'Out of stock',
+          bg: 'var(--danger-bg)',
+          color: 'var(--danger-fg)',
+        }
       : state === 'low'
-        ? { text: `${available} left`, bg: '#FEF3C7', color: '#92400E' }
-        : { text: `${available} in stock`, bg: '#DCFCE7', color: '#166534' };
+        ? {
+            text: `${available} left`,
+            bg: 'var(--warning-bg)',
+            color: 'var(--warning-fg)',
+          }
+        : {
+            text: `${available} in stock`,
+            bg: 'var(--success-bg)',
+            color: 'var(--success-fg)',
+          };
 
   return (
     <div
@@ -491,10 +514,15 @@ function ItemRow({
         <div style={css.thumb}>
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt="" style={css.thumbImg} loading="lazy" />
+            <img
+              src={image}
+              alt=""
+              style={css.thumbImg}
+              loading="lazy"
+            />
           ) : (
             <div style={css.thumbPlaceholder}>
-              <MdImage size={22} color="#94A3B8" />
+              <MdImage size={22} color="var(--text-muted)" />
             </div>
           )}
         </div>
@@ -504,7 +532,9 @@ function ItemRow({
             {item.title || 'Untitled'}
           </div>
           <div style={css.itemMeta}>
-            <span style={css.itemPrice}>{formatPrice(item.price)}</span>
+            <span style={css.itemPrice}>
+              {formatPrice(item.price)}
+            </span>
             <span
               style={{
                 ...css.stockChip,
@@ -527,7 +557,7 @@ function ItemRow({
           title="Edit"
           aria-label="Edit"
         >
-          <MdEdit size={18} color="#0504AA" />
+          <MdEdit size={18} color="var(--brand-primary)" />
         </button>
         <button
           type="button"
@@ -540,7 +570,7 @@ function ItemRow({
           {isDeleting ? (
             <div style={css.smallSpinner} />
           ) : (
-            <MdDeleteOutline size={18} color="#DC2626" />
+            <MdDeleteOutline size={18} color="var(--danger-fg)" />
           )}
         </button>
       </div>
@@ -548,15 +578,11 @@ function ItemRow({
   );
 }
 
-// ─── Interaction CSS + desktop layout ───────────────────────────────
 const CSS = `
   @keyframes skSpin { to { transform: rotate(360deg); } }
   @keyframes skShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 
-  .sk-items,
-  .sk-items *,
-  .sk-items *::before,
-  .sk-items *::after {
+  .sk-items, .sk-items *, .sk-items *::before, .sk-items *::after {
     box-sizing: border-box;
   }
 
@@ -564,24 +590,20 @@ const CSS = `
     transition: transform 0.12s ease, box-shadow 0.15s ease;
   }
   .sk-add-btn:hover {
-    box-shadow: 0 12px 24px rgba(5,4,170,0.32);
+    box-shadow: 0 12px 24px
+      color-mix(in srgb, var(--brand-on-gradient) 32%, transparent);
   }
-  .sk-add-btn:active {
-    transform: scale(0.97);
-  }
+  .sk-add-btn:active { transform: scale(0.97); }
 
   .sk-item-card {
-    transition: box-shadow 0.15s ease, transform 0.12s ease;
+    transition: box-shadow 0.15s ease, transform 0.12s ease,
+      background-color 0.18s ease, border-color 0.18s ease;
   }
   .sk-item-card:hover {
     box-shadow: 0 10px 24px rgba(15,23,42,0.06) !important;
   }
 
-  /* Desktop: wider column, 2-col grid, tighter add button */
   @media (min-width: 1024px) {
-    .sk-items .sk-items-inner {
-      max-width: 1080px;
-    }
     .sk-item-list {
       display: grid !important;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -593,24 +615,24 @@ const CSS = `
   }
 `;
 
-// ─── Styles ─────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
-  // HEADER
   headerWrap: {
     position: 'sticky',
     top: 0,
     zIndex: 20,
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    background: 'var(--brand-gradient)',
     padding: '14px 20px',
+    transition: 'background 0.18s ease',
   },
   headerInner: {
     display: 'flex',
@@ -623,13 +645,14 @@ const css: Record<string, React.CSSProperties> = {
   title: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     margin: 0,
     letterSpacing: -0.4,
   },
   subtitle: {
     fontSize: 12.5,
-    color: 'rgba(255,255,255,0.78)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
     fontWeight: 600,
     marginTop: 3,
   },
@@ -639,17 +662,16 @@ const css: Record<string, React.CSSProperties> = {
     gap: 6,
     padding: '10px 16px',
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     border: 'none',
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontSize: 13.5,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(0,0,0,0.18)',
+    boxShadow: 'var(--shadow-md)',
   },
 
-  // SHEET
   sheet: {
     flex: 1,
     padding: '16px 20px 40px',
@@ -658,15 +680,15 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
   },
 
-  // SEARCH
   searchWrap: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
     padding: '12px 16px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 14,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   searchInput: {
     flex: 1,
@@ -674,7 +696,7 @@ const css: Record<string, React.CSSProperties> = {
     outline: 'none',
     background: 'transparent',
     fontSize: 14.5,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     fontFamily: 'inherit',
     fontWeight: 500,
   },
@@ -682,7 +704,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     border: 'none',
     cursor: 'pointer',
     display: 'flex',
@@ -690,7 +712,6 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
   },
 
-  // PILLS
   pillRow: {
     display: 'flex',
     gap: 8,
@@ -721,7 +742,6 @@ const css: Record<string, React.CSSProperties> = {
     fontVariantNumeric: 'tabular-nums',
   },
 
-  // LIST
   list: {
     display: 'flex',
     flexDirection: 'column',
@@ -729,15 +749,15 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 16,
   },
 
-  // ITEM CARD
   itemCard: {
     display: 'flex',
     alignItems: 'stretch',
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     borderRadius: 18,
     overflow: 'hidden',
-    boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   itemMain: {
     flex: 1,
@@ -758,8 +778,8 @@ const css: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: '#F4F5FB',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-tertiary)',
+    border: '1px solid var(--border-default)',
   },
   thumbImg: {
     width: '100%',
@@ -773,7 +793,7 @@ const css: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
   },
   itemInfo: {
     flex: 1,
@@ -785,7 +805,7 @@ const css: Record<string, React.CSSProperties> = {
   itemTitle: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.2,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -803,7 +823,7 @@ const css: Record<string, React.CSSProperties> = {
   itemPrice: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     fontVariantNumeric: 'tabular-nums',
   },
   stockChip: {
@@ -814,7 +834,6 @@ const css: Record<string, React.CSSProperties> = {
     borderRadius: 999,
   },
 
-  // ACTIONS
   itemActions: {
     display: 'flex',
     alignItems: 'center',
@@ -825,7 +844,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     border: 'none',
     cursor: 'pointer',
     display: 'flex',
@@ -837,7 +856,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: 'var(--danger-bg)',
     border: 'none',
     cursor: 'pointer',
     display: 'flex',
@@ -848,13 +867,12 @@ const css: Record<string, React.CSSProperties> = {
   smallSpinner: {
     width: 16,
     height: 16,
-    border: '2px solid #FECACA',
-    borderTopColor: '#DC2626',
+    border: '2px solid var(--danger-strong)',
+    borderTopColor: 'var(--danger-fg)',
     borderRadius: '50%',
     animation: 'skSpin 0.7s linear infinite',
   },
 
-  // EMPTY
   emptyState: {
     display: 'flex',
     flexDirection: 'column',
@@ -867,8 +885,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 96,
     height: 96,
     borderRadius: 28,
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7D2FE',
+    backgroundColor: 'var(--brand-soft)',
+    border: '1px solid var(--brand-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -877,13 +895,13 @@ const css: Record<string, React.CSSProperties> = {
   emptyTitle: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   emptyBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     margin: '8px 0 24px',
     maxWidth: 340,
     lineHeight: 1.55,
@@ -894,18 +912,16 @@ const css: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '14px 22px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     fontSize: 15,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 12px 24px rgba(5,4,170,0.28)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // NO MATCHES
   noMatchWrap: {
     display: 'flex',
     flexDirection: 'column',
@@ -917,7 +933,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -926,11 +942,11 @@ const css: Record<string, React.CSSProperties> = {
   noMatchTitle: {
     fontSize: 16,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
   },
   noMatchBody: {
     fontSize: 13.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 4,
     lineHeight: 1.5,
   },
@@ -938,8 +954,8 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 16,
     padding: '10px 18px',
     borderRadius: 12,
-    backgroundColor: '#EEF0FF',
-    color: '#0504AA',
+    backgroundColor: 'var(--brand-soft)',
+    color: 'var(--brand-primary)',
     border: 'none',
     fontSize: 13.5,
     fontWeight: 800,
@@ -947,23 +963,24 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
 
-  // CENTER SCREENS (error / no store)
   centerRoot: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   errorHalo: {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -973,8 +990,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7D2FE',
+    backgroundColor: 'var(--brand-soft)',
+    border: '1px solid var(--brand-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -983,13 +1000,13 @@ const css: Record<string, React.CSSProperties> = {
   centerTitle: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   centerBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 8,
     maxWidth: 340,
     lineHeight: 1.55,
@@ -1001,36 +1018,35 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 800,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // SKELETONS
   skelLine: {
     height: 14,
     width: 180,
     borderRadius: 7,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
   },
   searchSkeleton: {
     height: 46,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     animation: 'skShimmer 1.4s ease-in-out infinite',
   },
   pillRowSkeleton: {
     height: 36,
     borderRadius: 999,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 12,
     maxWidth: 400,
     animation: 'skShimmer 1.4s ease-in-out infinite',
@@ -1038,8 +1054,8 @@ const css: Record<string, React.CSSProperties> = {
   itemSkeleton: {
     height: 100,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 10,
     animation: 'skShimmer 1.4s ease-in-out infinite',
   },

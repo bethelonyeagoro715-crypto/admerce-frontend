@@ -11,7 +11,6 @@ import {
 } from '../../../components/ui/dialogs';
 import {
   MdRefresh,
-  MdEventNote,
   MdLocalShipping,
   MdDeleteOutline,
   MdSwapHoriz,
@@ -22,13 +21,11 @@ import {
   MdAccessTime,
   MdStorefront,
   MdErrorOutline,
-  MdPerson,
   MdSearch,
   MdClose,
   MdSend,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface StoreOrder {
   order_id: string;
   status?: string;
@@ -61,7 +58,6 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'reversed', label: 'Reversed' },
 ];
 
-// ─── Helpers ────────────────────────────────────────────────────────
 function formatNaira(v: number): string {
   if (!Number.isFinite(v) || v <= 0) return '₦0';
   return `₦${Math.round(v).toLocaleString('en-NG')}`;
@@ -83,7 +79,9 @@ function isReservationStatus(status: string): boolean {
 
 function isPickedUpStatus(status: string): boolean {
   const s = status.toLowerCase();
-  return s === 'completed' || s === 'delivered' || s === 'picked_up';
+  return (
+    s === 'completed' || s === 'delivered' || s === 'picked_up'
+  );
 }
 
 function isCancelledStatus(status: string): boolean {
@@ -105,7 +103,6 @@ function isDeliveryStatus(order: StoreOrder): boolean {
   );
 }
 
-// ─── Status metadata ────────────────────────────────────────────────
 interface StatusMeta {
   label: string;
   bg: string;
@@ -115,30 +112,61 @@ interface StatusMeta {
 function statusMeta(status: string): StatusMeta {
   const s = (status || 'pending').toLowerCase();
   if (s === 'completed' || s === 'delivered' || s === 'picked_up') {
-    return { label: 'Picked up', bg: '#DCFCE7', fg: '#166534' };
+    return {
+      label: 'Picked up',
+      bg: 'var(--success-bg)',
+      fg: 'var(--success-fg)',
+    };
   }
   if (s === 'locked' || s === 'pending') {
-    return { label: 'Awaiting your hold', bg: '#FEF3C7', fg: '#92400E' };
+    return {
+      label: 'Awaiting your hold',
+      bg: 'var(--warning-bg)',
+      fg: 'var(--warning-fg)',
+    };
   }
   if (s === 'accepted') {
-    return { label: 'Awaiting pickup', bg: '#F3E8FF', fg: '#6B21A8' };
+    return {
+      label: 'Awaiting pickup',
+      bg: 'var(--purple-bg)',
+      fg: 'var(--purple-fg)',
+    };
   }
   if (s === 'dispatched') {
-    return { label: 'Dispatched', bg: '#E0F2FE', fg: '#075985' };
+    return {
+      label: 'Dispatched',
+      bg: 'var(--info-bg)',
+      fg: 'var(--info-fg)',
+    };
   }
   if (s === 'returned' || s === 'refunded') {
-    return { label: 'Dropped by shopper', bg: '#FEE2E2', fg: '#991B1B' };
+    return {
+      label: 'Dropped by shopper',
+      bg: 'var(--danger-bg)',
+      fg: 'var(--danger-fg)',
+    };
   }
   if (s === 'declined') {
-    return { label: 'Declined by you', bg: '#FEE2E2', fg: '#991B1B' };
+    return {
+      label: 'Declined by you',
+      bg: 'var(--danger-bg)',
+      fg: 'var(--danger-fg)',
+    };
   }
   if (s === 'reversed') {
-    return { label: 'Reversed', bg: '#FEF3C7', fg: '#92400E' };
+    return {
+      label: 'Reversed',
+      bg: 'var(--warning-bg)',
+      fg: 'var(--warning-fg)',
+    };
   }
-  return { label: status || 'Pending', bg: '#F1F5F9', fg: '#475569' };
+  return {
+    label: status || 'Pending',
+    bg: 'var(--bg-tertiary)',
+    fg: 'var(--text-secondary)',
+  };
 }
 
-// ─── Component ──────────────────────────────────────────────────────
 export default function StorekeeperOrdersPage() {
   useAuthGuard();
   const router = useRouter();
@@ -177,13 +205,17 @@ export default function StorekeeperOrdersPage() {
       }
       setStoreId(store.store_id);
       setStoreName(store.name || '');
-      const orders = (await api.getStoreOrders(store.store_id)) as StoreOrder[];
+      const orders = (await api.getStoreOrders(
+        store.store_id,
+      )) as StoreOrder[];
       if (seq !== reqSeq.current || !isMountedRef.current) return;
       setAllOrders(Array.isArray(orders) ? orders : []);
     } catch {
-      if (seq === reqSeq.current && isMountedRef.current) setErrored(true);
+      if (seq === reqSeq.current && isMountedRef.current)
+        setErrored(true);
     } finally {
-      if (seq === reqSeq.current && isMountedRef.current) setLoading(false);
+      if (seq === reqSeq.current && isMountedRef.current)
+        setLoading(false);
     }
   }, []);
 
@@ -194,7 +226,6 @@ export default function StorekeeperOrdersPage() {
     return () => clearTimeout(timer);
   }, [loadOrders]);
 
-  // ── Derived buckets ────────────────────────────────────────────
   const buckets = useMemo(() => {
     const reservations: StoreOrder[] = [];
     const awaiting: StoreOrder[] = [];
@@ -208,14 +239,14 @@ export default function StorekeeperOrdersPage() {
       else if (isReversedStatus(s)) reversed.push(o);
       else if (isCancelledStatus(s)) cancelled.push(o);
       else if (isDeliveryStatus(o)) deliveries.push(o);
-      else if (s !== 'completed' && s !== 'delivered' && s !== 'picked_up') {
+      else if (
+        s !== 'completed' &&
+        s !== 'delivered' &&
+        s !== 'picked_up'
+      ) {
         awaiting.push(o);
-      } else {
-        // picked up — appears in "All" only
       }
     }
-    // Pickup-complete orders also belong in awaiting? No — they're done.
-    // Add them to a hidden bucket for "All" only.
     return { reservations, awaiting, deliveries, cancelled, reversed };
   }, [allOrders]);
 
@@ -261,7 +292,6 @@ export default function StorekeeperOrdersPage() {
     });
   }, [activeFilter, buckets, allOrders, searchQuery]);
 
-  // ── Actions ────────────────────────────────────────────────────
   const holdForPickup = async (
     orderId: string,
     customer: string,
@@ -398,7 +428,6 @@ export default function StorekeeperOrdersPage() {
     }
   };
 
-  // ── Loading skeleton ───────────────────────────────────────────
   if (loading) {
     return (
       <main style={css.root} className="sk-orders">
@@ -420,39 +449,42 @@ export default function StorekeeperOrdersPage() {
     );
   }
 
-  // ── Error ──────────────────────────────────────────────────────
   if (errored) {
     return (
       <main style={css.centerRoot} className="sk-orders">
         <style>{CSS}</style>
         <div style={css.errorHalo}>
-          <MdErrorOutline size={40} color="#B91C1C" />
+          <MdErrorOutline size={40} color="var(--danger-fg)" />
         </div>
-        <h2 style={css.centerTitle}>Couldn&apos;t load your orders</h2>
+        <h2 style={css.centerTitle}>
+          Couldn&apos;t load your orders
+        </h2>
         <p style={css.centerBody}>
-          Check your connection and try again. If this keeps happening, sign
-          out and back in.
+          Check your connection and try again. If this keeps happening,
+          sign out and back in.
         </p>
-        <button onClick={() => void loadOrders()} style={css.centerPrimary}>
-          <MdRefresh size={18} color="#fff" />
+        <button
+          onClick={() => void loadOrders()}
+          style={css.centerPrimary}
+        >
+          <MdRefresh size={18} color="var(--brand-on-gradient)" />
           <span>Retry</span>
         </button>
       </main>
     );
   }
 
-  // ── No store ───────────────────────────────────────────────────
   if (!storeId && allOrders.length === 0) {
     return (
       <main style={css.centerRoot} className="sk-orders">
         <style>{CSS}</style>
         <div style={css.setupHalo}>
-          <MdStorefront size={40} color="#0504AA" />
+          <MdStorefront size={40} color="var(--brand-primary)" />
         </div>
         <h2 style={css.centerTitle}>No store yet</h2>
         <p style={css.centerBody}>
-          Set up your store first. Orders will start appearing here once
-          shoppers reserve your items.
+          Set up your store first. Orders will start appearing here
+          once shoppers reserve your items.
         </p>
         <button
           onClick={() => router.push('/storekeeper/onboarding')}
@@ -465,13 +497,13 @@ export default function StorekeeperOrdersPage() {
   }
 
   const hasNoOrders = allOrders.length === 0;
-  const hasNoMatches = !hasNoOrders && filteredOrders.length === 0;
+  const hasNoMatches =
+    !hasNoOrders && filteredOrders.length === 0;
 
   return (
     <main style={css.root} className="sk-orders">
       <style>{CSS}</style>
 
-      {/* HEADER */}
       <div style={css.headerWrap}>
         <div style={css.headerInner}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -481,7 +513,9 @@ export default function StorekeeperOrdersPage() {
                 ? storeName
                   ? `${storeName} · no orders yet`
                   : 'Orders will show up here'
-                : `${counts.all} total · ${counts.reservations} need${
+                : `${counts.all} total · ${
+                    counts.reservations
+                  } need${
                     counts.reservations === 1 ? 's' : ''
                   } your attention`}
             </div>
@@ -493,22 +527,22 @@ export default function StorekeeperOrdersPage() {
             aria-label="Refresh"
             className="sk-refresh"
           >
-            <MdRefresh size={20} color="#fff" />
+            <MdRefresh size={20} color="var(--brand-on-gradient)" />
           </button>
         </div>
       </div>
 
       <div style={css.sheet}>
         {hasNoOrders ? (
-          // ── EMPTY STATE ──────────────────────────────────────
           <div style={css.emptyState}>
             <div style={css.emptyHalo}>
-              <MdReceiptLong size={44} color="#0504AA" />
+              <MdReceiptLong size={44} color="var(--brand-primary)" />
             </div>
             <h2 style={css.emptyTitle}>No orders yet</h2>
             <p style={css.emptyBody}>
-              Once shoppers reserve your items, they show up here. Keep your
-              listings stocked and visible to get your first sale.
+              Once shoppers reserve your items, they show up here.
+              Keep your listings stocked and visible to get your first
+              sale.
             </p>
             <button
               onClick={() => router.push('/storekeeper/items')}
@@ -519,9 +553,8 @@ export default function StorekeeperOrdersPage() {
           </div>
         ) : (
           <>
-            {/* SEARCH */}
             <div style={css.searchWrap}>
-              <MdSearch size={18} color="#94A3B8" />
+              <MdSearch size={18} color="var(--text-muted)" />
               <input
                 type="text"
                 placeholder="Search by customer or order ID"
@@ -538,12 +571,11 @@ export default function StorekeeperOrdersPage() {
                   style={css.searchClear}
                   aria-label="Clear search"
                 >
-                  <MdClose size={14} color="#64748B" />
+                  <MdClose size={14} color="var(--text-tertiary)" />
                 </button>
               )}
             </div>
 
-            {/* FILTER PILLS */}
             <div style={css.pillRow}>
               {FILTERS.map((f) => {
                 const active = activeFilter === f.key;
@@ -555,14 +587,20 @@ export default function StorekeeperOrdersPage() {
                     onClick={() => setActiveFilter(f.key)}
                     style={{
                       ...css.pill,
-                      borderColor: active ? '#0504AA' : '#E6E8F0',
-                      backgroundColor: active ? '#EEF0FF' : '#FFFFFF',
+                      borderColor: active
+                        ? 'var(--brand-primary)'
+                        : 'var(--border-default)',
+                      backgroundColor: active
+                        ? 'var(--brand-soft)'
+                        : 'var(--bg-secondary)',
                     }}
                     className="sk-pill"
                   >
                     <span
                       style={{
-                        color: active ? '#0504AA' : '#475569',
+                        color: active
+                          ? 'var(--brand-primary)'
+                          : 'var(--text-secondary)',
                         fontWeight: active ? 800 : 700,
                         fontSize: 12.5,
                       }}
@@ -572,8 +610,12 @@ export default function StorekeeperOrdersPage() {
                     <span
                       style={{
                         ...css.pillCount,
-                        backgroundColor: active ? '#FFFFFF' : '#F1F5F9',
-                        color: active ? '#0504AA' : '#64748B',
+                        backgroundColor: active
+                          ? 'var(--bg-secondary)'
+                          : 'var(--bg-tertiary)',
+                        color: active
+                          ? 'var(--brand-primary)'
+                          : 'var(--text-tertiary)',
                       }}
                     >
                       {count}
@@ -583,11 +625,10 @@ export default function StorekeeperOrdersPage() {
               })}
             </div>
 
-            {/* LIST */}
             {hasNoMatches ? (
               <div style={css.noMatchWrap}>
                 <div style={css.noMatchHalo}>
-                  <MdSearch size={32} color="#94A3B8" />
+                  <MdSearch size={32} color="var(--text-muted)" />
                 </div>
                 <div style={css.noMatchTitle}>No matches</div>
                 <div style={css.noMatchBody}>
@@ -645,7 +686,6 @@ export default function StorekeeperOrdersPage() {
   );
 }
 
-// ─── Order card ─────────────────────────────────────────────────────
 function OrderCard({
   order,
   busy,
@@ -678,16 +718,15 @@ function OrderCard({
       style={{ ...css.card, opacity: busy ? 0.55 : 1 }}
       className="sk-order-card"
     >
-      {/* TOP: avatar + name/id + status chip */}
       <div style={css.cardTop}>
-        <div style={css.avatar}>
-          {initialOf(customer)}
-        </div>
+        <div style={css.avatar}>{initialOf(customer)}</div>
         <div style={css.cardTopMeta}>
           <div style={css.customerName} title={customer}>
             {customer}
           </div>
-          <div style={css.orderId}>Order #{shortId(order.order_id)}</div>
+          <div style={css.orderId}>
+            Order #{shortId(order.order_id)}
+          </div>
         </div>
         <span
           style={{
@@ -700,13 +739,11 @@ function OrderCard({
         </span>
       </div>
 
-      {/* AMOUNT */}
       <div style={css.amount}>{formatNaira(total)}</div>
 
-      {/* CONTEXT ROW */}
       {isDelivery && (
         <div style={css.contextRow}>
-          <MdLocalShipping size={15} color="#0891B2" />
+          <MdLocalShipping size={15} color="var(--info-fg)" />
           <span style={css.contextText}>
             Courier: {order.courier_name || 'Assigned'}
           </span>
@@ -714,33 +751,38 @@ function OrderCard({
       )}
       {isDropped && (
         <div style={{ ...css.contextRow, ...css.contextRowDanger }}>
-          <MdDeleteOutline size={15} color="#991B1B" />
-          <span style={{ ...css.contextText, color: '#991B1B' }}>
+          <MdDeleteOutline size={15} color="var(--danger-fg)" />
+          <span
+            style={{ ...css.contextText, color: 'var(--danger-fg)' }}
+          >
             Dropped by shopper · Refunded
           </span>
         </div>
       )}
       {isDeclined && (
         <div style={{ ...css.contextRow, ...css.contextRowDanger }}>
-          <MdCancel size={15} color="#991B1B" />
-          <span style={{ ...css.contextText, color: '#991B1B' }}>
+          <MdCancel size={15} color="var(--danger-fg)" />
+          <span
+            style={{ ...css.contextText, color: 'var(--danger-fg)' }}
+          >
             Declined by you · Refunded
           </span>
         </div>
       )}
       {isReversed && (
         <div style={{ ...css.contextRow, ...css.contextRowWarn }}>
-          <MdSwapHoriz size={15} color="#92400E" />
-          <span style={{ ...css.contextText, color: '#92400E' }}>
+          <MdSwapHoriz size={15} color="var(--warning-fg)" />
+          <span
+            style={{ ...css.contextText, color: 'var(--warning-fg)' }}
+          >
             Package reversed
           </span>
         </div>
       )}
 
-      {/* HOLDING NOTE */}
       {isAccepted && !isPickedUp && (
         <div style={css.holdingNote}>
-          <MdAccessTime size={15} color="#6B21A8" />
+          <MdAccessTime size={15} color="var(--purple-fg)" />
           <span style={css.holdingNoteText}>
             Waiting for <strong>{customer}</strong> to pick up. Your{' '}
             <strong>{formatNaira(total)}</strong> is held in escrow and
@@ -749,7 +791,6 @@ function OrderCard({
         </div>
       )}
 
-      {/* ACTIONS */}
       {!isPickedUp && !isDropped && !isDeclined && !isReversed && (
         <div style={css.actions}>
           {isReservation && (
@@ -758,20 +799,29 @@ function OrderCard({
                 type="button"
                 onClick={onHold}
                 disabled={busy}
-                style={{ ...css.primaryBtn, opacity: busy ? 0.6 : 1 }}
+                style={{
+                  ...css.primaryBtn,
+                  opacity: busy ? 0.6 : 1,
+                }}
                 className="sk-action-btn"
               >
-                <MdCheckCircleOutline size={18} color="#fff" />
+                <MdCheckCircleOutline
+                  size={18}
+                  color="var(--brand-on-gradient)"
+                />
                 <span>Hold for pickup</span>
               </button>
               <button
                 type="button"
                 onClick={onDecline}
                 disabled={busy}
-                style={{ ...css.dangerBtn, opacity: busy ? 0.6 : 1 }}
+                style={{
+                  ...css.dangerBtn,
+                  opacity: busy ? 0.6 : 1,
+                }}
                 className="sk-action-btn"
               >
-                <MdCancel size={18} color="#DC2626" />
+                <MdCancel size={18} color="var(--danger-fg)" />
                 <span>Decline</span>
               </button>
             </>
@@ -808,20 +858,24 @@ function OrderCard({
             type="button"
             onClick={onRelease}
             disabled={busy}
-            style={{ ...css.warnBtn, opacity: busy ? 0.6 : 1 }}
+            style={{
+              ...css.warnBtn,
+              opacity: busy ? 0.6 : 1,
+            }}
             className="sk-action-btn"
           >
-            <MdSend size={16} color="#fff" />
+            <MdSend size={16} color="#FFFFFF" />
             <span>Release courier fee</span>
           </button>
         </div>
       )}
 
-      {/* COMPLETED FOOTNOTE */}
       {isPickedUp && (
         <div style={css.doneRow}>
-          <MdCheckCircle size={18} color="#166534" />
-          <span style={css.doneText}>Picked up · Funds released</span>
+          <MdCheckCircle size={18} color="var(--success-fg)" />
+          <span style={css.doneText}>
+            Picked up · Funds released
+          </span>
         </div>
       )}
     </div>
@@ -846,9 +900,15 @@ function DeliverySegment({
       disabled={disabled || active}
       style={{
         ...css.segment,
-        backgroundColor: active ? '#0504AA' : '#FFFFFF',
-        borderColor: active ? '#0504AA' : '#E6E8F0',
-        color: active ? '#FFFFFF' : '#475569',
+        background: active
+          ? 'var(--brand-gradient)'
+          : 'var(--bg-secondary)',
+        borderColor: active
+          ? 'transparent'
+          : 'var(--border-default)',
+        color: active
+          ? 'var(--brand-on-gradient)'
+          : 'var(--text-secondary)',
         cursor: active || disabled ? 'default' : 'pointer',
       }}
     >
@@ -857,7 +917,6 @@ function DeliverySegment({
   );
 }
 
-// ─── Interaction CSS + desktop layout ───────────────────────────────
 const CSS = `
   @keyframes skSpin { to { transform: rotate(360deg); } }
   @keyframes skShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
@@ -869,14 +928,18 @@ const CSS = `
   .sk-refresh {
     transition: transform 0.12s, background-color 0.15s;
   }
-  .sk-refresh:hover { background-color: rgba(255,255,255,0.18); }
+  .sk-refresh:hover {
+    background-color:
+      color-mix(in srgb, var(--brand-on-gradient) 18%, transparent);
+  }
   .sk-refresh:active { transform: scale(0.94); }
 
   .sk-pill { transition: background-color 0.15s, border-color 0.15s; }
   .sk-pill:active { transform: scale(0.97); }
 
   .sk-order-card {
-    transition: box-shadow 0.15s ease;
+    transition: box-shadow 0.15s ease, background-color 0.18s ease,
+      border-color 0.18s ease;
   }
   .sk-order-card:hover {
     box-shadow: 0 10px 24px rgba(15,23,42,0.06) !important;
@@ -897,24 +960,24 @@ const CSS = `
   }
 `;
 
-// ─── Styles ─────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
-  // HEADER
   headerWrap: {
     position: 'sticky',
     top: 0,
     zIndex: 20,
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    background: 'var(--brand-gradient)',
     padding: '14px 20px',
+    transition: 'background 0.18s ease',
   },
   headerInner: {
     display: 'flex',
@@ -927,13 +990,14 @@ const css: Record<string, React.CSSProperties> = {
   title: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     margin: 0,
     letterSpacing: -0.4,
   },
   subtitle: {
     fontSize: 12.5,
-    color: 'rgba(255,255,255,0.78)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
     fontWeight: 600,
     marginTop: 3,
   },
@@ -941,7 +1005,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 12%, transparent)',
     border: 'none',
     display: 'flex',
     alignItems: 'center',
@@ -953,10 +1018,10 @@ const css: Record<string, React.CSSProperties> = {
     height: 20,
     width: 180,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
   },
 
-  // SHEET
   sheet: {
     flex: 1,
     padding: '16px 20px 40px',
@@ -965,15 +1030,15 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
   },
 
-  // SEARCH
   searchWrap: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
     padding: '12px 16px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 14,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   searchInput: {
     flex: 1,
@@ -981,7 +1046,7 @@ const css: Record<string, React.CSSProperties> = {
     outline: 'none',
     background: 'transparent',
     fontSize: 14.5,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     fontFamily: 'inherit',
     fontWeight: 500,
   },
@@ -989,7 +1054,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 26,
     height: 26,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     border: 'none',
     cursor: 'pointer',
     display: 'flex',
@@ -997,7 +1062,6 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
   },
 
-  // PILLS
   pillRow: {
     display: 'flex',
     gap: 8,
@@ -1028,7 +1092,6 @@ const css: Record<string, React.CSSProperties> = {
     fontVariantNumeric: 'tabular-nums',
   },
 
-  // LIST
   list: {
     display: 'flex',
     flexDirection: 'column',
@@ -1036,13 +1099,13 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 16,
   },
 
-  // CARD
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     padding: '16px 18px',
-    boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   cardTop: {
     display: 'flex',
@@ -1053,8 +1116,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: '#EEF0FF',
-    color: '#0504AA',
+    backgroundColor: 'var(--brand-soft)',
+    color: 'var(--brand-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1072,7 +1135,7 @@ const css: Record<string, React.CSSProperties> = {
   customerName: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.1,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1080,7 +1143,7 @@ const css: Record<string, React.CSSProperties> = {
   },
   orderId: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
   },
@@ -1094,54 +1157,51 @@ const css: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
 
-  // AMOUNT
   amount: {
     fontSize: 24,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     letterSpacing: -0.6,
     fontVariantNumeric: 'tabular-nums',
     marginTop: 12,
     lineHeight: 1.1,
   },
 
-  // CONTEXT
   contextRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
     marginTop: 10,
     padding: '8px 10px',
-    backgroundColor: '#E0F2FE',
+    backgroundColor: 'var(--info-bg)',
     borderRadius: 10,
   },
-  contextRowDanger: { backgroundColor: '#FEF2F2' },
-  contextRowWarn: { backgroundColor: '#FEF3C7' },
+  contextRowDanger: { backgroundColor: 'var(--danger-bg)' },
+  contextRowWarn: { backgroundColor: 'var(--warning-bg)' },
   contextText: {
     fontSize: 12,
-    color: '#075985',
+    color: 'var(--info-fg)',
     fontWeight: 600,
   },
 
-  // HOLDING NOTE
   holdingNote: {
     display: 'flex',
     alignItems: 'flex-start',
     gap: 8,
     padding: '11px 13px',
     marginTop: 12,
-    backgroundColor: '#F3E8FF',
-    border: '1px solid #D8B4FE',
+    backgroundColor: 'var(--purple-bg)',
+    border:
+      '1px solid color-mix(in srgb, var(--purple-fg) 30%, transparent)',
     borderRadius: 12,
   },
   holdingNoteText: {
     fontSize: 12.5,
-    color: '#6B21A8',
+    color: 'var(--purple-fg)',
     fontWeight: 500,
     lineHeight: 1.5,
   },
 
-  // ACTIONS
   actions: {
     display: 'flex',
     gap: 8,
@@ -1156,16 +1216,15 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 8,
     padding: '12px 16px',
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 12,
     fontSize: 14,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 18px rgba(5,4,170,0.22)',
+    boxShadow: 'var(--shadow-brand)',
   },
   dangerBtn: {
     flex: 1,
@@ -1175,9 +1234,9 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 8,
     padding: '12px 16px',
-    backgroundColor: '#FFFFFF',
-    color: '#DC2626',
-    border: '1.5px solid #FECACA',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--danger-fg)',
+    border: '1.5px solid var(--danger-strong)',
     borderRadius: 12,
     fontSize: 14,
     fontWeight: 800,
@@ -1191,7 +1250,7 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 8,
     padding: '12px 16px',
-    backgroundColor: '#D97706',
+    backgroundColor: 'var(--warning-fg)',
     color: '#FFFFFF',
     border: 'none',
     borderRadius: 12,
@@ -1199,16 +1258,16 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 18px rgba(217,119,6,0.22)',
+    boxShadow:
+      '0 8px 18px color-mix(in srgb, var(--warning-fg) 22%, transparent)',
   },
 
-  // DELIVERY SEGMENT
   segmentRow: {
     display: 'flex',
     gap: 6,
     width: '100%',
     padding: 4,
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 12,
   },
   segment: {
@@ -1222,23 +1281,21 @@ const css: Record<string, React.CSSProperties> = {
     transition: 'background-color 0.15s, color 0.15s, border-color 0.15s',
   },
 
-  // DONE
   doneRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
     marginTop: 12,
     padding: '10px 12px',
-    backgroundColor: '#DCFCE7',
+    backgroundColor: 'var(--success-bg)',
     borderRadius: 10,
   },
   doneText: {
     fontSize: 13,
-    color: '#166534',
+    color: 'var(--success-fg)',
     fontWeight: 700,
   },
 
-  // EMPTY
   emptyState: {
     display: 'flex',
     flexDirection: 'column',
@@ -1251,8 +1308,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 96,
     height: 96,
     borderRadius: 28,
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7D2FE',
+    backgroundColor: 'var(--brand-soft)',
+    border: '1px solid var(--brand-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1261,13 +1318,13 @@ const css: Record<string, React.CSSProperties> = {
   emptyTitle: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   emptyBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     margin: '8px 0 24px',
     maxWidth: 340,
     lineHeight: 1.55,
@@ -1278,18 +1335,16 @@ const css: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '14px 22px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     fontSize: 15,
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 12px 24px rgba(5,4,170,0.28)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // NO MATCH
   noMatchWrap: {
     display: 'flex',
     flexDirection: 'column',
@@ -1301,7 +1356,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'var(--bg-tertiary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1310,11 +1365,11 @@ const css: Record<string, React.CSSProperties> = {
   noMatchTitle: {
     fontSize: 16,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
   },
   noMatchBody: {
     fontSize: 13.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 4,
     lineHeight: 1.5,
   },
@@ -1322,8 +1377,8 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 16,
     padding: '10px 18px',
     borderRadius: 12,
-    backgroundColor: '#EEF0FF',
-    color: '#0504AA',
+    backgroundColor: 'var(--brand-soft)',
+    color: 'var(--brand-primary)',
     border: 'none',
     fontSize: 13.5,
     fontWeight: 800,
@@ -1331,23 +1386,24 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
 
-  // CENTER SCREENS
   centerRoot: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   errorHalo: {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1357,8 +1413,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7D2FE',
+    backgroundColor: 'var(--brand-soft)',
+    border: '1px solid var(--brand-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1367,13 +1423,13 @@ const css: Record<string, React.CSSProperties> = {
   centerTitle: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   centerBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 8,
     maxWidth: 340,
     lineHeight: 1.55,
@@ -1385,30 +1441,28 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 800,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // SKELETONS
   searchSkeleton: {
     height: 46,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     animation: 'skShimmer 1.4s ease-in-out infinite',
   },
   pillRowSkeleton: {
     height: 36,
     borderRadius: 999,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 12,
     maxWidth: 480,
     animation: 'skShimmer 1.4s ease-in-out infinite',
@@ -1416,8 +1470,8 @@ const css: Record<string, React.CSSProperties> = {
   orderSkeleton: {
     height: 180,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 12,
     animation: 'skShimmer 1.4s ease-in-out infinite',
   },

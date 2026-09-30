@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
 import {
@@ -14,7 +20,6 @@ import {
   MdOutlineMarkChatUnread,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
 interface Conversation {
   conversation_id: string;
   last_message?: string;
@@ -23,19 +28,20 @@ interface Conversation {
   other_user_id?: string;
   other_user_name?: string;
   other_user_avatar?: string;
-  // Optional — used to show "You: " prefix when the last message is
-  // the current user's own. Backend may not return this today; if it
-  // doesn't, the prefix simply won't appear.
   last_sender_id?: string;
   [key: string]: unknown;
 }
 
 type Filter = 'all' | 'unread';
 
-// ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
+  if (
+    url.startsWith('http') ||
+    url.startsWith('blob:') ||
+    url.startsWith('data:')
+  )
+    return url;
   const base =
     process.env.NEXT_PUBLIC_API_BASE ||
     process.env.NEXT_PUBLIC_API_URL ||
@@ -45,18 +51,12 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   return `${base}/${url}`;
 }
 
-// Relative time for a chat row. WhatsApp-style:
-//   Today      → "11:34"
-//   Yesterday  → "Yesterday"
-//   This week  → "Mon", "Tue"
-//   Older      → "25/12"
 function relativeRowTime(iso: string): string {
   if (!iso) return '';
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '';
 
   const now = Date.now();
-  const diffMs = now - then;
   const dayMs = 86_400_000;
 
   const today = new Date();
@@ -64,7 +64,9 @@ function relativeRowTime(iso: string): string {
   const thenDate = new Date(then);
   thenDate.setHours(0, 0, 0, 0);
 
-  const dayDiff = Math.round((today.getTime() - thenDate.getTime()) / dayMs);
+  const dayDiff = Math.round(
+    (today.getTime() - thenDate.getTime()) / dayMs,
+  );
 
   if (dayDiff <= 0) {
     return new Date(then).toLocaleTimeString([], {
@@ -74,7 +76,9 @@ function relativeRowTime(iso: string): string {
   }
   if (dayDiff === 1) return 'Yesterday';
   if (dayDiff < 7) {
-    return new Date(then).toLocaleDateString([], { weekday: 'short' });
+    return new Date(then).toLocaleDateString([], {
+      weekday: 'short',
+    });
   }
   return new Date(then).toLocaleDateString([], {
     day: '2-digit',
@@ -86,10 +90,11 @@ function initials(name: string): string {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return '?';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (
+    parts[0][0] + parts[parts.length - 1][0]
+  ).toUpperCase();
 }
 
-// Stable avatar hue derived from the user ID — same color every time.
 function avatarHue(seed: string): number {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -98,7 +103,6 @@ function avatarHue(seed: string): number {
   return hash;
 }
 
-// ─── Component ──────────────────────────────────────────────────────
 export default function StorekeeperInboxPage() {
   const router = useRouter();
 
@@ -121,41 +125,48 @@ export default function StorekeeperInboxPage() {
     };
   }, []);
 
-  // ── Load current user (for "You:" prefix detection) ─────────────
   useEffect(() => {
     (async () => {
       try {
-        const me: { id?: string; user_id?: string } | null = await api.getMyProfile();
+        const me: { id?: string; user_id?: string } | null =
+          await api.getMyProfile();
         if (!isMountedRef.current) return;
         setMyUserId(me?.id || me?.user_id || null);
       } catch {
-        // non-critical — no "You:" prefix if it fails
+        // non-critical
       }
     })();
   }, []);
 
-  // ── Load conversations ──────────────────────────────────────────
-  const loadConversations = useCallback(async (showSpinner = true) => {
-    const seq = ++reqSeq.current;
-    if (showSpinner) setIsLoading(true);
-    setError(null);
-    try {
-      const data = (await api.getConversations()) as Conversation[];
-      if (seq !== reqSeq.current || !isMountedRef.current) return;
-      // Drop SEAI assistant conversations — not real chats.
-      const filtered = (data || []).filter(
-        (conv) => !String(conv.conversation_id).endsWith('_seai'),
-      );
-      setConversations(filtered);
-    } catch (err: unknown) {
-      if (seq !== reqSeq.current || !isMountedRef.current) return;
-      setError(err instanceof Error ? err.message : 'Failed to load conversations');
-    } finally {
-      if (seq === reqSeq.current && isMountedRef.current) {
-        setIsLoading(false);
+  const loadConversations = useCallback(
+    async (showSpinner = true) => {
+      const seq = ++reqSeq.current;
+      if (showSpinner) setIsLoading(true);
+      setError(null);
+      try {
+        const data =
+          (await api.getConversations()) as Conversation[];
+        if (seq !== reqSeq.current || !isMountedRef.current) return;
+        const filtered = (data || []).filter(
+          (conv) =>
+            !String(conv.conversation_id).endsWith('_seai'),
+        );
+        setConversations(filtered);
+      } catch (err: unknown) {
+        if (seq !== reqSeq.current || !isMountedRef.current) return;
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Failed to load conversations',
+        );
+      } finally {
+        if (seq === reqSeq.current && isMountedRef.current) {
+          setIsLoading(false);
+        }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => loadConversations(), 0);
@@ -168,11 +179,13 @@ export default function StorekeeperInboxPage() {
     setIsRefreshing(false);
   };
 
-  // ── Filtering ───────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return conversations.filter((c) => {
-      if (filter === 'unread' && !(c.unread_count && c.unread_count > 0)) {
+      if (
+        filter === 'unread' &&
+        !(c.unread_count && c.unread_count > 0)
+      ) {
         return false;
       }
       if (!q) return true;
@@ -185,271 +198,335 @@ export default function StorekeeperInboxPage() {
   const unreadTotal = useMemo(
     () =>
       conversations.reduce(
-        (sum, c) => sum + (c.unread_count && c.unread_count > 0 ? c.unread_count : 0),
+        (sum, c) =>
+          sum + (c.unread_count && c.unread_count > 0
+            ? c.unread_count
+            : 0),
         0,
       ),
     [conversations],
   );
 
-  // ── Navigation ──────────────────────────────────────────────────
   const openChat = (conv: Conversation) => {
     const params = new URLSearchParams();
-    if (conv.other_user_id) params.set('otherUserId', conv.other_user_id);
-    if (conv.other_user_name) params.set('otherUserName', conv.other_user_name);
-    if (conv.other_user_avatar) params.set('otherUserAvatar', conv.other_user_avatar);
+    if (conv.other_user_id)
+      params.set('otherUserId', conv.other_user_id);
+    if (conv.other_user_name)
+      params.set('otherUserName', conv.other_user_name);
+    if (conv.other_user_avatar)
+      params.set('otherUserAvatar', conv.other_user_avatar);
     const suffix = params.toString() ? `?${params.toString()}` : '';
     router.push(`/chat/${conv.conversation_id}${suffix}`);
   };
 
-  const openCommunity = () => router.push('/storekeeper/community');
+  const openCommunity = () =>
+    router.push('/storekeeper/community');
 
   return (
-    <main style={styles.container}>
+    <main style={styles.container} className="sk-inbox-root">
       <style>{PAGE_CSS}</style>
 
-      {/* ═══ Header ═══════════════════════════════════════════════ */}
-      <header style={styles.header}>
-        <div style={styles.headerLeft}>
-          <h1 style={styles.title}>Inbox</h1>
-          {unreadTotal > 0 && (
-            <span style={styles.headerUnread}>{unreadTotal}</span>
-          )}
-        </div>
-        <button
-          onClick={handleRefresh}
-          style={styles.headerIconBtn}
-          aria-label="Refresh"
-          disabled={isRefreshing}
-        >
-          <MdRefresh
-            size={22}
-            color="#0B0B1A"
+      <div className="sk-inbox-shell">
+        <header style={styles.header}>
+          <div style={styles.headerLeft}>
+            <h1 style={styles.title}>Inbox</h1>
+            {unreadTotal > 0 && (
+              <span style={styles.headerUnread}>{unreadTotal}</span>
+            )}
+          </div>
+          <button
+            onClick={handleRefresh}
+            style={styles.headerIconBtn}
+            aria-label="Refresh"
+            disabled={isRefreshing}
+          >
+            <MdRefresh
+              size={22}
+              color="var(--brand-primary)"
+              style={{
+                animation: isRefreshing
+                  ? 'skInboxSpin 0.8s linear infinite'
+                  : 'none',
+              }}
+            />
+          </button>
+        </header>
+
+        <div style={styles.searchWrap}>
+          <div
             style={{
-              animation: isRefreshing ? 'skInboxSpin 0.8s linear infinite' : 'none',
+              ...styles.searchBox,
+              ...(inputFocused ? styles.searchBoxFocused : null),
             }}
-          />
-        </button>
-      </header>
-
-      {/* ═══ Search ═══════════════════════════════════════════════ */}
-      <div style={styles.searchWrap}>
-        <div
-          style={{
-            ...styles.searchBox,
-            ...(inputFocused ? styles.searchBoxFocused : null),
-          }}
-        >
-          <MdSearch size={20} color="#94A3B8" style={{ flexShrink: 0 }} />
-          <input
-            type="text"
-            placeholder="Search chats"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            style={styles.searchInput}
-          />
-          {query && (
-            <button
-              onClick={() => setQuery('')}
-              style={styles.searchClear}
-              aria-label="Clear search"
-            >
-              <MdClose size={16} color="#94A3B8" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ═══ Filter pills ═════════════════════════════════════════ */}
-      <div style={styles.pillRow}>
-        <FilterPill
-          label="All"
-          active={filter === 'all'}
-          count={conversations.length}
-          onClick={() => setFilter('all')}
-        />
-        <FilterPill
-          label="Unread"
-          active={filter === 'unread'}
-          count={unreadTotal}
-          onClick={() => setFilter('unread')}
-        />
-      </div>
-
-      {/* ═══ Body ═════════════════════════════════════════════════ */}
-      <div style={styles.body}>
-        {isLoading ? (
-          <div style={styles.skeletonList}>
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} style={styles.skeletonRow}>
-                <div style={styles.skeletonAvatar} />
-                <div style={styles.skeletonBody}>
-                  <div style={{ ...styles.skeletonLine, width: '45%' }} />
-                  <div style={{ ...styles.skeletonLine, width: '75%', height: 10 }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div style={styles.center}>
-            <div style={styles.errorHalo}>
-              <MdErrorOutline size={36} color="#B91C1C" />
-            </div>
-            <h3 style={styles.stateTitle}>Couldn&apos;t load your chats</h3>
-            <p style={styles.stateBody}>{error}</p>
-            <button onClick={() => loadConversations()} style={styles.retryBtn}>
-              Try again
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Pinned Community row — always visible, only on "All" tab
-                or when it matches the search. */}
-            {(filter === 'all' || query) && (
+          >
+            <MdSearch
+              size={20}
+              color="var(--text-muted)"
+              style={{ flexShrink: 0 }}
+            />
+            <input
+              type="text"
+              placeholder="Search chats"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              style={styles.searchInput}
+            />
+            {query && (
               <button
-                onClick={openCommunity}
-                style={styles.communityRow}
-                className="sk-community-row"
+                onClick={() => setQuery('')}
+                style={styles.searchClear}
+                aria-label="Clear search"
               >
-                <div style={styles.communityIcon}>
-                  <MdGroups size={26} color="#FFFFFF" />
-                </div>
-                <div style={styles.communityInfo}>
-                  <div style={styles.communityName}>Community</div>
-                  <div style={styles.communityPreview}>
-                    Sellers&apos; room · storekeepers and providers
-                  </div>
-                </div>
-                <MdChevronRight size={20} color="#7C3AED" />
+                <MdClose size={16} color="var(--text-muted)" />
               </button>
             )}
+          </div>
+        </div>
 
-            {/* Chat list */}
-            {filtered.length === 0 ? (
-              <div style={styles.center}>
-                {query || filter === 'unread' ? (
-                  <>
-                    <div style={styles.emptyHalo}>
-                      <MdOutlineMarkChatUnread size={34} color="#0504AA" />
-                    </div>
-                    <h3 style={styles.stateTitle}>
-                      {query ? 'No matches' : 'All caught up'}
-                    </h3>
-                    <p style={styles.stateBody}>
-                      {query
-                        ? `Nothing matches "${query}"`
-                        : 'No unread messages right now'}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div style={styles.emptyHalo}>
-                      <MdOutlineMarkChatUnread size={34} color="#0504AA" />
-                    </div>
-                    <h3 style={styles.stateTitle}>No conversations yet</h3>
-                    <p style={styles.stateBody}>
-                      When customers or providers message you, they&apos;ll
-                      appear here.
-                    </p>
-                  </>
-                )}
+        <div style={styles.pillRow}>
+          <FilterPill
+            label="All"
+            active={filter === 'all'}
+            count={conversations.length}
+            onClick={() => setFilter('all')}
+          />
+          <FilterPill
+            label="Unread"
+            active={filter === 'unread'}
+            count={unreadTotal}
+            onClick={() => setFilter('unread')}
+          />
+        </div>
+
+        <div style={styles.body}>
+          {isLoading ? (
+            <div style={styles.skeletonList}>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} style={styles.skeletonRow}>
+                  <div style={styles.skeletonAvatar} />
+                  <div style={styles.skeletonBody}>
+                    <div
+                      style={{
+                        ...styles.skeletonLine,
+                        width: '45%',
+                      }}
+                    />
+                    <div
+                      style={{
+                        ...styles.skeletonLine,
+                        width: '75%',
+                        height: 10,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : error ? (
+            <div style={styles.center}>
+              <div style={styles.errorHalo}>
+                <MdErrorOutline
+                  size={36}
+                  color="var(--danger-fg)"
+                />
               </div>
-            ) : (
-              <div style={styles.list}>
-                {filtered.map((conv) => {
-                  const name = conv.other_user_name || 'User';
-                  const avatar = resolveImageUrl(conv.other_user_avatar);
-                  const unread = conv.unread_count ?? 0;
-                  const isUnread = unread > 0;
-                  const lastTime = conv.last_time ? relativeRowTime(conv.last_time) : '';
-                  const mine =
-                    myUserId && conv.last_sender_id
-                      ? conv.last_sender_id === myUserId
-                      : false;
-                  const hue = avatarHue(conv.other_user_id || name);
+              <h3 style={styles.stateTitle}>
+                Couldn&apos;t load your chats
+              </h3>
+              <p style={styles.stateBody}>{error}</p>
+              <button
+                onClick={() => loadConversations()}
+                style={styles.retryBtn}
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <>
+              {(filter === 'all' || query) && (
+                <button
+                  onClick={openCommunity}
+                  style={styles.communityRow}
+                  className="sk-community-row"
+                >
+                  <div style={styles.communityIcon}>
+                    <MdGroups size={26} color="#FFFFFF" />
+                  </div>
+                  <div style={styles.communityInfo}>
+                    <div style={styles.communityName}>
+                      Community
+                    </div>
+                    <div style={styles.communityPreview}>
+                      Sellers&apos; room · storekeepers and providers
+                    </div>
+                  </div>
+                  <MdChevronRight
+                    size={20}
+                    color="var(--purple-fg)"
+                  />
+                </button>
+              )}
 
-                  return (
-                    <button
-                      key={conv.conversation_id}
-                      onClick={() => openChat(conv)}
-                      style={styles.row}
-                      className="sk-inbox-row"
-                    >
-                      {/* Avatar */}
-                      <div
-                        style={{
-                          ...styles.avatar,
-                          ...(avatar ? null : {
-                            background: `linear-gradient(135deg, hsl(${hue}, 65%, 55%) 0%, hsl(${(hue + 40) % 360}, 70%, 45%) 100%)`,
-                          }),
-                        }}
+              {filtered.length === 0 ? (
+                <div style={styles.center}>
+                  {query || filter === 'unread' ? (
+                    <>
+                      <div style={styles.emptyHalo}>
+                        <MdOutlineMarkChatUnread
+                          size={34}
+                          color="var(--brand-primary)"
+                        />
+                      </div>
+                      <h3 style={styles.stateTitle}>
+                        {query ? 'No matches' : 'All caught up'}
+                      </h3>
+                      <p style={styles.stateBody}>
+                        {query
+                          ? `Nothing matches "${query}"`
+                          : 'No unread messages right now'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div style={styles.emptyHalo}>
+                        <MdOutlineMarkChatUnread
+                          size={34}
+                          color="var(--brand-primary)"
+                        />
+                      </div>
+                      <h3 style={styles.stateTitle}>
+                        No conversations yet
+                      </h3>
+                      <p style={styles.stateBody}>
+                        When customers or providers message you,
+                        they&apos;ll appear here.
+                      </p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div style={styles.list}>
+                  {filtered.map((conv) => {
+                    const name = conv.other_user_name || 'User';
+                    const avatar = resolveImageUrl(
+                      conv.other_user_avatar,
+                    );
+                    const unread = conv.unread_count ?? 0;
+                    const isUnread = unread > 0;
+                    const lastTime = conv.last_time
+                      ? relativeRowTime(conv.last_time)
+                      : '';
+                    const mine =
+                      myUserId && conv.last_sender_id
+                        ? conv.last_sender_id === myUserId
+                        : false;
+                    const hue = avatarHue(
+                      conv.other_user_id || name,
+                    );
+
+                    return (
+                      <button
+                        key={conv.conversation_id}
+                        onClick={() => openChat(conv)}
+                        style={styles.row}
+                        className="sk-inbox-row"
                       >
-                        {avatar ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={avatar} alt="" style={styles.avatarImg} />
-                        ) : (
-                          <span style={styles.avatarInitials}>{initials(name)}</span>
-                        )}
-                      </div>
-
-                      {/* Text block */}
-                      <div style={styles.rowContent}>
-                        <div style={styles.nameRow}>
-                          <span
-                            style={{
-                              ...styles.name,
-                              ...(isUnread ? styles.nameUnread : null),
-                            }}
-                          >
-                            {name}
-                          </span>
-                        </div>
-                        <div style={styles.previewRow}>
-                          {mine && (
-                            <MdDoneAll
-                              size={14}
-                              color="#34B7F1"
-                              style={{ flexShrink: 0, marginRight: 4 }}
+                        <div
+                          style={{
+                            ...styles.avatar,
+                            ...(avatar
+                              ? null
+                              : {
+                                  background: `linear-gradient(135deg, hsl(${hue}, 65%, 55%) 0%, hsl(${
+                                    (hue + 40) % 360
+                                  }, 70%, 45%) 100%)`,
+                                }),
+                          }}
+                        >
+                          {avatar ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={avatar}
+                              alt=""
+                              style={styles.avatarImg}
                             />
+                          ) : (
+                            <span style={styles.avatarInitials}>
+                              {initials(name)}
+                            </span>
                           )}
-                          <span
-                            style={{
-                              ...styles.preview,
-                              ...(isUnread ? styles.previewUnread : null),
-                            }}
-                          >
-                            {mine && <span style={styles.previewYou}>You: </span>}
-                            {conv.last_message || 'No messages yet'}
-                          </span>
                         </div>
-                      </div>
 
-                      {/* Trailing: time OR unread badge */}
-                      <div style={styles.trailing}>
-                        {isUnread ? (
-                          <span style={styles.unreadPill}>
-                            {unread > 99 ? '99+' : unread}
-                          </span>
-                        ) : (
-                          lastTime && (
-                            <span style={styles.timeText}>{lastTime}</span>
-                          )
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
+                        <div style={styles.rowContent}>
+                          <div style={styles.nameRow}>
+                            <span
+                              style={{
+                                ...styles.name,
+                                ...(isUnread
+                                  ? styles.nameUnread
+                                  : null),
+                              }}
+                            >
+                              {name}
+                            </span>
+                          </div>
+                          <div style={styles.previewRow}>
+                            {mine && (
+                              <MdDoneAll
+                                size={14}
+                                color="var(--info-fg)"
+                                style={{
+                                  flexShrink: 0,
+                                  marginRight: 4,
+                                }}
+                              />
+                            )}
+                            <span
+                              style={{
+                                ...styles.preview,
+                                ...(isUnread
+                                  ? styles.previewUnread
+                                  : null),
+                              }}
+                            >
+                              {mine && (
+                                <span style={styles.previewYou}>
+                                  You:{' '}
+                                </span>
+                              )}
+                              {conv.last_message || 'No messages yet'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={styles.trailing}>
+                          {isUnread ? (
+                            <span style={styles.unreadPill}>
+                              {unread > 99 ? '99+' : unread}
+                            </span>
+                          ) : (
+                            lastTime && (
+                              <span style={styles.timeText}>
+                                {lastTime}
+                              </span>
+                            )
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </main>
   );
 }
 
-// ─── Filter pill ─────────────────────────────────────────────────────
 function FilterPill({
   label,
   active,
@@ -492,36 +569,46 @@ function FilterPill({
   );
 }
 
-// ─── Global keyframes ────────────────────────────────────────────────
 const PAGE_CSS = `
   @keyframes skInboxSpin { to { transform: rotate(360deg); } }
   @keyframes skInboxShimmer {
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
   }
-  .sk-inbox-row:hover { background-color: #F8FAFC; }
-  .sk-inbox-row:active { background-color: #F1F5F9; }
-  .sk-community-row:hover { box-shadow: 0 8px 24px rgba(124, 58, 237, 0.18); }
+  .sk-inbox-root { display: flex; justify-content: center; min-height: 100vh; }
+  .sk-inbox-shell {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+  .sk-inbox-row:hover { background-color: var(--bg-hover); }
+  .sk-inbox-row:active { background-color: var(--bg-tertiary); }
+  .sk-community-row:hover {
+    box-shadow:
+      0 8px 24px color-mix(in srgb, var(--purple-fg) 18%, transparent);
+  }
   .sk-community-row:active { transform: scale(0.995); }
   .sk-filter-pill:active { transform: scale(0.97); }
 `;
 
-// ─── Styles ──────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    height: '100%',
-    backgroundColor: '#FFFFFF',
+    flex: 1,
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
-  // ── Header
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 16px 12px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-primary)',
   },
   headerLeft: {
     display: 'flex',
@@ -531,7 +618,7 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: 26,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.7,
   },
@@ -543,8 +630,8 @@ const styles: Record<string, React.CSSProperties> = {
     height: 24,
     padding: '0 8px',
     borderRadius: 999,
-    backgroundColor: '#0504AA',
-    color: '#FFFFFF',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     fontSize: 12,
     fontWeight: 800,
   },
@@ -560,7 +647,6 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
 
-  // ── Search
   searchWrap: {
     padding: '0 16px 12px',
   },
@@ -570,14 +656,15 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '10px 14px',
     borderRadius: 14,
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-tertiary)',
     border: '1.5px solid transparent',
     transition: 'border-color 0.15s, background-color 0.15s',
   },
   searchBoxFocused: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0504AA',
-    boxShadow: '0 0 0 4px rgba(5, 4, 170, 0.08)',
+    backgroundColor: 'var(--bg-secondary)',
+    borderColor: 'var(--brand-primary)',
+    boxShadow:
+      '0 0 0 4px color-mix(in srgb, var(--brand-primary) 10%, transparent)',
   },
   searchInput: {
     flex: 1,
@@ -585,7 +672,7 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     background: 'transparent',
     fontSize: 15,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     fontFamily: 'inherit',
     minWidth: 0,
   },
@@ -594,7 +681,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 24,
     borderRadius: '50%',
     border: 'none',
-    backgroundColor: '#E2E8F0',
+    backgroundColor: 'var(--border-default)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -602,7 +689,6 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
 
-  // ── Filter pills
   pillRow: {
     display: 'flex',
     gap: 8,
@@ -616,38 +702,38 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
     padding: '7px 14px',
     borderRadius: 999,
-    border: '1px solid #E6E8F0',
-    backgroundColor: '#FFFFFF',
+    border: '1px solid var(--border-default)',
+    backgroundColor: 'var(--bg-secondary)',
     cursor: 'pointer',
     fontFamily: 'inherit',
     flexShrink: 0,
-    transition: 'background-color 0.15s, border-color 0.15s, transform 0.12s',
+    transition:
+      'background-color 0.15s, border-color 0.15s, transform 0.12s',
   },
   pillActive: {
-    backgroundColor: '#EEF0FF',
-    borderColor: '#C7CCFF',
+    backgroundColor: 'var(--brand-soft)',
+    borderColor: 'var(--brand-primary)',
   },
   pillLabel: {
     fontSize: 13,
     fontWeight: 700,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.1,
   },
   pillLabelActive: {
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
   },
   pillCount: {
     fontSize: 11,
     fontWeight: 700,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     minWidth: 18,
     textAlign: 'center',
   },
   pillCountActive: {
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
   },
 
-  // ── Body
   body: {
     flex: 1,
     overflowY: 'auto',
@@ -658,7 +744,6 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
   },
 
-  // ── Community pinned row
   communityRow: {
     display: 'flex',
     alignItems: 'center',
@@ -667,8 +752,9 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '14px 12px',
     marginBottom: 6,
     borderRadius: 16,
-    border: '1px solid #D8B4FE',
-    background: 'linear-gradient(135deg, #F5F3FF 0%, #FAF5FF 100%)',
+    border:
+      '1px solid color-mix(in srgb, var(--purple-fg) 40%, transparent)',
+    background: 'var(--purple-bg)',
     cursor: 'pointer',
     textAlign: 'left',
     fontFamily: 'inherit',
@@ -679,11 +765,12 @@ const styles: Record<string, React.CSSProperties> = {
     height: 52,
     flex: '0 0 52px',
     borderRadius: '50%',
-    background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)',
+    background: 'var(--purple-fg)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 6px 16px rgba(124, 58, 237, 0.28)',
+    boxShadow:
+      '0 6px 16px color-mix(in srgb, var(--purple-fg) 28%, transparent)',
   },
   communityInfo: {
     flex: 1,
@@ -692,13 +779,13 @@ const styles: Record<string, React.CSSProperties> = {
   communityName: {
     fontSize: 15.5,
     fontWeight: 800,
-    color: '#5B21B6',
+    color: 'var(--purple-fg)',
     letterSpacing: -0.1,
     lineHeight: 1.25,
   },
   communityPreview: {
     fontSize: 13,
-    color: '#7C3AED',
+    color: 'var(--purple-fg)',
     marginTop: 2,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -706,7 +793,6 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.85,
   },
 
-  // ── Chat row
   row: {
     display: 'flex',
     alignItems: 'center',
@@ -726,7 +812,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 52,
     flex: '0 0 52px',
     borderRadius: '50%',
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -760,7 +846,7 @@ const styles: Record<string, React.CSSProperties> = {
   name: {
     fontSize: 15,
     fontWeight: 600,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -776,7 +862,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   preview: {
     fontSize: 13.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -785,11 +871,11 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.35,
   },
   previewUnread: {
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     fontWeight: 600,
   },
   previewYou: {
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 500,
   },
   trailing: {
@@ -803,7 +889,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   timeText: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 500,
     letterSpacing: 0.1,
   },
@@ -815,14 +901,13 @@ const styles: Record<string, React.CSSProperties> = {
     height: 22,
     padding: '0 7px',
     borderRadius: 999,
-    backgroundColor: '#0504AA',
-    color: '#FFFFFF',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     fontSize: 11.5,
     fontWeight: 800,
     letterSpacing: 0.1,
   },
 
-  // ── States
   center: {
     display: 'flex',
     flexDirection: 'column',
@@ -835,8 +920,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 22,
-    backgroundColor: '#FEF2F2',
-    border: '1px solid #FECACA',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -846,23 +931,24 @@ const styles: Record<string, React.CSSProperties> = {
     width: 72,
     height: 72,
     borderRadius: 22,
-    background: 'linear-gradient(135deg, #EEF0FF 0%, #E0E7FF 100%)',
+    background: 'var(--brand-soft)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    boxShadow: '0 10px 28px rgba(5, 4, 170, 0.08)',
+    boxShadow:
+      '0 10px 28px color-mix(in srgb, var(--brand-primary) 10%, transparent)',
   },
   stateTitle: {
     fontSize: 16,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.2,
   },
   stateBody: {
     fontSize: 13.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 6,
     lineHeight: 1.5,
     maxWidth: 300,
@@ -872,16 +958,15 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '11px 22px',
     borderRadius: 12,
     border: 'none',
-    background: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    color: '#FFFFFF',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5, 4, 170, 0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // ── Skeleton
   skeletonList: {
     display: 'flex',
     flexDirection: 'column',
@@ -898,8 +983,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 52,
     height: 52,
     borderRadius: '50%',
-    background:
-      'linear-gradient(90deg, #EEF2F6 25%, #F8FAFC 50%, #EEF2F6 75%)',
+    background: 'var(--skeleton)',
     backgroundSize: '200% 100%',
     animation: 'skInboxShimmer 1.4s linear infinite',
     flexShrink: 0,
@@ -914,8 +998,7 @@ const styles: Record<string, React.CSSProperties> = {
   skeletonLine: {
     height: 12,
     borderRadius: 6,
-    background:
-      'linear-gradient(90deg, #EEF2F6 25%, #F8FAFC 50%, #EEF2F6 75%)',
+    background: 'var(--skeleton)',
     backgroundSize: '200% 100%',
     animation: 'skInboxShimmer 1.4s linear infinite',
   },
