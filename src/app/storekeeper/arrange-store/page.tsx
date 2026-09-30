@@ -16,10 +16,9 @@ import {
   MdMenuBook,
   MdCategory,
   MdImage,
-  MdArrowUpward,
-  MdArrowDownward,
-  MdSave,
   MdArrowBack,
+  MdArrowForward,
+  MdSave,
 } from 'react-icons/md';
 import type { IconType } from 'react-icons';
 
@@ -39,11 +38,9 @@ interface StoreItem {
 interface CategoryStyle {
   label: string;
   icon: IconType;
-  /** CSS var name (e.g. `--cat-tech`) that resolves per theme. */
   accentVar: string;
 }
 
-// Colors live in the CSS block below, defined per theme.
 const CATEGORY_STYLES: Record<string, CategoryStyle> = {
   tech_electronics: {
     label: 'Tech & Electronics',
@@ -181,8 +178,8 @@ function ArrangeStoreContent() {
     }
   };
 
-  const moveItem = async (index: number, dir: 'up' | 'down') => {
-    const next = dir === 'up' ? index - 1 : index + 1;
+  const moveItem = async (index: number, dir: 'left' | 'right') => {
+    const next = dir === 'left' ? index - 1 : index + 1;
     if (next < 0 || next >= items.length) return;
     const arr = [...items];
     const [moved] = arr.splice(index, 1);
@@ -202,8 +199,6 @@ function ArrangeStoreContent() {
     }
   };
 
-  // Group items into ordered category buckets (preserving first-seen
-  // category order across the flat list). Each bucket becomes one shelf.
   const shelves: { category: string; items: StoreItem[] }[] = [];
   const seenIndex: Record<string, number> = {};
   for (const it of items) {
@@ -256,8 +251,8 @@ function ArrangeStoreContent() {
 
       <div style={S.scrollArea}>
         <p style={S.helper}>
-          Tap the arrows to reorder items on the shelf. Changes save
-          automatically.
+          Use the ‹ › arrows on each item to move it along the shelf.
+          Changes save automatically.
         </p>
 
         {shelves.map(({ category, items: catItems }) => {
@@ -267,7 +262,6 @@ function ArrangeStoreContent() {
               key={category || 'uncategorized'}
               style={{
                 ...S.shelfSection,
-                // Expose the accent to descendants via a local var
                 ['--shelf-accent' as string]: `var(${sh.accentVar})`,
               }}
             >
@@ -296,12 +290,20 @@ function ArrangeStoreContent() {
                             { maximumFractionDigits: 0 },
                           )}`
                         : '';
-                    const canUp =
-                      globalIdx > 0 &&
-                      items[globalIdx - 1]?.category === category;
-                    const canDown =
-                      globalIdx < items.length - 1 &&
-                      items[globalIdx + 1]?.category === category;
+
+                    const prevItem =
+                      globalIdx > 0 ? items[globalIdx - 1] : null;
+                    const nextItem =
+                      globalIdx < items.length - 1
+                        ? items[globalIdx + 1]
+                        : null;
+
+                    const canLeft =
+                      prevItem !== null &&
+                      (prevItem.category || '') === category;
+                    const canRight =
+                      nextItem !== null &&
+                      (nextItem.category || '') === category;
 
                     return (
                       <article
@@ -325,49 +327,9 @@ function ArrangeStoreContent() {
                               />
                             </div>
                           )}
-
-                          <div
-                            style={S.shelfItemMoves}
-                            className="sk-shelf-item-moves"
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                canUp && moveItem(globalIdx, 'up')
-                              }
-                              disabled={!canUp}
-                              style={{
-                                ...S.moveBtn,
-                                opacity: canUp ? 1 : 0.35,
-                                cursor: canUp
-                                  ? 'pointer'
-                                  : 'not-allowed',
-                              }}
-                              aria-label="Move earlier"
-                              title="Move earlier"
-                            >
-                              <MdArrowUpward size={14} color="#fff" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                canDown &&
-                                moveItem(globalIdx, 'down')
-                              }
-                              disabled={!canDown}
-                              style={{
-                                ...S.moveBtn,
-                                opacity: canDown ? 1 : 0.35,
-                                cursor: canDown
-                                  ? 'pointer'
-                                  : 'not-allowed',
-                              }}
-                              aria-label="Move later"
-                              title="Move later"
-                            >
-                              <MdArrowDownward size={14} color="#fff" />
-                            </button>
-                          </div>
+                          <span style={S.shelfItemIndexBadge}>
+                            {localIdx + 1}
+                          </span>
                         </div>
 
                         <div style={S.shelfItemBody}>
@@ -380,6 +342,61 @@ function ArrangeStoreContent() {
                           {price && (
                             <p style={S.shelfItemPrice}>{price}</p>
                           )}
+                        </div>
+
+                        <div style={S.moveBar}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              canLeft && moveItem(globalIdx, 'left')
+                            }
+                            disabled={!canLeft}
+                            style={{
+                              ...S.moveBtn,
+                              opacity: canLeft ? 1 : 0.3,
+                              cursor: canLeft
+                                ? 'pointer'
+                                : 'not-allowed',
+                            }}
+                            aria-label="Move left"
+                            title="Move left"
+                          >
+                            <MdArrowBack
+                              size={16}
+                              color={
+                                canLeft
+                                  ? 'var(--text-primary)'
+                                  : 'var(--text-muted)'
+                              }
+                            />
+                          </button>
+                          <span style={S.moveDivider} aria-hidden />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              canRight &&
+                              moveItem(globalIdx, 'right')
+                            }
+                            disabled={!canRight}
+                            style={{
+                              ...S.moveBtn,
+                              opacity: canRight ? 1 : 0.3,
+                              cursor: canRight
+                                ? 'pointer'
+                                : 'not-allowed',
+                            }}
+                            aria-label="Move right"
+                            title="Move right"
+                          >
+                            <MdArrowForward
+                              size={16}
+                              color={
+                                canRight
+                                  ? 'var(--text-primary)'
+                                  : 'var(--text-muted)'
+                              }
+                            />
+                          </button>
                         </div>
 
                         <span
@@ -407,7 +424,6 @@ function ArrangeStoreContent() {
   );
 }
 
-// ─── Header ───────────────────────────────────────────────────────
 function Header({
   onBack,
   onSave,
@@ -469,7 +485,6 @@ export default function ArrangeStorePage() {
   );
 }
 
-// ─── CSS: shelf wood + interactions + per-category accents ───────
 const CSS = `
   @keyframes skSpin { to { transform: rotate(360deg); } }
   @keyframes skFadeInUp {
@@ -485,7 +500,7 @@ const CSS = `
     box-sizing: border-box;
   }
 
-  /* ── Shelf wood: light theme (oak) ─────────────────────── */
+  /* Shelf wood: light theme (oak) */
   .sk-arrange {
     --shelf-highlight: #E8C9A0;
     --shelf-face: #B8885C;
@@ -493,7 +508,6 @@ const CSS = `
     --shelf-bevel: rgba(255, 255, 255, 0.35);
     --shelf-drop: rgba(0, 0, 0, 0.22);
 
-    /* Per-category accents — light theme */
     --cat-tech:      #1A73E8;
     --cat-food:      #D84315;
     --cat-health:    #7B1FA2;
@@ -507,7 +521,6 @@ const CSS = `
     --cat-other:     #7A7A7A;
   }
 
-  /* ── Shelf wood: dark theme (brushed metal) ───────────── */
   [data-theme='dark'] .sk-arrange {
     --shelf-highlight: #3E3E42;
     --shelf-face: #26262A;
@@ -515,7 +528,6 @@ const CSS = `
     --shelf-bevel: rgba(232, 232, 236, 0.14);
     --shelf-drop: rgba(0, 0, 0, 0.55);
 
-    /* Accents brighten for dark backgrounds */
     --cat-tech:      #60A5FA;
     --cat-food:      #FB923C;
     --cat-health:    #C084FC;
@@ -536,18 +548,8 @@ const CSS = `
   .sk-shelf-item:hover {
     transform: translateY(-4px);
   }
-  .sk-shelf-item:hover .sk-shelf-item-moves,
-  .sk-shelf-item:focus-within .sk-shelf-item-moves {
-    opacity: 1;
-  }
-
-  /* Always show moves on touch devices */
-  @media (hover: none) {
-    .sk-shelf-item-moves { opacity: 1 !important; }
-  }
 `;
 
-// ─── Style objects ────────────────────────────────────────────────
 const S: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
@@ -558,7 +560,6 @@ const S: Record<string, React.CSSProperties> = {
     transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
-  // ── Header ────────────────────────────────────────────────
   header: {
     position: 'sticky',
     top: 0,
@@ -624,7 +625,6 @@ const S: Record<string, React.CSSProperties> = {
     letterSpacing: 0.2,
   },
 
-  // ── Scroll area ───────────────────────────────────────────
   scrollArea: {
     flex: 1,
     overflowY: 'auto',
@@ -641,7 +641,6 @@ const S: Record<string, React.CSSProperties> = {
     fontWeight: 500,
   },
 
-  // ── Shelf section ─────────────────────────────────────────
   shelfSection: {
     marginBottom: 22,
   },
@@ -682,7 +681,6 @@ const S: Record<string, React.CSSProperties> = {
     paddingLeft: 2,
   },
 
-  // ── Shelf row (scrollable items area) ─────────────────────
   shelfRowWrap: {
     position: 'relative',
     paddingTop: 6,
@@ -696,7 +694,6 @@ const S: Record<string, React.CSSProperties> = {
     WebkitOverflowScrolling: 'touch',
   },
 
-  // ── Shelf edge (wooden plank) ─────────────────────────────
   shelfEdge: {
     height: 16,
     marginLeft: 4,
@@ -739,11 +736,11 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: '0 4px 4px 0',
   },
 
-  // ── Item card (standing on shelf) ─────────────────────────
+  // ── Item card ────────────────────────────────────────────
   shelfItem: {
     position: 'relative',
-    flex: '0 0 112px',
-    width: 112,
+    flex: '0 0 132px',
+    width: 132,
     display: 'flex',
     flexDirection: 'column',
     borderRadius: 12,
@@ -775,38 +772,32 @@ const S: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  shelfItemMoves: {
+  shelfItemIndexBadge: {
     position: 'absolute',
     top: 6,
-    right: 6,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-    opacity: 0,
-    transition: 'opacity 0.15s ease',
-    zIndex: 2,
-  },
-  moveBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    left: 6,
+    minWidth: 20,
+    height: 20,
+    padding: '0 6px',
+    borderRadius: 999,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     backdropFilter: 'blur(6px)',
     WebkitBackdropFilter: 'blur(6px)',
-    border: 'none',
+    color: '#FFFFFF',
+    fontSize: 10.5,
+    fontWeight: 800,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 0,
-    transition: 'transform 0.1s ease',
+    fontVariantNumeric: 'tabular-nums',
+    pointerEvents: 'none',
   },
   shelfItemBody: {
-    padding: '8px 10px 10px',
+    padding: '8px 10px 8px',
     display: 'flex',
     flexDirection: 'column',
     gap: 2,
-    borderBottomLeftRadius: 11,
-    borderBottomRightRadius: 11,
+    minHeight: 44,
   },
   shelfItemTitle: {
     fontSize: 11.5,
@@ -826,9 +817,36 @@ const S: Record<string, React.CSSProperties> = {
     fontVariantNumeric: 'tabular-nums',
     letterSpacing: -0.1,
   },
+
+  // ── Always-visible move bar ──────────────────────────────
+  moveBar: {
+    display: 'flex',
+    alignItems: 'stretch',
+    borderTop: '1px solid var(--border-subtle)',
+    backgroundColor: 'var(--bg-tertiary)',
+    borderBottomLeftRadius: 11,
+    borderBottomRightRadius: 11,
+    overflow: 'hidden',
+  },
+  moveBtn: {
+    flex: 1,
+    height: 34,
+    border: 'none',
+    backgroundColor: 'transparent',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    transition: 'background-color 0.12s ease, transform 0.1s ease',
+  },
+  moveDivider: {
+    width: 1,
+    backgroundColor: 'var(--border-default)',
+    alignSelf: 'stretch',
+  },
+
   shelfItemBase: {
-    // Small dark bar under the card that rests on the shelf edge
-    // — creates the "standing on the shelf" illusion.
     position: 'absolute',
     left: 6,
     right: 6,
@@ -841,7 +859,6 @@ const S: Record<string, React.CSSProperties> = {
     pointerEvents: 'none',
   },
 
-  // ── Center / empty states ─────────────────────────────────
   centerFill: {
     flex: 1,
     display: 'flex',
@@ -885,7 +902,6 @@ const S: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
   },
 
-  // ── Toast ─────────────────────────────────────────────────
   toast: {
     position: 'fixed',
     bottom: 24,
