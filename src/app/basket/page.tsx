@@ -12,20 +12,15 @@ import {
   MdAdd,
   MdDeleteOutline,
   MdRefresh,
-  MdChevronRight,
   MdErrorOutline,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
-// The API returns listing_id + store_id + quantity. Name/price may come
-// from a joined listing row — the backend isn't consistent, so we accept
-// every plausible key name.
 interface BasketItem {
   id: number;
   listing_id?: string;
   store_id?: string;
   quantity?: number;
-  // Joined fields — may or may not be present depending on backend
   name?: string;
   title?: string;
   price?: number | string;
@@ -51,7 +46,7 @@ interface BasketData {
 
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
+  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
   const base =
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_API_BASE ||
@@ -77,6 +72,15 @@ function itemName(item: BasketItem): string {
 function itemPrice(item: BasketItem): number {
   const n = Number(item.price ?? 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+// Inject `spin` once at module scope — original only rendered the keyframe
+// inside the *loaded* branch, so loading/empty/error spinners never spun.
+if (typeof document !== 'undefined' && !document.getElementById('basket-spin-kf')) {
+  const s = document.createElement('style');
+  s.id = 'basket-spin-kf';
+  s.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+  document.head.appendChild(s);
 }
 
 export default function BasketPage() {
@@ -155,7 +159,6 @@ export default function BasketPage() {
     setError(null);
     try {
       await api.checkoutBasket();
-      // ✅ Route to the unified saved screen's History tab
       router.push('/shopper/saved?tab=History');
     } catch (err: unknown) {
       const msg =
@@ -170,8 +173,6 @@ export default function BasketPage() {
 
   const total = Number(basket.total ?? 0);
 
-  // ✅ Accept both shapes the backend might return: store_groups (grouped)
-  //    or a flat items array. Flatten into groups if we only get items.
   const storeGroups: StoreGroup[] = (() => {
     if (Array.isArray(basket.store_groups) && basket.store_groups.length > 0) {
       return basket.store_groups;
@@ -201,11 +202,11 @@ export default function BasketPage() {
     );
   }
 
-  // ── Error state (no data at all) ────────────────────────────
+  // ── Error state ────────────────────────────────────────────
   if (error && storeGroups.length === 0) {
     return (
       <main style={styles.center}>
-        <MdErrorOutline size={64} color="#EF9A9A" />
+        <MdErrorOutline size={64} color="var(--danger-fg)" />
         <p style={styles.emptyTitle}>Couldn&apos;t load your basket</p>
         <p style={styles.emptySubtitle}>{error}</p>
         <button onClick={handleRefresh} style={styles.startShoppingBtn}>
@@ -219,7 +220,7 @@ export default function BasketPage() {
   if (storeGroups.length === 0) {
     return (
       <main style={styles.center}>
-        <MdShoppingBasket size={80} color="#ccc" />
+        <MdShoppingBasket size={80} color="var(--border-strong)" />
         <p style={styles.emptyTitle}>Your basket is empty</p>
         <p style={styles.emptySubtitle}>Add items from stores near you</p>
         <button
@@ -253,7 +254,7 @@ export default function BasketPage() {
         >
           <MdRefresh
             size={24}
-            color="#0504AA"
+            color="var(--brand-primary)"
             style={{
               animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none',
             }}
@@ -261,10 +262,10 @@ export default function BasketPage() {
         </button>
       </div>
 
-      {/* Inline error banner (non-blocking) */}
+      {/* Inline error banner */}
       {error && (
         <div style={styles.errorBanner}>
-          <MdErrorOutline size={16} color="#B71C1C" />
+          <MdErrorOutline size={16} color="var(--danger-fg)" />
           <span style={{ marginLeft: 8, flex: 1 }}>{error}</span>
           <button
             onClick={() => setError(null)}
@@ -281,7 +282,7 @@ export default function BasketPage() {
         {storeGroups.map((group) => (
           <div key={group.store_id} style={styles.storeCard}>
             <div style={styles.storeHeader}>
-              <MdStore size={18} color="#666" />
+              <MdStore size={18} color="var(--text-tertiary)" />
               <span style={styles.storeName}>
                 {group.store_name ||
                   `Store #${String(group.store_id).slice(0, 8)}`}
@@ -319,7 +320,7 @@ export default function BasketPage() {
                         }}
                       />
                     ) : (
-                      <MdImage size={24} color="#888" />
+                      <MdImage size={24} color="var(--text-muted)" />
                     )}
                   </div>
 
@@ -364,7 +365,7 @@ export default function BasketPage() {
                     title="Remove"
                     disabled={busy}
                   >
-                    <MdDeleteOutline size={18} color="#FF0000" />
+                    <MdDeleteOutline size={18} color="var(--danger-fg)" />
                   </button>
                 </div>
               );
@@ -391,8 +392,6 @@ export default function BasketPage() {
           {isCheckingOut ? 'Processing…' : 'Place Reservations'}
         </button>
       </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }
@@ -402,7 +401,11 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: 'var(--bg-primary)',
+    maxWidth: 720,
+    marginLeft: 'auto',
+    marginRight: 'auto',
+    width: '100%',
   },
   center: {
     display: 'flex',
@@ -410,15 +413,15 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '100vh',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-primary)',
     padding: 16,
     textAlign: 'center',
   },
   spinner: {
     width: 36,
     height: 36,
-    border: '4px solid #eee',
-    borderTopColor: '#0504AA',
+    border: '4px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
@@ -426,18 +429,18 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 20,
     fontWeight: 600,
     margin: '16px 0 8px',
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
   },
   emptySubtitle: {
-    color: '#888',
+    color: 'var(--text-muted)',
     marginBottom: 24,
     maxWidth: 320,
     lineHeight: 1.5,
   },
   startShoppingBtn: {
     padding: '12px 32px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     border: 'none',
     borderRadius: 12,
     fontSize: 16,
@@ -449,14 +452,14 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '12px 16px',
-    backgroundColor: '#fff',
-    borderBottom: '1px solid #eee',
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-default)',
     flexShrink: 0,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: 600,
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   refreshBtn: {
@@ -472,17 +475,17 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     margin: '8px 12px 0',
     padding: '10px 12px',
-    backgroundColor: '#FFEBEE',
-    border: '1px solid #FFCDD2',
+    backgroundColor: 'var(--danger-bg)',
+    border: '1px solid var(--danger-strong)',
     borderRadius: 10,
-    color: '#B71C1C',
+    color: 'var(--danger-fg)',
     fontSize: 13,
     flexShrink: 0,
   },
   errorDismiss: {
     background: 'none',
     border: 'none',
-    color: '#B71C1C',
+    color: 'var(--danger-fg)',
     fontSize: 20,
     lineHeight: 1,
     cursor: 'pointer',
@@ -494,11 +497,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 12,
   },
   storeCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+    border: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-sm)',
   },
   storeHeader: {
     display: 'flex',
@@ -509,19 +513,20 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     fontSize: 16,
     fontWeight: 600,
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   storeSubtotal: {
     fontWeight: 'bold',
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
   },
   divider: {
     height: 1,
-    backgroundColor: '#eee',
+    backgroundColor: 'var(--border-default)',
     margin: '12px 0',
   },
   itemRow: {
@@ -534,7 +539,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 50,
     height: 50,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'var(--bg-tertiary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -549,19 +554,19 @@ const styles: Record<string, React.CSSProperties> = {
   itemName: {
     fontSize: 15,
     fontWeight: 500,
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   itemPrice: {
     fontSize: 13,
-    color: '#888',
+    color: 'var(--text-muted)',
   },
   qtyControl: {
     display: 'flex',
     alignItems: 'center',
-    border: '1px solid #ddd',
+    border: '1px solid var(--border-default)',
     borderRadius: 8,
     overflow: 'hidden',
     flexShrink: 0,
@@ -574,12 +579,13 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#333',
+    color: 'var(--text-secondary)',
   },
   qtyValue: {
     width: 28,
     textAlign: 'center',
     fontWeight: 600,
+    color: 'var(--text-primary)',
   },
   deleteBtn: {
     background: 'none',
@@ -595,23 +601,25 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#fff',
-    boxShadow: '0 -4px 8px rgba(0,0,0,0.05)',
+    backgroundColor: 'var(--bg-secondary)',
+    borderTop: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-md)',
     flexShrink: 0,
   },
   totalLabel: {
     fontSize: 12,
-    color: '#888',
+    color: 'var(--text-muted)',
   },
   totalValue: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
+    fontVariantNumeric: 'tabular-nums',
   },
   checkoutBtn: {
     padding: '14px 32px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     border: 'none',
     borderRadius: 12,
     fontSize: 16,

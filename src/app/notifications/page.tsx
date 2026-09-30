@@ -129,7 +129,6 @@ function classify(n: NotificationItem): NotificationKind {
       return 'delivery';
     if (raw.includes('review') || raw.includes('rating')) return 'review';
   }
-  // Fall back to title keyword sniffing
   const t = (n.title || '').toLowerCase();
   if (t.includes('order')) return 'order';
   if (t.includes('message')) return 'message';
@@ -140,18 +139,22 @@ function classify(n: NotificationItem): NotificationKind {
   return 'system';
 }
 
+// Icons sit on a tinted rounded square. Colors are semantic type colors,
+// not theme colors — where a token exists we use it, otherwise we keep
+// the vivid hue and switch the "soft" background to a translucent tint
+// so it renders correctly on both light and dark surfaces.
 const KIND_META: Record<
   NotificationKind,
   { color: string; soft: string; Icon: React.ComponentType<{ size: number; color: string }> }
 > = {
-  order: { color: '#0504AA', soft: '#EEF0FF', Icon: MdShoppingBag },
-  message: { color: '#0F766E', soft: '#CCFBF1', Icon: MdChat },
-  store: { color: '#7C3AED', soft: '#EDE9FE', Icon: MdStorefront },
-  verified: { color: '#16A34A', soft: '#DCFCE7', Icon: MdVerified },
-  favorite: { color: '#DB2777', soft: '#FCE7F3', Icon: MdFavorite },
-  delivery: { color: '#EA580C', soft: '#FFEDD5', Icon: MdLocalShipping },
-  review: { color: '#D97706', soft: '#FEF3C7', Icon: MdStar },
-  system: { color: '#64748B', soft: '#F1F5F9', Icon: MdNotifications },
+  order:    { color: 'var(--brand-primary)',  soft: 'var(--brand-soft)',  Icon: MdShoppingBag },
+  message:  { color: 'var(--info-fg)',        soft: 'var(--info-bg)',     Icon: MdChat },
+  store:    { color: 'var(--purple-fg)',      soft: 'var(--purple-bg)',   Icon: MdStorefront },
+  verified: { color: 'var(--success-fg)',     soft: 'var(--success-bg)',  Icon: MdVerified },
+  favorite: { color: '#DB2777',               soft: 'color-mix(in srgb, #DB2777 15%, transparent)', Icon: MdFavorite },
+  delivery: { color: '#EA580C',               soft: 'color-mix(in srgb, #EA580C 15%, transparent)', Icon: MdLocalShipping },
+  review:   { color: 'var(--warning-fg)',     soft: 'var(--warning-bg)',  Icon: MdStar },
+  system:   { color: 'var(--text-tertiary)',  soft: 'var(--bg-tertiary)', Icon: MdNotifications },
 };
 
 // ─── Deep link resolution ───────────────────────────────────────────
@@ -254,9 +257,7 @@ export default function NotificationsPage() {
     if (unread.length === 0 || markingAll) return;
     setMarkingAll(true);
     try {
-      // ✅ Fan-out: no backend bulk endpoint exists yet, so we fire them in
-      //    parallel. If the backend later adds `POST /notifications/read-all`,
-      //    swap this out for a single call.
+      // Fan-out: no backend bulk endpoint exists yet.
       await Promise.all(
         unread.map((n) => api.markNotificationRead(n.id).catch(() => null)),
       );
@@ -273,7 +274,6 @@ export default function NotificationsPage() {
     [notifications],
   );
 
-  // Group by date label, preserving order
   const groups = useMemo(() => {
     const out: { label: string; items: NotificationItem[] }[] = [];
     for (const n of notifications) {
@@ -298,7 +298,7 @@ export default function NotificationsPage() {
           onClick={() => router.back()}
           aria-label="Go back"
         >
-          <MdArrowBack size={22} color="#0B0B1A" />
+          <MdArrowBack size={22} color="var(--text-primary)" />
         </button>
         <div className="nf-headerText">
           <h1 className="nf-title">Notifications</h1>
@@ -315,7 +315,7 @@ export default function NotificationsPage() {
           title="Refresh"
           disabled={isLoading}
         >
-          <MdRefresh size={20} color="#0504AA" />
+          <MdRefresh size={20} color="var(--brand-primary)" />
         </button>
       </header>
 
@@ -327,7 +327,7 @@ export default function NotificationsPage() {
             onClick={handleMarkAll}
             disabled={markingAll}
           >
-            <MdDoneAll size={18} color="#0504AA" />
+            <MdDoneAll size={18} color="var(--brand-primary)" />
             <span>{markingAll ? 'Marking…' : 'Mark all as read'}</span>
           </button>
         </div>
@@ -355,7 +355,7 @@ export default function NotificationsPage() {
           </>
         ) : error ? (
           <div className="nf-center">
-            <MdErrorOutline size={48} color="#ef9a9a" />
+            <MdErrorOutline size={48} color="var(--danger-fg)" />
             <p className="nf-centerText">{error}</p>
             <button
               type="button"
@@ -368,7 +368,7 @@ export default function NotificationsPage() {
         ) : notifications.length === 0 ? (
           <div className="nf-center">
             <div className="nf-emptyIconWrap" aria-hidden="true">
-              <MdNotifications size={40} color="#0504AA" />
+              <MdNotifications size={40} color="var(--brand-primary)" />
             </div>
             <h2 className="nf-centerTitle">You&apos;re all caught up</h2>
             <p className="nf-centerText">
@@ -422,7 +422,7 @@ export default function NotificationsPage() {
                     {hasLink && (
                       <MdChevronRight
                         size={22}
-                        color="#cbd5e1"
+                        color="var(--border-strong)"
                         className="nf-chevron"
                         aria-hidden="true"
                       />
@@ -453,7 +453,7 @@ const CSS = `
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background: #F4F5FB;
+    background: var(--bg-primary);
   }
 
   /* Header */
@@ -462,8 +462,8 @@ const CSS = `
     align-items: center;
     gap: 10px;
     padding: 12px 14px;
-    background: #fff;
-    border-bottom: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-default);
     position: sticky;
     top: 0;
     z-index: 10;
@@ -481,7 +481,7 @@ const CSS = `
     transition: background 0.15s;
     flex: 0 0 36px;
   }
-  .nf-backBtn:hover { background: #F1F3FA; }
+  .nf-backBtn:hover { background: var(--bg-hover); }
   .nf-headerText {
     flex: 1;
     min-width: 0;
@@ -492,7 +492,7 @@ const CSS = `
   .nf-title {
     font-size: 18px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0;
     letter-spacing: -0.02em;
     white-space: nowrap;
@@ -500,8 +500,8 @@ const CSS = `
   .nf-unread {
     padding: 2px 8px;
     border-radius: 999px;
-    background: #EEF0FF;
-    color: #0504AA;
+    background: var(--brand-soft);
+    color: var(--brand-primary);
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.02em;
@@ -519,7 +519,7 @@ const CSS = `
     transition: background 0.15s;
     flex: 0 0 36px;
   }
-  .nf-iconBtn:hover:not(:disabled) { background: #F1F3FA; }
+  .nf-iconBtn:hover:not(:disabled) { background: var(--bg-hover); }
   .nf-iconBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* Actions bar */
@@ -534,9 +534,9 @@ const CSS = `
     gap: 6px;
     padding: 8px 14px;
     border-radius: 10px;
-    border: 1px solid #E5E7EF;
-    background: #fff;
-    color: #0504AA;
+    border: 1px solid var(--border-default);
+    background: var(--bg-secondary);
+    color: var(--brand-primary);
     font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
@@ -544,8 +544,8 @@ const CSS = `
     font-family: inherit;
   }
   .nf-markAllBtn:hover:not(:disabled) {
-    background: #EEF0FF;
-    border-color: #C9CBFF;
+    background: var(--brand-soft);
+    border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
   }
   .nf-markAllBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
@@ -561,7 +561,7 @@ const CSS = `
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 1px;
-    color: #94A3B8;
+    color: var(--text-muted);
     text-transform: uppercase;
     padding: 4px 4px 10px;
   }
@@ -575,8 +575,8 @@ const CSS = `
     padding: 14px;
     margin-bottom: 8px;
     border-radius: 14px;
-    border: 1px solid #EAECF3;
-    background: #fff;
+    border: 1px solid var(--border-default);
+    background: var(--bg-secondary);
     cursor: pointer;
     text-align: left;
     font-family: inherit;
@@ -584,14 +584,14 @@ const CSS = `
     animation: nf-fadeIn 0.2s ease;
   }
   .nf-card:hover {
-    border-color: #C9CBFF;
+    border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
   }
   .nf-cardUnread {
-    border-color: #DDDFFF;
-    box-shadow: 0 1px 3px rgba(5, 4, 170, 0.06);
+    border-color: color-mix(in srgb, var(--brand-primary) 28%, transparent);
+    box-shadow: var(--shadow-sm);
   }
   .nf-cardUnread:hover {
-    background: #FAFBFF;
+    background: var(--bg-hover);
   }
 
   .nf-iconWrap {
@@ -620,7 +620,7 @@ const CSS = `
   .nf-titleText {
     font-size: 14px;
     font-weight: 700;
-    color: #0B0B1A;
+    color: var(--text-primary);
     line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -632,18 +632,18 @@ const CSS = `
   }
   .nf-cardRead .nf-titleText {
     font-weight: 600;
-    color: #334155;
+    color: var(--text-secondary);
   }
   .nf-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #0504AA;
+    background: var(--brand-primary);
     flex: 0 0 8px;
   }
   .nf-bodyText {
     font-size: 13.5px;
-    color: #475569;
+    color: var(--text-secondary);
     line-height: 1.45;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -653,7 +653,7 @@ const CSS = `
   }
   .nf-timeText {
     font-size: 11.5px;
-    color: #94A3B8;
+    color: var(--text-muted);
     font-weight: 600;
     margin-top: 2px;
   }
@@ -676,7 +676,7 @@ const CSS = `
     width: 76px;
     height: 76px;
     border-radius: 26px;
-    background: #EEF0FF;
+    background: var(--brand-soft);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -685,13 +685,13 @@ const CSS = `
   .nf-centerTitle {
     font-size: 18px;
     font-weight: 800;
-    color: #0B0B1A;
+    color: var(--text-primary);
     margin: 0;
     letter-spacing: -0.01em;
   }
   .nf-centerText {
     font-size: 13.5px;
-    color: #64748B;
+    color: var(--text-tertiary);
     margin: 4px 0 0;
     max-width: 340px;
     line-height: 1.55;
@@ -699,8 +699,8 @@ const CSS = `
   .nf-retryBtn {
     margin-top: 14px;
     padding: 10px 22px;
-    background: #0504AA;
-    color: #fff;
+    background: var(--brand-primary);
+    color: var(--brand-on-primary);
     border: none;
     border-radius: 12px;
     font-weight: 700;
@@ -716,11 +716,11 @@ const CSS = `
     padding: 14px;
     margin-bottom: 8px;
     border-radius: 14px;
-    background: #fff;
-    border: 1px solid #EAECF3;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
   }
   .nf-skel {
-    background: linear-gradient(90deg, #EEF2F6 0%, #F8FAFC 50%, #EEF2F6 100%);
+    background: var(--skeleton);
     background-size: 800px 100%;
     animation: nf-shimmer 1.4s infinite linear;
     border-radius: 8px;
@@ -729,6 +729,17 @@ const CSS = `
   .nf-skelBody { flex: 1; display: flex; flex-direction: column; gap: 8px; }
   .nf-skelLine { height: 12px; width: 90%; }
   .nf-skelLineShort { height: 10px; }
+
+  @media (min-width: 1024px) {
+    .nf-header,
+    .nf-actionsBar,
+    .nf-body {
+      max-width: 720px;
+      margin-left: auto;
+      margin-right: auto;
+      width: 100%;
+    }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     * {

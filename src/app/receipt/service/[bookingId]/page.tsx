@@ -35,7 +35,6 @@ interface BookingDetail {
   [key: string]: unknown;
 }
 
-// ✅ Fall back to NEXT_PUBLIC_API_BASE || NEXT_PUBLIC_API_URL — matches api.ts
 function fmtMoney(value: number | string | undefined): string {
   const n = typeof value === 'number' ? value : Number(value ?? 0);
   if (!isFinite(n)) return '₦0';
@@ -69,11 +68,11 @@ function statusLabel(status: string): string {
 
 function statusColor(status: string): { bg: string; fg: string } {
   const s = (status || '').toLowerCase();
-  if (s === 'completed') return { bg: '#DCFCE7', fg: '#166534' };
-  if (s === 'locked')    return { bg: '#FEF3C7', fg: '#92400E' };
-  if (s === 'refunded')  return { bg: '#DBEAFE', fg: '#1E40AF' };
-  if (s === 'cancelled') return { bg: '#FEE2E2', fg: '#991B1B' };
-  return { bg: '#E5E7EB', fg: '#374151' };
+  if (s === 'completed') return { bg: 'var(--success-bg)', fg: 'var(--success-fg)' };
+  if (s === 'locked')    return { bg: 'var(--warning-bg)', fg: 'var(--warning-fg)' };
+  if (s === 'refunded')  return { bg: 'var(--info-bg)',    fg: 'var(--info-fg)' };
+  if (s === 'cancelled') return { bg: 'var(--danger-bg)',  fg: 'var(--danger-fg)' };
+  return { bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)' };
 }
 
 function ServiceReceiptContent() {
@@ -84,7 +83,6 @@ function ServiceReceiptContent() {
   const bookingId =
     params.bookingId || searchParams.get('booking_id') || 'Unknown';
 
-  // Seed from URL params (fast path when arriving from confirmation screen)
   const [serviceName, setServiceName] = useState(
     searchParams.get('service_name') || 'Service',
   );
@@ -110,12 +108,8 @@ function ServiceReceiptContent() {
     hasBookingId ? null : 'Missing booking ID.',
   );
 
-  // ── Fetch full booking from API ────────────────────────────────
   useEffect(() => {
-    if (!bookingId || bookingId === 'Unknown') {
-      return;
-    }
-
+    if (!bookingId || bookingId === 'Unknown') return;
     let cancelled = false;
 
     (async () => {
@@ -162,7 +156,7 @@ function ServiceReceiptContent() {
           url: shareUrl,
         });
         return;
-      } catch (err) {
+      } catch {
         // User cancelled or share failed — fall through to copy
       }
     }
@@ -181,7 +175,6 @@ function ServiceReceiptContent() {
   const shortId = bookingId.slice(0, 8);
   const displayDate = scheduledFor || createdAt;
 
-  // ── Loading ────────────────────────────────────────────────
   if (loading) {
     return (
       <main style={styles.centerScreen}>
@@ -191,12 +184,11 @@ function ServiceReceiptContent() {
     );
   }
 
-  // ── Error (only hard-error if we have no data at all) ────
   if (error && !serviceName) {
     return (
       <main style={styles.centerScreen}>
-        <MdErrorOutline size={56} color="#EF9A9A" />
-        <p style={{ marginTop: 12, color: '#B71C1C', textAlign: 'center' }}>
+        <MdErrorOutline size={56} color="var(--danger-fg)" />
+        <p style={{ marginTop: 12, color: 'var(--danger-fg)', textAlign: 'center' }}>
           {error}
         </p>
         <button onClick={() => router.back()} style={styles.retryBtn}>
@@ -208,32 +200,30 @@ function ServiceReceiptContent() {
 
   return (
     <main style={styles.container}>
-      {/* Top bar */}
       <div style={styles.header}>
         <button onClick={() => router.back()} style={styles.backBtn} aria-label="Back">
-          <MdArrowBack size={22} color="#1A1A1A" />
+          <MdArrowBack size={22} color="var(--text-primary)" />
         </button>
         <h1 style={styles.title}>Receipt</h1>
         <div style={styles.headerActions}>
           <button onClick={handlePrint} style={styles.iconBtn} title="Print">
-            <MdPrint size={22} color="#1A1A1A" />
+            <MdPrint size={22} color="var(--text-primary)" />
           </button>
           <button onClick={handleShare} style={styles.iconBtn} title="Share">
-            <MdShare size={22} color="#1A1A1A" />
+            <MdShare size={22} color="var(--text-primary)" />
           </button>
           <button onClick={handleDownload} style={styles.iconBtn} title="Download PDF">
-            <MdDownload size={22} color="#1A1A1A" />
+            <MdDownload size={22} color="var(--text-primary)" />
           </button>
         </div>
       </div>
 
-      {/* Receipt card */}
       <div style={styles.cardWrapper}>
         <div style={styles.receiptCard}>
           {/* Gradient header */}
           <div style={styles.cardHeader}>
             <div style={styles.iconWrapper}>
-              <MdReceiptLong size={32} color="#fff" />
+              <MdReceiptLong size={32} color="var(--brand-on-gradient)" />
             </div>
             <h2 style={styles.cardTitle}>Service Receipt</h2>
             <p style={styles.orderId}>Booking #{shortId}</p>
@@ -251,7 +241,6 @@ function ServiceReceiptContent() {
             </p>
           </div>
 
-          {/* Status badge */}
           {status && (
             <div style={styles.statusRow}>
               <span
@@ -269,7 +258,6 @@ function ServiceReceiptContent() {
             </div>
           )}
 
-          {/* Info section */}
           <div style={styles.infoSection}>
             {customerName && (
               <div style={styles.infoRow}>
@@ -301,29 +289,25 @@ function ServiceReceiptContent() {
               </div>
             )}
 
-            {/* Divider */}
             <div style={styles.divider} />
 
-            {/* Amount breakdown */}
             <div style={styles.amountRow}>
               <span style={styles.amountLabel}>Amount paid</span>
               <span style={styles.amountValue}>{fmtMoney(amount)}</span>
             </div>
 
-            {/* Escrow note */}
             {status === 'locked' && (
               <p style={styles.escrowNote}>
                 Funds held in escrow. Released to the provider once the job is marked complete.
               </p>
             )}
             {status === 'completed' && (
-              <p style={{ ...styles.escrowNote, color: '#166534' }}>
+              <p style={{ ...styles.escrowNote, color: 'var(--success-fg)' }}>
                 Funds released to the provider. Thank you for using Admerce.
               </p>
             )}
           </div>
 
-          {/* Notes */}
           {notes && (
             <div style={styles.notesBlock}>
               <div style={styles.notesLabel}>Notes</div>
@@ -331,7 +315,6 @@ function ServiceReceiptContent() {
             </div>
           )}
 
-          {/* Footer */}
           <div style={styles.footerNote}>
             <div style={styles.footerBrand}>Admerce</div>
             <div style={styles.footerSub}>Buy, sell, and provide services locally</div>
@@ -365,7 +348,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: 'var(--bg-primary)',
   },
   centerScreen: {
     display: 'flex',
@@ -373,22 +356,22 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: 'var(--bg-primary)',
     padding: 24,
   },
   spinner: {
     width: 40,
     height: 40,
-    border: '4px solid #eee',
-    borderTopColor: '#0504AA',
+    border: '4px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   retryBtn: {
     marginTop: 16,
     padding: '10px 20px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     border: 'none',
     borderRadius: 10,
     fontWeight: 600,
@@ -398,8 +381,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     padding: '14px 16px',
-    backgroundColor: '#fff',
-    borderBottom: '1px solid #eee',
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-default)',
   },
   backBtn: {
     background: 'none',
@@ -414,7 +397,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 20,
     fontWeight: 700,
     flex: 1,
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
   },
   headerActions: {
     display: 'flex',
@@ -435,25 +418,26 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '0 auto',
   },
   receiptCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 24,
     padding: 20,
-    boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+    border: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-lg)',
     overflow: 'hidden',
   },
   cardHeader: {
-    background: 'linear-gradient(135deg, #0504AA 0%, #3B82F6 100%)',
+    background: 'var(--brand-gradient)',
     margin: -20,
     marginBottom: 20,
     padding: 24,
     textAlign: 'center',
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
   },
   iconWrapper: {
     width: 60,
     height: 60,
     borderRadius: '50%',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'color-mix(in srgb, var(--brand-on-gradient) 15%, transparent)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -500,14 +484,14 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   infoLabel: {
-    color: '#666',
+    color: 'var(--text-tertiary)',
     fontWeight: 500,
     display: 'inline-flex',
     alignItems: 'center',
     flexShrink: 0,
   },
   infoValue: {
-    color: '#1A1A1A',
+    color: 'var(--text-primary)',
     fontWeight: 600,
     textAlign: 'right',
     maxWidth: '60%',
@@ -515,7 +499,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: 'var(--border-default)',
     margin: '16px 0',
   },
   amountRow: {
@@ -526,56 +510,57 @@ const styles: Record<string, React.CSSProperties> = {
   },
   amountLabel: {
     fontSize: 14,
-    color: '#666',
+    color: 'var(--text-tertiary)',
     fontWeight: 600,
   },
   amountValue: {
     fontSize: 22,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
+    fontVariantNumeric: 'tabular-nums',
   },
   escrowNote: {
     marginTop: 8,
     fontSize: 12,
-    color: '#92400E',
+    color: 'var(--warning-fg)',
     lineHeight: 1.4,
     textAlign: 'center',
   },
   notesBlock: {
     marginTop: 16,
     padding: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 10,
-    border: '1px solid #E5E7EB',
+    border: '1px solid var(--border-default)',
   },
   notesLabel: {
     fontSize: 11,
     fontWeight: 700,
-    color: '#6B7280',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: 4,
   },
   notesText: {
     fontSize: 13,
-    color: '#374151',
+    color: 'var(--text-secondary)',
     lineHeight: 1.5,
   },
   footerNote: {
     marginTop: 24,
     paddingTop: 16,
-    borderTop: '1px dashed #E5E7EB',
+    borderTop: '1px dashed var(--border-default)',
     textAlign: 'center',
   },
   footerBrand: {
     fontSize: 14,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     letterSpacing: 0.3,
   },
   footerSub: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: 'var(--text-muted)',
     marginTop: 2,
   },
 };
