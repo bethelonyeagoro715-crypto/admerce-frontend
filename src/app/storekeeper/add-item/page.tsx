@@ -19,7 +19,6 @@ import {
   MdStorefront,
 } from 'react-icons/md';
 
-// ─── Constants ──────────────────────────────────────────────────────
 interface Category {
   id: string;
   label: string;
@@ -39,7 +38,14 @@ const CATEGORIES: Category[] = [
   { id: 'media_office', label: 'Media & Office', emoji: '📚' },
 ];
 
-const CONDITIONS = ['New', 'Like New', 'Good', 'Fair', 'Used', 'Refurbished'];
+const CONDITIONS = [
+  'New',
+  'Like New',
+  'Good',
+  'Fair',
+  'Used',
+  'Refurbished',
+];
 
 const STYLES: { label: string; value: string; icon: React.ReactNode }[] = [
   { label: 'Warm', value: 'warm', icon: <MdWbSunny size={16} /> },
@@ -47,7 +53,6 @@ const STYLES: { label: string; value: string; icon: React.ReactNode }[] = [
   { label: 'Studio', value: 'studio', icon: <MdPhotoCamera size={16} /> },
 ];
 
-// ─── Component ──────────────────────────────────────────────────────
 export default function AddItemPage() {
   useAuthGuard();
   const router = useRouter();
@@ -56,9 +61,8 @@ export default function AddItemPage() {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
-    null,
-  );
+  const [selectedCategory, setSelectedCategory] =
+    useState<Category | null>(null);
   const [selectedCondition, setSelectedCondition] = useState('New');
   const [selectedStyle, setSelectedStyle] = useState('warm');
 
@@ -66,14 +70,15 @@ export default function AddItemPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageFileName, setImageFileName] = useState('');
   const [previewError, setPreviewError] = useState(false);
-  const [processedImageUrl, setProcessedImageUrl] = useState<string | null>(
-    null,
-  );
+  const [processedImageUrl, setProcessedImageUrl] = useState<
+    string | null
+  >(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isRewritingTitle, setIsRewritingTitle] = useState(false);
-  const [isRewritingDescription, setIsRewritingDescription] = useState(false);
+  const [isRewritingDescription, setIsRewritingDescription] =
+    useState(false);
   const [loadingStore, setLoadingStore] = useState(true);
   const [storeId, setStoreId] = useState<string | null>(null);
   const [lat, setLat] = useState(5.5103);
@@ -83,7 +88,6 @@ export default function AddItemPage() {
   const reqSeq = useRef(0);
   const isMountedRef = useRef(true);
 
-  // ── Bootstrap ──────────────────────────────────────────────────
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -126,7 +130,6 @@ export default function AddItemPage() {
     );
   }, []);
 
-  // Revoke blob URLs on unmount
   useEffect(() => {
     return () => {
       if (imagePreview && imagePreview.startsWith('blob:')) {
@@ -135,8 +138,9 @@ export default function AddItemPage() {
     };
   }, [imagePreview]);
 
-  // ── Image handling ─────────────────────────────────────────────
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -170,7 +174,6 @@ export default function AddItemPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // ── AI actions ─────────────────────────────────────────────────
   const scanImageWithAI = async () => {
     if (!imageFile) {
       await alertDialog({
@@ -198,11 +201,16 @@ export default function AddItemPage() {
 
       if (res.title) setTitle(res.title);
       if (res.description) setDescription(res.description);
-      if (res.condition_hint && CONDITIONS.includes(res.condition_hint)) {
+      if (
+        res.condition_hint &&
+        CONDITIONS.includes(res.condition_hint)
+      ) {
         setSelectedCondition(res.condition_hint);
       }
       if (res.category_hint) {
-        const matched = CATEGORIES.find((c) => c.id === res.category_hint);
+        const matched = CATEGORIES.find(
+          (c) => c.id === res.category_hint,
+        );
         if (matched) setSelectedCategory(matched);
       }
 
@@ -224,7 +232,10 @@ export default function AddItemPage() {
     } catch (err) {
       await alertDialog({
         title: "Couldn't scan the photo",
-        body: extractErrorDetail(err, 'Please fill in the details manually.'),
+        body: extractErrorDetail(
+          err,
+          'Please fill in the details manually.',
+        ),
         kind: 'danger',
       });
     } finally {
@@ -303,7 +314,10 @@ export default function AddItemPage() {
     }
     setIsAnalyzing(true);
     try {
-      const response = await api.previewImage(imageFile, selectedStyle);
+      const response = await api.previewImage(
+        imageFile,
+        selectedStyle,
+      );
       if (response.image_url) {
         if (imagePreview && imagePreview.startsWith('blob:')) {
           URL.revokeObjectURL(imagePreview);
@@ -323,11 +337,12 @@ export default function AddItemPage() {
     }
   };
 
-  // ── Submit ─────────────────────────────────────────────────────
   const validate = (): string | null => {
     if (!imageFile) return 'Every listing needs at least one photo.';
-    if (!title.trim()) return 'Give your item a short, descriptive name.';
-    if (!selectedCategory) return 'Pick the category that best fits this item.';
+    if (!title.trim())
+      return 'Give your item a short, descriptive name.';
+    if (!selectedCategory)
+      return 'Pick the category that best fits this item.';
     if (!price.trim() || Number(price) <= 0)
       return 'Enter how much this item costs.';
     if (!quantity.trim() || Number(quantity) < 1)
@@ -384,7 +399,10 @@ export default function AddItemPage() {
   };
 
   const goBack = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
+    if (
+      typeof window !== 'undefined' &&
+      window.history.length > 1
+    ) {
       router.back();
     } else {
       router.push('/storekeeper/home');
@@ -411,7 +429,6 @@ export default function AddItemPage() {
     Number(price) > 0 &&
     Number(quantity) >= 1;
 
-  // ── Loading store ──────────────────────────────────────────────
   if (loadingStore) {
     return (
       <main style={css.root} className="sk-add">
@@ -430,18 +447,17 @@ export default function AddItemPage() {
     );
   }
 
-  // ── No store ───────────────────────────────────────────────────
   if (!storeId) {
     return (
       <main style={css.centerRoot} className="sk-add">
         <style>{CSS}</style>
         <div style={css.setupHalo}>
-          <MdStorefront size={40} color="#0504AA" />
+          <MdStorefront size={40} color="var(--brand-primary)" />
         </div>
         <h2 style={css.centerTitle}>Set up your store first</h2>
         <p style={css.centerBody}>
-          You need a store before you can list items. It takes about two
-          minutes to set up.
+          You need a store before you can list items. It takes about
+          two minutes to set up.
         </p>
         <button
           onClick={() => router.push('/storekeeper/onboarding')}
@@ -453,12 +469,10 @@ export default function AddItemPage() {
     );
   }
 
-  // ── Main ───────────────────────────────────────────────────────
   return (
     <main style={css.root} className="sk-add">
       <style>{CSS}</style>
 
-      {/* HEADER */}
       <div style={css.headerWrap}>
         <div style={css.headerInner}>
           <button
@@ -467,12 +481,14 @@ export default function AddItemPage() {
             style={css.backBtn}
             aria-label="Back"
           >
-            <MdArrowBack size={20} color="#fff" />
+            <MdArrowBack size={20} color="var(--brand-on-gradient)" />
           </button>
           <div style={css.headerText}>
             <h1 style={css.headerTitle}>Add item</h1>
             <div style={css.headerSub}>
-              {ready ? 'Ready to publish' : 'Fill in the details below'}
+              {ready
+                ? 'Ready to publish'
+                : 'Fill in the details below'}
             </div>
           </div>
           <div style={css.headerSpacer} />
@@ -480,7 +496,6 @@ export default function AddItemPage() {
       </div>
 
       <div style={css.sheet}>
-        {/* PHOTO */}
         <label
           htmlFor="add-item-image-input"
           style={css.photoCard}
@@ -519,7 +534,10 @@ export default function AddItemPage() {
                   <div style={css.spinnerWhite} />
                 ) : (
                   <>
-                    <MdAutoAwesome size={16} color="#fff" />
+                    <MdAutoAwesome
+                      size={16}
+                      color="var(--brand-on-gradient)"
+                    />
                     <span style={css.aiScanLabel}>AI</span>
                   </>
                 )}
@@ -539,14 +557,15 @@ export default function AddItemPage() {
                 <MdClose size={16} color="#fff" />
               </button>
 
-              <div style={css.photoHint}>
-                Tap to change photo
-              </div>
+              <div style={css.photoHint}>Tap to change photo</div>
             </>
           ) : (
             <div style={css.photoPlaceholder}>
               <div style={css.photoPlaceholderHalo}>
-                <MdAddPhotoAlternate size={40} color="#0504AA" />
+                <MdAddPhotoAlternate
+                  size={40}
+                  color="var(--brand-primary)"
+                />
               </div>
               <div style={css.photoPlaceholderTitle}>
                 {previewError
@@ -562,10 +581,12 @@ export default function AddItemPage() {
           )}
         </label>
 
-        {/* FILENAME CHIP */}
         {imageFileName && (
           <div style={css.fileChip}>
-            <MdInsertDriveFile size={14} color="#0504AA" />
+            <MdInsertDriveFile
+              size={14}
+              color="var(--brand-primary)"
+            />
             <span style={css.fileChipText} title={imageFileName}>
               {imageFileName}
             </span>
@@ -575,12 +596,11 @@ export default function AddItemPage() {
               style={css.fileChipRemove}
               aria-label="Remove file"
             >
-              <MdClose size={14} color="#64748B" />
+              <MdClose size={14} color="var(--text-tertiary)" />
             </button>
           </div>
         )}
 
-        {/* STYLE */}
         {hasPreviewImage && (
           <>
             <h3 style={css.sectionLabel}>Image style</h3>
@@ -594,9 +614,15 @@ export default function AddItemPage() {
                     onClick={() => setSelectedStyle(style.value)}
                     style={{
                       ...css.stylePill,
-                      borderColor: active ? '#0504AA' : '#E6E8F0',
-                      backgroundColor: active ? '#EEF0FF' : '#FFFFFF',
-                      color: active ? '#0504AA' : '#475569',
+                      borderColor: active
+                        ? 'var(--brand-primary)'
+                        : 'var(--border-default)',
+                      backgroundColor: active
+                        ? 'var(--brand-soft)'
+                        : 'var(--bg-secondary)',
+                      color: active
+                        ? 'var(--brand-primary)'
+                        : 'var(--text-secondary)',
                     }}
                     className="sk-style-pill"
                   >
@@ -615,17 +641,18 @@ export default function AddItemPage() {
                 ...css.previewBtn,
                 opacity: !imageFile || isAnalyzing ? 0.5 : 1,
                 cursor:
-                  !imageFile || isAnalyzing ? 'not-allowed' : 'pointer',
+                  !imageFile || isAnalyzing
+                    ? 'not-allowed'
+                    : 'pointer',
               }}
               className="sk-preview-btn"
             >
-              <MdPreview size={18} color="#0504AA" />
+              <MdPreview size={18} color="var(--brand-primary)" />
               <span>Preview this style</span>
             </button>
           </>
         )}
 
-        {/* THE BASICS */}
         <h3 style={css.sectionLabel}>The basics</h3>
         <div style={css.card}>
           <div style={css.fieldWrap}>
@@ -651,7 +678,10 @@ export default function AddItemPage() {
                 {isRewritingTitle ? (
                   <div style={css.spinnerSmall} />
                 ) : (
-                  <MdAutoAwesome size={18} color="#0504AA" />
+                  <MdAutoAwesome
+                    size={18}
+                    color="var(--brand-primary)"
+                  />
                 )}
               </button>
             </div>
@@ -663,7 +693,7 @@ export default function AddItemPage() {
             </div>
           </div>
 
-          <div style={css.fieldWrap}>
+          <div style={{ ...css.fieldWrap, borderBottom: 'none' }}>
             <label style={css.fieldLabel}>Description</label>
             <div style={css.inputRow}>
               <textarea
@@ -686,20 +716,25 @@ export default function AddItemPage() {
                 {isRewritingDescription ? (
                   <div style={css.spinnerSmall} />
                 ) : (
-                  <MdAutoAwesome size={18} color="#0504AA" />
+                  <MdAutoAwesome
+                    size={18}
+                    color="var(--brand-primary)"
+                  />
                 )}
               </button>
             </div>
             <div style={css.fieldFooter}>
               <span style={css.fieldHint}>
-                Optional — but listings with a description sell 3× faster
+                Optional — but listings with a description sell 3×
+                faster
               </span>
-              <span style={css.charCount}>{description.length}/500</span>
+              <span style={css.charCount}>
+                {description.length}/500
+              </span>
             </div>
           </div>
         </div>
 
-        {/* PRICE & STOCK */}
         <h3 style={css.sectionLabel}>Price & stock</h3>
         <div style={css.card}>
           <div style={css.fieldWrap}>
@@ -724,7 +759,7 @@ export default function AddItemPage() {
             </span>
           </div>
 
-          <div style={css.fieldWrap}>
+          <div style={{ ...css.fieldWrap, borderBottom: 'none' }}>
             <label style={css.fieldLabel}>Quantity in stock</label>
             <input
               type="number"
@@ -742,7 +777,6 @@ export default function AddItemPage() {
           </div>
         </div>
 
-        {/* CATEGORY */}
         <h3 style={css.sectionLabel}>Category</h3>
         <div style={css.chipsWrap}>
           {CATEGORIES.map((cat) => {
@@ -754,9 +788,15 @@ export default function AddItemPage() {
                 onClick={() => setSelectedCategory(cat)}
                 style={{
                   ...css.chip,
-                  borderColor: active ? '#0504AA' : '#E6E8F0',
-                  backgroundColor: active ? '#EEF0FF' : '#FFFFFF',
-                  color: active ? '#0504AA' : '#475569',
+                  borderColor: active
+                    ? 'var(--brand-primary)'
+                    : 'var(--border-default)',
+                  backgroundColor: active
+                    ? 'var(--brand-soft)'
+                    : 'var(--bg-secondary)',
+                  color: active
+                    ? 'var(--brand-primary)'
+                    : 'var(--text-secondary)',
                 }}
                 className="sk-chip"
               >
@@ -764,19 +804,18 @@ export default function AddItemPage() {
                   {cat.emoji}
                 </span>
                 <span
-                  style={{
-                    fontWeight: active ? 800 : 700,
-                  }}
+                  style={{ fontWeight: active ? 800 : 700 }}
                 >
                   {cat.label}
                 </span>
-                {active && <MdCheck size={14} color="#0504AA" />}
+                {active && (
+                  <MdCheck size={14} color="var(--brand-primary)" />
+                )}
               </button>
             );
           })}
         </div>
 
-        {/* CONDITION */}
         <h3 style={css.sectionLabel}>Condition</h3>
         <div style={css.chipsWrap}>
           {CONDITIONS.map((cond) => {
@@ -788,29 +827,32 @@ export default function AddItemPage() {
                 onClick={() => setSelectedCondition(cond)}
                 style={{
                   ...css.chip,
-                  borderColor: active ? '#0504AA' : '#E6E8F0',
-                  backgroundColor: active ? '#EEF0FF' : '#FFFFFF',
-                  color: active ? '#0504AA' : '#475569',
+                  borderColor: active
+                    ? 'var(--brand-primary)'
+                    : 'var(--border-default)',
+                  backgroundColor: active
+                    ? 'var(--brand-soft)'
+                    : 'var(--bg-secondary)',
+                  color: active
+                    ? 'var(--brand-primary)'
+                    : 'var(--text-secondary)',
                 }}
                 className="sk-chip"
               >
-                <span
-                  style={{
-                    fontWeight: active ? 800 : 700,
-                  }}
-                >
+                <span style={{ fontWeight: active ? 800 : 700 }}>
                   {cond}
                 </span>
-                {active && <MdCheck size={14} color="#0504AA" />}
+                {active && (
+                  <MdCheck size={14} color="var(--brand-primary)" />
+                )}
               </button>
             );
           })}
         </div>
 
-        {/* MISSING FIELDS NUDGE */}
         {!ready && (
           <div style={css.missingNudge}>
-            <MdErrorOutline size={16} color="#92400E" />
+            <MdErrorOutline size={16} color="var(--warning-fg)" />
             <span>
               {!imageFile
                 ? 'Add a photo to continue'
@@ -825,7 +867,6 @@ export default function AddItemPage() {
           </div>
         )}
 
-        {/* SUBMIT */}
         <button
           type="button"
           onClick={submitListing}
@@ -853,21 +894,19 @@ export default function AddItemPage() {
   );
 }
 
-// ─── Interaction CSS + desktop layout ───────────────────────────────
 const CSS = `
   @keyframes skSpin { to { transform: rotate(360deg); } }
   @keyframes skShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 
   .sk-add,
-  .sk-add *,
-  .sk-add *::before,
-  .sk-add *::after {
+  .sk-add *, .sk-add *::before, .sk-add *::after {
     box-sizing: border-box;
   }
 
   .sk-input:focus {
-    border-color: #0504AA !important;
-    box-shadow: 0 0 0 3px rgba(5,4,170,0.10);
+    border-color: var(--brand-primary) !important;
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--brand-primary) 12%, transparent);
   }
 
   .sk-style-pill {
@@ -875,11 +914,11 @@ const CSS = `
   }
   .sk-style-pill:active { transform: scale(0.97); }
 
-  .sk-preview-btn {
-    transition: background-color 0.15s;
-  }
+  .sk-preview-btn { transition: background-color 0.15s; }
   .sk-preview-btn:hover:not(:disabled) {
-    background-color: #E0E7FF !important;
+    background-color: color-mix(
+      in srgb, var(--brand-primary) 18%, var(--brand-soft)
+    ) !important;
   }
 
   .sk-chip {
@@ -887,46 +926,34 @@ const CSS = `
   }
   .sk-chip:active { transform: scale(0.97); }
 
-  .sk-photo-card {
-    transition: box-shadow 0.15s;
-  }
+  .sk-photo-card { transition: box-shadow 0.15s; }
   .sk-photo-card:hover {
-    box-shadow: 0 12px 32px rgba(5,4,170,0.08);
+    box-shadow: 0 12px 32px
+      color-mix(in srgb, var(--brand-primary) 10%, transparent);
   }
 
-  .sk-submit {
-    transition: transform 0.12s, box-shadow 0.15s;
-  }
-  .sk-submit:active:not(:disabled) {
-    transform: scale(0.98);
-  }
-
-  /* Desktop: wider sheet, two-column basics, larger inputs */
-  @media (min-width: 1024px) {
-    .sk-add-sheet {
-      max-width: 880px;
-    }
-  }
+  .sk-submit { transition: transform 0.12s, box-shadow 0.15s; }
+  .sk-submit:active:not(:disabled) { transform: scale(0.98); }
 `;
 
-// ─── Styles ─────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     overflowX: 'hidden',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
 
-  // HEADER
   headerWrap: {
     position: 'sticky',
     top: 0,
     zIndex: 20,
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    background: 'var(--brand-gradient)',
     padding: '12px 20px',
+    transition: 'background 0.18s ease',
   },
   headerInner: {
     display: 'flex',
@@ -940,7 +967,8 @@ const css: Record<string, React.CSSProperties> = {
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 12%, transparent)',
     border: 'none',
     display: 'flex',
     alignItems: 'center',
@@ -958,13 +986,14 @@ const css: Record<string, React.CSSProperties> = {
   headerTitle: {
     fontSize: 17,
     fontWeight: 800,
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     margin: 0,
     letterSpacing: -0.3,
   },
   headerSub: {
     fontSize: 11.5,
-    color: 'rgba(255,255,255,0.72)',
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
     fontWeight: 600,
     letterSpacing: 0.2,
   },
@@ -973,10 +1002,10 @@ const css: Record<string, React.CSSProperties> = {
     width: 160,
     height: 20,
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
   },
 
-  // SHEET
   sheet: {
     flex: 1,
     padding: '20px 20px 40px',
@@ -985,19 +1014,20 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
   },
 
-  // PHOTO
   photoCard: {
     position: 'relative',
     display: 'block',
     width: '100%',
     aspectRatio: '16 / 10',
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    border: '1.5px dashed #C7D2FE',
+    backgroundColor: 'var(--bg-secondary)',
+    border:
+      '1.5px dashed color-mix(in srgb, var(--brand-primary) 40%, var(--border-default))',
     cursor: 'pointer',
     overflow: 'hidden',
     marginBottom: 12,
-    boxShadow: '0 6px 18px rgba(5,4,170,0.05)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   photoImg: {
     width: '100%',
@@ -1014,19 +1044,18 @@ const css: Record<string, React.CSSProperties> = {
     paddingLeft: 14,
     paddingRight: 16,
     borderRadius: 999,
-    backgroundColor: '#0504AA',
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
+    background: 'var(--brand-gradient)',
     border: 'none',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     cursor: 'pointer',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.42)',
+    boxShadow: 'var(--shadow-brand)',
     zIndex: 2,
   },
   aiScanLabel: {
-    color: '#fff',
+    color: 'var(--brand-on-gradient)',
     fontSize: 13,
     fontWeight: 800,
     letterSpacing: 0.3,
@@ -1068,13 +1097,13 @@ const css: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     padding: 20,
     gap: 6,
-    backgroundColor: '#F8FAFF',
+    backgroundColor: 'var(--bg-tertiary)',
   },
   photoPlaceholderHalo: {
     width: 76,
     height: 76,
     borderRadius: 24,
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1083,26 +1112,26 @@ const css: Record<string, React.CSSProperties> = {
   photoPlaceholderTitle: {
     fontSize: 15,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     letterSpacing: -0.2,
   },
   photoPlaceholderHint: {
     fontSize: 12.5,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     fontWeight: 500,
     lineHeight: 1.45,
     maxWidth: 260,
   },
 
-  // FILE CHIP
   fileChip: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
     padding: '8px 12px',
     marginBottom: 20,
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7CCFF',
+    backgroundColor: 'var(--brand-soft)',
+    border:
+      '1px solid color-mix(in srgb, var(--brand-primary) 30%, transparent)',
     borderRadius: 10,
   },
   fileChipText: {
@@ -1110,7 +1139,7 @@ const css: Record<string, React.CSSProperties> = {
     minWidth: 0,
     fontSize: 12.5,
     fontWeight: 600,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1125,17 +1154,15 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
   },
 
-  // SECTION LABELS
   sectionLabel: {
     fontSize: 11.5,
     fontWeight: 800,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     margin: '24px 0 10px 4px',
   },
 
-  // STYLE PILLS
   styleRow: {
     display: 'flex',
     gap: 8,
@@ -1162,34 +1189,35 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '13px 16px',
     marginTop: 10,
-    backgroundColor: '#EEF0FF',
-    color: '#0504AA',
+    backgroundColor: 'var(--brand-soft)',
+    color: 'var(--brand-primary)',
     border: 'none',
     borderRadius: 14,
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 800,
     fontFamily: 'inherit',
+    transition: 'background-color 0.15s',
   },
 
-  // CARD (form sections)
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
-    border: '1px solid #EAECF3',
+    border: '1px solid var(--border-default)',
     overflow: 'hidden',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   fieldWrap: {
     display: 'flex',
     flexDirection: 'column',
     gap: 6,
     padding: '16px',
-    borderBottom: '1px solid #F1F5F9',
+    borderBottom: '1px solid var(--border-subtle)',
   },
   fieldLabel: {
     fontSize: 12.5,
     fontWeight: 700,
-    color: '#334155',
+    color: 'var(--text-secondary)',
     letterSpacing: 0.1,
     marginBottom: 2,
   },
@@ -1211,7 +1239,7 @@ const css: Record<string, React.CSSProperties> = {
     transform: 'translateY(-50%)',
     fontSize: 15,
     fontWeight: 800,
-    color: '#0504AA',
+    color: 'var(--brand-primary)',
     pointerEvents: 'none',
   },
   input: {
@@ -1219,14 +1247,15 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '12px 14px',
     borderRadius: 12,
-    border: '1.5px solid #E6E8F0',
+    border: '1.5px solid var(--border-default)',
     fontSize: 14.5,
     fontWeight: 500,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontFamily: 'inherit',
-    backgroundColor: '#FFFFFF',
-    transition: 'border-color 0.15s, box-shadow 0.15s',
+    backgroundColor: 'var(--bg-tertiary)',
+    transition:
+      'border-color 0.15s, box-shadow 0.15s, background-color 0.18s ease',
     boxSizing: 'border-box',
   },
   textarea: {
@@ -1234,24 +1263,25 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '12px 14px',
     borderRadius: 12,
-    border: '1.5px solid #E6E8F0',
+    border: '1.5px solid var(--border-default)',
     fontSize: 14.5,
     fontWeight: 500,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     outline: 'none',
     fontFamily: 'inherit',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'var(--bg-tertiary)',
     resize: 'vertical',
     lineHeight: 1.5,
     minHeight: 92,
-    transition: 'border-color 0.15s, box-shadow 0.15s',
+    transition:
+      'border-color 0.15s, box-shadow 0.15s, background-color 0.18s ease',
     boxSizing: 'border-box',
   },
   aiMiniBtn: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#EEF0FF',
+    backgroundColor: 'var(--brand-soft)',
     border: 'none',
     cursor: 'pointer',
     display: 'flex',
@@ -1269,18 +1299,17 @@ const css: Record<string, React.CSSProperties> = {
   },
   fieldHint: {
     fontSize: 11.5,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontWeight: 500,
     lineHeight: 1.4,
   },
   charCount: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontVariantNumeric: 'tabular-nums',
     fontWeight: 600,
   },
 
-  // CHIPS
   chipsWrap: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -1304,23 +1333,21 @@ const css: Record<string, React.CSSProperties> = {
     lineHeight: 1,
   },
 
-  // MISSING NUDGE
   missingNudge: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
     marginTop: 22,
     padding: '12px 14px',
-    backgroundColor: '#FEF3C7',
-    border: '1px solid #FDE68A',
+    backgroundColor: 'var(--warning-bg)',
+    border: '1px solid var(--warning-strong)',
     borderRadius: 12,
-    color: '#92400E',
+    color: 'var(--warning-fg)',
     fontSize: 12.5,
     fontWeight: 600,
     lineHeight: 1.4,
   },
 
-  // SUBMIT
   submitBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -1329,9 +1356,8 @@ const css: Record<string, React.CSSProperties> = {
     width: '100%',
     marginTop: 20,
     padding: 17,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 16,
     fontSize: 15.5,
@@ -1339,44 +1365,46 @@ const css: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
     letterSpacing: -0.1,
-    boxShadow: '0 14px 28px rgba(5,4,170,0.28)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // SPINNERS
   spinnerSmall: {
     width: 18,
     height: 18,
-    border: '2px solid #E6E8F0',
-    borderTopColor: '#0504AA',
+    border: '2px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'skSpin 0.8s linear infinite',
   },
   spinnerWhite: {
     width: 18,
     height: 18,
-    border: '2px solid rgba(255,255,255,0.4)',
-    borderTopColor: '#fff',
+    border:
+      '2px solid color-mix(in srgb, currentColor 40%, transparent)',
+    borderTopColor: 'currentColor',
     borderRadius: '50%',
     animation: 'skSpin 0.8s linear infinite',
   },
 
-  // CENTER SCREENS
   centerRoot: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#F4F5FB',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   setupHalo: {
     width: 84,
     height: 84,
     borderRadius: 24,
-    backgroundColor: '#EEF0FF',
-    border: '1px solid #C7D2FE',
+    backgroundColor: 'var(--brand-soft)',
+    border:
+      '1px solid color-mix(in srgb, var(--brand-primary) 40%, transparent)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1385,13 +1413,13 @@ const css: Record<string, React.CSSProperties> = {
   centerTitle: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     margin: 0,
     letterSpacing: -0.3,
   },
   centerBody: {
     fontSize: 14,
-    color: '#64748B',
+    color: 'var(--text-tertiary)',
     marginTop: 8,
     maxWidth: 340,
     lineHeight: 1.55,
@@ -1403,31 +1431,31 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 24,
     padding: '13px 24px',
     borderRadius: 14,
-    backgroundImage: 'linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    background: 'var(--brand-gradient)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 800,
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
   },
 
-  // SKELETONS
   heroSkel: {
     height: 260,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     animation: 'skShimmer 1.4s ease-in-out infinite',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   blockSkel: {
     height: 140,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #EAECF3',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 20,
     animation: 'skShimmer 1.4s ease-in-out infinite',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
 };
