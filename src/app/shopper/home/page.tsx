@@ -28,10 +28,18 @@ const SPOTLIGHT_INTERVAL_MS = 4200;
 
 const CONTENT_MAX_WIDTH = 1440;
 
-// Reels-style portrait ratio — matches Instagram Reels / Facebook Reels /
-// Pinterest's newer reel grid.
-const CARD_ASPECT = '9 / 16';
-const CARD_WEIGHT = 16 / 9; // height / width
+// Aspect ratio bounds — width / height.
+//   MIN_ASPECT = 9/16 → tallest card (reels-style portrait)
+//   MAX_ASPECT = 4/5  → shortest card (Instagram portrait)
+// Clamping outside this range keeps the grid a coherent "portrait wall".
+const MIN_ASPECT = 9 / 16; // 0.5625
+const MAX_ASPECT = 4 / 5; // 0.8
+const DEFAULT_ASPECT = 3 / 4; // 0.75 — used when dimensions are unknown
+const SERVICE_ASPECT = 9 / 16; // services are video-only, always 9:16
+
+// Gap between cards, in pixels. Also normalized for the masonry balancer.
+const GRID_GAP_MOBILE = 12;
+const GRID_GAP_DESKTOP = 16;
 
 type FeedFilter = 'mixed' | 'items' | 'services';
 
@@ -83,13 +91,43 @@ function formatPrice(raw: unknown): string {
 }
 
 /**
- * Distribute `b` evenly through `a`.
- *
- * Old implementation pushed b[0] after a[0], b[1] after a[1], etc — which
- * clumps every b into the first `2 * b.length` positions when b.length is
- * much smaller than a.length. This version inserts b items at evenly-
- * spaced indices across the whole output, so a handful of services end up
- * spread through the entire feed instead of stacked at the top.
+ * Compute a clamped aspect ratio (width / height) from pixel dims.
+ * Falls back to DEFAULT_ASPECT when dims are missing or invalid.
+ */
+function computeAspect(
+  w: number | null | undefined,
+  h: number | null | undefined,
+): number {
+  const width = Number(w ?? 0);
+  const height = Number(h ?? 0);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return DEFAULT_ASPECT;
+  }
+  if (width <= 0 || height <= 0) return DEFAULT_ASPECT;
+  const raw = width / height;
+  if (raw < MIN_ASPECT) return MIN_ASPECT;
+  if (raw > MAX_ASPECT) return MAX_ASPECT;
+  return raw;
+}
+
+/**
+ * Deterministic pseudo-random aspect for entities without pixel dims
+ * (stores, providers). Same id → same height, so the grid is stable
+ * across re-renders and reloads.
+ */
+function seededAspect(seed: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const n = ((h >>> 0) % 1000) / 1000; // 0..1
+  return MIN_ASPECT + (MAX_ASPECT - MIN_ASPECT) * n;
+}
+
+/**
+ * Distribute `b` evenly through `a`. Old version clumped b at the top
+ * when a.length >> b.length; this inserts at evenly-spaced indices.
  */
 function interleave<T>(a: T[], b: T[]): T[] {
   if (b.length === 0) return [...a];
@@ -98,7 +136,7 @@ function interleave<T>(a: T[], b: T[]): T[] {
   const out: T[] = [];
   const total = a.length + b.length;
   const step = total / b.length;
-  let nextBAt = step / 2; // first b placed at half-step
+  let nextBAt = step / 2;
   let aIdx = 0;
   let bIdx = 0;
 
@@ -173,6 +211,8 @@ interface RankedItem {
   price?: number;
   store_name?: string;
   category?: string | null;
+  image_width?: number | null;
+  image_height?: number | null;
 }
 interface StoreLocation {
   store_id: string;
@@ -180,6 +220,8 @@ interface StoreLocation {
   image_url?: string;
   lat: number;
   lng: number;
+  image_width?: number | null;
+  image_height?: number | null;
 }
 interface ServiceItem {
   service_id: string;
@@ -208,6 +250,8 @@ interface Item {
   price: string;
   storeName: string;
   category: string | null;
+  /** width / height, clamped to [9/16, 4/5] */
+  aspect: number;
 }
 interface Store {
   id: string;
@@ -215,31 +259,38 @@ interface Store {
   image: string | null;
   lat: number;
   lng: number;
+  aspect: number;
 }
 interface Provider {
   id: string;
   name: string;
   image: string | null;
   serviceCount: number;
+  aspect: number;
 }
 
 // ─── Height-balanced masonry ───────────────────────────────────────────────
 function MasonryColumns<T>({
   items,
   columns,
-  gap,
+  gapPx,
   renderItem,
   keyFor,
   weightOf,
 }: {
   items: T[];
   columns: number;
-  gap: number;
+  gapPx: number;
   renderItem: (item: T) => React.ReactNode;
   keyFor: (item: T, index: number) => string;
   weightOf: (item: T) => number;
 }) {
   if (items.length === 0) return null;
+
+  // Approximate card width so the pixel gap becomes a comparable unit
+  // against the "height in card-widths" weights produced by weightOf().
+  const ASSUMED_CARD_WIDTH_PX = 200;
+  const gapWeight = gapPx / ASSUMED_CARD_WIDTH_PX;
 
   const cols: T[][] = Array.from({ length: columns }, () => []);
   const heights = new Array(columns).fill(0);
@@ -250,14 +301,14 @@ function MasonryColumns<T>({
       if (heights[c] < heights[target]) target = c;
     }
     cols[target].push(item);
-    heights[target] += weightOf(item) + gap;
+    heights[target] += weightOf(item) + gapWeight;
   }
 
   return (
     <div
       style={{
         display: 'flex',
-        gap,
+        gap: gapPx,
         alignItems: 'flex-start',
         width: '100%',
       }}
@@ -269,7 +320,7 @@ function MasonryColumns<T>({
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            gap,
+            gap: gapPx,
             minWidth: 0,
           }}
         >
@@ -448,9 +499,10 @@ function StoreSpotlight({
   );
 }
 
-// ─── ReelCard (item / store / provider — 9:16) ────────────────────────────
+// ─── ReelCard ──────────────────────────────────────────────────────────────
 function ReelCard({
   image,
+  aspect,
   placeholder,
   badge,
   badgeBg,
@@ -462,6 +514,7 @@ function ReelCard({
   ariaLabel,
 }: {
   image: string | null;
+  aspect: number;
   placeholder: React.ReactNode;
   badge: string;
   badgeBg: string;
@@ -476,7 +529,7 @@ function ReelCard({
     <button
       type="button"
       onClick={onPress}
-      style={styles.reelCard}
+      style={{ ...styles.reelCard, aspectRatio: aspect }}
       aria-label={ariaLabel || title}
       className="sh-reel"
     >
@@ -528,12 +581,13 @@ function ItemCard({
   onVisualSearch: (image: string | null) => void;
 }) {
   if (item.kind === 'service') {
-    // ServiceReelCard owns the video playback. We wrap it in a fixed
-    // 9:16 container so its height is deterministic and the masonry
-    // balancer can place it correctly. The wrapper also clips the card
-    // to the same corner radius as every other tile.
+    // ServiceReelCard owns the video playback. Wrapped in a fixed 9:16
+    // container so the masonry balancer knows its exact height.
     return (
-      <div className="sh-svc-wrap">
+      <div
+        className="sh-svc-wrap"
+        style={{ aspectRatio: SERVICE_ASPECT }}
+      >
         <ServiceReelCard
           service={{
             id: item.id,
@@ -552,6 +606,7 @@ function ItemCard({
   return (
     <ReelCard
       image={item.image}
+      aspect={item.aspect}
       placeholder={<MdImage size={40} color="var(--text-muted)" />}
       badge="ITEM"
       badgeBg="rgba(15,23,42,0.82)"
@@ -575,6 +630,7 @@ function StoreCard({
   return (
     <ReelCard
       image={store.image}
+      aspect={store.aspect}
       placeholder={<MdStorefront size={40} color="var(--text-muted)" />}
       badge="STORE"
       badgeBg="rgba(5,4,170,0.9)"
@@ -596,6 +652,7 @@ function ProviderCard({
   return (
     <ReelCard
       image={provider.image}
+      aspect={provider.aspect}
       placeholder={
         <div style={styles.reelProviderPlaceholder}>
           <span style={styles.reelProviderInitials}>{initials}</span>
@@ -645,10 +702,16 @@ function FeedEmpty({
 }
 
 // ─── Skeleton ──────────────────────────────────────────────────────────────
-function FeedSkeleton({ columns }: { columns: number }) {
+function FeedSkeleton({
+  columns,
+  gapPx,
+}: {
+  columns: number;
+  gapPx: number;
+}) {
   const cards = 8;
   return (
-    <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+    <div style={{ display: 'flex', gap: gapPx, width: '100%' }}>
       {Array.from({ length: columns }).map((_, colIdx) => (
         <div
           key={colIdx}
@@ -656,7 +719,7 @@ function FeedSkeleton({ columns }: { columns: number }) {
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            gap: 10,
+            gap: gapPx,
             minWidth: 0,
           }}
         >
@@ -703,6 +766,7 @@ export default function ShopperHomePage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [columns, setColumns] = useState(2);
+  const [gapPx, setGapPx] = useState(GRID_GAP_MOBILE);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -751,6 +815,9 @@ export default function ShopperHomePage() {
       else if (w < 1200) setColumns(4);
       else if (w < 1600) setColumns(5);
       else setColumns(6);
+      setGapPx(
+        w >= 1024 ? GRID_GAP_DESKTOP : GRID_GAP_MOBILE,
+      );
     };
     update();
     window.addEventListener('resize', update);
@@ -859,16 +926,24 @@ export default function ShopperHomePage() {
           );
         });
 
-        const newItems: Item[] = feed.map((item) => ({
-          id: item.listing_id?.toString() ?? '',
-          kind: 'item',
-          image: resolveImageUrl(item.image_url),
-          video: null,
-          title: item.title ?? 'No Title',
-          price: formatPrice(item.price),
-          storeName: item.store_name ?? 'Unknown',
-          category: item.category ?? null,
-        }));
+        const newItems: Item[] = feed.map((item) => {
+          const id = item.listing_id?.toString() ?? '';
+          const aspect = computeAspect(
+            item.image_width,
+            item.image_height,
+          );
+          return {
+            id,
+            kind: 'item' as const,
+            image: resolveImageUrl(item.image_url),
+            video: null,
+            title: item.title ?? 'No Title',
+            price: formatPrice(item.price),
+            storeName: item.store_name ?? 'Unknown',
+            category: item.category ?? null,
+            aspect,
+          };
+        });
 
         newItems.forEach((item) =>
           sessionItemsShown.current.push(item.id),
@@ -895,13 +970,26 @@ export default function ShopperHomePage() {
         (await api.getStoreLocations()) as unknown as StoreLocation[];
       if (mySeq !== storesReqSeq.current) return;
       setStores(
-        locations.map((loc) => ({
-          id: loc.store_id,
-          name: loc.store_name ?? 'Store',
-          image: resolveImageUrl(loc.image_url),
-          lat: loc.lat,
-          lng: loc.lng,
-        })),
+        locations.map((loc) => {
+          // Prefer backend dims; fall back to a deterministic seed so
+          // heights don't all collapse to a single value.
+          const backendAspect = computeAspect(
+            loc.image_width,
+            loc.image_height,
+          );
+          const aspect =
+            loc.image_width && loc.image_height
+              ? backendAspect
+              : seededAspect(`store-${loc.store_id}`);
+          return {
+            id: loc.store_id,
+            name: loc.store_name ?? 'Store',
+            image: resolveImageUrl(loc.image_url),
+            lat: loc.lat,
+            lng: loc.lng,
+            aspect,
+          };
+        }),
       );
     } catch {
       // ignore
@@ -922,7 +1010,7 @@ export default function ShopperHomePage() {
         .filter((s) => s && s.service_id)
         .map((s) => ({
           id: s.service_id,
-          kind: 'service',
+          kind: 'service' as const,
           image: resolveImageUrl(s.image_url),
           video: resolveImageUrl(s.video_url ?? null),
           title: s.title ?? 'Service',
@@ -930,6 +1018,8 @@ export default function ShopperHomePage() {
           storeName:
             s.business_name ?? s.username ?? 'Service Provider',
           category: s.category ?? null,
+          // Services are video-first and always 9:16 by design.
+          aspect: SERVICE_ASPECT,
         }));
       setServiceItems(svcItems);
 
@@ -945,6 +1035,7 @@ export default function ShopperHomePage() {
               resolveImageUrl(s.business_image_url) ??
               resolveImageUrl(s.avatar_url),
             serviceCount: 0,
+            aspect: seededAspect(`provider-${s.provider_id}`),
           });
         }
         providerMap.get(s.provider_id)!.serviceCount += 1;
@@ -1385,7 +1476,10 @@ export default function ShopperHomePage() {
                 className="sh-panel-inner"
               >
                 {loadingFeed ? (
-                  <FeedSkeleton columns={columns} />
+                  <FeedSkeleton
+                    columns={columns}
+                    gapPx={gapPx}
+                  />
                 ) : feedItems.length === 0 ? (
                   hasActiveFilters ? (
                     <FeedEmpty
@@ -1416,9 +1510,9 @@ export default function ShopperHomePage() {
                     <MasonryColumns
                       items={displayedFeed}
                       columns={columns}
-                      gap={10}
+                      gapPx={gapPx}
                       keyFor={(item) => `${item.kind}-${item.id}`}
-                      weightOf={() => CARD_WEIGHT}
+                      weightOf={(item) => 1 / item.aspect}
                       renderItem={(item) => (
                         <ItemCard
                           item={item}
@@ -1448,7 +1542,10 @@ export default function ShopperHomePage() {
                 className="sh-panel-inner"
               >
                 {loadingStores ? (
-                  <FeedSkeleton columns={columns} />
+                  <FeedSkeleton
+                    columns={columns}
+                    gapPx={gapPx}
+                  />
                 ) : stores.length === 0 ? (
                   <FeedEmpty
                     icon={
@@ -1464,9 +1561,9 @@ export default function ShopperHomePage() {
                   <MasonryColumns
                     items={stores}
                     columns={columns}
-                    gap={10}
+                    gapPx={gapPx}
                     keyFor={(store) => store.id}
-                    weightOf={() => CARD_WEIGHT}
+                    weightOf={(store) => 1 / store.aspect}
                     renderItem={(store) => (
                       <StoreCard
                         store={store}
@@ -1488,7 +1585,10 @@ export default function ShopperHomePage() {
                 className="sh-panel-inner"
               >
                 {loadingServices ? (
-                  <FeedSkeleton columns={columns} />
+                  <FeedSkeleton
+                    columns={columns}
+                    gapPx={gapPx}
+                  />
                 ) : providers.length === 0 ? (
                   <FeedEmpty
                     icon={
@@ -1504,9 +1604,9 @@ export default function ShopperHomePage() {
                   <MasonryColumns
                     items={providers}
                     columns={columns}
-                    gap={10}
+                    gapPx={gapPx}
                     keyFor={(provider) => provider.id}
-                    weightOf={() => CARD_WEIGHT}
+                    weightOf={(provider) => 1 / provider.aspect}
                     renderItem={(provider) => (
                       <ProviderCard
                         provider={provider}
@@ -1874,11 +1974,10 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
 
-  // ── Reel card (item / store / provider — 9:16) ──────────────
+  // ── Reel card — aspect set inline per item ──────────────────
   reelCard: {
     position: 'relative',
     width: '100%',
-    aspectRatio: CARD_ASPECT,
     borderRadius: 18,
     overflow: 'hidden',
     border: 'none',
@@ -2050,7 +2149,7 @@ const styles: Record<string, React.CSSProperties> = {
   // ── Skeleton ────────────────────────────────────────────────
   skeletonCard: {
     width: '100%',
-    aspectRatio: CARD_ASPECT,
+    aspectRatio: '3 / 4',
     borderRadius: 18,
     border: '1px solid var(--border-default)',
     overflow: 'hidden',
@@ -2252,7 +2351,6 @@ const CSS = `
   .sh-svc-wrap {
     position: relative;
     width: 100%;
-    aspect-ratio: 9 / 16;
     border-radius: 18px;
     overflow: hidden;
     background: var(--bg-tertiary);
@@ -2266,8 +2364,6 @@ const CSS = `
   .sh-svc-wrap:active {
     transform: scale(0.985);
   }
-  /* Force the child card to fill the wrapper regardless of any
-     internal aspect-ratio, width, or height the component declares. */
   .sh-svc-wrap > * {
     width: 100% !important;
     height: 100% !important;
@@ -2276,19 +2372,15 @@ const CSS = `
     display: block !important;
   }
 
-  /* ─── Pill tabs — full-width equal thirds ─────────────── */
+  /* ─── Pill tabs ───────────────────────────────────────── */
   .sh-tab-pill {
     flex: 1;
     padding: 11px 10px;
   }
 
   /* ─── Spotlight ──────────────────────────────────────── */
-  .sh-spotlight-wrap {
-    margin-bottom: 6px;
-  }
-  .sh-spotlight-pad {
-    padding: 0 16px;
-  }
+  .sh-spotlight-wrap { margin-bottom: 6px; }
+  .sh-spotlight-pad { padding: 0 16px; }
   .sh-spotlight-rel {
     position: relative;
     border-radius: 20px;
@@ -2397,8 +2489,6 @@ const CSS = `
     outline: 2px solid var(--brand-primary);
     outline-offset: 2px;
   }
-
-  /* ─── Spotlight: collapsed state ─────────────────────── */
   .sh-spotlight-collapsed {
     display: flex;
     justify-content: flex-end;
@@ -2439,7 +2529,7 @@ const CSS = `
   }
 
   .sh-panel-inner {
-    padding: 0 16px 16px;
+    padding: 8px 16px 24px;
   }
   .sh-tabs-inner {
     padding: 10px 16px 8px;
@@ -2465,7 +2555,7 @@ const CSS = `
       max-height: 80vh;
     }
     .sh-panel-inner {
-      padding: 0 24px 24px;
+      padding: 12px 24px 32px;
     }
 
     .sh-spotlight-pad {
