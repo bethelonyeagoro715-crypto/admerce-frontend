@@ -29,17 +29,14 @@ const SPOTLIGHT_INTERVAL_MS = 4200;
 const CONTENT_MAX_WIDTH = 1440;
 
 // Aspect ratio bounds — width / height.
-//   MIN_ASPECT = 9/16 → tallest card (reels-style portrait)
-//   MAX_ASPECT = 4/5  → shortest card (Instagram portrait)
-// Clamping outside this range keeps the grid a coherent "portrait wall".
-const MIN_ASPECT = 9 / 16; // 0.5625
-const MAX_ASPECT = 4 / 5; // 0.8
-const DEFAULT_ASPECT = 3 / 4; // 0.75 — used when dimensions are unknown
+const MIN_ASPECT = 9 / 16; // 0.5625 — tallest (reels)
+const MAX_ASPECT = 4 / 5; // 0.8 — shortest (Instagram portrait)
+const DEFAULT_ASPECT = 3 / 4; // 0.75 — when dims are missing
 const SERVICE_ASPECT = 9 / 16; // services are video-only, always 9:16
 
-// Gap between cards, in pixels. Also normalized for the masonry balancer.
-const GRID_GAP_MOBILE = 12;
-const GRID_GAP_DESKTOP = 16;
+// Gap between cards, in pixels. Bumped to match Pinterest spacing.
+const GRID_GAP_MOBILE = 14;
+const GRID_GAP_DESKTOP = 22;
 
 type FeedFilter = 'mixed' | 'items' | 'services';
 
@@ -90,10 +87,6 @@ function formatPrice(raw: unknown): string {
   return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
 }
 
-/**
- * Compute a clamped aspect ratio (width / height) from pixel dims.
- * Falls back to DEFAULT_ASPECT when dims are missing or invalid.
- */
 function computeAspect(
   w: number | null | undefined,
   h: number | null | undefined,
@@ -110,25 +103,16 @@ function computeAspect(
   return raw;
 }
 
-/**
- * Deterministic pseudo-random aspect for entities without pixel dims
- * (stores, providers). Same id → same height, so the grid is stable
- * across re-renders and reloads.
- */
 function seededAspect(seed: string): number {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
     h ^= seed.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
-  const n = ((h >>> 0) % 1000) / 1000; // 0..1
+  const n = ((h >>> 0) % 1000) / 1000;
   return MIN_ASPECT + (MAX_ASPECT - MIN_ASPECT) * n;
 }
 
-/**
- * Distribute `b` evenly through `a`. Old version clumped b at the top
- * when a.length >> b.length; this inserts at evenly-spaced indices.
- */
 function interleave<T>(a: T[], b: T[]): T[] {
   if (b.length === 0) return [...a];
   if (a.length === 0) return [...b];
@@ -250,7 +234,6 @@ interface Item {
   price: string;
   storeName: string;
   category: string | null;
-  /** width / height, clamped to [9/16, 4/5] */
   aspect: number;
 }
 interface Store {
@@ -287,8 +270,6 @@ function MasonryColumns<T>({
 }) {
   if (items.length === 0) return null;
 
-  // Approximate card width so the pixel gap becomes a comparable unit
-  // against the "height in card-widths" weights produced by weightOf().
   const ASSUMED_CARD_WIDTH_PX = 200;
   const gapWeight = gapPx / ASSUMED_CARD_WIDTH_PX;
 
@@ -581,8 +562,6 @@ function ItemCard({
   onVisualSearch: (image: string | null) => void;
 }) {
   if (item.kind === 'service') {
-    // ServiceReelCard owns the video playback. Wrapped in a fixed 9:16
-    // container so the masonry balancer knows its exact height.
     return (
       <div
         className="sh-svc-wrap"
@@ -971,8 +950,6 @@ export default function ShopperHomePage() {
       if (mySeq !== storesReqSeq.current) return;
       setStores(
         locations.map((loc) => {
-          // Prefer backend dims; fall back to a deterministic seed so
-          // heights don't all collapse to a single value.
           const backendAspect = computeAspect(
             loc.image_width,
             loc.image_height,
@@ -1018,7 +995,6 @@ export default function ShopperHomePage() {
           storeName:
             s.business_name ?? s.username ?? 'Service Provider',
           category: s.category ?? null,
-          // Services are video-first and always 9:16 by design.
           aspect: SERVICE_ASPECT,
         }));
       setServiceItems(svcItems);
@@ -1974,7 +1950,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
 
-  // ── Reel card — aspect set inline per item ──────────────────
+  // ── Reel card ────────────────────────────────────────────────
   reelCard: {
     position: 'relative',
     width: '100%',
@@ -2379,7 +2355,7 @@ const CSS = `
   }
 
   /* ─── Spotlight ──────────────────────────────────────── */
-  .sh-spotlight-wrap { margin-bottom: 6px; }
+  .sh-spotlight-wrap { margin-bottom: 8px; }
   .sh-spotlight-pad { padding: 0 16px; }
   .sh-spotlight-rel {
     position: relative;
@@ -2528,8 +2504,9 @@ const CSS = `
     transform: scale(0.97);
   }
 
+  /* ─── Mobile panel padding ───────────────────────────── */
   .sh-panel-inner {
-    padding: 8px 16px 24px;
+    padding: 14px 16px 32px;
   }
   .sh-tabs-inner {
     padding: 10px 16px 8px;
@@ -2555,9 +2532,10 @@ const CSS = `
       max-height: 80vh;
     }
     .sh-panel-inner {
-      padding: 12px 24px 32px;
+      padding: 20px 24px 48px;
     }
 
+    .sh-spotlight-wrap { margin-bottom: 12px; }
     .sh-spotlight-pad {
       padding: 0 24px;
     }
@@ -2572,13 +2550,13 @@ const CSS = `
       font-size: 22px;
     }
 
-    /* Tab strip: full-width pills, taller, larger text */
+    /* Tab strip: more vertical breathing room, larger gap between pills */
     .sh-tabs-wrap {
       border-bottom: 1px solid var(--border-default);
     }
     .sh-tabs-inner {
-      padding: 18px 24px 16px;
-      gap: 12px;
+      padding: 22px 24px 20px;
+      gap: 14px;
     }
     .sh-tab-pill {
       flex: 1;
