@@ -104,7 +104,6 @@ function ReceiptContent() {
     loading: true,
   });
 
-  // Fallback from query params
   const fallbackItems: OrderItem[] = (() => {
     try { return JSON.parse(searchParams.get('items') || '[]') as OrderItem[]; }
     catch { return []; }
@@ -119,7 +118,6 @@ function ReceiptContent() {
   };
 
   useEffect(() => {
-    // Use the wallet order endpoint — it returns real customer + storekeeper names.
     api.getOrderDetail(orderId)
       .then((raw: unknown) => {
         const res = raw as OrderDetailResponse;
@@ -151,13 +149,10 @@ function ReceiptContent() {
       });
   }, [orderId]);
 
-  // ── Resolved display values ─────────────────────────────────────
   const rawCustomerName    = orderData?.customer_name    || fallback.customer_name;
   const rawStoreName       = orderData?.store_name       || fallback.store_name;
   const rawStorekeeperName = orderData?.storekeeper_name || fallback.storekeeper_name;
 
-  // Never show the literal string 'Customer' or 'Store' as a fallback —
-  // instead show a neutral placeholder so the layout stays clean.
   const customerName    = (rawCustomerName    && rawCustomerName    !== 'Customer')    ? rawCustomerName    : 'Customer';
   const storeName       = (rawStoreName       && rawStoreName       !== 'Store')       ? rawStoreName       : '—';
   const storekeeperName = (rawStorekeeperName && rawStorekeeperName !== 'Storekeeper') ? rawStorekeeperName : '';
@@ -173,8 +168,6 @@ function ReceiptContent() {
   const items        = orderData?.items?.length ? orderData.items : fallback.items;
   const storeAddress = orderData?.address || searchParams.get('store_address') || '';
 
-  // If the backend didn't send an items array but escrow has a listing,
-  // synthesize a single row from the escrow fields.
   const synthesizedItems: OrderItem[] = items.length === 0 && listingId
     ? [{
         name: `Item #${shortenId(listingId)}`,
@@ -207,16 +200,14 @@ function ReceiptContent() {
 
   const now = new Date();
 
-  // Compose the info rows dynamically so 'Storekeeper' and 'Address' only
-  // appear when we actually have a value.
   const infoRows = [
-    { icon: <MdPersonOutline size={18} color="#0504AA" />, label: 'Customer',   value: customerName },
-    { icon: <MdStore        size={18} color="#0504AA" />, label: 'Store',      value: storeName    },
+    { icon: <MdPersonOutline size={18} color="var(--brand-primary)" />, label: 'Customer',   value: customerName },
+    { icon: <MdStore        size={18} color="var(--brand-primary)" />, label: 'Store',      value: storeName    },
     ...(storekeeperName
-      ? [{ icon: <MdPerson size={18} color="#0504AA" />, label: 'Storekeeper', value: storekeeperName }]
+      ? [{ icon: <MdPerson size={18} color="var(--brand-primary)" />, label: 'Storekeeper', value: storekeeperName }]
       : []),
     ...(storeAddress
-      ? [{ icon: <MdLocationOn size={18} color="#0504AA" />, label: 'Address', value: storeAddress }]
+      ? [{ icon: <MdLocationOn size={18} color="var(--brand-primary)" />, label: 'Address', value: storeAddress }]
       : []),
   ];
 
@@ -229,9 +220,9 @@ function ReceiptContent() {
         <button onClick={() => router.back()} style={css.backBtn}>←</button>
         <h1 style={css.title}>Receipt</h1>
         <div style={css.headerActions}>
-          <button onClick={handlePrint} style={css.iconBtn} title="Print"><MdPrint size={22} color="#333" /></button>
-          <button onClick={handleShare} style={css.iconBtn} title="Share"><MdShare size={22} color="#333" /></button>
-          <button onClick={handlePrint} style={css.iconBtn} title="Download (PDF via print)"><MdDownload size={22} color="#333" /></button>
+          <button onClick={handlePrint} style={css.iconBtn} title="Print"><MdPrint size={22} color="var(--text-secondary)" /></button>
+          <button onClick={handleShare} style={css.iconBtn} title="Share"><MdShare size={22} color="var(--text-secondary)" /></button>
+          <button onClick={handlePrint} style={css.iconBtn} title="Download (PDF via print)"><MdDownload size={22} color="var(--text-secondary)" /></button>
         </div>
       </div>
 
@@ -239,7 +230,7 @@ function ReceiptContent() {
       <div style={css.receiptCard}>
         <div style={css.cardHeader}>
           <div style={css.receiptIconWrapper}>
-            <MdReceiptLong size={32} color="#fff" />
+            <MdReceiptLong size={32} color="var(--brand-on-gradient)" />
           </div>
           <h2 style={css.cardTitle}>Transaction Receipt</h2>
           <p style={css.orderId}>Order #{orderId}</p>
@@ -262,7 +253,7 @@ function ReceiptContent() {
         <div style={css.itemsSection}>
           <h3 style={css.itemsTitle}>Items</h3>
           {displayItems.length === 0 ? (
-            <p style={{ color: '#888' }}>No items in this order.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No items in this order.</p>
           ) : (
             <div style={css.itemsList}>
               {displayItems.map((item, index) => {
@@ -281,7 +272,7 @@ function ReceiptContent() {
           )}
 
           {deliveryFee > 0 && (
-            <div style={{ ...css.itemRow, marginTop: 8, color: '#666' }}>
+            <div style={{ ...css.itemRow, marginTop: 8, color: 'var(--text-tertiary)' }}>
               <span style={css.itemName}>Delivery fee</span>
               <span style={css.itemQty} />
               <span style={css.itemSubtotal}>₦{deliveryFee.toFixed(0)}</span>
@@ -302,7 +293,7 @@ function ReceiptContent() {
 
 export default function ReceiptPage() {
   return (
-    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading receipt…</div>}>
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--text-primary)' }}>Loading receipt…</div>}>
       <ReceiptContent />
     </Suspense>
   );
@@ -313,33 +304,33 @@ const KF = `@keyframes spin { to { transform: rotate(360deg); } }`;
 
 // ─── Styles ──────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
-  container:        { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F8F9FA', paddingBottom: 20 },
-  loadScreen:       { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' },
-  spinner:          { width: 40, height: 40, border: '4px solid #eee', borderTopColor: '#0504AA', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
-  header:           { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', backgroundColor: '#fff', borderBottom: '1px solid #eee' },
-  backBtn:          { background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#333', padding: 0, width: 24, textAlign: 'left' },
-  title:            { fontSize: 20, fontWeight: 700, color: '#1A1A1A', flex: 1, marginLeft: 12 },
+  container:        { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-primary)', paddingBottom: 20 },
+  loadScreen:       { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: 'var(--bg-primary)' },
+  spinner:          { width: 40, height: 40, border: '4px solid var(--border-default)', borderTopColor: 'var(--brand-primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
+  header:           { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-default)' },
+  backBtn:          { background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-secondary)', padding: 0, width: 24, textAlign: 'left' },
+  title:            { fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', flex: 1, marginLeft: 12 },
   headerActions:    { display: 'flex', gap: 16 },
   iconBtn:          { background: 'none', border: 'none', cursor: 'pointer', padding: 4 },
-  receiptCard:      { margin: '16px', backgroundColor: '#fff', borderRadius: 24, padding: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.08)', overflow: 'hidden' },
-  cardHeader:       { background: 'linear-gradient(135deg, #0504AA 0%, #3B82F6 100%)', margin: -20, marginBottom: 20, padding: 24, textAlign: 'center', color: '#fff' },
-  receiptIconWrapper:{ width: 60, height: 60, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' },
+  receiptCard:      { margin: '16px', backgroundColor: 'var(--bg-secondary)', borderRadius: 24, padding: 20, border: '1px solid var(--border-default)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden' },
+  cardHeader:       { background: 'var(--brand-gradient)', margin: -20, marginBottom: 20, padding: 24, textAlign: 'center', color: 'var(--brand-on-gradient)' },
+  receiptIconWrapper:{ width: 60, height: 60, borderRadius: '50%', backgroundColor: 'color-mix(in srgb, var(--brand-on-gradient) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' },
   cardTitle:        { fontSize: 22, fontWeight: 800, margin: 0 },
   orderId:          { fontSize: 14, opacity: 0.9, marginTop: 4 },
   dateTime:         { fontSize: 12, opacity: 0.8, marginTop: 2 },
   infoSection:      { padding: '4px 0', marginBottom: 12 },
   infoRow:          { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: 14 },
-  infoLabel:        { display: 'flex', alignItems: 'center', gap: 6, color: '#0504AA', fontWeight: 600 },
-  infoValue:        { color: '#1A1A1A', fontWeight: 600, textAlign: 'right', maxWidth: '60%' },
+  infoLabel:        { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--brand-primary)', fontWeight: 600 },
+  infoValue:        { color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right', maxWidth: '60%' },
   itemsSection:     { marginTop: 20 },
-  itemsTitle:       { fontSize: 16, fontWeight: 700, color: '#1A1A1A', marginBottom: 12 },
+  itemsTitle:       { fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 },
   itemsList:        { display: 'flex', flexDirection: 'column', gap: 8 },
   itemRow:          { display: 'flex', alignItems: 'center', gap: 12 },
-  itemName:         { flex: 2, fontSize: 14, fontWeight: 500 },
-  itemQty:          { fontSize: 14, color: '#666' },
-  itemSubtotal:     { width: 70, textAlign: 'right', fontSize: 14, fontWeight: 600, color: '#0504AA' },
-  totalSection:     { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, paddingTop: 16, borderTop: '1px dashed #E5E7EB' },
-  totalLabel:       { fontSize: 18, fontWeight: 700, color: '#1A1A1A' },
-  totalValue:       { fontSize: 22, fontWeight: 800, color: '#0504AA' },
-  footerNote:       { marginTop: 20, textAlign: 'center', color: '#888', fontSize: 13 },
+  itemName:         { flex: 2, fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' },
+  itemQty:          { fontSize: 14, color: 'var(--text-tertiary)' },
+  itemSubtotal:     { width: 70, textAlign: 'right', fontSize: 14, fontWeight: 600, color: 'var(--brand-primary)', fontVariantNumeric: 'tabular-nums' },
+  totalSection:     { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, paddingTop: 16, borderTop: '1px dashed var(--border-default)' },
+  totalLabel:       { fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' },
+  totalValue:       { fontSize: 22, fontWeight: 800, color: 'var(--brand-primary)', fontVariantNumeric: 'tabular-nums' },
+  footerNote:       { marginTop: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 },
 };
