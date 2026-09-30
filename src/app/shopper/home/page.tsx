@@ -34,9 +34,12 @@ const MAX_ASPECT = 4 / 5; // 0.8 — shortest (Instagram portrait)
 const DEFAULT_ASPECT = 3 / 4; // 0.75 — when dims are missing
 const SERVICE_ASPECT = 9 / 16; // services are video-only, always 9:16
 
-// Gap between cards, in pixels.
-const GRID_GAP_MOBILE = 12;
-const GRID_GAP_DESKTOP = 30;
+// Column gap = horizontal space between side-by-side cards
+// Row gap    = vertical space between cards in the same column
+const COL_GAP_MOBILE = 10;
+const ROW_GAP_MOBILE = 20;
+const COL_GAP_DESKTOP = 16;
+const ROW_GAP_DESKTOP = 30;
 
 type FeedFilter = 'mixed' | 'items' | 'services';
 
@@ -252,18 +255,20 @@ interface Provider {
   aspect: number;
 }
 
-// ─── Height-balanced masonry ───────────────────────────────────────────────
+// ─── Height-balanced masonry (separate column / row gaps) ─────────────────
 function MasonryColumns<T>({
   items,
   columns,
-  gapPx,
+  columnGap,
+  rowGap,
   renderItem,
   keyFor,
   weightOf,
 }: {
   items: T[];
   columns: number;
-  gapPx: number;
+  columnGap: number;
+  rowGap: number;
   renderItem: (item: T) => React.ReactNode;
   keyFor: (item: T, index: number) => string;
   weightOf: (item: T) => number;
@@ -271,7 +276,7 @@ function MasonryColumns<T>({
   if (items.length === 0) return null;
 
   const ASSUMED_CARD_WIDTH_PX = 200;
-  const gapWeight = gapPx / ASSUMED_CARD_WIDTH_PX;
+  const gapWeight = rowGap / ASSUMED_CARD_WIDTH_PX;
 
   const cols: T[][] = Array.from({ length: columns }, () => []);
   const heights = new Array(columns).fill(0);
@@ -289,7 +294,7 @@ function MasonryColumns<T>({
     <div
       style={{
         display: 'flex',
-        gap: gapPx,
+        columnGap,
         alignItems: 'flex-start',
         width: '100%',
       }}
@@ -301,7 +306,7 @@ function MasonryColumns<T>({
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            gap: gapPx,
+            rowGap,
             minWidth: 0,
           }}
         >
@@ -683,14 +688,16 @@ function FeedEmpty({
 // ─── Skeleton ──────────────────────────────────────────────────────────────
 function FeedSkeleton({
   columns,
-  gapPx,
+  columnGap,
+  rowGap,
 }: {
   columns: number;
-  gapPx: number;
+  columnGap: number;
+  rowGap: number;
 }) {
   const cards = 8;
   return (
-    <div style={{ display: 'flex', gap: gapPx, width: '100%' }}>
+    <div style={{ display: 'flex', columnGap, width: '100%' }}>
       {Array.from({ length: columns }).map((_, colIdx) => (
         <div
           key={colIdx}
@@ -698,7 +705,7 @@ function FeedSkeleton({
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            gap: gapPx,
+            rowGap,
             minWidth: 0,
           }}
         >
@@ -745,7 +752,8 @@ export default function ShopperHomePage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [columns, setColumns] = useState(2);
-  const [gapPx, setGapPx] = useState(GRID_GAP_MOBILE);
+  const [columnGap, setColumnGap] = useState(COL_GAP_MOBILE);
+  const [rowGap, setRowGap] = useState(ROW_GAP_MOBILE);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -794,9 +802,10 @@ export default function ShopperHomePage() {
       else if (w < 1200) setColumns(4);
       else if (w < 1600) setColumns(5);
       else setColumns(6);
-      setGapPx(
-        w >= 1024 ? GRID_GAP_DESKTOP : GRID_GAP_MOBILE,
-      );
+
+      const desktop = w >= 1024;
+      setColumnGap(desktop ? COL_GAP_DESKTOP : COL_GAP_MOBILE);
+      setRowGap(desktop ? ROW_GAP_DESKTOP : ROW_GAP_MOBILE);
     };
     update();
     window.addEventListener('resize', update);
@@ -1454,7 +1463,8 @@ export default function ShopperHomePage() {
                 {loadingFeed ? (
                   <FeedSkeleton
                     columns={columns}
-                    gapPx={gapPx}
+                    columnGap={columnGap}
+                    rowGap={rowGap}
                   />
                 ) : feedItems.length === 0 ? (
                   hasActiveFilters ? (
@@ -1486,7 +1496,8 @@ export default function ShopperHomePage() {
                     <MasonryColumns
                       items={displayedFeed}
                       columns={columns}
-                      gapPx={gapPx}
+                      columnGap={columnGap}
+                      rowGap={rowGap}
                       keyFor={(item) => `${item.kind}-${item.id}`}
                       weightOf={(item) => 1 / item.aspect}
                       renderItem={(item) => (
@@ -1520,7 +1531,8 @@ export default function ShopperHomePage() {
                 {loadingStores ? (
                   <FeedSkeleton
                     columns={columns}
-                    gapPx={gapPx}
+                    columnGap={columnGap}
+                    rowGap={rowGap}
                   />
                 ) : stores.length === 0 ? (
                   <FeedEmpty
@@ -1537,7 +1549,8 @@ export default function ShopperHomePage() {
                   <MasonryColumns
                     items={stores}
                     columns={columns}
-                    gapPx={gapPx}
+                    columnGap={columnGap}
+                    rowGap={rowGap}
                     keyFor={(store) => store.id}
                     weightOf={(store) => 1 / store.aspect}
                     renderItem={(store) => (
@@ -1563,7 +1576,8 @@ export default function ShopperHomePage() {
                 {loadingServices ? (
                   <FeedSkeleton
                     columns={columns}
-                    gapPx={gapPx}
+                    columnGap={columnGap}
+                    rowGap={rowGap}
                   />
                 ) : providers.length === 0 ? (
                   <FeedEmpty
@@ -1580,7 +1594,8 @@ export default function ShopperHomePage() {
                   <MasonryColumns
                     items={providers}
                     columns={columns}
-                    gapPx={gapPx}
+                    columnGap={columnGap}
+                    rowGap={rowGap}
                     keyFor={(provider) => provider.id}
                     weightOf={(provider) => 1 / provider.aspect}
                     renderItem={(provider) => (
@@ -2497,7 +2512,7 @@ const CSS = `
   }
 
   .sh-panel-inner {
-    padding: 12px 12px 40px;
+    padding: 20px 16px 40px;
   }
   .sh-tabs-inner {
     padding: 12px 16px 10px;
