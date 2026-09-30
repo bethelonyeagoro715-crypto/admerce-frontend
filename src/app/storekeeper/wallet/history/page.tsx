@@ -1,6 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../../services/api';
 import { useAuthGuard } from '../../../../hooks/useAuthGuard';
@@ -35,7 +40,10 @@ interface Txn {
 }
 
 function fmtNaira(v: number) {
-  return '₦' + v.toLocaleString('en-NG', { maximumFractionDigits: 2 });
+  return (
+    '₦' +
+    v.toLocaleString('en-NG', { maximumFractionDigits: 2 })
+  );
 }
 
 function fmtDate(iso: string) {
@@ -59,7 +67,9 @@ function normalize(raw: unknown): Txn[] {
     id: String(t.id ?? Math.random()),
     type: t.type === 'credit' ? 'credit' : 'debit',
     amount: Number(t.amount ?? 0),
-    description: t.description || (t.type === 'credit' ? 'Credit' : 'Debit'),
+    description:
+      t.description ||
+      (t.type === 'credit' ? 'Credit' : 'Debit'),
     reference: t.reference || '',
     date: t.created_at || '',
   }));
@@ -88,7 +98,6 @@ export default function HistoryPage() {
   }, [limit]);
 
   useEffect(() => {
-    // Defer to avoid synchronous setState inside the effect
     const timer = setTimeout(() => {
       load();
     }, 0);
@@ -103,15 +112,17 @@ export default function HistoryPage() {
 
   const filtered = useMemo(() => {
     let list = txns;
-    if (filter === 'credit') list = list.filter((t) => t.type === 'credit');
-    else if (filter === 'debit') list = list.filter((t) => t.type === 'debit');
+    if (filter === 'credit')
+      list = list.filter((t) => t.type === 'credit');
+    else if (filter === 'debit')
+      list = list.filter((t) => t.type === 'debit');
 
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter(
         (t) =>
           t.description.toLowerCase().includes(q) ||
-          t.reference.toLowerCase().includes(q)
+          t.reference.toLowerCase().includes(q),
       );
     }
     return list;
@@ -129,141 +140,369 @@ export default function HistoryPage() {
 
   return (
     <main style={css.container}>
-      <div style={css.appBar}>
-        <button onClick={() => router.back()} style={css.backBtn}>
-          <MdArrowBack size={22} color="#1A1A1A" />
-        </button>
-        <h1 style={css.title}>Transaction History</h1>
-        <button onClick={onRefresh} style={css.backBtn} title="Refresh">
-          <MdRefresh
-            size={22}
-            color="#1A1A1A"
-            style={{ animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}
-          />
-        </button>
-      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{SHELL_CSS}</style>
 
-      <div style={css.statRow}>
-        <div style={css.statCard}>
-          <MdTrendingUp size={18} color="#16A34A" />
-          <span style={css.statLabel}>Money in</span>
-          <span style={css.statValueCredit}>{fmtNaira(totals.credit)}</span>
-        </div>
-        <div style={css.statCard}>
-          <MdTrendingDown size={18} color="#DC2626" />
-          <span style={css.statLabel}>Money out</span>
-          <span style={css.statValueDebit}>{fmtNaira(totals.debit)}</span>
-        </div>
-      </div>
-
-      <div style={css.searchWrap}>
-        <MdSearch size={18} color="#94A3B8" />
-        <input
-          type="text"
-          placeholder="Search transactions…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={css.searchInput}
-        />
-      </div>
-
-      <div style={css.filterRow}>
-        {(['all', 'credit', 'debit'] as Filter[]).map((f) => (
+      <div className="hist-shell">
+        <div style={css.appBar}>
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              ...css.filterBtn,
-              backgroundColor: filter === f ? '#0504AA' : 'transparent',
-              color: filter === f ? '#fff' : '#0504AA',
-            }}
+            onClick={() => router.back()}
+            style={css.backBtn}
           >
-            {f === 'all' ? 'All' : f === 'credit' ? 'Credits' : 'Debits'}
+            <MdArrowBack size={22} color="var(--text-primary)" />
           </button>
-        ))}
-      </div>
+          <h1 style={css.title}>Transaction History</h1>
+          <button
+            onClick={onRefresh}
+            style={css.backBtn}
+            title="Refresh"
+          >
+            <MdRefresh
+              size={22}
+              color="var(--text-primary)"
+              style={{
+                animation: refreshing
+                  ? 'spin 0.8s linear infinite'
+                  : 'none',
+              }}
+            />
+          </button>
+        </div>
 
-      <div style={css.list}>
-        {loading ? (
-          <div style={css.center}>
-            <div style={css.spinner} />
+        <div style={css.statRow}>
+          <div style={css.statCard}>
+            <MdTrendingUp size={18} color="var(--success-fg)" />
+            <span style={css.statLabel}>Money in</span>
+            <span style={css.statValueCredit}>
+              {fmtNaira(totals.credit)}
+            </span>
           </div>
-        ) : filtered.length === 0 ? (
-          <div style={css.empty}>
-            <MdAccountBalanceWallet size={48} color="#C7D2FE" />
-            <p style={css.emptyText}>No transactions yet.</p>
+          <div style={css.statCard}>
+            <MdTrendingDown size={18} color="var(--danger-fg)" />
+            <span style={css.statLabel}>Money out</span>
+            <span style={css.statValueDebit}>
+              {fmtNaira(totals.debit)}
+            </span>
           </div>
-        ) : (
-          filtered.map((t) => {
-            const isCredit = t.type === 'credit';
+        </div>
+
+        <div style={css.searchWrap}>
+          <MdSearch size={18} color="var(--text-muted)" />
+          <input
+            type="text"
+            placeholder="Search transactions…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={css.searchInput}
+          />
+        </div>
+
+        <div style={css.filterRow}>
+          {(['all', 'credit', 'debit'] as Filter[]).map((f) => {
+            const active = filter === f;
             return (
-              <div key={t.id} style={css.txnRow}>
-                <div
-                  style={{
-                    ...css.txnIcon,
-                    backgroundColor: isCredit ? '#DCFCE7' : '#FEE2E2',
-                  }}
-                >
-                  {isCredit ? (
-                    <MdTrendingUp size={18} color="#16A34A" />
-                  ) : (
-                    <MdTrendingDown size={18} color="#DC2626" />
-                  )}
-                </div>
-                <div style={css.txnBody}>
-                  <span style={css.txnDesc}>{t.description}</span>
-                  <span style={css.txnDate}>{fmtDate(t.date)}</span>
-                </div>
-                <span
-                  style={{
-                    ...css.txnAmt,
-                    color: isCredit ? '#16A34A' : '#DC2626',
-                  }}
-                >
-                  {isCredit ? '+' : '−'}
-                  {fmtNaira(t.amount)}
-                </span>
-              </div>
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                style={{
+                  ...css.filterBtn,
+                  background: active
+                    ? 'var(--brand-gradient)'
+                    : 'transparent',
+                  color: active
+                    ? 'var(--brand-on-gradient)'
+                    : 'var(--brand-primary)',
+                  borderColor: active
+                    ? 'transparent'
+                    : 'var(--brand-primary)',
+                }}
+              >
+                {f === 'all'
+                  ? 'All'
+                  : f === 'credit'
+                    ? 'Credits'
+                    : 'Debits'}
+              </button>
             );
-          })
+          })}
+        </div>
+
+        <div style={css.list}>
+          {loading ? (
+            <div style={css.center}>
+              <div style={css.spinner} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={css.empty}>
+              <MdAccountBalanceWallet
+                size={48}
+                color="var(--brand-soft)"
+              />
+              <p style={css.emptyText}>No transactions yet.</p>
+            </div>
+          ) : (
+            filtered.map((t) => {
+              const isCredit = t.type === 'credit';
+              return (
+                <div key={t.id} style={css.txnRow}>
+                  <div
+                    style={{
+                      ...css.txnIcon,
+                      backgroundColor: isCredit
+                        ? 'var(--success-bg)'
+                        : 'var(--danger-bg)',
+                    }}
+                  >
+                    {isCredit ? (
+                      <MdTrendingUp
+                        size={18}
+                        color="var(--success-fg)"
+                      />
+                    ) : (
+                      <MdTrendingDown
+                        size={18}
+                        color="var(--danger-fg)"
+                      />
+                    )}
+                  </div>
+                  <div style={css.txnBody}>
+                    <span style={css.txnDesc}>
+                      {t.description}
+                    </span>
+                    <span style={css.txnDate}>
+                      {fmtDate(t.date)}
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      ...css.txnAmt,
+                      color: isCredit
+                        ? 'var(--success-fg)'
+                        : 'var(--danger-fg)',
+                    }}
+                  >
+                    {isCredit ? '+' : '−'}
+                    {fmtNaira(t.amount)}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {!loading && txns.length >= limit && (
+          <button
+            onClick={() => setLimit((n) => n + 50)}
+            style={css.loadMore}
+          >
+            Load more
+          </button>
         )}
       </div>
-
-      {!loading && txns.length >= limit && (
-        <button onClick={() => setLimit((n) => n + 50)} style={css.loadMore}>
-          Load more
-        </button>
-      )}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }
 
+const SHELL_CSS = `
+  .hist-shell {
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+`;
+
 const css: Record<string, React.CSSProperties> = {
-  container: { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#F8F9FA' },
-  appBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', backgroundColor: '#fff', borderBottom: '1px solid #eee' },
-  backBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' },
-  title: { fontSize: 17, fontWeight: 600, color: '#1A1A1A', margin: 0 },
-  statRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: 16 },
-  statCard: { display: 'flex', flexDirection: 'column', gap: 4, padding: 14, borderRadius: 12, backgroundColor: '#fff', boxShadow: '0 1px 3px rgba(15,23,42,0.05)' },
-  statLabel: { fontSize: 12, color: '#64748B' },
-  statValueCredit: { fontSize: 16, fontWeight: 700, color: '#16A34A' },
-  statValueDebit: { fontSize: 16, fontWeight: 700, color: '#DC2626' },
-  searchWrap: { display: 'flex', alignItems: 'center', gap: 8, margin: '0 16px 12px', padding: '10px 14px', backgroundColor: '#fff', borderRadius: 12, border: '1px solid #E2E8F0' },
-  searchInput: { flex: 1, border: 'none', outline: 'none', fontSize: 14, backgroundColor: 'transparent', color: '#1A1A1A' },
-  filterRow: { display: 'flex', gap: 8, padding: '0 16px 12px' },
-  filterBtn: { padding: '8px 16px', borderRadius: 20, border: '1px solid #0504AA', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  list: { flex: 1, padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 10 },
-  center: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px 0' },
-  spinner: { width: 36, height: 36, border: '4px solid #eee', borderTopColor: '#0504AA', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
-  empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 0', gap: 12 },
-  emptyText: { color: '#94A3B8', fontSize: 14, margin: 0 },
-  txnRow: { display: 'flex', alignItems: 'center', gap: 12, padding: 14, backgroundColor: '#fff', borderRadius: 12, boxShadow: '0 1px 3px rgba(15,23,42,0.05)' },
-  txnIcon: { width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  txnBody: { flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 },
-  txnDesc: { fontSize: 14, fontWeight: 600, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  txnDate: { fontSize: 11, color: '#94A3B8' },
-  txnAmt: { fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' },
-  loadMore: { margin: '0 16px 24px', padding: 12, borderRadius: 12, border: '1px solid #0504AA', backgroundColor: '#fff', color: '#0504AA', fontSize: 14, fontWeight: 600, cursor: 'pointer' },
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: '100vh',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
+    transition: 'background-color 0.18s ease, color 0.18s ease',
+  },
+  appBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px 16px',
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-default)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+  },
+  backBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 4,
+    display: 'flex',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: 600,
+    color: 'var(--text-primary)',
+    margin: 0,
+  },
+  statRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 12,
+    padding: 16,
+  },
+  statCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: 'var(--text-tertiary)',
+  },
+  statValueCredit: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: 'var(--success-fg)',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  statValueDebit: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: 'var(--danger-fg)',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  searchWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    margin: '0 16px 12px',
+    padding: '10px 14px',
+    backgroundColor: 'var(--bg-secondary)',
+    borderRadius: 12,
+    border: '1px solid var(--border-default)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+  },
+  searchInput: {
+    flex: 1,
+    border: 'none',
+    outline: 'none',
+    fontSize: 14,
+    backgroundColor: 'transparent',
+    color: 'var(--text-primary)',
+    fontFamily: 'inherit',
+  },
+  filterRow: {
+    display: 'flex',
+    gap: 8,
+    padding: '0 16px 12px',
+  },
+  filterBtn: {
+    padding: '8px 16px',
+    borderRadius: 20,
+    border: '1px solid',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+  },
+  list: {
+    flex: 1,
+    padding: '0 16px 24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  },
+  center: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '40px 0',
+  },
+  spinner: {
+    width: 36,
+    height: 36,
+    border: '4px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  empty: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '60px 0',
+    gap: 12,
+  },
+  emptyText: {
+    color: 'var(--text-muted)',
+    fontSize: 14,
+    margin: 0,
+  },
+  txnRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    backgroundColor: 'var(--bg-secondary)',
+    borderRadius: 12,
+    border: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-sm)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+  },
+  txnIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  txnBody: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 3,
+    minWidth: 0,
+  },
+  txnDesc: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: 'var(--text-primary)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  txnDate: {
+    fontSize: 11,
+    color: 'var(--text-muted)',
+  },
+  txnAmt: {
+    fontSize: 14,
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  loadMore: {
+    margin: '0 16px 24px',
+    padding: 12,
+    borderRadius: 12,
+    border: '1px solid var(--brand-primary)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--brand-primary)',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
 };
