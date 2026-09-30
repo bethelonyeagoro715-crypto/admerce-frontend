@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
-import ServiceReelCard from '../../../components/ServiceReelCard';
 import {
   MdSearch,
   MdShoppingBasket,
@@ -11,6 +10,8 @@ import {
   MdTune,
   MdImage,
   MdStorefront,
+  MdBuild,
+  MdPlayArrow,
   MdExpandLess,
   MdExpandMore,
   MdClose,
@@ -28,27 +29,9 @@ const SPOTLIGHT_INTERVAL_MS = 4200;
 
 const CONTENT_MAX_WIDTH = 1440;
 
-const CARD_RATIOS: { w: number; h: number; weight: number }[] = [
-  { w: 4, h: 5, weight: 5 / 4 },
-  { w: 5, h: 6, weight: 6 / 5 },
-  { w: 3, h: 4, weight: 4 / 3 },
-  { w: 1, h: 1, weight: 1 },
-  { w: 9, h: 16, weight: 16 / 9 },
-];
-
-function ratioForSeed(seed: string) {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  const n = (h >>> 0) % 100;
-  if (n < 30) return CARD_RATIOS[0];
-  if (n < 55) return CARD_RATIOS[1];
-  if (n < 75) return CARD_RATIOS[2];
-  if (n < 90) return CARD_RATIOS[3];
-  return CARD_RATIOS[4];
-}
+// Pinterest-standard portrait ratio (1000 × 1500)
+const CARD_ASPECT = '2 / 3';
+const CARD_WEIGHT = 3 / 2; // height / width
 
 type FeedFilter = 'mixed' | 'items' | 'services';
 
@@ -248,7 +231,14 @@ function MasonryColumns<T>({
   }
 
   return (
-    <div style={{ display: 'flex', gap, alignItems: 'flex-start', width: '100%' }}>
+    <div
+      style={{
+        display: 'flex',
+        gap,
+        alignItems: 'flex-start',
+        width: '100%',
+      }}
+    >
       {cols.map((col, colIdx) => (
         <div
           key={colIdx}
@@ -399,7 +389,9 @@ function StoreSpotlight({
             />
             <div className="sh-spotlight-overlay" aria-hidden />
             <div className="sh-spotlight-text">
-              <div className="sh-spotlight-eyebrow">Featured store</div>
+              <div className="sh-spotlight-eyebrow">
+                Featured store
+              </div>
               <div className="sh-spotlight-title">{current.name}</div>
             </div>
             {withImages.length > 1 && (
@@ -433,37 +425,37 @@ function StoreSpotlight({
   );
 }
 
-// ─── ReelCard ──────────────────────────────────────────────────────────────
+// ─── ReelCard (unified 2:3) ────────────────────────────────────────────────
 function ReelCard({
   image,
   placeholder,
   badge,
   badgeBg,
-  ratio,
   onPress,
   onSearch,
   store,
   title,
   price,
   ariaLabel,
+  isVideo,
 }: {
   image: string | null;
   placeholder: React.ReactNode;
   badge: string;
   badgeBg: string;
-  ratio: { w: number; h: number };
   onPress: () => void;
   onSearch?: () => void;
   store?: string;
   title: string;
   price?: string;
   ariaLabel?: string;
+  isVideo?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onPress}
-      style={{ ...styles.reelCard, aspectRatio: `${ratio.w} / ${ratio.h}` }}
+      style={styles.reelCard}
       aria-label={ariaLabel || title}
       className="sh-reel"
     >
@@ -479,6 +471,12 @@ function ReelCard({
       <div style={{ ...styles.reelBadge, backgroundColor: badgeBg }}>
         {badge}
       </div>
+
+      {isVideo && (
+        <div style={styles.reelPlayBadge} aria-hidden>
+          <MdPlayArrow size={18} color="#fff" />
+        </div>
+      )}
 
       {onSearch && (
         <div
@@ -516,29 +514,26 @@ function ItemCard({
 }) {
   if (item.kind === 'service') {
     return (
-      <ServiceReelCard
-        service={{
-          id: item.id,
-          title: item.title,
-          price: item.price,
-          videoUrl: item.video,
-          imageUrl: item.image,
-          providerName: item.storeName,
-        }}
-        onOpen={() => onPress(item)}
+      <ReelCard
+        image={item.image}
+        placeholder={<MdBuild size={40} color="var(--text-muted)" />}
+        badge="SERVICE"
+        badgeBg="rgba(126,34,206,0.9)"
+        onPress={() => onPress(item)}
+        store={item.storeName}
+        title={item.title}
+        price={item.price}
+        isVideo={Boolean(item.video)}
       />
     );
   }
-
-  const ratio = ratioForSeed(item.id);
 
   return (
     <ReelCard
       image={item.image}
       placeholder={<MdImage size={40} color="var(--text-muted)" />}
       badge="ITEM"
-      badgeBg="rgba(15,23,42,0.78)"
-      ratio={ratio}
+      badgeBg="rgba(15,23,42,0.82)"
       onPress={() => onPress(item)}
       onSearch={() => onVisualSearch(item.image)}
       store={item.storeName}
@@ -556,14 +551,12 @@ function StoreCard({
   store: Store;
   onPress: (id: string) => void;
 }) {
-  const ratio = ratioForSeed(`store-${store.id}`);
   return (
     <ReelCard
       image={store.image}
       placeholder={<MdStorefront size={40} color="var(--text-muted)" />}
       badge="STORE"
-      badgeBg="rgba(5,4,170,0.88)"
-      ratio={ratio}
+      badgeBg="rgba(5,4,170,0.9)"
       onPress={() => onPress(store.id)}
       title={store.name}
     />
@@ -579,7 +572,6 @@ function ProviderCard({
   onPress: (id: string, name: string) => void;
 }) {
   const initials = (provider.name || '?')[0].toUpperCase();
-  const ratio = ratioForSeed(`provider-${provider.id}`);
   return (
     <ReelCard
       image={provider.image}
@@ -589,8 +581,7 @@ function ProviderCard({
         </div>
       }
       badge="PROVIDER"
-      badgeBg="rgba(126,34,206,0.88)"
-      ratio={ratio}
+      badgeBg="rgba(126,34,206,0.9)"
       onPress={() => onPress(provider.id, provider.name)}
       title={provider.name}
       price={`${provider.serviceCount} service${
@@ -648,11 +639,13 @@ function FeedSkeleton({ columns }: { columns: number }) {
             minWidth: 0,
           }}
         >
-          {Array.from({ length: Math.ceil(cards / columns) }).map((_, i) => (
-            <div key={i} style={styles.skeletonCard}>
-              <div style={styles.skeletonImage} />
-            </div>
-          ))}
+          {Array.from({ length: Math.ceil(cards / columns) }).map(
+            (_, i) => (
+              <div key={i} style={styles.skeletonCard}>
+                <div style={styles.skeletonImage} />
+              </div>
+            ),
+          )}
         </div>
       ))}
     </div>
@@ -664,7 +657,8 @@ export default function ShopperHomePage() {
   const router = useRouter();
 
   const [currentTab, setCurrentTab] = useState(0);
-  const [isSpotlightCollapsed, setIsSpotlightCollapsed] = useState(false);
+  const [isSpotlightCollapsed, setIsSpotlightCollapsed] =
+    useState(false);
 
   const [listingItems, setListingItems] = useState<Item[]>([]);
   const [serviceItems, setServiceItems] = useState<Item[]>([]);
@@ -682,7 +676,9 @@ export default function ShopperHomePage() {
 
   const [showFilter, setShowFilter] = useState(false);
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('mixed');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<
+    string | null
+  >(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [columns, setColumns] = useState(2);
@@ -714,7 +710,9 @@ export default function ShopperHomePage() {
     const panelTop = activePanelRef.current?.scrollTop ?? 0;
     const windowTop =
       typeof window !== 'undefined'
-        ? window.scrollY || document.documentElement.scrollTop || 0
+        ? window.scrollY ||
+          document.documentElement.scrollTop ||
+          0
         : 0;
     return { panelTop, windowTop };
   };
@@ -738,27 +736,28 @@ export default function ShopperHomePage() {
     return () => window.removeEventListener('resize', update);
   }, []);
 
-  const getCurrentLocation = async (): Promise<GeolocationPosition | null> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        setLocationDenied(true);
-        resolve(null);
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLocationDenied(false);
-          resolve(pos);
-        },
-        (err) => {
-          console.warn('Geolocation error:', err.message);
+  const getCurrentLocation =
+    async (): Promise<GeolocationPosition | null> => {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
           setLocationDenied(true);
           resolve(null);
-        },
-        { timeout: 10000, maximumAge: 0 },
-      );
-    });
-  };
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setLocationDenied(false);
+            resolve(pos);
+          },
+          (err) => {
+            console.warn('Geolocation error:', err.message);
+            setLocationDenied(true);
+            resolve(null);
+          },
+          { timeout: 10000, maximumAge: 0 },
+        );
+      });
+    };
 
   const requestLocationManually = async () => {
     const pos = await getCurrentLocation();
@@ -813,7 +812,9 @@ export default function ShopperHomePage() {
           return;
         }
 
-        const candidateIds = candidates.map((c) => c.listing_id.toString());
+        const candidateIds = candidates.map((c) =>
+          c.listing_id.toString(),
+        );
         const rankData = await api.rankFeed(
           lat,
           lng,
@@ -848,7 +849,9 @@ export default function ShopperHomePage() {
           category: item.category ?? null,
         }));
 
-        newItems.forEach((item) => sessionItemsShown.current.push(item.id));
+        newItems.forEach((item) =>
+          sessionItemsShown.current.push(item.id),
+        );
 
         if (loadMore) {
           setListingItems((prev) => [...prev, ...newItems]);
@@ -857,7 +860,8 @@ export default function ShopperHomePage() {
           setLoadingItems(false);
         }
       } catch {
-        if (mySeq === itemsReqSeq.current && !loadMore) setLoadingItems(false);
+        if (mySeq === itemsReqSeq.current && !loadMore)
+          setLoadingItems(false);
       }
     },
     [],
@@ -888,7 +892,8 @@ export default function ShopperHomePage() {
   const loadServices = useCallback(async (_lat: number, _lng: number) => {
     const mySeq = ++servicesReqSeq.current;
     try {
-      const services = (await api.listServices()) as unknown as ServiceItem[];
+      const services =
+        (await api.listServices()) as unknown as ServiceItem[];
 
       if (mySeq !== servicesReqSeq.current) return;
 
@@ -901,7 +906,8 @@ export default function ShopperHomePage() {
           video: resolveImageUrl(s.video_url ?? null),
           title: s.title ?? 'Service',
           price: formatPrice(s.price),
-          storeName: s.business_name ?? s.username ?? 'Service Provider',
+          storeName:
+            s.business_name ?? s.username ?? 'Service Provider',
           category: s.category ?? null,
         }));
       setServiceItems(svcItems);
@@ -912,7 +918,8 @@ export default function ShopperHomePage() {
         if (!providerMap.has(s.provider_id)) {
           providerMap.set(s.provider_id, {
             id: s.provider_id,
-            name: s.business_name ?? s.username ?? 'Service Provider',
+            name:
+              s.business_name ?? s.username ?? 'Service Provider',
             image:
               resolveImageUrl(s.business_image_url) ??
               resolveImageUrl(s.avatar_url),
@@ -953,13 +960,17 @@ export default function ShopperHomePage() {
   const filteredListingItems = useMemo(() => {
     if (feedFilter === 'services') return [];
     if (!selectedCategory) return listingItems;
-    return listingItems.filter((it) => it.category === selectedCategory);
+    return listingItems.filter(
+      (it) => it.category === selectedCategory,
+    );
   }, [feedFilter, selectedCategory, listingItems]);
 
   const filteredServiceItems = useMemo(() => {
     if (feedFilter === 'items') return [];
     if (!selectedCategory) return serviceItems;
-    return serviceItems.filter((it) => it.category === selectedCategory);
+    return serviceItems.filter(
+      (it) => it.category === selectedCategory,
+    );
   }, [feedFilter, selectedCategory, serviceItems]);
 
   const feedItems = useMemo(
@@ -994,7 +1005,12 @@ export default function ShopperHomePage() {
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [currentTab, loadingItems, loadingServices, feedItems.length]);
+  }, [
+    currentTab,
+    loadingItems,
+    loadingServices,
+    feedItems.length,
+  ]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
@@ -1026,7 +1042,10 @@ export default function ShopperHomePage() {
 
         if (deltaY < 0) {
           pullStartY.current = null;
-        } else if (deltaY > PULL_DEAD_ZONE_PX + PULL_THRESHOLD_PX) {
+        } else if (
+          deltaY >
+          PULL_DEAD_ZONE_PX + PULL_THRESHOLD_PX
+        ) {
           pullTriggered.current = true;
           setIsRefreshing(true);
           onRefresh().finally(() => setIsRefreshing(false));
@@ -1035,7 +1054,8 @@ export default function ShopperHomePage() {
       }
     }
 
-    if (dragStartX.current === null || dragStartY.current === null) return;
+    if (dragStartX.current === null || dragStartY.current === null)
+      return;
     const deltaX = currentX - dragStartX.current;
     const deltaY = currentY - dragStartY.current;
 
@@ -1107,9 +1127,12 @@ export default function ShopperHomePage() {
       alert('No image available for visual search.');
     }
   };
-  const handleStorePress = (id: string) => router.push(`/store-detail/${id}`);
+  const handleStorePress = (id: string) =>
+    router.push(`/store-detail/${id}`);
   const handleProviderPress = (id: string, name: string) =>
-    router.push(`/provider-services/${id}?name=${encodeURIComponent(name)}`);
+    router.push(
+      `/provider-services/${id}?name=${encodeURIComponent(name)}`,
+    );
 
   const clearAllFilters = () => {
     setFeedFilter('mixed');
@@ -1117,9 +1140,12 @@ export default function ShopperHomePage() {
     setVisibleCount(INITIAL_VISIBLE);
   };
 
-  const hasActiveFilters = feedFilter !== 'mixed' || selectedCategory !== null;
+  const hasActiveFilters =
+    feedFilter !== 'mixed' || selectedCategory !== null;
 
-  const trackTransform = `translateX(calc(-${currentTab * 33.3333}% + ${dragOffset}px))`;
+  const trackTransform = `translateX(calc(-${
+    currentTab * 33.3333
+  }% + ${dragOffset}px))`;
 
   const loadingFeed = loadingItems || loadingServices;
   const hasMoreToReveal = visibleCount < feedItems.length;
@@ -1127,8 +1153,10 @@ export default function ShopperHomePage() {
   const TAB_LABELS = ['BUYTEMS', 'SHOPNSTORE', 'SERVOOKS'];
 
   const activeCategoryLabel = selectedCategory
-    ? PRODUCT_CATEGORIES.find((c) => c.id === selectedCategory)?.label ||
-      SERVICE_CATEGORIES.find((c) => c.id === selectedCategory)?.label ||
+    ? PRODUCT_CATEGORIES.find((c) => c.id === selectedCategory)
+        ?.label ||
+      SERVICE_CATEGORIES.find((c) => c.id === selectedCategory)
+        ?.label ||
       selectedCategory
     : null;
 
@@ -1164,7 +1192,10 @@ export default function ShopperHomePage() {
               aria-label="Basket"
               title="Basket"
             >
-              <MdShoppingBasket size={22} color="var(--brand-primary)" />
+              <MdShoppingBasket
+                size={22}
+                color="var(--brand-primary)"
+              />
             </button>
             <button
               style={styles.iconBtn}
@@ -1172,7 +1203,10 @@ export default function ShopperHomePage() {
               aria-label="Notifications"
               title="Notifications"
             >
-              <MdNotificationsNone size={22} color="var(--brand-primary)" />
+              <MdNotificationsNone
+                size={22}
+                color="var(--brand-primary)"
+              />
             </button>
             <button
               style={{
@@ -1201,14 +1235,14 @@ export default function ShopperHomePage() {
           <StoreSpotlight
             stores={stores}
             collapsed={isSpotlightCollapsed}
-            onToggleCollapsed={() => setIsSpotlightCollapsed((c) => !c)}
+            onToggleCollapsed={() =>
+              setIsSpotlightCollapsed((c) => !c)
+            }
             onPress={handleStorePress}
           />
         )}
 
-        {/* ── PILL TABS ────────────────────────────────────────
-            Only BUYTEMS / SHOPNSTORE / SERVOOKS use this pill
-            treatment. Other buttons elsewhere stay rectangular. */}
+        {/* ── PILL TABS ──────────────────────────────────────── */}
         <div
           style={styles.tabsWrap}
           className="sh-tabs-wrap"
@@ -1235,7 +1269,7 @@ export default function ShopperHomePage() {
                       ? 'transparent'
                       : 'var(--border-default)',
                     boxShadow: active
-                      ? '0 6px 18px rgba(232,232,236,0.20), inset 0 1px 0 rgba(255,255,255,0.6)'
+                      ? '0 8px 22px rgba(232,232,236,0.22), inset 0 1px 0 rgba(255,255,255,0.7)'
                       : 'none',
                   }}
                   className="sh-tab-pill"
@@ -1260,7 +1294,10 @@ export default function ShopperHomePage() {
                   aria-label="Remove kind filter"
                   style={styles.activeFilterClose}
                 >
-                  <MdClose size={12} color="var(--brand-primary)" />
+                  <MdClose
+                    size={12}
+                    color="var(--brand-primary)"
+                  />
                 </button>
               </span>
             )}
@@ -1273,7 +1310,10 @@ export default function ShopperHomePage() {
                   aria-label="Remove category filter"
                   style={styles.activeFilterClose}
                 >
-                  <MdClose size={12} color="var(--brand-primary)" />
+                  <MdClose
+                    size={12}
+                    color="var(--brand-primary)"
+                  />
                 </button>
               </span>
             )}
@@ -1319,20 +1359,33 @@ export default function ShopperHomePage() {
               ref={currentTab === 0 ? activePanelRef : null}
               style={styles.panel}
             >
-              <div style={styles.panelInner} className="sh-panel-inner">
+              <div
+                style={styles.panelInner}
+                className="sh-panel-inner"
+              >
                 {loadingFeed ? (
                   <FeedSkeleton columns={columns} />
                 ) : feedItems.length === 0 ? (
                   hasActiveFilters ? (
                     <FeedEmpty
-                      icon={<MdTune size={40} color="var(--text-muted)" />}
+                      icon={
+                        <MdTune
+                          size={40}
+                          color="var(--text-muted)"
+                        />
+                      }
                       title="No matches"
                       body="Try a different category or clear the filters."
                       onClear={clearAllFilters}
                     />
                   ) : (
                     <FeedEmpty
-                      icon={<MdImage size={40} color="var(--text-muted)" />}
+                      icon={
+                        <MdImage
+                          size={40}
+                          color="var(--text-muted)"
+                        />
+                      }
                       title="Nothing to show yet"
                       body="Pull down to refresh, or check back soon."
                     />
@@ -1344,11 +1397,7 @@ export default function ShopperHomePage() {
                       columns={columns}
                       gap={10}
                       keyFor={(item) => `${item.kind}-${item.id}`}
-                      weightOf={(item) =>
-                        item.kind === 'service'
-                          ? CARD_RATIOS[0].weight
-                          : ratioForSeed(item.id).weight
-                      }
+                      weightOf={() => CARD_WEIGHT}
                       renderItem={(item) => (
                         <ItemCard
                           item={item}
@@ -1358,7 +1407,10 @@ export default function ShopperHomePage() {
                       )}
                     />
                     {hasMoreToReveal && (
-                      <div ref={sentinelRef} style={{ height: 1 }} />
+                      <div
+                        ref={sentinelRef}
+                        style={{ height: 1 }}
+                      />
                     )}
                   </>
                 )}
@@ -1370,12 +1422,20 @@ export default function ShopperHomePage() {
               ref={currentTab === 1 ? activePanelRef : null}
               style={styles.panel}
             >
-              <div style={styles.panelInner} className="sh-panel-inner">
+              <div
+                style={styles.panelInner}
+                className="sh-panel-inner"
+              >
                 {loadingStores ? (
                   <FeedSkeleton columns={columns} />
                 ) : stores.length === 0 ? (
                   <FeedEmpty
-                    icon={<MdStorefront size={40} color="var(--text-muted)" />}
+                    icon={
+                      <MdStorefront
+                        size={40}
+                        color="var(--text-muted)"
+                      />
+                    }
                     title="No stores yet"
                     body="Stores will appear here as storekeepers open them."
                   />
@@ -1385,11 +1445,12 @@ export default function ShopperHomePage() {
                     columns={columns}
                     gap={10}
                     keyFor={(store) => store.id}
-                    weightOf={(store) =>
-                      ratioForSeed(`store-${store.id}`).weight
-                    }
+                    weightOf={() => CARD_WEIGHT}
                     renderItem={(store) => (
-                      <StoreCard store={store} onPress={handleStorePress} />
+                      <StoreCard
+                        store={store}
+                        onPress={handleStorePress}
+                      />
                     )}
                   />
                 )}
@@ -1401,12 +1462,20 @@ export default function ShopperHomePage() {
               ref={currentTab === 2 ? activePanelRef : null}
               style={styles.panel}
             >
-              <div style={styles.panelInner} className="sh-panel-inner">
+              <div
+                style={styles.panelInner}
+                className="sh-panel-inner"
+              >
                 {loadingServices ? (
                   <FeedSkeleton columns={columns} />
                 ) : providers.length === 0 ? (
                   <FeedEmpty
-                    icon={<MdStorefront size={40} color="var(--text-muted)" />}
+                    icon={
+                      <MdStorefront
+                        size={40}
+                        color="var(--text-muted)"
+                      />
+                    }
                     title="No service providers yet"
                     body="Providers will appear here as they list services."
                   />
@@ -1416,9 +1485,7 @@ export default function ShopperHomePage() {
                     columns={columns}
                     gap={10}
                     keyFor={(provider) => provider.id}
-                    weightOf={(provider) =>
-                      ratioForSeed(`provider-${provider.id}`).weight
-                    }
+                    weightOf={() => CARD_WEIGHT}
                     renderItem={(provider) => (
                       <ProviderCard
                         provider={provider}
@@ -1456,7 +1523,10 @@ export default function ShopperHomePage() {
                 aria-label="Close"
                 style={styles.sheetClose}
               >
-                <MdClose size={20} color="var(--text-tertiary)" />
+                <MdClose
+                  size={20}
+                  color="var(--text-tertiary)"
+                />
               </button>
             </div>
 
@@ -1494,7 +1564,9 @@ export default function ShopperHomePage() {
                         >
                           {opt.label}
                         </span>
-                        <span style={styles.filterOptionHint}>{opt.hint}</span>
+                        <span style={styles.filterOptionHint}>
+                          {opt.hint}
+                        </span>
                       </span>
                       {active && (
                         <MdCheckCircle
@@ -1539,7 +1611,9 @@ export default function ShopperHomePage() {
                       key={cat.id}
                       type="button"
                       onClick={() => {
-                        setSelectedCategory(active ? null : cat.id);
+                        setSelectedCategory(
+                          active ? null : cat.id,
+                        );
                         setVisibleCount(INITIAL_VISIBLE);
                       }}
                       style={{
@@ -1573,7 +1647,9 @@ export default function ShopperHomePage() {
                       key={cat.id}
                       type="button"
                       onClick={() => {
-                        setSelectedCategory(active ? null : cat.id);
+                        setSelectedCategory(
+                          active ? null : cat.id,
+                        );
                         setVisibleCount(INITIAL_VISIBLE);
                       }}
                       style={{
@@ -1693,8 +1769,6 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'var(--bg-primary)',
     transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
-  // flex + padding live in CSS (.sh-tab-pill) so the desktop media query
-  // can override them without !important.
   tabsInner: {
     display: 'flex',
     gap: 8,
@@ -1779,11 +1853,12 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box',
   },
 
-  // ── Reel card ────────────────────────────────────────────────
+  // ── Reel card (unified 2:3) ─────────────────────────────────
   reelCard: {
     position: 'relative',
     width: '100%',
-    borderRadius: 16,
+    aspectRatio: CARD_ASPECT,
+    borderRadius: 18,
     overflow: 'hidden',
     border: 'none',
     padding: 0,
@@ -1792,7 +1867,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     textAlign: 'left',
     display: 'block',
-    transition: 'transform 0.12s ease',
+    boxShadow: '0 2px 8px rgba(15,23,42,0.06)',
+    transition: 'transform 0.16s ease, box-shadow 0.22s ease',
   },
   reelImage: {
     position: 'absolute',
@@ -1808,7 +1884,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1F2937',
+    backgroundColor: 'var(--bg-tertiary)',
   },
   reelProviderPlaceholder: {
     position: 'absolute',
@@ -1828,23 +1904,40 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'absolute',
     inset: 0,
     background:
-      'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.42) 32%, rgba(0,0,0,0.05) 62%, transparent 100%)',
+      'linear-gradient(to top, rgba(0,0,0,0.86) 0%, rgba(0,0,0,0.28) 38%, transparent 68%)',
     pointerEvents: 'none',
   },
   reelBadge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
-    padding: '3px 8px',
+    top: 10,
+    left: 10,
+    padding: '4px 9px',
     borderRadius: 8,
     color: '#fff',
     fontSize: 9.5,
     fontWeight: 800,
-    letterSpacing: 0.6,
+    letterSpacing: 0.7,
     textTransform: 'uppercase',
-    backdropFilter: 'blur(6px)',
-    WebkitBackdropFilter: 'blur(6px)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
     pointerEvents: 'none',
+  },
+  reelPlayBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    borderRadius: '50%',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    pointerEvents: 'none',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
   },
   reelSearch: {
     position: 'absolute',
@@ -1853,19 +1946,19 @@ const styles: Record<string, React.CSSProperties> = {
     width: 34,
     height: 34,
     borderRadius: '50%',
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: 'rgba(255,255,255,0.96)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.28)',
+    boxShadow: '0 3px 10px rgba(0,0,0,0.24)',
   },
   reelBody: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    padding: '14px 14px 16px',
+    padding: '16px 14px 16px',
     paddingRight: 54,
     display: 'flex',
     flexDirection: 'column',
@@ -1875,7 +1968,7 @@ const styles: Record<string, React.CSSProperties> = {
   reelStore: {
     fontSize: 11,
     fontWeight: 600,
-    color: 'rgba(255,255,255,0.78)',
+    color: 'rgba(255,255,255,0.82)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1893,15 +1986,15 @@ const styles: Record<string, React.CSSProperties> = {
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
     letterSpacing: -0.2,
-    textShadow: '0 1px 3px rgba(0,0,0,0.55)',
+    textShadow: '0 1px 3px rgba(0,0,0,0.6)',
   },
   reelPrice: {
     fontSize: 15.5,
     fontWeight: 800,
-    color: '#C7D2FE',
+    color: '#E8E8EC',
     letterSpacing: -0.2,
     fontVariantNumeric: 'tabular-nums',
-    textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+    textShadow: '0 1px 3px rgba(0,0,0,0.65)',
     marginTop: 2,
   },
 
@@ -1952,8 +2045,8 @@ const styles: Record<string, React.CSSProperties> = {
   // ── Skeleton ────────────────────────────────────────────────
   skeletonCard: {
     width: '100%',
-    aspectRatio: '4 / 5',
-    borderRadius: 16,
+    aspectRatio: CARD_ASPECT,
+    borderRadius: 18,
     border: '1px solid var(--border-default)',
     overflow: 'hidden',
     background: 'var(--bg-secondary)',
@@ -2145,8 +2238,12 @@ const CSS = `
   .sh-reel:active {
     transform: scale(0.985);
   }
+  .sh-reel:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.20);
+  }
 
-  /* ─── Pill tabs — full-width equal thirds on every viewport ─────── */
+  /* ─── Pill tabs — full-width equal thirds ─────────────── */
   .sh-tab-pill {
     flex: 1;
     padding: 11px 10px;
@@ -2293,17 +2390,15 @@ const CSS = `
     border-color: var(--border-strong);
     color: var(--text-primary);
   }
-  .sh-spotlight-collapsed-label {
-    letter-spacing: 0.2px;
-  }
 
   /* ─── Pill tab hover ─────────────────────────────────── */
   .sh-tab-pill:hover:not([aria-selected="true"]) {
     background-color: var(--bg-hover) !important;
     border-color: var(--border-strong) !important;
+    transform: translateY(-1px);
   }
   .sh-tab-pill {
-    transition: transform 0.12s ease, box-shadow 0.22s ease,
+    transition: transform 0.14s ease, box-shadow 0.22s ease,
       background 0.22s ease !important;
   }
   .sh-tab-pill:active {
@@ -2355,28 +2450,20 @@ const CSS = `
       font-size: 22px;
     }
 
-    /* Tab strip: full-width pills, subtle underline below the row */
+    /* Tab strip: full-width pills, taller, larger text */
     .sh-tabs-wrap {
       border-bottom: 1px solid var(--border-default);
     }
     .sh-tabs-inner {
-      padding: 14px 24px 12px;
-      gap: 10px;
+      padding: 18px 24px 16px;
+      gap: 12px;
     }
     .sh-tab-pill {
       flex: 1;
-      padding: 12px 18px;
-      font-size: 12.5px;
-      letter-spacing: 0.7px;
-    }
-
-    /* Desktop hover lift on reel cards */
-    .sh-reel {
-      transition: transform 0.16s ease, box-shadow 0.22s ease !important;
-    }
-    .sh-reel:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+      padding: 16px 24px;
+      font-size: 14px;
+      letter-spacing: 0.8px;
+      min-height: 52px;
     }
   }
 
