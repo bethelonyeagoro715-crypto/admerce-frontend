@@ -1,10 +1,23 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { MdArrowBack, MdBuild, MdRefresh, MdSearch } from 'react-icons/md';
+import {
+  MdArrowBack,
+  MdBuild,
+  MdRefresh,
+  MdSearch,
+} from 'react-icons/md';
 import api from '../../../services/api';
-import ServiceReelCard, { ServiceReel } from '../../../components/ServiceReelCard';
+import ServiceReelCard, {
+  ServiceReel,
+} from '../../../components/ServiceReelCard';
 
 interface ProviderServiceResponse {
   service_id?: string | null;
@@ -21,7 +34,9 @@ function formatPrice(raw: unknown): string {
   if (raw === null || raw === undefined || raw === '') return 'Free';
   const numeric = Number(raw);
   if (!Number.isFinite(numeric) || numeric <= 0) return 'Free';
-  return `₦${numeric.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
+  return `₦${numeric.toLocaleString('en-NG', {
+    maximumFractionDigits: 0,
+  })}`;
 }
 
 function ServiceSkeleton() {
@@ -37,7 +52,9 @@ function ProviderServicesContent() {
   const providerId = Array.isArray(rawId) ? rawId[0] : rawId || '';
   const urlName = searchParams.get('name')?.trim() || '';
 
-  const [providerName, setProviderName] = useState(urlName || 'Service Provider');
+  const [providerName, setProviderName] = useState(
+    urlName || 'Service Provider',
+  );
   const [services, setServices] = useState<ServiceReel[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -59,11 +76,15 @@ function ProviderServicesContent() {
       setError(null);
 
       try {
-        const raw = await api.getProviderServicesByUserId(providerId);
+        const raw =
+          await api.getProviderServicesByUserId(providerId);
         if (cancelled) return;
 
         if (!Array.isArray(raw)) {
-          console.warn('Provider services response is not an array:', raw);
+          console.warn(
+            'Provider services response is not an array:',
+            raw,
+          );
           setServices([]);
           return;
         }
@@ -71,11 +92,14 @@ function ProviderServicesContent() {
         const rawList = raw as ProviderServiceResponse[];
         const firstRaw = rawList.find((item) => item?.service_id);
         const apiName =
-          firstRaw?.business_name?.trim() || firstRaw?.username?.trim() || '';
+          firstRaw?.business_name?.trim() ||
+          firstRaw?.username?.trim() ||
+          '';
 
         const list: ServiceReel[] = rawList
           .filter(
-            (item): item is ProviderServiceResponse => Boolean(item?.service_id),
+            (item): item is ProviderServiceResponse =>
+              Boolean(item?.service_id),
           )
           .map((item) => ({
             id: String(item.service_id),
@@ -149,26 +173,25 @@ function ProviderServicesContent() {
     <main className="psp-page">
       <style>{`
         .psp-page {
-          --psp-primary: #0504AA;
-          --psp-primarySoft: #EEF2FF;
-          --psp-text: #101114;
-          --psp-muted: #70747D;
-          --psp-border: #E8E9ED;
-          --psp-surface: #FFFFFF;
-          --psp-page: #F7F8FC;
+          --psp-primary: var(--brand-primary);
+          --psp-primarySoft: var(--brand-soft);
+          --psp-text: var(--text-primary);
+          --psp-muted: var(--text-tertiary);
+          --psp-border: var(--border-default);
+          --psp-surface: var(--bg-secondary);
+          --psp-page: var(--bg-primary);
           min-height: 100dvh;
           background: var(--psp-page);
           color: var(--psp-text);
           font-family: inherit;
-          /* ✅ Never allow horizontal scroll on the page */
           overflow-x: hidden;
+          transition: background-color 0.18s ease, color 0.18s ease;
         }
 
         .psp-shell {
           width: min(1180px, 100%);
           margin: 0 auto;
           padding: 0 18px 32px;
-          /* ✅ Padding never widens the shell past the viewport */
           box-sizing: border-box;
         }
 
@@ -176,10 +199,13 @@ function ProviderServicesContent() {
           position: sticky;
           top: 0;
           z-index: 20;
-          border-bottom: 1px solid rgba(232, 233, 237, 0.92);
-          background: rgba(255, 255, 255, 0.94);
+          border-bottom: 1px solid
+            color-mix(in srgb, var(--border-default) 92%, transparent);
+          background:
+            color-mix(in srgb, var(--bg-secondary) 94%, transparent);
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
+          transition: background-color 0.18s ease, border-color 0.18s ease;
         }
 
         .psp-headerInner {
@@ -190,7 +216,6 @@ function ProviderServicesContent() {
           display: flex;
           align-items: center;
           gap: 12px;
-          /* ✅ Belt-and-suspenders */
           box-sizing: border-box;
         }
 
@@ -209,20 +234,19 @@ function ProviderServicesContent() {
           transition: 160ms ease;
         }
         .psp-backButton:hover {
-          border-color: #C9CBFF;
+          border-color:
+            color-mix(in srgb, var(--brand-primary) 40%, transparent);
           color: var(--psp-primary);
           transform: translateY(-1px);
         }
         .psp-backButton:focus-visible,
         .psp-search:focus-within {
-          outline: 3px solid rgba(5, 4, 170, 0.18);
+          outline: 3px solid
+            color-mix(in srgb, var(--brand-primary) 18%, transparent);
           outline-offset: 2px;
         }
 
-        .psp-heading {
-          min-width: 0;
-          flex: 1;
-        }
+        .psp-heading { min-width: 0; flex: 1; }
 
         .psp-providerName {
           margin: 0;
@@ -248,7 +272,6 @@ function ProviderServicesContent() {
           justify-content: space-between;
           gap: 16px;
           padding: 24px 0 18px;
-          /* ✅ */
           box-sizing: border-box;
           min-width: 0;
         }
@@ -278,10 +301,12 @@ function ProviderServicesContent() {
           border-radius: 14px;
           background: var(--psp-surface);
           transition: 160ms ease;
-          /* ✅ */
           box-sizing: border-box;
         }
-        .psp-search svg { color: #858995; flex: 0 0 auto; }
+        .psp-search svg {
+          color: var(--text-tertiary);
+          flex: 0 0 auto;
+        }
         .psp-search input {
           width: 100%;
           min-width: 0;
@@ -292,25 +317,21 @@ function ProviderServicesContent() {
           font: inherit;
           font-size: 14px;
         }
-        .psp-search input::placeholder { color: #9A9DA6; }
+        .psp-search input::placeholder { color: var(--text-muted); }
 
-        /* ✅ Reels grid — narrower columns because cards are tall 9:16. */
         .psp-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 16px;
-          /* ✅ minmax(0,1fr) above + min-width here = no column ever
-             grows past its slot, so the row can't overflow */
           min-width: 0;
         }
 
-        /* ✅ Skeleton sized to match the reel card. */
         .psp-skeletonCard {
           position: relative;
           width: 100%;
           aspect-ratio: 9 / 16;
           border-radius: 16px;
-          background: #ECEEF4;
+          background: var(--bg-tertiary);
           overflow: hidden;
         }
         .psp-skeletonCard::after {
@@ -321,7 +342,7 @@ function ProviderServicesContent() {
           background: linear-gradient(
             90deg,
             transparent,
-            rgba(255, 255, 255, 0.52),
+            color-mix(in srgb, var(--bg-hover) 60%, transparent),
             transparent
           );
           animation: pspShimmer 1.25s infinite;
@@ -340,8 +361,8 @@ function ProviderServicesContent() {
         .psp-spinner {
           width: 38px;
           height: 38px;
-          border: 3px solid #DFE1F8;
-          border-top-color: var(--psp-primary);
+          border: 3px solid var(--border-default);
+          border-top-color: var(--brand-primary);
           border-radius: 50%;
           animation: pspSpin 700ms linear infinite;
         }
@@ -369,7 +390,6 @@ function ProviderServicesContent() {
           color: var(--psp-muted);
           font-size: 14px;
           line-height: 1.5;
-          /* ✅ Long error text wraps, doesn't push width */
           word-break: break-word;
         }
 
@@ -383,13 +403,14 @@ function ProviderServicesContent() {
           padding: 0 15px;
           border: 0;
           border-radius: 12px;
-          background: var(--psp-primary);
-          color: #fff;
+          background: var(--brand-gradient);
+          color: var(--brand-on-gradient);
           font: inherit;
           font-size: 13px;
           font-weight: 750;
           cursor: pointer;
           transition: 160ms ease;
+          font-family: inherit;
         }
         .psp-retry:hover {
           transform: translateY(-1px);
@@ -399,24 +420,23 @@ function ProviderServicesContent() {
         .psp-noResults {
           grid-column: 1 / -1;
           padding: 52px 18px;
-          border: 1px dashed #DADCE6;
+          border: 1px dashed var(--border-default);
           border-radius: 18px;
           text-align: center;
-          background: rgba(255, 255, 255, 0.72);
+          background:
+            color-mix(in srgb, var(--bg-secondary) 72%, transparent);
           color: var(--psp-muted);
-          /* ✅ */
           word-break: break-word;
         }
 
-        @keyframes pspSpin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes pspShimmer {
-          100% { transform: translateX(100%); }
-        }
+        @keyframes pspSpin { to { transform: rotate(360deg); } }
+        @keyframes pspShimmer { 100% { transform: translateX(100%); } }
 
         @media (max-width: 980px) {
-          .psp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+          .psp-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+          }
         }
 
         @media (max-width: 720px) {
@@ -428,7 +448,6 @@ function ProviderServicesContent() {
             padding-top: 20px;
           }
           .psp-search { width: 100%; }
-          /* ✅ Two columns on mobile — matches IG/TikTok grid feel. */
           .psp-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
@@ -483,7 +502,11 @@ function ProviderServicesContent() {
         </section>
 
         {loading ? (
-          <div className="psp-grid" aria-busy="true" aria-label="Loading services">
+          <div
+            className="psp-grid"
+            aria-busy="true"
+            aria-label="Loading services"
+          >
             {Array.from({ length: 6 }).map((_, i) => (
               <ServiceSkeleton key={i} />
             ))}
@@ -493,9 +516,15 @@ function ProviderServicesContent() {
             <div className="psp-stateIcon" aria-hidden="true">
               <MdBuild size={32} />
             </div>
-            <h2 className="psp-stateTitle">We couldn&apos;t load these services</h2>
+            <h2 className="psp-stateTitle">
+              We couldn&apos;t load these services
+            </h2>
             <p className="psp-stateText">{error}</p>
-            <button type="button" className="psp-retry" onClick={handleRetry}>
+            <button
+              type="button"
+              className="psp-retry"
+              onClick={handleRetry}
+            >
               <MdRefresh size={18} />
               Try again
             </button>
@@ -512,10 +541,14 @@ function ProviderServicesContent() {
           </div>
         ) : filteredServices.length === 0 ? (
           <div className="psp-noResults">
-            No services match <strong>&quot;{search.trim()}&quot;</strong>.
+            No services match{' '}
+            <strong>&quot;{search.trim()}&quot;</strong>.
           </div>
         ) : (
-          <section className="psp-grid" aria-label={`${providerName} services`}>
+          <section
+            className="psp-grid"
+            aria-label={`${providerName} services`}
+          >
             {filteredServices.map((service) => (
               <ServiceReelCard
                 key={service.id}
@@ -541,6 +574,7 @@ export default function ProviderServicesPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              background: 'var(--bg-primary)',
             }}
           >
             <div
@@ -548,8 +582,8 @@ export default function ProviderServicesPage() {
               style={{
                 width: 36,
                 height: 36,
-                border: '3px solid #DFE1F8',
-                borderTopColor: '#0504AA',
+                border: '3px solid var(--border-default)',
+                borderTopColor: 'var(--brand-primary)',
                 borderRadius: '50%',
               }}
             />
@@ -561,4 +595,3 @@ export default function ProviderServicesPage() {
     </Suspense>
   );
 }
-

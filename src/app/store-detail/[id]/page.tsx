@@ -103,7 +103,9 @@ function ItemCard({
 
   const handleOpen = () => onOpen(item.id);
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       handleOpen();
@@ -223,7 +225,10 @@ export default function StoreDetailPage() {
         setIsFollowing(Boolean(followStatus));
 
         if (!Array.isArray(itemsData)) {
-          console.warn('Store items response is not an array:', itemsData);
+          console.warn(
+            'Store items response is not an array:',
+            itemsData,
+          );
           setItems([]);
           return;
         }
@@ -354,36 +359,41 @@ export default function StoreDetailPage() {
   }`;
 
   const showInfoStrip =
-    !loading && !!store && (!!storeImage || !!store.address || categories.length > 0);
+    !loading &&
+    !!store &&
+    (!!storeImage || !!store.address || categories.length > 0);
 
   return (
     <main className="sdp-page">
       <style>{`
         .sdp-page {
-          --sdp-primary: #0504AA;
-          --sdp-primarySoft: #EEF2FF;
-          --sdp-text: #101114;
-          --sdp-muted: #70747D;
-          --sdp-border: #E8E9ED;
-          --sdp-surface: #FFFFFF;
-          --sdp-page: #F7F8FC;
-          --sdp-amber: #FFA000;
+          --sdp-primary: var(--brand-primary);
+          --sdp-primarySoft: var(--brand-soft);
+          --sdp-text: var(--text-primary);
+          --sdp-muted: var(--text-tertiary);
+          --sdp-border: var(--border-default);
+          --sdp-surface: var(--bg-secondary);
+          --sdp-page: var(--bg-primary);
+          --sdp-amber: var(--warning-fg);
           min-height: 100dvh;
           background: var(--sdp-page);
           color: var(--sdp-text);
           font-family: inherit;
-          /* ✅ Never allow horizontal scroll on the page */
           overflow-x: hidden;
+          transition: background-color 0.18s ease, color 0.18s ease;
         }
 
         .sdp-header {
           position: sticky;
           top: 0;
           z-index: 20;
-          border-bottom: 1px solid rgba(232, 233, 237, 0.92);
-          background: rgba(255, 255, 255, 0.94);
+          border-bottom: 1px solid
+            color-mix(in srgb, var(--border-default) 92%, transparent);
+          background:
+            color-mix(in srgb, var(--bg-secondary) 94%, transparent);
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
+          transition: background-color 0.18s ease, border-color 0.18s ease;
         }
 
         .sdp-headerInner {
@@ -394,7 +404,6 @@ export default function StoreDetailPage() {
           display: flex;
           align-items: center;
           gap: 12px;
-          /* ✅ Belt-and-suspenders: no child can push this wider than the viewport */
           box-sizing: border-box;
         }
 
@@ -416,28 +425,26 @@ export default function StoreDetailPage() {
 
         .sdp-backButton:hover,
         .sdp-iconButton:hover {
-          border-color: #C9CBFF;
+          border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
           color: var(--sdp-primary);
           transform: translateY(-1px);
         }
 
         .sdp-iconButton.is-active {
           color: var(--sdp-amber);
-          border-color: #FFE0B2;
+          border-color: var(--warning-strong);
         }
 
         .sdp-backButton:focus-visible,
         .sdp-iconButton:focus-visible,
         .sdp-search:focus-within,
         .sdp-card:focus-visible {
-          outline: 3px solid rgba(5, 4, 170, 0.18);
+          outline: 3px solid
+            color-mix(in srgb, var(--brand-primary) 18%, transparent);
           outline-offset: 2px;
         }
 
-        .sdp-heading {
-          min-width: 0;
-          flex: 1;
-        }
+        .sdp-heading { min-width: 0; flex: 1; }
 
         .sdp-storeName {
           margin: 0;
@@ -457,11 +464,7 @@ export default function StoreDetailPage() {
           font-weight: 600;
         }
 
-        .sdp-actions {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
+        .sdp-actions { display: flex; align-items: center; gap: 8px; }
 
         .sdp-shell {
           width: min(1180px, 100%);
@@ -470,7 +473,6 @@ export default function StoreDetailPage() {
           box-sizing: border-box;
         }
 
-        /* ─── Info strip ──────────────────────────────────── */
         .sdp-infoStrip {
           display: flex;
           align-items: center;
@@ -480,8 +482,9 @@ export default function StoreDetailPage() {
           border: 1px solid var(--sdp-border);
           border-radius: 18px;
           background: var(--sdp-surface);
-          box-shadow: 0 6px 20px rgba(16, 17, 20, 0.04);
+          box-shadow: var(--shadow-sm);
           box-sizing: border-box;
+          transition: background-color 0.18s ease, border-color 0.18s ease;
         }
 
         .sdp-infoAvatar {
@@ -520,16 +523,12 @@ export default function StoreDetailPage() {
           color: var(--sdp-muted);
           font-size: 13px;
           line-height: 1.4;
-          /* ✅ Long addresses wrap instead of pushing width */
           word-break: break-word;
           overflow-wrap: anywhere;
         }
 
-        .sdp-infoAddress svg {
-          flex: 0 0 auto;
-        }
+        .sdp-infoAddress svg { flex: 0 0 auto; }
 
-        /* ✅ Chips wrap onto multiple lines — never a horizontal scroller */
         .sdp-chips {
           display: flex;
           flex-wrap: wrap;
@@ -552,7 +551,6 @@ export default function StoreDetailPage() {
           white-space: nowrap;
         }
 
-        /* ─── Content header ─────────────────────────────── */
         .sdp-contentHeader {
           display: flex;
           align-items: flex-end;
@@ -591,7 +589,7 @@ export default function StoreDetailPage() {
         }
 
         .sdp-search svg {
-          color: #858995;
+          color: var(--text-tertiary);
           flex: 0 0 auto;
         }
 
@@ -606,17 +604,12 @@ export default function StoreDetailPage() {
           font-size: 14px;
         }
 
-        .sdp-search input::placeholder {
-          color: #9A9DA6;
-        }
+        .sdp-search input::placeholder { color: var(--text-muted); }
 
-        /* ─── Grid + cards ──────────────────────────────── */
         .sdp-grid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 16px;
-          /* ✅ minmax(0,1fr) above + min-width here = no grid column ever
-             grows past its slot, so the whole row can't overflow */
           min-width: 0;
         }
 
@@ -627,15 +620,19 @@ export default function StoreDetailPage() {
           border-radius: 18px;
           background: var(--sdp-surface);
           cursor: pointer;
-          box-shadow: 0 8px 24px rgba(16, 17, 20, 0.045);
-          transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+          box-shadow: var(--shadow-sm);
+          transition:
+            transform 180ms ease,
+            box-shadow 180ms ease,
+            border-color 180ms ease,
+            background-color 0.18s ease;
           box-sizing: border-box;
         }
 
         .sdp-card:hover {
           transform: translateY(-3px);
-          border-color: #D9DAFF;
-          box-shadow: 0 16px 34px rgba(16, 17, 20, 0.085);
+          border-color: color-mix(in srgb, var(--brand-primary) 30%, transparent);
+          box-shadow: var(--shadow-lg);
         }
 
         .sdp-media {
@@ -658,7 +655,7 @@ export default function StoreDetailPage() {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #A9B1DA;
+          color: var(--text-muted);
         }
 
         .sdp-outBadge {
@@ -711,6 +708,7 @@ export default function StoreDetailPage() {
           font-size: 14px;
           font-weight: 850;
           white-space: nowrap;
+          font-variant-numeric: tabular-nums;
         }
 
         .sdp-itemMetaRow {
@@ -722,7 +720,7 @@ export default function StoreDetailPage() {
 
         .sdp-itemMetaMuted {
           margin: 0;
-          color: #9A9DA6;
+          color: var(--text-muted);
           font-size: 12.5px;
           line-height: 1.5;
         }
@@ -734,7 +732,6 @@ export default function StoreDetailPage() {
           font-weight: 750;
         }
 
-        /* ─── States ─────────────────────────────────────── */
         .sdp-center {
           min-height: 48vh;
           display: flex;
@@ -780,13 +777,14 @@ export default function StoreDetailPage() {
           padding: 0 15px;
           border: 0;
           border-radius: 12px;
-          background: var(--sdp-primary);
-          color: #fff;
+          background: var(--brand-gradient);
+          color: var(--brand-on-gradient);
           font: inherit;
           font-size: 13px;
           font-weight: 750;
           cursor: pointer;
           transition: 160ms ease;
+          font-family: inherit;
         }
 
         .sdp-retry:hover {
@@ -797,14 +795,14 @@ export default function StoreDetailPage() {
         .sdp-noResults {
           grid-column: 1 / -1;
           padding: 52px 18px;
-          border: 1px dashed #DADCE6;
+          border: 1px dashed var(--border-default);
           border-radius: 18px;
           text-align: center;
-          background: rgba(255, 255, 255, 0.72);
+          background:
+            color-mix(in srgb, var(--bg-secondary) 72%, transparent);
           color: var(--sdp-muted);
         }
 
-        /* ─── Skeletons ─────────────────────────────────── */
         .sdp-skeletonCard {
           cursor: default;
           pointer-events: none;
@@ -813,7 +811,7 @@ export default function StoreDetailPage() {
         .sdp-skeleton {
           position: relative;
           overflow: hidden;
-          background: #ECEEF4;
+          background: var(--bg-tertiary);
         }
 
         .sdp-skeleton::after {
@@ -824,79 +822,47 @@ export default function StoreDetailPage() {
           background: linear-gradient(
             90deg,
             transparent,
-            rgba(255, 255, 255, 0.52),
+            color-mix(in srgb, var(--bg-hover) 60%, transparent),
             transparent
           );
           animation: sdpShimmer 1.25s infinite;
         }
 
-        .sdp-skeletonMedia {
-          aspect-ratio: 1 / 1;
-        }
-
+        .sdp-skeletonMedia { aspect-ratio: 1 / 1; }
         .sdp-skeletonTitle {
           width: 72%;
           height: 16px;
           border-radius: 6px;
         }
-
         .sdp-skeletonLine {
           width: 100%;
           height: 11px;
           border-radius: 6px;
         }
+        .sdp-skeletonLineShort { width: 64%; }
 
-        .sdp-skeletonLineShort {
-          width: 64%;
-        }
+        @keyframes sdpSpin { to { transform: rotate(360deg); } }
+        @keyframes sdpShimmer { 100% { transform: translateX(100%); } }
 
-        @keyframes sdpSpin {
-          to { transform: rotate(360deg); }
-        }
-
-        @keyframes sdpShimmer {
-          100% { transform: translateX(100%); }
-        }
-
-        /* ─── Responsive ─────────────────────────────────── */
         @media (max-width: 980px) {
-          .sdp-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
+          .sdp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         }
 
         @media (max-width: 720px) {
-          .sdp-shell {
-            padding: 0 14px 26px;
-          }
-
-          .sdp-headerInner {
-            padding: 9px 14px;
-          }
-
+          .sdp-shell { padding: 0 14px 26px; }
+          .sdp-headerInner { padding: 9px 14px; }
           .sdp-contentHeader {
             align-items: stretch;
             flex-direction: column;
             padding-top: 20px;
           }
-
-          .sdp-search {
-            width: 100%;
-          }
-
+          .sdp-search { width: 100%; }
           .sdp-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 12px;
           }
-
-          .sdp-card {
-            border-radius: 15px;
-          }
-
-          .sdp-cardBody {
-            padding: 11px 12px 12px;
-          }
-
+          .sdp-card { border-radius: 15px; }
+          .sdp-cardBody { padding: 11px 12px 12px; }
           .sdp-infoStrip {
             flex-direction: column;
             align-items: flex-start;
@@ -904,9 +870,7 @@ export default function StoreDetailPage() {
         }
 
         @media (max-width: 420px) {
-          .sdp-grid {
-            grid-template-columns: 1fr;
-          }
+          .sdp-grid { grid-template-columns: 1fr; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -916,7 +880,6 @@ export default function StoreDetailPage() {
           .sdp-retry {
             transition: none;
           }
-
           .sdp-spinner,
           .sdp-skeleton::after {
             animation: none;
@@ -945,13 +908,21 @@ export default function StoreDetailPage() {
           <div className="sdp-actions">
             <button
               type="button"
-              className={`sdp-iconButton${isFollowing ? ' is-active' : ''}`}
+              className={`sdp-iconButton${
+                isFollowing ? ' is-active' : ''
+              }`}
               onClick={toggleFollow}
               disabled={followLoading || loading || !store}
-              aria-label={isFollowing ? 'Unfollow store' : 'Follow store'}
+              aria-label={
+                isFollowing ? 'Unfollow store' : 'Follow store'
+              }
               title={isFollowing ? 'Unfollow' : 'Follow'}
             >
-              {isFollowing ? <MdStar size={21} /> : <MdStarBorder size={21} />}
+              {isFollowing ? (
+                <MdStar size={21} />
+              ) : (
+                <MdStarBorder size={21} />
+              )}
             </button>
 
             <button
@@ -1067,7 +1038,11 @@ export default function StoreDetailPage() {
         ) : (
           <section className="sdp-grid" aria-label={`${storeName} items`}>
             {filteredItems.map((item) => (
-              <ItemCard key={item.id} item={item} onOpen={handleOpenItem} />
+              <ItemCard
+                key={item.id}
+                item={item}
+                onOpen={handleOpenItem}
+              />
             ))}
           </section>
         )}
