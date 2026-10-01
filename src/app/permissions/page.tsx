@@ -150,10 +150,7 @@ export default function PermissionPage() {
 
         <button
           onClick={() => router.push('/onboarding')}
-          style={{
-            ...styles.continueButton,
-            ...(allGranted ? styles.continueButtonReady : {}),
-          }}
+          style={styles.continueButton}
         >
           {allGranted ? 'All set — Continue' : 'Continue'}
         </button>
@@ -335,6 +332,11 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     marginLeft: 12,
   },
+  // Always brand. No green "ready" state — the copy "All set" carries
+  // the state signal, and every primary CTA in the app uses the brand
+  // gradient (blue in light, silver in dark). Using --success-fg as a
+  // background here made the button read as forest-green in light and
+  // was inconsistent with every other CTA.
   continueButton: {
     width: '100%',
     padding: '16px',
@@ -348,13 +350,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: '36px',
     boxShadow: 'var(--shadow-brand)',
     transition:
-      'background 0.2s, box-shadow 0.2s, transform 0.2s',
+      'transform 0.2s, box-shadow 0.2s',
     fontFamily: 'inherit',
-  },
-  continueButtonReady: {
-    background: 'var(--success-fg)',
-    boxShadow:
-      '0 6px 18px color-mix(in srgb, var(--success-fg) 30%, transparent)',
   },
   snackbar: {
     display: 'flex',
