@@ -28,6 +28,7 @@ import {
   MdLocationOn,
   MdInventory2,
   MdCalendarToday,
+  MdReceiptLong,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -113,9 +114,29 @@ interface BasketResponse {
   [key: string]: unknown;
 }
 
+interface InstantCounterparty {
+  user_id?: string;
+  display_name?: string;
+  role?: string;
+  store_name?: string | null;
+  business_name?: string | null;
+}
+
+interface InstantTransaction {
+  id?: number;
+  reference: string;
+  amount?: number | string;
+  description?: string;
+  status?: string;
+  created_at?: string;
+  counterparty?: InstantCounterparty | null;
+}
+
 const TABS = [
   'Items',
   'Wanted',
+  'Pickups',
+  'Jobs',
   'Reservations',
   'Deliveries',
   'Bookings',
@@ -178,7 +199,6 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
-// ─── Time helpers ───────────────────────────────────────────────────
 function parseAsUtc(iso?: string | null): number {
   if (!iso) return NaN;
   const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
@@ -190,28 +210,22 @@ function formatRemaining(expiresMs: number, nowMs: number): string {
   if (!Number.isFinite(expiresMs)) return '';
   const ms = expiresMs - nowMs;
   if (ms <= 0) return 'expired';
-
   const totalSecs = Math.floor(ms / 1000);
   if (totalSecs < 60) return `in ${totalSecs}s`;
-
   const totalMins = Math.floor(totalSecs / 60);
   if (totalMins < 60) {
     return totalMins === 1 ? 'in 1 min' : `in ${totalMins} mins`;
   }
-
   const hrs = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
   if (hrs < 24) {
     return mins > 0 ? `in ${hrs}h ${mins}m` : `in ${hrs}h`;
   }
-
   const days = Math.floor(hrs / 24);
   const remHrs = hrs % 24;
   return remHrs > 0 ? `in ${days}d ${remHrs}h` : `in ${days}d`;
 }
 
-// Order status → chip. Colors resolve through CSS vars so the chip
-// flips correctly between light and dark.
 function statusMeta(status?: string): {
   label: string;
   bg: string;
@@ -220,63 +234,21 @@ function statusMeta(status?: string): {
 } {
   switch ((status || '').toLowerCase()) {
     case 'locked':
-      return {
-        label: 'Reserved',
-        bg: 'var(--brand-soft)',
-        fg: 'var(--brand-primary)',
-        border: 'var(--brand-primary)',
-      };
+      return { label: 'Reserved', bg: 'var(--brand-soft)', fg: 'var(--brand-primary)', border: 'var(--brand-primary)' };
     case 'accepted':
-      return {
-        label: 'Holding for pickup',
-        bg: 'var(--purple-bg)',
-        fg: 'var(--purple-fg)',
-        border:
-          'color-mix(in srgb, var(--purple-fg) 40%, transparent)',
-      };
+      return { label: 'Holding for pickup', bg: 'var(--purple-bg)', fg: 'var(--purple-fg)', border: 'color-mix(in srgb, var(--purple-fg) 40%, transparent)' };
     case 'picked_up':
-      return {
-        label: 'Picked up',
-        bg: 'var(--success-bg)',
-        fg: 'var(--success-fg)',
-        border: 'var(--success-strong)',
-      };
+      return { label: 'Picked up', bg: 'var(--success-bg)', fg: 'var(--success-fg)', border: 'var(--success-strong)' };
     case 'dispatched':
-      return {
-        label: 'Out for delivery',
-        bg: 'var(--info-bg)',
-        fg: 'var(--info-fg)',
-        border:
-          'color-mix(in srgb, var(--info-fg) 40%, transparent)',
-      };
+      return { label: 'Out for delivery', bg: 'var(--info-bg)', fg: 'var(--info-fg)', border: 'color-mix(in srgb, var(--info-fg) 40%, transparent)' };
     case 'returned':
-      return {
-        label: 'Returned',
-        bg: 'var(--bg-tertiary)',
-        fg: 'var(--text-secondary)',
-        border: 'var(--border-default)',
-      };
+      return { label: 'Returned', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
     case 'expired':
-      return {
-        label: 'Expired',
-        bg: 'var(--bg-tertiary)',
-        fg: 'var(--text-muted)',
-        border: 'var(--border-default)',
-      };
+      return { label: 'Expired', bg: 'var(--bg-tertiary)', fg: 'var(--text-muted)', border: 'var(--border-default)' };
     case 'reversed':
-      return {
-        label: 'Reversed',
-        bg: 'var(--bg-tertiary)',
-        fg: 'var(--text-secondary)',
-        border: 'var(--border-default)',
-      };
+      return { label: 'Reversed', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
     default:
-      return {
-        label: status ? status : 'Unknown',
-        bg: 'var(--bg-tertiary)',
-        fg: 'var(--text-secondary)',
-        border: 'var(--border-default)',
-      };
+      return { label: status ? status : 'Unknown', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
   }
 }
 
@@ -288,48 +260,17 @@ function bookingStatusMeta(status?: string): {
 } {
   switch ((status || '').toLowerCase()) {
     case 'locked':
-      return {
-        label: 'Booked',
-        bg: 'var(--brand-soft)',
-        fg: 'var(--brand-primary)',
-        border: 'var(--brand-primary)',
-      };
+      return { label: 'Booked', bg: 'var(--brand-soft)', fg: 'var(--brand-primary)', border: 'var(--brand-primary)' };
     case 'accepted':
-      return {
-        label: 'Provider confirmed',
-        bg: 'var(--purple-bg)',
-        fg: 'var(--purple-fg)',
-        border:
-          'color-mix(in srgb, var(--purple-fg) 40%, transparent)',
-      };
+      return { label: 'Provider confirmed', bg: 'var(--purple-bg)', fg: 'var(--purple-fg)', border: 'color-mix(in srgb, var(--purple-fg) 40%, transparent)' };
     case 'completed':
-      return {
-        label: 'Completed',
-        bg: 'var(--success-bg)',
-        fg: 'var(--success-fg)',
-        border: 'var(--success-strong)',
-      };
+      return { label: 'Completed', bg: 'var(--success-bg)', fg: 'var(--success-fg)', border: 'var(--success-strong)' };
     case 'cancelled':
-      return {
-        label: 'Cancelled',
-        bg: 'var(--bg-tertiary)',
-        fg: 'var(--text-secondary)',
-        border: 'var(--border-default)',
-      };
+      return { label: 'Cancelled', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
     case 'declined':
-      return {
-        label: 'Declined',
-        bg: 'var(--danger-bg)',
-        fg: 'var(--danger-fg)',
-        border: 'var(--danger-strong)',
-      };
+      return { label: 'Declined', bg: 'var(--danger-bg)', fg: 'var(--danger-fg)', border: 'var(--danger-strong)' };
     default:
-      return {
-        label: status ? status : 'Unknown',
-        bg: 'var(--bg-tertiary)',
-        fg: 'var(--text-secondary)',
-        border: 'var(--border-default)',
-      };
+      return { label: status ? status : 'Unknown', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
   }
 }
 
@@ -360,6 +301,8 @@ function SavedPageContent() {
 
   const [savedItems, setSavedItems] = useState<SavedListing[]>([]);
   const [wantedAlerts, setWantedAlerts] = useState<WantedAlert[]>([]);
+  const [instantPickups, setInstantPickups] = useState<InstantTransaction[]>([]);
+  const [instantJobs, setInstantJobs] = useState<InstantTransaction[]>([]);
   const [reservations, setReservations] = useState<WalletOrder[]>([]);
   const [deliveries, setDeliveries] = useState<WalletOrder[]>([]);
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
@@ -378,9 +321,7 @@ function SavedPageContent() {
   const [newWantedNotes, setNewWantedNotes] = useState('');
   const [newWantedBudget, setNewWantedBudget] = useState('');
   const [creatingWanted, setCreatingWanted] = useState(false);
-  const [createWantedError, setCreateWantedError] = useState<string | null>(
-    null,
-  );
+  const [createWantedError, setCreateWantedError] = useState<string | null>(null);
 
   useEffect(() => {
     const current = searchParams.get('tab');
@@ -403,6 +344,7 @@ function SavedPageContent() {
       api.getServiceBookings(),
       api.getBasket(),
       api.getWalletOrders(['picked_up', 'returned', 'expired', 'reversed']),
+      api.getInstantTransactions(),
     ]);
 
     const [
@@ -413,6 +355,7 @@ function SavedPageContent() {
       bookingsResult,
       basketResult,
       historyResult,
+      instantResult,
     ] = results;
 
     if (savedResult.status === 'fulfilled') {
@@ -442,9 +385,7 @@ function SavedPageContent() {
 
     if (basketResult.status === 'fulfilled') {
       const raw = basketResult.value as BasketResponse | null;
-      const items = Array.isArray(raw?.items)
-        ? (raw!.items as BasketItem[])
-        : [];
+      const items = Array.isArray(raw?.items) ? (raw!.items as BasketItem[]) : [];
       setBasketItems(items);
       setBasketTotal(Number(raw?.total ?? 0));
     } else {
@@ -456,6 +397,15 @@ function SavedPageContent() {
       const raw = historyResult.value;
       setHistory(Array.isArray(raw) ? (raw as WalletOrder[]) : []);
     } else setHistory([]);
+
+    if (instantResult.status === 'fulfilled') {
+      const raw = instantResult.value as { pickups: unknown[]; services: unknown[] };
+      setInstantPickups(Array.isArray(raw?.pickups) ? (raw.pickups as InstantTransaction[]) : []);
+      setInstantJobs(Array.isArray(raw?.services) ? (raw.services as InstantTransaction[]) : []);
+    } else {
+      setInstantPickups([]);
+      setInstantJobs([]);
+    }
 
     const allFailed = results.every((r) => r.status === 'rejected');
     if (allFailed) {
@@ -490,17 +440,15 @@ function SavedPageContent() {
   const openBooking = (booking: ServiceBooking) => {
     if (booking.booking_id) {
       router.push(
-        `/booking-confirmed?booking_id=${encodeURIComponent(
-          booking.booking_id,
-        )}`,
+        `/booking-confirmed?booking_id=${encodeURIComponent(booking.booking_id)}`,
       );
     } else if (booking.service_id) {
       router.push(`/service-detail/${booking.service_id}`);
     }
   };
 
-  const openReceipt = (order: WalletOrder) => {
-    router.push(`/shopper/orders/receipt/${order.order_id}`);
+  const openInstantReceipt = (reference: string) => {
+    router.push(`/receipt/instant/${encodeURIComponent(reference)}`);
   };
 
   const openStoreOnMap = (order: WalletOrder, e: React.MouseEvent) => {
@@ -521,13 +469,8 @@ function SavedPageContent() {
     setCreatingWanted(true);
     setCreateWantedError(null);
     try {
-      const budgetNum = newWantedBudget.trim()
-        ? Number(newWantedBudget)
-        : undefined;
-      if (
-        budgetNum !== undefined &&
-        (!Number.isFinite(budgetNum) || budgetNum < 0)
-      ) {
+      const budgetNum = newWantedBudget.trim() ? Number(newWantedBudget) : undefined;
+      if (budgetNum !== undefined && (!Number.isFinite(budgetNum) || budgetNum < 0)) {
         setCreateWantedError('Budget must be a positive number.');
         setCreatingWanted(false);
         return;
@@ -543,8 +486,7 @@ function SavedPageContent() {
       setNewWantedBudget('');
       await loadAllData();
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : 'Could not create alert.';
+      const msg = err instanceof Error ? err.message : 'Could not create alert.';
       setCreateWantedError(msg);
     } finally {
       setCreatingWanted(false);
@@ -563,14 +505,10 @@ function SavedPageContent() {
 
   const handleToggleWanted = async (id: number) => {
     try {
-      const res = (await api.toggleWantedAlert(id)) as {
-        is_active?: boolean;
-      };
+      const res = (await api.toggleWantedAlert(id)) as { is_active?: boolean };
       setWantedAlerts((prev) =>
         prev.map((a) =>
-          a.id === id
-            ? { ...a, is_active: res.is_active ?? !a.is_active }
-            : a,
+          a.id === id ? { ...a, is_active: res.is_active ?? !a.is_active } : a,
         ),
       );
     } catch (err) {
@@ -606,6 +544,22 @@ function SavedPageContent() {
         'category',
       ]) as unknown as WantedAlert[],
     [wantedAlerts, q],
+  );
+  const filteredPickups = useMemo(
+    () =>
+      applyFilter(instantPickups as unknown as Record<string, unknown>[], [
+        'description',
+        'reference',
+      ]) as unknown as InstantTransaction[],
+    [instantPickups, q],
+  );
+  const filteredJobs = useMemo(
+    () =>
+      applyFilter(instantJobs as unknown as Record<string, unknown>[], [
+        'description',
+        'reference',
+      ]) as unknown as InstantTransaction[],
+    [instantJobs, q],
   );
   const filteredReservations = useMemo(
     () =>
@@ -699,12 +653,7 @@ function SavedPageContent() {
         <div style={styles.resTopRow}>
           <div style={styles.resThumb}>
             {storeImage ? (
-              <img
-                src={storeImage}
-                alt=""
-                loading="lazy"
-                style={styles.resThumbImg}
-              />
+              <img src={storeImage} alt="" loading="lazy" style={styles.resThumbImg} />
             ) : (
               <MdStorefront size={22} color="var(--text-muted)" />
             )}
@@ -726,9 +675,7 @@ function SavedPageContent() {
             ) : (
               <div style={styles.resItemLine}>
                 <MdInventory2 size={12} color="var(--text-muted)" />
-                <span
-                  style={{ ...styles.resItemText, color: 'var(--text-muted)' }}
-                >
+                <span style={{ ...styles.resItemText, color: 'var(--text-muted)' }}>
                   Order #{shortId(order.order_id)}
                 </span>
               </div>
@@ -743,9 +690,7 @@ function SavedPageContent() {
                 title={hasCoords ? 'Open in map' : address}
               >
                 <MdLocationOn size={12} color="var(--text-tertiary)" />
-                <span style={styles.resAddressText}>
-                  {shortAddress(address)}
-                </span>
+                <span style={styles.resAddressText}>{shortAddress(address)}</span>
               </button>
             ) : null}
           </div>
@@ -804,12 +749,9 @@ function SavedPageContent() {
     );
     const serviceImage = resolveImageUrl(booking.service_image_url);
     const thumb = providerImage || serviceImage;
-    const title =
-      booking.service_title || booking.title || 'Service booking';
+    const title = booking.service_title || booking.title || 'Service booking';
     const meta = bookingStatusMeta(booking.status);
-    const scheduled = booking.scheduled_for
-      ? fmtDateTime(booking.scheduled_for)
-      : null;
+    const scheduled = booking.scheduled_for ? fmtDateTime(booking.scheduled_for) : null;
     const created = booking.created_at ? fmtDate(booking.created_at) : '';
 
     return (
@@ -823,12 +765,7 @@ function SavedPageContent() {
         <div style={styles.resTopRow}>
           <div style={styles.resThumb}>
             {thumb ? (
-              <img
-                src={thumb}
-                alt=""
-                loading="lazy"
-                style={styles.resThumbImg}
-              />
+              <img src={thumb} alt="" loading="lazy" style={styles.resThumbImg} />
             ) : (
               <MdBuild size={22} color="var(--text-muted)" />
             )}
@@ -842,9 +779,7 @@ function SavedPageContent() {
             {booking.provider_name ? (
               <div style={styles.resItemLine}>
                 <MdStorefront size={12} color="var(--text-tertiary)" />
-                <span style={styles.resItemText}>
-                  {booking.provider_name}
-                </span>
+                <span style={styles.resItemText}>{booking.provider_name}</span>
               </div>
             ) : null}
 
@@ -880,16 +815,88 @@ function SavedPageContent() {
     );
   };
 
+  const renderInstantCard = (txn: InstantTransaction, kind: 'pickup' | 'job') => {
+    const ref = txn.reference;
+    const amount = Number(txn.amount ?? 0);
+    const description = txn.description || (kind === 'pickup' ? 'Instant pickup' : 'Service payment');
+    const status = (txn.status || 'completed').toLowerCase();
+    const cp = txn.counterparty || null;
+
+    const counterpartyLabel = kind === 'pickup'
+      ? (cp?.store_name || cp?.display_name || 'Store')
+      : (cp?.business_name || cp?.display_name || 'Provider');
+
+    const statusColor =
+      status === 'completed'
+        ? { bg: 'var(--success-bg)', fg: 'var(--success-fg)', border: 'var(--success-strong)' }
+        : status === 'pending'
+        ? { bg: 'var(--warning-bg)', fg: 'var(--warning-fg)', border: 'var(--warning-strong)' }
+        : { bg: 'var(--danger-bg)', fg: 'var(--danger-fg)', border: 'var(--danger-strong)' };
+
+    return (
+      <div
+        key={ref}
+        style={styles.resCard}
+        onClick={() => openInstantReceipt(ref)}
+        role="button"
+        tabIndex={0}
+      >
+        <div style={styles.resTopRow}>
+          <div style={styles.resThumb}>
+            {kind === 'pickup' ? (
+              <MdInventory2 size={22} color="var(--text-muted)" />
+            ) : (
+              <MdBuild size={22} color="var(--text-muted)" />
+            )}
+          </div>
+
+          <div style={styles.resInfo}>
+            <div style={styles.resStoreName} title={counterpartyLabel}>
+              {counterpartyLabel}
+            </div>
+            <div style={styles.resItemLine}>
+              <MdReceiptLong size={12} color="var(--text-tertiary)" />
+              <span style={styles.resItemText}>
+                {description.length > 60 ? `${description.slice(0, 58)}…` : description}
+              </span>
+            </div>
+            {txn.created_at && (
+              <div style={styles.resItemLine}>
+                <MdAccessTime size={12} color="var(--text-tertiary)" />
+                <span style={styles.resItemText}>{fmtDateTime(txn.created_at)}</span>
+              </div>
+            )}
+          </div>
+
+          <div style={styles.resAmount}>{fmtNaira(amount)}</div>
+        </div>
+
+        <div style={styles.resBottomRow}>
+          <span
+            style={{
+              ...styles.resChip,
+              backgroundColor: statusColor.bg,
+              color: statusColor.fg,
+              borderColor: statusColor.border,
+            }}
+          >
+            {status === 'completed' ? 'PAID' : status.toUpperCase()}
+          </span>
+
+          <span style={styles.resCountdown}>
+            <MdReceiptLong size={13} />
+            <span>View receipt</span>
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   const renderItemsTab = () => {
     if (filteredSaved.length === 0) {
       return (
         <EmptyState
-          icon={
-            <MdInventory
-              size={44}
-              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
-            />
-          }
+          icon={<MdInventory size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
           text={q ? `No saved items match "${query}"` : 'No saved items yet.'}
         />
       );
@@ -909,16 +916,7 @@ function SavedPageContent() {
             >
               <div style={styles.thumb}>
                 {image ? (
-                  <img
-                    src={image}
-                    alt=""
-                    loading="lazy"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
-                  />
+                  <img src={image} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <MdImage size={22} color="var(--text-muted)" />
                 )}
@@ -942,80 +940,46 @@ function SavedPageContent() {
   const renderWantedTab = () => {
     return (
       <>
-        <button
-          onClick={() => setShowCreateWanted(true)}
-          style={styles.createAlertBtn}
-        >
+        <button onClick={() => setShowCreateWanted(true)} style={styles.createAlertBtn}>
           <MdAdd size={20} color="var(--brand-on-gradient)" />
-          <span style={{ marginLeft: 6 }}>
-            Post what you&apos;re looking for
-          </span>
+          <span style={{ marginLeft: 6 }}>Post what you&apos;re looking for</span>
         </button>
 
         {filteredWanted.length === 0 ? (
           <EmptyState
-            icon={
-              <MdNotificationsActive
-                size={44}
-                color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
-              />
-            }
-            text={
-              q
-                ? `No alerts match "${query}"`
-                : 'No wanted alerts yet. Post one so sellers can find you.'
-            }
+            icon={<MdNotificationsActive size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
+            text={q ? `No alerts match "${query}"` : 'No wanted alerts yet. Post one so sellers can find you.'}
           />
         ) : (
           <div style={styles.list}>
             {filteredWanted.map((alert) => (
               <div
                 key={alert.id}
-                style={{
-                  ...styles.card,
-                  opacity: alert.is_active ? 1 : 0.55,
-                }}
+                style={{ ...styles.card, opacity: alert.is_active ? 1 : 0.55 }}
               >
                 <MdNotificationsActive
                   size={20}
-                  color={
-                    alert.is_active
-                      ? 'var(--brand-primary)'
-                      : 'var(--text-muted)'
-                  }
+                  color={alert.is_active ? 'var(--brand-primary)' : 'var(--text-muted)'}
                   style={{ marginRight: 8 }}
                 />
                 <div style={styles.cardContent}>
                   <div style={styles.cardTitle}>{alert.title}</div>
-                  {alert.notes ? (
-                    <div style={styles.cardSubtitle}>{alert.notes}</div>
-                  ) : null}
+                  {alert.notes ? <div style={styles.cardSubtitle}>{alert.notes}</div> : null}
                   <div style={styles.cardMeta}>
-                    {alert.budget != null &&
-                      `Budget: ${fmtNaira(alert.budget)} · `}
+                    {alert.budget != null && `Budget: ${fmtNaira(alert.budget)} · `}
                     {alert.is_active ? 'Active' : 'Paused'}
-                    {alert.created_at
-                      ? ` · ${fmtDate(alert.created_at)}`
-                      : ''}
+                    {alert.created_at ? ` · ${fmtDate(alert.created_at)}` : ''}
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleToggleWanted(alert.id)}
-                  style={styles.iconBtn}
-                  title={alert.is_active ? 'Pause alert' : 'Resume alert'}
-                >
+                <button onClick={() => handleToggleWanted(alert.id)} style={styles.iconBtn} title={alert.is_active ? 'Pause alert' : 'Resume alert'}>
                   {alert.is_active ? (
                     <MdToggleOn size={24} color="var(--brand-primary)" />
                   ) : (
                     <MdToggleOff size={24} color="var(--text-muted)" />
                   )}
                 </button>
-                <button
-                  onClick={() => handleDeleteWanted(alert.id)}
-                  style={styles.iconBtn}
-                  title="Delete"
-                >
+                <button onClick={() => handleDeleteWanted(alert.id)} style={styles.iconBtn} title="Delete">
                   <MdDeleteOutline size={20} color="var(--danger-fg)" />
                 </button>
               </div>
@@ -1026,21 +990,44 @@ function SavedPageContent() {
     );
   };
 
+  const renderPickupsTab = () => {
+    if (filteredPickups.length === 0) {
+      return (
+        <EmptyState
+          icon={<MdInventory size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
+          text={q ? `No pickups match "${query}"` : 'No instant pickups yet. Pay at a store to see them here.'}
+        />
+      );
+    }
+    return (
+      <div style={styles.list}>
+        {filteredPickups.map((p) => renderInstantCard(p, 'pickup'))}
+      </div>
+    );
+  };
+
+  const renderJobsTab = () => {
+    if (filteredJobs.length === 0) {
+      return (
+        <EmptyState
+          icon={<MdBuild size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
+          text={q ? `No jobs match "${query}"` : 'No instant service payments yet.'}
+        />
+      );
+    }
+    return (
+      <div style={styles.list}>
+        {filteredJobs.map((j) => renderInstantCard(j, 'job'))}
+      </div>
+    );
+  };
+
   const renderReservationsTab = () => {
     if (filteredReservations.length === 0) {
       return (
         <EmptyState
-          icon={
-            <MdEventNote
-              size={44}
-              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
-            />
-          }
-          text={
-            q
-              ? `No reservations match "${query}"`
-              : 'No active reservations.'
-          }
+          icon={<MdEventNote size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
+          text={q ? `No reservations match "${query}"` : 'No active reservations.'}
         />
       );
     }
@@ -1054,9 +1041,7 @@ function SavedPageContent() {
     });
     return (
       <div style={styles.list}>
-        {sorted.map((order) =>
-          renderOrderCard(order, { showExpiry: true }),
-        )}
+        {sorted.map((order) => renderOrderCard(order, { showExpiry: true }))}
       </div>
     );
   };
@@ -1065,15 +1050,8 @@ function SavedPageContent() {
     if (filteredDeliveries.length === 0) {
       return (
         <EmptyState
-          icon={
-            <MdLocalShipping
-              size={44}
-              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
-            />
-          }
-          text={
-            q ? `No deliveries match "${query}"` : 'No active deliveries.'
-          }
+          icon={<MdLocalShipping size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
+          text={q ? `No deliveries match "${query}"` : 'No active deliveries.'}
         />
       );
     }
@@ -1087,9 +1065,7 @@ function SavedPageContent() {
     });
     return (
       <div style={styles.list}>
-        {sorted.map((order) =>
-          renderOrderCard(order, { showExpiry: false }),
-        )}
+        {sorted.map((order) => renderOrderCard(order, { showExpiry: false }))}
       </div>
     );
   };
@@ -1098,15 +1074,8 @@ function SavedPageContent() {
     if (filteredBookings.length === 0) {
       return (
         <EmptyState
-          icon={
-            <MdBuild
-              size={44}
-              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
-            />
-          }
-          text={
-            q ? `No bookings match "${query}"` : 'No service bookings.'
-          }
+          icon={<MdBuild size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
+          text={q ? `No bookings match "${query}"` : 'No service bookings.'}
         />
       );
     }
@@ -1129,12 +1098,7 @@ function SavedPageContent() {
     if (filteredBasket.length === 0) {
       return (
         <EmptyState
-          icon={
-            <MdShoppingBasket
-              size={44}
-              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
-            />
-          }
+          icon={<MdShoppingBasket size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
           text={q ? `No basket items match "${query}"` : 'Basket is empty.'}
         />
       );
@@ -1143,57 +1107,36 @@ function SavedPageContent() {
       <div style={styles.list}>
         {filteredBasket.map((item, i) => {
           const image = resolveImageUrl(item.image_url);
-          const lineTotal =
-            Number(item.price || 0) * (item.quantity ?? 1);
+          const lineTotal = Number(item.price || 0) * (item.quantity ?? 1);
           return (
             <div
               key={item.id || item.listing_id || i}
               style={styles.resCard}
-              onClick={() =>
-                router.push(`/item-detail/${item.listing_id}`)
-              }
+              onClick={() => router.push(`/item-detail/${item.listing_id}`)}
               role="button"
               tabIndex={0}
             >
               <div style={styles.resTopRow}>
                 <div style={styles.resThumb}>
                   {image ? (
-                    <img
-                      src={image}
-                      alt=""
-                      loading="lazy"
-                      style={styles.resThumbImg}
-                    />
+                    <img src={image} alt="" loading="lazy" style={styles.resThumbImg} />
                   ) : (
                     <MdImage size={22} color="var(--text-muted)" />
                   )}
                 </div>
                 <div style={styles.resInfo}>
-                  <div
-                    style={styles.resStoreName}
-                    title={item.title || 'Item'}
-                  >
+                  <div style={styles.resStoreName} title={item.title || 'Item'}>
                     {item.title || 'Item'}
                   </div>
                   {item.store_name ? (
                     <div style={styles.resItemLine}>
-                      <MdStorefront
-                        size={12}
-                        color="var(--text-tertiary)"
-                      />
-                      <span style={styles.resItemText}>
-                        {item.store_name}
-                      </span>
+                      <MdStorefront size={12} color="var(--text-tertiary)" />
+                      <span style={styles.resItemText}>{item.store_name}</span>
                     </div>
                   ) : null}
                   <div style={styles.resItemLine}>
-                    <MdInventory2
-                      size={12}
-                      color="var(--text-tertiary)"
-                    />
-                    <span style={styles.resItemText}>
-                      Qty {item.quantity ?? 1}
-                    </span>
+                    <MdInventory2 size={12} color="var(--text-tertiary)" />
+                    <span style={styles.resItemText}>Qty {item.quantity ?? 1}</span>
                   </div>
                 </div>
                 <div style={styles.resAmount}>{fmtNaira(lineTotal)}</div>
@@ -1207,11 +1150,8 @@ function SavedPageContent() {
             <span style={styles.basketLabel}>Subtotal</span>
             <span style={styles.basketValue}>{fmtNaira(basketTotal)}</span>
           </div>
-          <button
-            onClick={() => router.push('/basket')}
-            style={styles.primaryBtn}
-          >
-            View basket & checkout
+          <button onClick={() => router.push('/basket')} style={styles.primaryBtn}>
+            View basket &amp; checkout
           </button>
         </div>
       </div>
@@ -1222,12 +1162,7 @@ function SavedPageContent() {
     if (filteredHistory.length === 0) {
       return (
         <EmptyState
-          icon={
-            <MdCheckCircle
-              size={44}
-              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
-            />
-          }
+          icon={<MdCheckCircle size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
           text={q ? `No orders match "${query}"` : 'No past orders.'}
         />
       );
@@ -1242,9 +1177,7 @@ function SavedPageContent() {
     });
     return (
       <div style={styles.list}>
-        {sorted.map((order) =>
-          renderOrderCard(order, { showExpiry: false }),
-        )}
+        {sorted.map((order) => renderOrderCard(order, { showExpiry: false }))}
       </div>
     );
   };
@@ -1255,6 +1188,10 @@ function SavedPageContent() {
         return renderItemsTab();
       case 'Wanted':
         return renderWantedTab();
+      case 'Pickups':
+        return renderPickupsTab();
+      case 'Jobs':
+        return renderJobsTab();
       case 'Reservations':
         return renderReservationsTab();
       case 'Deliveries':
@@ -1303,11 +1240,7 @@ function SavedPageContent() {
           <MdRefresh
             size={22}
             color="var(--brand-primary)"
-            style={{
-              animation: isRefreshing
-                ? 'spin 0.8s linear infinite'
-                : 'none',
-            }}
+            style={{ animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none' }}
           />
         </button>
       </div>
@@ -1347,25 +1280,16 @@ function SavedPageContent() {
           className="sv-modal-overlay"
           onClick={() => !creatingWanted && setShowCreateWanted(false)}
         >
-          <div
-            style={styles.sheet}
-            className="sv-sheet"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div style={styles.sheet} className="sv-sheet" onClick={(e) => e.stopPropagation()}>
             <div style={styles.sheetHeader}>
               <h3 style={styles.sheetTitle}>Post a wanted alert</h3>
-              <button
-                onClick={() => setShowCreateWanted(false)}
-                style={styles.iconBtn}
-                disabled={creatingWanted}
-              >
+              <button onClick={() => setShowCreateWanted(false)} style={styles.iconBtn} disabled={creatingWanted}>
                 <MdClose size={22} color="var(--text-tertiary)" />
               </button>
             </div>
 
             <p style={styles.sheetHelper}>
-              Tell sellers what you&apos;re looking for. Your alert stays
-              active for 30 days.
+              Tell sellers what you&apos;re looking for. Your alert stays active for 30 days.
             </p>
 
             <label style={styles.fieldLabel}>
@@ -1387,11 +1311,7 @@ function SavedPageContent() {
                 value={newWantedNotes}
                 onChange={(e) => setNewWantedNotes(e.target.value)}
                 placeholder="Any specific requirements?"
-                style={{
-                  ...styles.textInput,
-                  minHeight: 72,
-                  resize: 'vertical',
-                }}
+                style={{ ...styles.textInput, minHeight: 72, resize: 'vertical' }}
                 maxLength={500}
               />
             </label>
@@ -1409,9 +1329,7 @@ function SavedPageContent() {
               />
             </label>
 
-            {createWantedError && (
-              <div style={styles.inlineError}>{createWantedError}</div>
-            )}
+            {createWantedError && <div style={styles.inlineError}>{createWantedError}</div>}
 
             <button
               onClick={handleCreateWanted}
@@ -1419,12 +1337,8 @@ function SavedPageContent() {
               style={{
                 ...styles.primaryBtn,
                 marginTop: 16,
-                opacity:
-                  creatingWanted || !newWantedTitle.trim() ? 0.5 : 1,
-                cursor:
-                  creatingWanted || !newWantedTitle.trim()
-                    ? 'not-allowed'
-                    : 'pointer',
+                opacity: creatingWanted || !newWantedTitle.trim() ? 0.5 : 1,
+                cursor: creatingWanted || !newWantedTitle.trim() ? 'not-allowed' : 'pointer',
               }}
             >
               {creatingWanted ? 'Posting…' : 'Post alert'}
@@ -1459,13 +1373,7 @@ export default function SavedPage() {
   );
 }
 
-function EmptyState({
-  icon,
-  text,
-}: {
-  icon: React.ReactNode;
-  text: string;
-}) {
+function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
     <div style={styles.center}>
       {icon}
@@ -1637,7 +1545,6 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
     fontVariantNumeric: 'tabular-nums',
   },
-
   resCard: {
     padding: 14,
     marginBottom: 10,
@@ -1782,7 +1689,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--warning-fg)',
     lineHeight: 1.4,
   },
-
   createAlertBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -1914,9 +1820,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-// ─── Responsive layout ─────────────────────────────────────────────
-// Padding/margin for tabbar, searchWrap and content live in CSS so the
-// desktop media query can restyle them without !important.
 const CSS = `
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -1943,8 +1846,8 @@ const CSS = `
       overflow-x: visible;
     }
     .sv-tab {
-      padding: 14px 20px;
-      font-size: 13.5px;
+      padding: 14px 16px;
+      font-size: 13px;
     }
     .sv-search-wrap {
       width: calc(100% - 48px);

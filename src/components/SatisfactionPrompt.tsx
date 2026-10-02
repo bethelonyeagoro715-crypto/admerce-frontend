@@ -26,16 +26,19 @@ export function hasRatedBooking(bookingId: string): boolean {
 function markRated(bookingId: string) {
   try {
     window.localStorage.setItem(STORAGE_PREFIX + bookingId, '1');
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
-function SatisfactionPromptContent({
+export default function SatisfactionPrompt({
   bookingId,
   serviceName,
   providerName,
   onDone,
   onSkip,
 }: SatisfactionPromptProps) {
+  const [previousBookingId, setPreviousBookingId] = useState(bookingId);
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState('');
@@ -43,8 +46,21 @@ function SatisfactionPromptContent({
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  if (bookingId !== previousBookingId) {
+    setPreviousBookingId(bookingId);
+    setRating(0);
+    setHover(0);
+    setComment('');
+    setSubmitting(false);
+    setSubmitted(false);
+    setError(null);
+  }
+
   const handleSubmit = async () => {
-    if (rating < 1) { setError('Please choose a rating.'); return; }
+    if (rating < 1) {
+      setError('Please choose a rating.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -57,7 +73,9 @@ function SatisfactionPromptContent({
       });
       markRated(bookingId);
       setSubmitted(true);
-      setTimeout(() => { onDone?.(); }, 900);
+      setTimeout(() => {
+        onDone?.();
+      }, 900);
     } catch (err) {
       setError(extractErrorDetail(err, 'Could not submit feedback.'));
     } finally {
@@ -86,7 +104,9 @@ function SatisfactionPromptContent({
             <div style={p.successIcon}>
               <MdCheckCircle size={36} color="var(--success-fg)" />
             </div>
-            <h3 id="satp-title" style={p.title}>Thanks for the feedback</h3>
+            <h3 id="satp-title" style={p.title}>
+              Thanks for the feedback
+            </h3>
             <p style={p.body}>Your rating helps other shoppers choose better.</p>
           </div>
         ) : (
@@ -100,7 +120,9 @@ function SatisfactionPromptContent({
               <MdClose size={20} color="var(--text-tertiary)" />
             </button>
 
-            <h3 id="satp-title" style={p.title}>Are you satisfied with the service?</h3>
+            <h3 id="satp-title" style={p.title}>
+              Are you satisfied with the service?
+            </h3>
             <p style={p.body}>
               <strong>{serviceName}</strong> by <strong>{providerName}</strong>
             </p>
@@ -137,14 +159,22 @@ function SatisfactionPromptContent({
             {error && <div style={p.error}>{error}</div>}
 
             <div style={p.actions}>
-              <button type="button" onClick={handleSkip} style={p.skipBtn} disabled={submitting}>
+              <button
+                type="button"
+                onClick={handleSkip}
+                style={p.skipBtn}
+                disabled={submitting}
+              >
                 Not now
               </button>
               <button
                 type="button"
                 onClick={handleSubmit}
                 disabled={submitting || rating < 1}
-                style={{ ...p.submitBtn, opacity: submitting || rating < 1 ? 0.6 : 1 }}
+                style={{
+                  ...p.submitBtn,
+                  opacity: submitting || rating < 1 ? 0.6 : 1,
+                }}
               >
                 {submitting ? 'Sending…' : 'Submit'}
               </button>
@@ -229,6 +259,7 @@ const p: Record<string, React.CSSProperties> = {
     marginBottom: 12,
     outline: 'none',
     minHeight: 68,
+    boxSizing: 'border-box',
   },
   error: {
     color: 'var(--danger-fg)',

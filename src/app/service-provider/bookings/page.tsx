@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api, { extractErrorDetail } from '../../../services/api';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
-import { confirmDialog, alertDialog } from '../../../components/ui/dialogs';
+import { confirmDialog, alertDialog, promptDialog } from '../../../components/ui/dialogs';
 import {
   MdRefresh,
   MdCalendarToday,
@@ -102,38 +102,18 @@ interface StatusMeta {
 function statusMeta(status: string): StatusMeta {
   const s = (status || 'pending').toLowerCase();
   if (s === 'locked' || s === 'pending') {
-    return {
-      label: 'New',
-      bg: 'var(--warning-bg)',
-      fg: 'var(--warning-fg)',
-    };
+    return { label: 'New', bg: 'var(--warning-bg)', fg: 'var(--warning-fg)' };
   }
   if (s === 'accepted') {
-    return {
-      label: 'Confirmed',
-      bg: 'var(--info-bg)',
-      fg: 'var(--info-fg)',
-    };
+    return { label: 'Confirmed', bg: 'var(--info-bg)', fg: 'var(--info-fg)' };
   }
   if (s === 'completed') {
-    return {
-      label: 'Completed',
-      bg: 'var(--success-bg)',
-      fg: 'var(--success-fg)',
-    };
+    return { label: 'Completed', bg: 'var(--success-bg)', fg: 'var(--success-fg)' };
   }
   if (s === 'cancelled' || s === 'declined') {
-    return {
-      label: 'Cancelled',
-      bg: 'var(--danger-bg)',
-      fg: 'var(--danger-fg)',
-    };
+    return { label: 'Cancelled', bg: 'var(--danger-bg)', fg: 'var(--danger-fg)' };
   }
-  return {
-    label: status || 'Pending',
-    bg: 'var(--bg-tertiary)',
-    fg: 'var(--text-secondary)',
-  };
+  return { label: status || 'Pending', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)' };
 }
 
 export default function ServiceProviderBookingsPage() {
@@ -231,30 +211,65 @@ export default function ServiceProviderBookingsPage() {
     });
   }, [activeFilter, buckets, bookings, searchQuery]);
 
-  const handleConfirm = async (b: Booking) => {
+  const handleAccept = async (b: Booking) => {
     const id = bookingId(b);
     if (!id) return;
     const customer = customerName(b);
     const ok = await confirmDialog({
-      title: 'Confirm this booking?',
-      body: `${b.service_title || 'The service'} for ${customer}. Once confirmed, they'll be notified to expect you.`,
+      title: 'Accept this booking?',
+      body: `${b.service_title || 'The service'} for ${customer}. They'll be notified that you're on the job.`,
       kind: 'info',
-      confirmLabel: 'Confirm booking',
-      cancelLabel: 'Not yet',
+      confirmLabel: 'Accept',
+      cancelLabel: 'Not now',
     });
     if (!ok) return;
     setBusyId(id);
     try {
-      await api.confirmServiceBooking(id);
+      await api.acceptServiceBooking(id);
       await loadBookings(false);
       await alertDialog({
-        title: 'Booking confirmed',
+        title: 'Booking accepted',
         body: `${customer} has been notified.`,
         kind: 'success',
       });
     } catch (err) {
       await alertDialog({
-        title: "Couldn't confirm",
+        title: "Couldn't accept",
+        body: extractErrorDetail(err, 'Please try again.'),
+        kind: 'danger',
+      });
+    } finally {
+      if (isMountedRef.current) setBusyId(null);
+    }
+  };
+
+  const handleDecline = async (b: Booking) => {
+    const id = bookingId(b);
+    if (!id) return;
+    const customer = customerName(b);
+    const reason = await promptDialog({
+      title: 'Decline this booking?',
+      body: `${customer} will be refunded in full and notified. Optional reason helps them understand.`,
+      kind: 'warning',
+      placeholder: 'e.g. Fully booked, Outside my area…',
+      multiline: true,
+      confirmLabel: 'Decline & refund',
+      cancelLabel: 'Keep booking',
+      required: false,
+    });
+    if (reason === null) return;
+    setBusyId(id);
+    try {
+      await api.declineServiceBooking(id, reason.trim() || undefined);
+      await loadBookings(false);
+      await alertDialog({
+        title: 'Booking declined',
+        body: `${customer} has been refunded and notified.`,
+        kind: 'success',
+      });
+    } catch (err) {
+      await alertDialog({
+        title: "Couldn't decline",
         body: extractErrorDetail(err, 'Please try again.'),
         kind: 'danger',
       });
@@ -277,9 +292,7 @@ export default function ServiceProviderBookingsPage() {
     if (!ok) return;
     setBusyId(id);
     try {
-      // NOTE: kept as confirmServiceBooking — the original file used the
-      // same endpoint here. If the backend expects a separate
-      // completeServiceBooking call, swap this line.
+      // /confirm is the provider-side "mark complete" endpoint.
       await api.confirmServiceBooking(id);
       await loadBookings(false);
       await alertDialog({
@@ -328,13 +341,9 @@ export default function ServiceProviderBookingsPage() {
         </div>
         <h2 style={css.centerTitle}>Couldn&apos;t load your bookings</h2>
         <p style={css.centerBody}>
-          Check your connection and try again. If this keeps happening, sign
-          out and back in.
+          Check your connection and try again. If this keeps happening, sign out and back in.
         </p>
-        <button
-          onClick={() => void loadBookings()}
-          style={css.centerPrimary}
-        >
+        <button onClick={() => void loadBookings()} style={css.centerPrimary}>
           <MdRefresh size={18} color="var(--brand-on-gradient)" />
           <span>Retry</span>
         </button>
@@ -357,9 +366,7 @@ export default function ServiceProviderBookingsPage() {
               {hasNoBookings
                 ? 'Bookings will show up here'
                 : `${counts.all} total · ${counts.new} new${
-                    counts.confirmed > 0
-                      ? ` · ${counts.confirmed} confirmed`
-                      : ''
+                    counts.confirmed > 0 ? ` · ${counts.confirmed} confirmed` : ''
                   }`}
             </div>
           </div>
@@ -383,17 +390,14 @@ export default function ServiceProviderBookingsPage() {
             </div>
             <h2 style={css.emptyTitle}>No bookings yet</h2>
             <p style={css.emptyBody}>
-              When shoppers book your services, they&apos;ll show up here.
-              Keep your services visible and priced right.
+              When shoppers book your services, they&apos;ll show up here. Keep your services
+              visible and priced right.
             </p>
             <button
               onClick={() => router.push('/service-provider/services')}
               style={css.emptyPrimary}
             >
-              <MdDesignServices
-                size={20}
-                color="var(--brand-on-gradient)"
-              />
+              <MdDesignServices size={20} color="var(--brand-on-gradient)" />
               <span>Manage my services</span>
             </button>
           </div>
@@ -433,20 +437,14 @@ export default function ServiceProviderBookingsPage() {
                     onClick={() => setActiveFilter(f.key)}
                     style={{
                       ...css.pill,
-                      borderColor: active
-                        ? 'var(--brand-primary)'
-                        : 'var(--border-default)',
-                      backgroundColor: active
-                        ? 'var(--brand-soft)'
-                        : 'var(--bg-secondary)',
+                      borderColor: active ? 'var(--brand-primary)' : 'var(--border-default)',
+                      backgroundColor: active ? 'var(--brand-soft)' : 'var(--bg-secondary)',
                     }}
                     className="sp-pill"
                   >
                     <span
                       style={{
-                        color: active
-                          ? 'var(--brand-primary)'
-                          : 'var(--text-secondary)',
+                        color: active ? 'var(--brand-primary)' : 'var(--text-secondary)',
                         fontWeight: active ? 800 : 700,
                         fontSize: 12.5,
                       }}
@@ -456,12 +454,8 @@ export default function ServiceProviderBookingsPage() {
                     <span
                       style={{
                         ...css.pillCount,
-                        backgroundColor: active
-                          ? 'var(--bg-secondary)'
-                          : 'var(--bg-tertiary)',
-                        color: active
-                          ? 'var(--brand-primary)'
-                          : 'var(--text-tertiary)',
+                        backgroundColor: active ? 'var(--bg-secondary)' : 'var(--bg-tertiary)',
+                        color: active ? 'var(--brand-primary)' : 'var(--text-tertiary)',
                       }}
                     >
                       {count}
@@ -477,9 +471,7 @@ export default function ServiceProviderBookingsPage() {
                   <MdSearch size={32} color="var(--text-muted)" />
                 </div>
                 <div style={css.noMatchTitle}>No matches</div>
-                <div style={css.noMatchBody}>
-                  Try a different word, or clear the filters.
-                </div>
+                <div style={css.noMatchBody}>Try a different word, or clear the filters.</div>
                 <button
                   onClick={() => {
                     setSearchQuery('');
@@ -497,7 +489,8 @@ export default function ServiceProviderBookingsPage() {
                     key={bookingId(b)}
                     booking={b}
                     busy={busyId === bookingId(b)}
-                    onConfirm={() => handleConfirm(b)}
+                    onAccept={() => handleAccept(b)}
+                    onDecline={() => handleDecline(b)}
                     onComplete={() => handleComplete(b)}
                   />
                 ))}
@@ -515,12 +508,14 @@ export default function ServiceProviderBookingsPage() {
 function BookingCard({
   booking,
   busy,
-  onConfirm,
+  onAccept,
+  onDecline,
   onComplete,
 }: {
   booking: Booking;
   busy: boolean;
-  onConfirm: () => void;
+  onAccept: () => void;
+  onDecline: () => void;
   onComplete: () => void;
 }) {
   const status = (booking.status || 'pending').toLowerCase();
@@ -536,21 +531,14 @@ function BookingCard({
   const isCancelled = isCancelledStatus(status);
 
   return (
-    <div
-      style={{ ...css.card, opacity: busy ? 0.55 : 1 }}
-      className="sp-booking-card"
-    >
+    <div style={{ ...css.card, opacity: busy ? 0.55 : 1 }} className="sp-booking-card">
       <div style={css.cardTop}>
-        <div style={css.avatar}>
-          {(customer.charAt(0) || '?').toUpperCase()}
-        </div>
+        <div style={css.avatar}>{(customer.charAt(0) || '?').toUpperCase()}</div>
         <div style={css.cardTopMeta}>
           <div style={css.customerName} title={customer}>
             {customer}
           </div>
-          <div style={css.bookingId}>
-            Booking #{bookingId(booking).slice(0, 8)}
-          </div>
+          <div style={css.bookingId}>Booking #{bookingId(booking).slice(0, 8)}</div>
         </div>
         <span
           style={{
@@ -585,35 +573,43 @@ function BookingCard({
         </div>
       )}
 
-      {(isNew || isConfirmed) && (
+      {isNew && (
         <div style={css.actions}>
-          {isNew && (
-            <button
-              type="button"
-              onClick={onConfirm}
-              disabled={busy}
-              style={{ ...css.primaryBtn, opacity: busy ? 0.6 : 1 }}
-              className="sp-action-btn"
-            >
-              <MdCheckCircle
-                size={18}
-                color="var(--brand-on-gradient)"
-              />
-              <span>Confirm booking</span>
-            </button>
-          )}
-          {isConfirmed && (
-            <button
-              type="button"
-              onClick={onComplete}
-              disabled={busy}
-              style={{ ...css.successBtn, opacity: busy ? 0.6 : 1 }}
-              className="sp-action-btn"
-            >
-              <MdCheckCircle size={18} color="#FFFFFF" />
-              <span>Mark complete</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onDecline}
+            disabled={busy}
+            style={{ ...css.dangerBtn, opacity: busy ? 0.6 : 1 }}
+            className="sp-action-btn"
+          >
+            <MdCancel size={18} color="var(--danger-fg)" />
+            <span>Decline</span>
+          </button>
+          <button
+            type="button"
+            onClick={onAccept}
+            disabled={busy}
+            style={{ ...css.primaryBtn, opacity: busy ? 0.6 : 1 }}
+            className="sp-action-btn"
+          >
+            <MdCheckCircle size={18} color="var(--brand-on-gradient)" />
+            <span>Accept booking</span>
+          </button>
+        </div>
+      )}
+
+      {isConfirmed && (
+        <div style={css.actions}>
+          <button
+            type="button"
+            onClick={onComplete}
+            disabled={busy}
+            style={{ ...css.successBtn, opacity: busy ? 0.6 : 1 }}
+            className="sp-action-btn"
+          >
+            <MdCheckCircle size={18} color="#FFFFFF" />
+            <span>Mark complete</span>
+          </button>
         </div>
       )}
 
@@ -626,9 +622,7 @@ function BookingCard({
       {isCancelled && (
         <div style={css.cancelledRow}>
           <MdCancel size={18} color="var(--danger-fg)" />
-          <span style={css.cancelledText}>
-            Cancelled · No payment due
-          </span>
+          <span style={css.cancelledText}>Cancelled · No payment due</span>
         </div>
       )}
     </div>
@@ -647,8 +641,7 @@ const CSS = `
     transition: transform 0.12s, background-color 0.15s;
   }
   .sp-refresh:hover {
-    background-color:
-      color-mix(in srgb, var(--brand-on-gradient) 18%, transparent);
+    background-color: color-mix(in srgb, var(--brand-on-gradient) 18%, transparent);
   }
   .sp-refresh:active { transform: scale(0.94); }
 
@@ -688,7 +681,6 @@ const css: Record<string, React.CSSProperties> = {
     overflowX: 'hidden',
     transition: 'background-color 0.18s ease, color 0.18s ease',
   },
-
   headerWrap: {
     position: 'sticky',
     top: 0,
@@ -714,8 +706,7 @@ const css: Record<string, React.CSSProperties> = {
   },
   subtitle: {
     fontSize: 12.5,
-    color:
-      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
+    color: 'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
     fontWeight: 600,
     marginTop: 3,
   },
@@ -723,8 +714,7 @@ const css: Record<string, React.CSSProperties> = {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor:
-      'color-mix(in srgb, var(--brand-on-gradient) 12%, transparent)',
+    backgroundColor: 'color-mix(in srgb, var(--brand-on-gradient) 12%, transparent)',
     border: 'none',
     display: 'flex',
     alignItems: 'center',
@@ -736,10 +726,8 @@ const css: Record<string, React.CSSProperties> = {
     height: 20,
     width: 180,
     borderRadius: 8,
-    backgroundColor:
-      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
+    backgroundColor: 'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
   },
-
   sheet: {
     flex: 1,
     padding: '16px 20px 40px',
@@ -747,7 +735,6 @@ const css: Record<string, React.CSSProperties> = {
     margin: '0 auto',
     width: '100%',
   },
-
   searchWrap: {
     display: 'flex',
     alignItems: 'center',
@@ -779,7 +766,6 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   pillRow: {
     display: 'flex',
     gap: 8,
@@ -809,14 +795,12 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     fontVariantNumeric: 'tabular-nums',
   },
-
   list: {
     display: 'flex',
     flexDirection: 'column',
     gap: 12,
     marginTop: 16,
   },
-
   card: {
     backgroundColor: 'var(--bg-secondary)',
     borderRadius: 18,
@@ -874,7 +858,6 @@ const css: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
-
   serviceRow: {
     display: 'flex',
     alignItems: 'center',
@@ -892,7 +875,6 @@ const css: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-
   dateRow: {
     display: 'flex',
     alignItems: 'center',
@@ -905,7 +887,6 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--text-tertiary)',
     fontWeight: 500,
   },
-
   amount: {
     fontSize: 24,
     fontWeight: 800,
@@ -915,7 +896,6 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 12,
     lineHeight: 1.1,
   },
-
   notesRow: {
     marginTop: 10,
     padding: '10px 12px',
@@ -929,7 +909,6 @@ const css: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
     fontWeight: 500,
   },
-
   actions: {
     display: 'flex',
     gap: 8,
@@ -952,6 +931,22 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     boxShadow: 'var(--shadow-brand)',
   },
+  dangerBtn: {
+    flex: 1,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: '12px 16px',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--danger-fg)',
+    border: '1.5px solid var(--danger-strong)',
+    borderRadius: 12,
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
   successBtn: {
     flex: 1,
     display: 'inline-flex',
@@ -967,10 +962,8 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow:
-      '0 8px 18px color-mix(in srgb, var(--success-fg) 22%, transparent)',
+    boxShadow: '0 8px 18px color-mix(in srgb, var(--success-fg) 22%, transparent)',
   },
-
   doneRow: {
     display: 'flex',
     alignItems: 'center',
@@ -999,7 +992,6 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--danger-fg)',
     fontWeight: 700,
   },
-
   emptyState: {
     display: 'flex',
     flexDirection: 'column',
@@ -1048,7 +1040,6 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     boxShadow: 'var(--shadow-brand)',
   },
-
   noMatchWrap: {
     display: 'flex',
     flexDirection: 'column',
@@ -1089,7 +1080,6 @@ const css: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
-
   centerRoot: {
     display: 'flex',
     flexDirection: 'column',
@@ -1143,7 +1133,6 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     boxShadow: 'var(--shadow-brand)',
   },
-
   searchSkeleton: {
     height: 46,
     borderRadius: 14,

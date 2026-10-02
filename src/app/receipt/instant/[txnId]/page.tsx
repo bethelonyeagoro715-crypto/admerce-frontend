@@ -20,6 +20,8 @@ interface Counterparty {
   user_id?: string;
   display_name?: string;
   role?: string;
+  store_name?: string | null;
+  business_name?: string | null;
 }
 
 interface TransactionResponse {
@@ -43,18 +45,13 @@ interface MeShape {
   phone?: string;
   email?: string;
   role?: string;
+  business_name?: string;
 }
 
 function fmtMoney(raw: number | string | null | undefined): string {
   const n = Number(raw ?? 0);
   if (!Number.isFinite(n)) return '₦0.00';
-  return (
-    '₦' +
-    n.toLocaleString('en-NG', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  );
+  return '₦' + n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function fmtDate(iso: string | null | undefined): string {
@@ -87,16 +84,21 @@ function maskEmail(email?: string): string {
   return `${head}•••${email.slice(at)}`;
 }
 
-function displayName(me: MeShape | null): string {
-  if (!me) return 'You';
-  const first = (me.first_name || '').trim();
-  const last = (me.last_name || '').trim();
-  if (first || last) return `${first} ${last}`.trim();
-  return me.real_name || me.nickname || 'You';
+function fullName(u: {
+  real_name?: string;
+  nickname?: string;
+  first_name?: string;
+  last_name?: string;
+} | null): string {
+  if (!u) return '';
+  const first = (u.first_name || '').trim();
+  const last = (u.last_name || '').trim();
+  const full = `${first} ${last}`.trim();
+  return (u.real_name || '').trim() || (u.nickname || '').trim() || full;
 }
 
-function roleLabel(role: string | undefined, kind: 'item' | 'service'): string {
-  if (!role) return kind === 'service' ? 'Service Provider' : 'Store';
+function roleLabel(role: string | undefined): string {
+  if (!role) return '';
   const r = role.toLowerCase().replace(/[_-]/g, '');
   if (r === 'shopper' || r === '') return 'Shopper';
   if (r === 'storekeeper') return 'Storekeeper';
@@ -104,7 +106,7 @@ function roleLabel(role: string | undefined, kind: 'item' | 'service'): string {
   if (r === 'courier') return 'Courier';
   if (r === 'flipper') return 'Flipper';
   if (r === 'admin') return 'Admerce';
-  return kind === 'service' ? 'Service Provider' : 'Store';
+  return '';
 }
 
 function txnTypeLabel(txnType: string | undefined, reference: string | undefined): string {
@@ -125,42 +127,7 @@ function txnTypeLabel(txnType: string | undefined, reference: string | undefined
   return 'Wallet transaction';
 }
 
-function fallbackCounterparty(
-  reference: string,
-  isDebit: boolean,
-  kind: 'item' | 'service',
-): { payerName: string; payeeName: string } {
-  // When the counterparty row doesn't exist yet (e.g. shopper reserved, store
-  // hasn't been credited), fall back to a description-based label. These are
-  // placeholders and will be replaced by real names once the paired row
-  // exists.
-  const head = reference.split(/[_:]/)[0];
-  if (head === 'topup') return { payerName: 'Paystack', payeeName: 'You' };
-  if (head === 'wdr') return { payerName: 'You', payeeName: 'External bank account' };
-  if (head === 'svcpay') {
-    return kind === 'service'
-      ? { payerName: isDebit ? 'You' : 'Admerce Service Provider', payeeName: isDebit ? 'Admerce Service Provider' : 'You' }
-      : { payerName: isDebit ? 'You' : 'Admerce user', payeeName: isDebit ? 'Admerce user' : 'You' };
-  }
-  if (head === 'pickup') {
-    return { payerName: isDebit ? 'You' : 'Admerce Shopper', payeeName: isDebit ? 'Admerce Store' : 'You' };
-  }
-  if (head === 'ord') {
-    return { payerName: isDebit ? 'You' : 'Admerce Shopper', payeeName: isDebit ? 'Admerce Store' : 'You' };
-  }
-  if (head === 'book' || head === 'confirm' || head === 'complete' || head === 'cancel' || head === 'decline') {
-    return { payerName: isDebit ? 'You' : 'Admerce Customer', payeeName: isDebit ? 'Admerce Service Provider' : 'You' };
-  }
-  return { payerName: isDebit ? 'You' : 'Admerce', payeeName: isDebit ? 'Admerce' : 'You' };
-}
-
-function CopyValue({
-  value,
-  label,
-  copied,
-  onCopy,
-  mono,
-}: {
+function CopyValue({ value, label, copied, onCopy, mono }: {
   value: string;
   label: string;
   copied: boolean;
@@ -177,11 +144,7 @@ function CopyValue({
         aria-label={`Copy ${label}`}
         title={copied ? 'Copied' : `Copy ${label}`}
       >
-        {copied ? (
-          <MdCheck size={16} color="var(--success-fg)" />
-        ) : (
-          <MdContentCopy size={14} color="var(--text-muted)" />
-        )}
+        {copied ? <MdCheck size={16} color="var(--success-fg)" /> : <MdContentCopy size={14} color="var(--text-muted)" />}
       </button>
     </div>
   );
@@ -193,7 +156,6 @@ function InstantReceiptContent() {
   const searchParams = useSearchParams();
 
   const txnId = params.txnId || 'Unknown';
-  const queryKind = (searchParams.get('kind') || 'item') as 'item' | 'service';
 
   const [txn, setTxn] = useState<TransactionResponse | null>(null);
   const [me, setMe] = useState<MeShape | null>(null);
@@ -210,24 +172,16 @@ function InstantReceiptContent() {
           api.getMyProfile(),
         ]);
         if (cancelled) return;
-
-        if (txnRes.status === 'fulfilled') {
-          setTxn(txnRes.value as TransactionResponse);
-        } else {
-          setLoadError('Could not load this receipt.');
-        }
-        if (meRes.status === 'fulfilled') {
-          setMe(meRes.value as MeShape);
-        }
+        if (txnRes.status === 'fulfilled') setTxn(txnRes.value as TransactionResponse);
+        else setLoadError('Could not load this receipt.');
+        if (meRes.status === 'fulfilled') setMe(meRes.value as MeShape);
       } catch {
         if (!cancelled) setLoadError('Could not load this receipt.');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [txnId]);
 
   const handleCopy = async (key: string, value: string) => {
@@ -235,9 +189,7 @@ function InstantReceiptContent() {
       await navigator.clipboard.writeText(value);
       setCopiedKey(key);
       setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   };
 
   const handlePrint = () => window.print();
@@ -251,17 +203,13 @@ function InstantReceiptContent() {
       try {
         await navigator.share({ title: 'Admerce Receipt', text: shareText, url: shareUrl });
         return;
-      } catch {
-        /* user cancelled */
-      }
+      } catch { /* cancelled */ }
     }
     try {
       await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
       setCopiedKey('share');
       setTimeout(() => setCopiedKey((k) => (k === 'share' ? null : k)), 1500);
-    } catch {
-      alert(shareUrl);
-    }
+    } catch { alert(shareUrl); }
   };
 
   if (loading) {
@@ -284,56 +232,84 @@ function InstantReceiptContent() {
           <p style={{ color: 'var(--text-tertiary)', marginTop: 6, textAlign: 'center', maxWidth: 320 }}>
             {loadError || 'This transaction does not exist or does not belong to your account.'}
           </p>
-          <button onClick={() => router.back()} style={s.backCta}>
-            Go back
-          </button>
+          <button onClick={() => router.back()} style={s.backCta}>Go back</button>
         </div>
       </main>
     );
   }
 
-  // ── Derive ─────────────────────────────────────────────────────
   const amount = txn.amount ?? 0;
   const description = txn.description || 'Wallet transaction';
   const reference = txn.reference || txnId;
   const createdAt = txn.created_at;
   const txnType = txnTypeLabel(txn.type, reference);
-
-  const kind: 'item' | 'service' = description.toLowerCase().includes('service')
-    ? 'service'
-    : queryKind;
-
   const isDebit = (txn.type || '').toLowerCase() === 'debit';
   const narrativeVerb = isDebit ? 'You paid' : 'You received';
 
-  const currentUserName = displayName(me);
-  const currentUserMask = me ? maskPhone(me.phone) || maskEmail(me.email) : '';
-  const currentUserRole = me?.role;
+  const currentRealName = fullName(me);
+  const currentRole = me?.role;
+  const currentMask = me ? maskPhone(me.phone) || maskEmail(me.email) : '';
+  const currentBusinessName = (me?.business_name || '').trim();
 
-  // Counterparty may or may not exist yet. Fall back to placeholder labels
-  // derived from the reference prefix.
   const cp = txn.counterparty || null;
-  const fallback = fallbackCounterparty(reference, isDebit, kind);
+  const cpRealName = cp?.display_name || '';
+  const cpStoreName = (cp?.store_name || '').trim();
+  const cpBusinessName = (cp?.business_name || '').trim();
+  const cpRole = cp?.role;
 
-  const payerName = isDebit
-    ? currentUserName
-    : cp?.display_name || fallback.payerName;
+  // "Stage name" = store name or business name when present; fallback to personal name
+  const stageNameFor = (role?: string, store?: string, business?: string, personal?: string): string => {
+    if (role === 'storekeeper' && store) return store;
+    if ((role === 'service_provider' || role === 'serviceprovider') && business) return business;
+    return personal || '';
+  };
 
-  const payeeName = !isDebit
-    ? currentUserName
-    : cp?.display_name || fallback.payeeName;
+  // The current user's "stage name" from their own profile
+  const currentStageName = (() => {
+    if (currentRole === 'storekeeper') return ''; // We don't fetch stores for the current user here.
+    if (currentRole === 'service_provider') return currentBusinessName || '';
+    return '';
+  })();
 
-  const payerSub = isDebit
-    ? currentUserMask || 'Admerce Wallet'
-    : cp?.role
-      ? roleLabel(cp.role, kind)
-      : roleLabel(undefined, kind);
+  // Build the four display values
+  const payerStage = isDebit
+    ? (currentStageName || currentRealName)
+    : (cp ? stageNameFor(cpRole, cpStoreName, cpBusinessName, cpRealName) : 'Admerce');
 
-  const payeeSub = !isDebit
-    ? currentUserMask || 'Admerce Wallet'
-    : cp?.role
-      ? roleLabel(cp.role, kind)
-      : roleLabel(undefined, kind);
+  const payerPersonal = isDebit ? currentRealName : cpRealName;
+  const payerRole = isDebit ? roleLabel(currentRole) : roleLabel(cpRole);
+
+  const payeeStage = !isDebit
+    ? (currentStageName || currentRealName)
+    : (cp ? stageNameFor(cpRole, cpStoreName, cpBusinessName, cpRealName) : 'Admerce');
+
+  const payeePersonal = !isDebit ? currentRealName : cpRealName;
+  const payeeRole = !isDebit ? roleLabel(currentRole) : roleLabel(cpRole);
+
+  // Fallback labels for single-sided transactions (topup, withdrawal)
+  const refHead = reference.split(/[_:-]/)[0];
+  const showFallback = !cp;
+  if (showFallback) {
+    if (refHead === 'topup') {
+      // payer is Paystack, payee is user
+    } else if (refHead === 'wdr') {
+      // payer is user, payee is external
+    }
+  }
+
+  const renderParty = (
+    stage: string,
+    personal: string,
+    role: string,
+  ) => (
+    <>
+      <div className="field-value">{stage || 'Admerce'}</div>
+      {personal && personal !== stage && (
+        <div className="field-sub">{personal}</div>
+      )}
+      {role && <div className="field-role">{role}</div>}
+    </>
+  );
 
   return (
     <main style={s.container}>
@@ -350,7 +326,6 @@ function InstantReceiptContent() {
 
       <div style={s.cardWrap}>
         <div className="receipt-card receipt-print-area">
-          {/* Top brand row */}
           <div className="receipt-brand">
             <div className="receipt-brand-left">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -360,7 +335,6 @@ function InstantReceiptContent() {
             <span className="receipt-brand-right">Transaction Receipt</span>
           </div>
 
-          {/* Narrative + amount */}
           <div className="receipt-narrative">{narrativeVerb}</div>
           <div className="receipt-amount-block">
             <div className="receipt-amount">{fmtMoney(amount)}</div>
@@ -368,16 +342,15 @@ function InstantReceiptContent() {
               <MdCheckCircle size={16} color="var(--success-fg)" />
               <span>{txn.status === 'completed' ? 'Successful' : txn.status || 'Paid'}</span>
             </div>
-            {payeeName && (
+            {payeeStage && (
               <div className="receipt-recipient">
-                {isDebit ? 'to' : 'from'} <strong>{isDebit ? payeeName : payerName}</strong>
+                {isDebit ? 'to' : 'from'} <strong>{isDebit ? payeeStage : payerStage}</strong>
               </div>
             )}
           </div>
 
           <div className="receipt-dotted" />
 
-          {/* Field list */}
           <div className="receipt-fields">
             <div className="field">
               <div className="field-label">Transaction Reference</div>
@@ -407,14 +380,12 @@ function InstantReceiptContent() {
 
             <div className="field">
               <div className="field-label">Paid By</div>
-              <div className="field-value">{payerName}</div>
-              {payerSub && <div className="field-sub">{payerSub}</div>}
+              {renderParty(payerStage, payerPersonal, payerRole)}
             </div>
 
             <div className="field">
               <div className="field-label">Paid To</div>
-              <div className="field-value">{payeeName}</div>
-              {payeeSub && <div className="field-sub">{payeeSub}</div>}
+              {renderParty(payeeStage, payeePersonal, payeeRole)}
             </div>
 
             <div className="field">
@@ -459,7 +430,6 @@ function InstantReceiptContent() {
             <span className="receipt-total-value">{fmtMoney(amount)}</span>
           </div>
 
-          {/* Action row */}
           <div className="receipt-actions no-print">
             <span className="action-status">
               <MdCheckCircle size={14} color="var(--success-fg)" />
@@ -475,14 +445,9 @@ function InstantReceiptContent() {
             </button>
           </div>
 
-          {/* Brand footer */}
           <div className="receipt-footer">
             <div className="footer-brand">Admerce</div>
-            <div className="footer-sub">
-              {kind === 'service'
-                ? 'Paid directly to provider'
-                : 'Thank you for your purchase'}
-            </div>
+            <div className="footer-sub">Thank you for using Admerce</div>
             <div className="footer-verify">
               Verify this receipt with the Transaction Reference above.
               <br />
@@ -490,7 +455,6 @@ function InstantReceiptContent() {
             </div>
           </div>
 
-          {/* Bottom brand watermark */}
           <div className="receipt-watermark">Admerce</div>
         </div>
       </div>
@@ -500,27 +464,16 @@ function InstantReceiptContent() {
 
 export default function InstantReceiptPage() {
   return (
-    <Suspense
-      fallback={
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '100vh',
-            color: 'var(--text-primary)',
-          }}
-        >
-          Loading…
-        </div>
-      }
-    >
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--text-primary)' }}>Loading…</div>}>
       <InstantReceiptContent />
     </Suspense>
   );
 }
 
 const RECEIPT_CSS = `
+  /* Prevent any horizontal scroll on the receipt page */
+  html, body { overflow-x: hidden !important; }
+
   .receipt-card {
     position: relative;
     overflow: hidden;
@@ -529,9 +482,12 @@ const RECEIPT_CSS = `
     padding: 22px 22px 0;
     border: 1px solid var(--border-default);
     box-shadow: var(--shadow-lg);
+    box-sizing: border-box;
+    max-width: 100%;
   }
+  .receipt-card > * { position: relative; z-index: 1; max-width: 100%; }
 
-  /* Logo watermark — repeated faintly behind content */
+  /* Logo watermark — clipped by overflow hidden above */
   .receipt-card::before {
     content: '';
     position: absolute;
@@ -544,7 +500,6 @@ const RECEIPT_CSS = `
     pointer-events: none;
     z-index: 0;
   }
-  .receipt-card > * { position: relative; z-index: 1; }
 
   .receipt-brand {
     display: flex;
@@ -552,17 +507,12 @@ const RECEIPT_CSS = `
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 22px;
+    min-width: 0;
   }
-  .receipt-brand-left { display: flex; align-items: center; gap: 8px; }
-  .receipt-brand-mark { width: 26px; height: 26px; object-fit: contain; display: block; }
-  .receipt-brand-name {
-    font-size: 17px; font-weight: 800;
-    color: var(--text-primary); letter-spacing: -0.01em;
-  }
-  .receipt-brand-right {
-    font-size: 12px; font-weight: 700;
-    color: var(--text-tertiary); letter-spacing: 0.2px;
-  }
+  .receipt-brand-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .receipt-brand-mark { width: 26px; height: 26px; object-fit: contain; display: block; flex-shrink: 0; }
+  .receipt-brand-name { font-size: 17px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em; }
+  .receipt-brand-right { font-size: 12px; font-weight: 700; color: var(--text-tertiary); letter-spacing: 0.2px; white-space: nowrap; }
 
   .receipt-narrative {
     font-size: 14px; font-weight: 600;
@@ -571,10 +521,11 @@ const RECEIPT_CSS = `
   }
   .receipt-amount-block { text-align: center; margin-bottom: 22px; }
   .receipt-amount {
-    font-size: 40px; font-weight: 800;
+    font-size: 36px; font-weight: 800;
     color: var(--brand-primary);
     letter-spacing: -1.2px; line-height: 1.05;
     font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
   }
   .receipt-status {
     display: inline-flex; align-items: center; gap: 6px;
@@ -584,6 +535,7 @@ const RECEIPT_CSS = `
   .receipt-recipient {
     margin-top: 8px;
     font-size: 13.5px; color: var(--text-secondary); font-weight: 600;
+    overflow-wrap: anywhere;
   }
   .receipt-recipient strong { color: var(--text-primary); font-weight: 800; }
 
@@ -599,7 +551,7 @@ const RECEIPT_CSS = `
   }
 
   .receipt-fields { display: flex; flex-direction: column; gap: 18px; }
-  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .field-label {
     font-size: 11px; font-weight: 800;
     letter-spacing: 0.8px; color: var(--text-muted);
@@ -608,17 +560,27 @@ const RECEIPT_CSS = `
   .field-value {
     font-size: 14.5px; font-weight: 700;
     color: var(--text-primary);
-    word-break: break-word; line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.4;
+    max-width: 100%;
   }
   .field-mono {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 13px; letter-spacing: -0.2px;
+    word-break: break-all;
   }
   .field-sub {
     font-size: 12.5px; color: var(--text-tertiary); font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .field-role {
+    font-size: 11px; color: var(--text-muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.6px; margin-top: 2px;
   }
   .field-value-row {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    min-width: 0;
   }
   .field-value-row .field-value { flex: 1; min-width: 0; }
   .field-copy {
@@ -642,6 +604,7 @@ const RECEIPT_CSS = `
     display: flex; justify-content: space-between; align-items: baseline;
     padding-top: 14px; margin-top: 18px;
     border-top: 1px solid var(--border-subtle);
+    gap: 12px;
   }
   .receipt-total-label {
     font-size: 14px; font-weight: 700; color: var(--text-secondary);
@@ -650,6 +613,7 @@ const RECEIPT_CSS = `
     font-size: 22px; font-weight: 800;
     color: var(--brand-primary);
     font-variant-numeric: tabular-nums; letter-spacing: -0.4px;
+    overflow-wrap: anywhere;
   }
 
   .receipt-actions {
@@ -670,7 +634,7 @@ const RECEIPT_CSS = `
     font-size: 13px; font-weight: 800;
     cursor: pointer; font-family: inherit; border: none;
     transition: opacity 0.15s, transform 0.1s;
-    flex: 1 1 auto; min-width: 120px;
+    flex: 1 1 120px; min-width: 0;
   }
   .action-btn:active { transform: scale(0.98); }
   .action-share {
@@ -689,15 +653,9 @@ const RECEIPT_CSS = `
     border-top: 1px dashed var(--border-default);
     text-align: center;
   }
-  .footer-brand {
-    font-size: 14px; font-weight: 800;
-    color: var(--brand-primary); letter-spacing: 0.4px;
-  }
+  .footer-brand { font-size: 14px; font-weight: 800; color: var(--brand-primary); letter-spacing: 0.4px; }
   .footer-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
-  .footer-verify {
-    font-size: 10.5px; color: var(--text-muted);
-    margin-top: 12px; line-height: 1.6;
-  }
+  .footer-verify { font-size: 10.5px; color: var(--text-muted); margin-top: 12px; line-height: 1.6; }
 
   .receipt-watermark {
     text-align: center;
@@ -707,12 +665,19 @@ const RECEIPT_CSS = `
     padding: 18px 0 14px;
     margin: 0 -22px;
     user-select: none; pointer-events: none;
+    overflow: hidden;
+  }
+
+  /* Mobile safety net */
+  @media (max-width: 480px) {
+    .receipt-amount { font-size: 32px; }
+    .receipt-total-value { font-size: 20px; }
   }
 `;
 
 const PRINT_CSS = `
   @media print {
-    html, body { background: #ffffff !important; color: #000000 !important; }
+    html, body { background: #ffffff !important; color: #000000 !important; overflow: visible !important; }
     body * { visibility: hidden !important; }
     .receipt-print-area, .receipt-print-area * { visibility: visible !important; }
     .receipt-print-area {
@@ -734,8 +699,7 @@ const PRINT_CSS = `
     .receipt-print-area .field-copy { display: none !important; }
     .receipt-print-area .receipt-dotted {
       background-image: linear-gradient(
-        to right,
-        #999 0, #999 4px, transparent 4px, transparent 10px
+        to right, #999 0, #999 4px, transparent 4px, transparent 10px
       ) !important;
     }
     .no-print { display: none !important; }
@@ -748,6 +712,9 @@ const s: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     minHeight: '100vh',
     backgroundColor: 'var(--bg-primary)',
+    overflowX: 'hidden',
+    width: '100%',
+    maxWidth: '100vw',
   },
   center: {
     flex: 1,
@@ -758,51 +725,38 @@ const s: Record<string, React.CSSProperties> = {
     padding: 24,
   },
   spinner: {
-    width: 40,
-    height: 40,
+    width: 40, height: 40,
     border: '4px solid var(--border-default)',
     borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   backCta: {
-    marginTop: 20,
-    padding: '12px 22px',
-    borderRadius: 12,
-    border: 'none',
+    marginTop: 20, padding: '12px 22px',
+    borderRadius: 12, border: 'none',
     background: 'var(--brand-gradient)',
     color: 'var(--brand-on-gradient)',
-    fontSize: 14,
-    fontWeight: 800,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
+    fontSize: 14, fontWeight: 800,
+    cursor: 'pointer', fontFamily: 'inherit',
   },
   header: {
-    display: 'flex',
-    alignItems: 'center',
+    display: 'flex', alignItems: 'center',
     padding: '14px 16px',
     backgroundColor: 'var(--bg-secondary)',
     borderBottom: '1px solid var(--border-default)',
   },
   backBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    marginRight: 12,
-    display: 'flex',
-    alignItems: 'center',
-    padding: 4,
+    background: 'none', border: 'none',
+    cursor: 'pointer', marginRight: 12,
+    display: 'flex', alignItems: 'center', padding: 4,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 700,
-    flex: 1,
-    color: 'var(--text-primary)',
-  },
+  title: { fontSize: 20, fontWeight: 700, flex: 1, color: 'var(--text-primary)' },
   cardWrap: {
     padding: 16,
     maxWidth: 540,
     width: '100%',
     margin: '0 auto',
+    boxSizing: 'border-box',
+    overflowX: 'hidden',
   },
 };

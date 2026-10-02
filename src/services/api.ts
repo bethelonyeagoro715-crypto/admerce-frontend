@@ -1749,6 +1749,29 @@ class ApiService {
   const res = await this.axios.get(`/wallet/transaction/${encodeURIComponent(reference)}`);
   return res.data;
 }
+
+public async getInstantTransactions(): Promise<{
+  pickups: JsonArray;
+  services: JsonArray;
+}> {
+  const res = await this.axios.get('/wallet/instant-transactions');
+  return {
+    pickups: Array.isArray(res.data?.pickups) ? res.data.pickups : [],
+    services: Array.isArray(res.data?.services) ? res.data.services : [],
+  };
+}
+
+  public async acceptServiceBooking(bookingId: string): Promise<JsonObject> {
+    const res = await this.axios.post(`/services/bookings/${bookingId}/accept`);
+    return res.data;
+  }
+
+  public async declineServiceBooking(bookingId: string, reason?: string): Promise<JsonObject> {
+    const res = await this.axios.post(`/services/bookings/${bookingId}/decline`, {
+      ...(reason ? { reason } : {}),
+    });
+    return res.data;
+  }
 }
 
 export default ApiService.getInstance();

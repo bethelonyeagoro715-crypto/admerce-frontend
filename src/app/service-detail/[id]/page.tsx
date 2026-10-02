@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import SatisfactionPrompt from '../../../components/SatisfactionPrompt';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../../services/api';
@@ -24,7 +25,6 @@ import {
   MdLink,
   MdFlag,
   MdStorefront,
-  MdCheckCircle,
 } from 'react-icons/md';
 
 const API_BASE =
@@ -90,6 +90,11 @@ interface HeartBurst {
   id: number;
   x: number;
   y: number;
+}
+
+interface PaidInfo {
+  amount: number;
+  txnId: string;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -164,6 +169,10 @@ export default function ServiceDetailPage() {
   const [showPickTime, setShowPickTime] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Payment + satisfaction
+  const [paidInfo, setPaidInfo] = useState<PaidInfo | null>(null);
+  const [satisfactionOpen, setSatisfactionOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
@@ -354,7 +363,7 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // ✅ CHANGED — route to instant receipt instead of opening a success card.
+  // ✅ Pay Now → API call → satisfaction prompt → receipt
   const handlePayNowClick = async () => {
     if (!service || isPaying) return;
     if (!service.provider_id) { alert('This service has no provider attached.'); return; }
@@ -371,22 +380,29 @@ export default function ServiceDetailPage() {
       const txnId = response?.transaction_id || reference;
       const paidAmount = Number(response?.amount ?? service.price);
 
-      const q = new URLSearchParams({
-        kind: 'service',
-        amount: String(paidAmount),
-        title: service.title,
-        counterparty: service.business_name || 'Provider',
-        created_at: new Date().toISOString(),
-      });
-
-      router.replace(`/receipt/instant/${encodeURIComponent(txnId)}?${q.toString()}`);
+      setPaidInfo({ amount: paidAmount, txnId });
+      setSatisfactionOpen(true);
     } catch (err: unknown) {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
         (err instanceof Error ? err.message : 'Payment failed');
       alert(detail);
+    } finally {
       setIsPaying(false);
     }
+  };
+
+  const handleSatisfactionDone = () => {
+    setSatisfactionOpen(false);
+    if (!paidInfo || !service) return;
+    const q = new URLSearchParams({
+      kind: 'service',
+      amount: String(paidInfo.amount),
+      title: service.title,
+      counterparty: service.business_name || 'Provider',
+      created_at: new Date().toISOString(),
+    });
+    router.replace(`/receipt/instant/${encodeURIComponent(paidInfo.txnId)}?${q.toString()}`);
   };
 
   if (loading) {
@@ -496,7 +512,7 @@ export default function ServiceDetailPage() {
               {muted ? <MdVolumeOff size={22} /> : <MdVolumeUp size={22} />}
             </button>
           )}
-          <button type="button" style={styles.railBtn} onClick={toggleSave} disabled={isSaveLoading} aria-label={isSaved ? 'Unsave' : 'Save'} title="Save (not yet wired to backend)">
+          <button type="button" style={styles.railBtn} onClick={toggleSave} disabled={isSaveLoading} aria-label={isSaved ? 'Unsave' : 'Save'}>
             {isSaved ? <MdFavorite size={22} /> : <MdFavoriteBorder size={22} />}
           </button>
           <button type="button" style={styles.railBtn} onClick={shareService} aria-label="Share">
@@ -683,10 +699,6 @@ export default function ServiceDetailPage() {
                     </div>
                   )}
                 </div>
-
-                <p style={styles.stubNote}>
-                  Save and share are not yet connected to the backend. They will reset on reload.
-                </p>
               </div>
             </motion.div>
           </>
@@ -699,6 +711,17 @@ export default function ServiceDetailPage() {
         onSelect={handlePickTime}
         mode="service"
       />
+
+      {/* ✅ Satisfaction prompt — fires after successful Pay Now */}
+      {satisfactionOpen && paidInfo && service && (
+        <SatisfactionPrompt
+          bookingId={`instant-${paidInfo.txnId}`}
+          serviceName={service.title}
+          providerName={service.business_name || 'Provider'}
+          onDone={handleSatisfactionDone}
+          onSkip={handleSatisfactionDone}
+        />
+      )}
     </main>
   );
 }
