@@ -6,14 +6,15 @@
  *   • Pure white text (no dimming)
  *
  * Light palette — Oct 2026 vivid pass
+ *   • Pure white page (--bg-primary = #FFFFFF, matches --bg-secondary)
  *   • Status fg at 600-tier (vivid), strong at 500-tier (saturated borders)
- *   • Contrast on pale tint ~3:1 — fine for chips, icons, badges, bold labels
+ *   • Cards separated by border + shadow only
  *   • Dark mode unchanged
  */
 
 :root {
   /* ── Surfaces ──────────────────────────────────────────────── */
-  --bg-primary: #F4F5FB;
+  --bg-primary: #FFFFFF;          /* pure white page */
   --bg-secondary: #FFFFFF;
   --bg-tertiary: #F8FAFC;
   --bg-elevated: #FFFFFF;
