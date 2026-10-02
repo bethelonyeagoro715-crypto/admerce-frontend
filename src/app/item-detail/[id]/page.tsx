@@ -24,6 +24,7 @@ import {
   MdErrorOutline,
   MdClose,
   MdRefresh,
+  MdVerified,
 } from 'react-icons/md';
 
 function LensIcon({
@@ -74,6 +75,7 @@ interface Store {
   longitude: number;
   rating?: number;
   reviews_count?: number;
+  verification_status?: string;
   [key: string]: unknown;
 }
 
@@ -295,8 +297,8 @@ export default function ItemDetailPage() {
   const stock = useMemo(() => deriveStock(rawStock), [rawStock]);
   const outOfStock = stock.known && stock.count === 0;
   const maxQty = stock.known ? stock.count : UNKNOWN_STOCK_MAX;
+  const isStoreVerified = store?.verification_status === 'verified';
 
-  // ✅ CHANGED — route to instant receipt on success
   const confirmInstantPickup = useCallback(async () => {
     if (!listing || !store) return;
     const total = listing.price * quantity;
@@ -322,7 +324,7 @@ export default function ItemDetailPage() {
         created_at: new Date().toISOString(),
       });
 
-            router.replace(`/receipt/instant/${txnId}?${q.toString()}`);
+      router.replace(`/receipt/instant/${txnId}?${q.toString()}`);
     } catch (err) {
       showToast('error', extractErrorDetail(err, 'Payment failed'));
       setIsLoading(false);
@@ -665,7 +667,17 @@ export default function ItemDetailPage() {
                     {storeImage ? <img src={storeImage} alt="" className="idt-avatarImg" /> : <span className="idt-avatarText">{store?.name?.charAt(0) ?? '?'}</span>}
                   </div>
                   <div className="idt-storeMeta">
-                    <div className="idt-storeName" title={store?.name}>{store?.name ?? 'Unknown Store'}</div>
+                    <div className="idt-storeName" title={store?.name}>
+                      <span className="idt-storeNameText">{store?.name ?? 'Unknown Store'}</span>
+                      {isStoreVerified && (
+                        <MdVerified
+                          size={14}
+                          className="idt-storeVerified"
+                          aria-label="Verified store"
+                          title="Verified store"
+                        />
+                      )}
+                    </div>
                     <div className="idt-storeRating">
                       {rating > 0 ? (
                         <>
@@ -852,7 +864,6 @@ export default function ItemDetailPage() {
   );
 }
 
-// CSS unchanged from source
 const CSS = `
   @keyframes idShimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
   @keyframes idToastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
@@ -897,7 +908,9 @@ const CSS = `
   .idt-avatarImg { width: 100%; height: 100%; object-fit: cover; }
   .idt-avatarText { color: var(--brand-on-soft); font-weight: 800; font-size: 18px; }
   .idt-storeMeta { flex: 1; min-width: 0; }
-  .idt-storeName { font-size: 14.5px; font-weight: 700; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .idt-storeName { display: flex; align-items: center; gap: 4px; font-size: 14.5px; font-weight: 700; color: var(--text-primary); min-width: 0; }
+  .idt-storeNameText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .idt-storeVerified { color: var(--brand-primary); flex: 0 0 auto; }
   .idt-storeRating { display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12.5px; color: var(--text-secondary); font-weight: 700; }
   .idt-storeReviews { color: var(--text-muted); font-weight: 500; }
   .idt-addressRow { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 14px; margin-bottom: 18px; transition: background-color 0.18s ease, border-color 0.18s ease; }

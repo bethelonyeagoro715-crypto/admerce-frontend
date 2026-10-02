@@ -13,6 +13,7 @@ import {
   MdRefresh,
   MdSearch,
   MdLocationOn,
+  MdVerified,
 } from 'react-icons/md';
 import api from '../../../services/api';
 
@@ -27,6 +28,7 @@ interface Store {
   store_image_url?: string;
   address?: string;
   category?: string[] | string;
+  verification_status?: string;
   [key: string]: unknown;
 }
 
@@ -52,11 +54,9 @@ function resolveMediaUrl(url: string | null | undefined): string {
   if (!url) return '';
   const trimmed = url.trim();
   if (!trimmed) return '';
-
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   if (/^blob:/i.test(trimmed)) return trimmed;
   if (/^\/\//.test(trimmed)) return `https:${trimmed}`;
-
   const base = API_BASE.replace(/\/+$/, '');
   if (trimmed.startsWith('/')) {
     return base ? `${base}${trimmed}` : trimmed;
@@ -103,9 +103,7 @@ function ItemCard({
 
   const handleOpen = () => onOpen(item.id);
 
-  const handleKeyDown = (
-    event: React.KeyboardEvent<HTMLDivElement>,
-  ) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       handleOpen();
@@ -225,10 +223,7 @@ export default function StoreDetailPage() {
         setIsFollowing(Boolean(followStatus));
 
         if (!Array.isArray(itemsData)) {
-          console.warn(
-            'Store items response is not an array:',
-            itemsData,
-          );
+          console.warn('Store items response is not an array:', itemsData);
           setItems([]);
           return;
         }
@@ -282,6 +277,8 @@ export default function StoreDetailPage() {
     () => (store ? normalizeCategories(store.category) : []),
     [store],
   );
+
+  const isVerified = store?.verification_status === 'verified';
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -446,6 +443,13 @@ export default function StoreDetailPage() {
 
         .sdp-heading { min-width: 0; flex: 1; }
 
+        .sdp-titleRow {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+        }
+
         .sdp-storeName {
           margin: 0;
           font-size: clamp(17px, 2.4vw, 21px);
@@ -455,6 +459,13 @@ export default function StoreDetailPage() {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          min-width: 0;
+        }
+
+        .sdp-verifiedBadge {
+          color: var(--brand-primary);
+          flex: 0 0 auto;
+          display: inline-flex;
         }
 
         .sdp-storeMeta {
@@ -549,6 +560,20 @@ export default function StoreDetailPage() {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+
+        .sdp-verifiedPill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 10px 3px 8px;
+          border-radius: 999px;
+          background: var(--sdp-primarySoft);
+          color: var(--sdp-primary);
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.02em;
+          align-self: flex-start;
         }
 
         .sdp-contentHeader {
@@ -899,7 +924,18 @@ export default function StoreDetailPage() {
           </button>
 
           <div className="sdp-heading">
-            <h1 className="sdp-storeName">{storeName}</h1>
+            <div className="sdp-titleRow">
+              <h1 className="sdp-storeName">{storeName}</h1>
+              {isVerified && (
+                <span
+                  className="sdp-verifiedBadge"
+                  title="Verified store"
+                  aria-label="Verified store"
+                >
+                  <MdVerified size={20} />
+                </span>
+              )}
+            </div>
             <p className="sdp-storeMeta">
               {loading ? 'Loading…' : itemCountLabel}
             </p>
@@ -908,14 +944,10 @@ export default function StoreDetailPage() {
           <div className="sdp-actions">
             <button
               type="button"
-              className={`sdp-iconButton${
-                isFollowing ? ' is-active' : ''
-              }`}
+              className={`sdp-iconButton${isFollowing ? ' is-active' : ''}`}
               onClick={toggleFollow}
               disabled={followLoading || loading || !store}
-              aria-label={
-                isFollowing ? 'Unfollow store' : 'Follow store'
-              }
+              aria-label={isFollowing ? 'Unfollow store' : 'Follow store'}
               title={isFollowing ? 'Unfollow' : 'Follow'}
             >
               {isFollowing ? (
@@ -951,6 +983,13 @@ export default function StoreDetailPage() {
             </div>
 
             <div className="sdp-infoText">
+              {isVerified && (
+                <span className="sdp-verifiedPill">
+                  <MdVerified size={13} />
+                  Verified store
+                </span>
+              )}
+
               {store?.address && (
                 <p className="sdp-infoAddress">
                   <MdLocationOn size={15} />

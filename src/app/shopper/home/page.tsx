@@ -15,6 +15,7 @@ import {
   MdExpandMore,
   MdClose,
   MdCheckCircle,
+  MdVerified,
 } from 'react-icons/md';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -192,6 +193,7 @@ interface RankedItem {
   title?: string;
   price?: number;
   store_name?: string;
+  store_verification_status?: string;
   category?: string | null;
   image_width?: number | null;
   image_height?: number | null;
@@ -202,6 +204,7 @@ interface StoreLocation {
   image_url?: string;
   lat: number;
   lng: number;
+  verification_status?: string;
   image_width?: number | null;
   image_height?: number | null;
 }
@@ -219,6 +222,9 @@ interface ServiceItem {
   username?: string;
   business_image_url?: string;
   avatar_url?: string;
+  verification_status?: string;
+  business_verification_status?: string;
+  provider_verification_status?: string;
 }
 
 type FeedKind = 'item' | 'service';
@@ -233,6 +239,7 @@ interface Item {
   storeName: string;
   category: string | null;
   aspect: number;
+  verified: boolean;
 }
 interface Store {
   id: string;
@@ -241,6 +248,7 @@ interface Store {
   lat: number;
   lng: number;
   aspect: number;
+  verified: boolean;
 }
 interface Provider {
   id: string;
@@ -248,6 +256,7 @@ interface Provider {
   image: string | null;
   serviceCount: number;
   aspect: number;
+  verified: boolean;
 }
 
 function MasonryColumns<T>({
@@ -444,7 +453,16 @@ function StoreSpotlight({
               <div className="sh-spotlight-eyebrow">
                 Featured store
               </div>
-              <div className="sh-spotlight-title">{current.name}</div>
+              <div className="sh-spotlight-title">
+                {current.name}
+                {current.verified && (
+                  <MdVerified
+                    size={18}
+                    className="sh-spotlight-verified"
+                    aria-label="Verified"
+                  />
+                )}
+              </div>
             </div>
             {withImages.length > 1 && (
               <div className="sh-spotlight-dots" aria-hidden="true">
@@ -489,6 +507,7 @@ function ReelCard({
   title,
   price,
   ariaLabel,
+  verified = false,
 }: {
   image: string | null;
   aspect: number;
@@ -501,6 +520,7 @@ function ReelCard({
   title: string;
   price?: string;
   ariaLabel?: string;
+  verified?: boolean;
 }) {
   return (
     <button
@@ -522,6 +542,12 @@ function ReelCard({
       <div style={{ ...styles.reelBadge, backgroundColor: badgeBg }}>
         {badge}
       </div>
+
+      {verified && (
+        <div style={styles.reelVerified} aria-label="Verified" title="Verified">
+          <MdVerified size={16} color="var(--brand-primary)" />
+        </div>
+      )}
 
       {onSearch && (
         <div
@@ -589,6 +615,7 @@ function ItemCard({
       store={item.storeName}
       title={item.title}
       price={item.price}
+      verified={item.verified}
     />
   );
 }
@@ -609,6 +636,7 @@ function StoreCard({
       badgeBg="rgba(5,4,170,0.9)"
       onPress={() => onPress(store.id)}
       title={store.name}
+      verified={store.verified}
     />
   );
 }
@@ -637,6 +665,7 @@ function ProviderCard({
       price={`${provider.serviceCount} service${
         provider.serviceCount > 1 ? 's' : ''
       }`}
+      verified={provider.verified}
     />
   );
 }
@@ -937,6 +966,7 @@ export default function ShopperHomePage() {
             storeName: item.store_name ?? 'Unknown',
             category: item.category ?? null,
             aspect,
+            verified: item.store_verification_status === 'verified',
           };
         });
 
@@ -981,6 +1011,7 @@ export default function ShopperHomePage() {
             lat: loc.lat,
             lng: loc.lng,
             aspect,
+            verified: loc.verification_status === 'verified',
           };
         }),
       );
@@ -1012,6 +1043,10 @@ export default function ShopperHomePage() {
             s.business_name ?? s.username ?? 'Service Provider',
           category: s.category ?? null,
           aspect: SERVICE_ASPECT,
+          verified:
+            s.verification_status === 'verified' ||
+            s.business_verification_status === 'verified' ||
+            s.provider_verification_status === 'verified',
         }));
       setServiceItems(svcItems);
 
@@ -1028,6 +1063,10 @@ export default function ShopperHomePage() {
               resolveImageUrl(s.avatar_url),
             serviceCount: 0,
             aspect: seededAspect(`provider-${s.provider_id}`),
+            verified:
+              s.verification_status === 'verified' ||
+              s.business_verification_status === 'verified' ||
+              s.provider_verification_status === 'verified',
           });
         }
         providerMap.get(s.provider_id)!.serviceCount += 1;
@@ -2031,6 +2070,23 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
     pointerEvents: 'none',
   },
+  reelVerified: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 26,
+    height: 26,
+    borderRadius: '50%',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.24)',
+    backdropFilter: 'blur(6px)',
+    WebkitBackdropFilter: 'blur(6px)',
+    pointerEvents: 'none',
+    zIndex: 2,
+  },
   reelSearch: {
     position: 'absolute',
     bottom: 12,
@@ -2425,6 +2481,11 @@ const CSS = `
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .sh-spotlight-verified {
+    color: #E8E8EC;
+    vertical-align: middle;
+    margin-left: 4px;
   }
   .sh-spotlight-dots {
     position: absolute;
