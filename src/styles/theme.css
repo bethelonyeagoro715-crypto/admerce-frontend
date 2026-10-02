@@ -5,11 +5,10 @@
  *   • Shining silver accent — gradient for fills, solid for text/icons
  *   • Pure white text (no dimming)
  *
- * Light palette — Oct 2026 vividness pass
- *   • Status fg moved from 800-tier → 700-tier (30% more saturated,
- *     contrast still ≥ 3.5:1 on the pale tint backgrounds)
- *   • Status strong moved from 600-tier → 500-tier (borders pop)
- *   • Dark mode unchanged — already vivid
+ * Light palette — Oct 2026 vivid pass
+ *   • Status fg at 600-tier (vivid), strong at 500-tier (saturated borders)
+ *   • Contrast on pale tint ~3:1 — fine for chips, icons, badges, bold labels
+ *   • Dark mode unchanged
  */
 
 :root {
@@ -44,29 +43,30 @@
   --brand-gradient: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
   --brand-on-gradient: #FFFFFF;
 
-  /* ── Status (vivid-tier: fg is 700, strong is 500, bg stays pale) ──
-   * Light-mode fg sits at 700-tier so it reads as a saturated signal
-   * (not a muted label) while keeping ≥ 3.5:1 on the tint bg for
-   * chips, icons, and bold status text.
+  /* ── Status — VIVID tier (600 fg / 500 strong) ─────────────────
+   * Light mode status text at 600-tier so it reads as a saturated
+   * signal, not a muted label. Chips and icons stay readable at
+   * ~3:1 contrast on their pale tint backgrounds. If a chip ever
+   * needs a WCAG-AA label, use solid-fill + white text instead.
    */
   --success-bg: #DCFCE7;
-  --success-fg: #15803D;         /* was #166534 — green-700 */
-  --success-strong: #22C55E;     /* was #16A34A — green-500 */
+  --success-fg: #16A34A;
+  --success-strong: #22C55E;
 
   --danger-bg: #FEE2E2;
-  --danger-fg: #B91C1C;          /* was #991B1B — red-700 */
-  --danger-strong: #EF4444;      /* was #DC2626 — red-500 */
+  --danger-fg: #DC2626;
+  --danger-strong: #EF4444;
 
   --warning-bg: #FEF3C7;
-  --warning-fg: #B45309;         /* was #92400E — amber-700 */
-  --warning-strong: #F59E0B;     /* was #D97706 — amber-500 */
+  --warning-fg: #D97706;
+  --warning-strong: #F59E0B;
 
   --info-bg: #E0F2FE;
-  --info-fg: #0369A1;            /* was #075985 — sky-700 */
-  --info-strong: #0EA5E9;        /* was #0891B2 — sky-500 */
+  --info-fg: #0284C7;
+  --info-strong: #0EA5E9;
 
   --purple-bg: #F3E8FF;
-  --purple-fg: #7E22CE;          /* was #6B21A8 — purple-700 */
+  --purple-fg: #9333EA;
 
   /* ── Shadows ───────────────────────────────────────────────── */
   --shadow-sm: 0 2px 6px rgba(15,23,42,0.03);
@@ -83,50 +83,33 @@
 
 [data-theme='dark'] {
   /* ── Surfaces — Spotify-exact charcoal ladder ──────────────── */
-  --bg-primary: #121212;          /* page — Spotify signature */
-  --bg-secondary: #181818;        /* cards, sidebar, bottom nav */
-  --bg-tertiary: #1F1F1F;         /* nested rows, muted zones */
-  --bg-elevated: #232323;         /* modals, popovers */
+  --bg-primary: #121212;
+  --bg-secondary: #181818;
+  --bg-tertiary: #1F1F1F;
+  --bg-elevated: #232323;
   --bg-hover: #232323;
   --bg-pressed: #2A2A2A;
   --bg-inverse: #FAFAFA;
 
   /* ── Text — pure white, no dimming ─────────────────────────── */
   --text-primary: #FFFFFF;
-  --text-secondary: #B3B3B3;      /* Spotify secondary */
+  --text-secondary: #B3B3B3;
   --text-tertiary: #8A8A8A;
   --text-muted: #6A6A6A;
   --text-inverse: #121212;
 
   /* ── Borders ───────────────────────────────────────────────── */
-  --border-default: #282828;      /* Spotify separator */
+  --border-default: #282828;
   --border-subtle: #1F1F1F;
   --border-strong: #3E3E3E;
 
-  /* ── Silver accent — the shining chrome ──────────────────────
-   *
-   * Silver on dark needs to *glow*, not sit flat. So the accent
-   * is a two-tier system:
-   *
-   *   1. --brand-primary: solid bright silver
-   *      → used for text, icons, borders, small accents
-   *      → #E8E8EC has ~13:1 contrast on #121212 — never dims
-   *
-   *   2. --brand-gradient: metal gradient
-   *      → used for CTA fills, active pill tabs, premium cards
-   *      → light source top-left → mid → shadow bottom-right
-   *      → text on top goes dark (#0A0A0A) — chrome look
-   *
-   * Silver carries a tiny cool-blue tint (R=G, B slightly higher)
-   * so it reads as "metal" not "grey". Without that tint, silver
-   * looks like disabled UI.
-   */
+  /* ── Silver accent — the shining chrome ────────────────────── */
   --brand-primary: #E8E8EC;
   --brand-hover: #F5F5F8;
   --brand-soft: rgba(232, 232, 236, 0.10);
   --brand-soft-strong: rgba(232, 232, 236, 0.18);
   --brand-on-soft: #FFFFFF;
-  --brand-on-primary: #0A0A0A;    /* dark text on solid silver */
+  --brand-on-primary: #0A0A0A;
   --brand-gradient: linear-gradient(
     135deg,
     #FFFFFF 0%,
@@ -136,8 +119,8 @@
   );
   --brand-on-gradient: #0A0A0A;
 
-  /* ── Status (translucent fills + brighter text) ────────────── */
-  --success-bg: rgba(30, 215, 96, 0.15);   /* Spotify green-adjacent */
+  /* ── Status (translucent fills + bright text) ──────────────── */
+  --success-bg: rgba(30, 215, 96, 0.15);
   --success-fg: #4ADE80;
   --success-strong: #22C55E;
 
@@ -156,11 +139,10 @@
   --purple-bg: rgba(168, 85, 247, 0.15);
   --purple-fg: #C084FC;
 
-  /* ── Shadows — deeper for charcoal ─────────────────────────── */
+  /* ── Shadows ───────────────────────────────────────────────── */
   --shadow-sm: 0 2px 6px rgba(0,0,0,0.50);
   --shadow-md: 0 10px 24px rgba(0,0,0,0.60);
   --shadow-lg: 0 20px 40px rgba(0,0,0,0.70);
-  /* Silver glow — subtle luminous halo on premium elements */
   --shadow-brand: 0 12px 32px rgba(232, 232, 236, 0.14);
 
   /* ── Overlays ──────────────────────────────────────────────── */
