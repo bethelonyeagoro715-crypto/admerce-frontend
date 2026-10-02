@@ -257,45 +257,39 @@ function InstantReceiptContent() {
   const cpBusinessName = (cp?.business_name || '').trim();
   const cpRole = cp?.role;
 
-  // "Stage name" = store name or business name when present; fallback to personal name
-  const stageNameFor = (role?: string, store?: string, business?: string, personal?: string): string => {
-    if (role === 'storekeeper' && store) return store;
-    if ((role === 'service_provider' || role === 'serviceprovider') && business) return business;
+  // "Stage name" = store name or business name when present; fallback to personal name.
+  // Do NOT gate on role — the DB stores empty-string roles for many storekeepers,
+  // so a role check silently fails and hides the store name.
+  const stageNameFor = (store?: string, business?: string, personal?: string): string => {
+    if (store) return store;
+    if (business) return business;
     return personal || '';
   };
 
-  // The current user's "stage name" from their own profile
+  // The current user's own "stage name" — we only have business_name from /auth/me,
+  // not the store name. Providers get business_name; storekeepers see their own
+  // personal name unless we later add a store lookup for the current user.
   const currentStageName = (() => {
-    if (currentRole === 'storekeeper') return ''; // We don't fetch stores for the current user here.
-    if (currentRole === 'service_provider') return currentBusinessName || '';
+    if (currentRole === 'service_provider' || currentRole === 'serviceprovider') {
+      return currentBusinessName || '';
+    }
     return '';
   })();
 
   // Build the four display values
   const payerStage = isDebit
     ? (currentStageName || currentRealName)
-    : (cp ? stageNameFor(cpRole, cpStoreName, cpBusinessName, cpRealName) : 'Admerce');
+    : (cp ? stageNameFor(cpStoreName, cpBusinessName, cpRealName) : 'Admerce');
 
   const payerPersonal = isDebit ? currentRealName : cpRealName;
   const payerRole = isDebit ? roleLabel(currentRole) : roleLabel(cpRole);
 
   const payeeStage = !isDebit
     ? (currentStageName || currentRealName)
-    : (cp ? stageNameFor(cpRole, cpStoreName, cpBusinessName, cpRealName) : 'Admerce');
+    : (cp ? stageNameFor(cpStoreName, cpBusinessName, cpRealName) : 'Admerce');
 
   const payeePersonal = !isDebit ? currentRealName : cpRealName;
   const payeeRole = !isDebit ? roleLabel(currentRole) : roleLabel(cpRole);
-
-  // Fallback labels for single-sided transactions (topup, withdrawal)
-  const refHead = reference.split(/[_:-]/)[0];
-  const showFallback = !cp;
-  if (showFallback) {
-    if (refHead === 'topup') {
-      // payer is Paystack, payee is user
-    } else if (refHead === 'wdr') {
-      // payer is user, payee is external
-    }
-  }
 
   const renderParty = (
     stage: string,

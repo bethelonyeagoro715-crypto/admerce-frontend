@@ -152,6 +152,77 @@ const styles: Record<string, React.CSSProperties> = {
   avatarText: { color: '#0504AA', fontWeight: 'bold', fontSize: 15 },
   providerName: { color: '#111827', flex: 1, fontWeight: 700, fontSize: 15 },
   chatButton: { width: 36, height: 36, borderRadius: '50%', backgroundColor: '#0504AA14', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  payConfirmOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 6000,
+    padding: 20,
+  },
+  payConfirmCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: '26px 22px',
+    maxWidth: 400,
+    width: '100%',
+    textAlign: 'center',
+    boxShadow: '0 24px 60px rgba(0,0,0,0.35)',
+  },
+  payConfirmIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    backgroundColor: '#0504AA14',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  payConfirmTitle: {
+    fontSize: 19,
+    fontWeight: 800,
+    color: '#111827',
+    margin: '0 0 8px',
+    letterSpacing: -0.2,
+  },
+  payConfirmBody: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 1.55,
+    margin: '0 0 22px',
+  },
+  payConfirmActions: {
+    display: 'flex',
+    gap: 10,
+  },
+  payConfirmCancel: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    border: '1px solid #E5E7EB',
+    backgroundColor: '#F9FAFB',
+    color: '#4B5563',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  payConfirmConfirm: {
+    flex: 2,
+    padding: 14,
+    borderRadius: 12,
+    border: 'none',
+    backgroundColor: '#16A34A',
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    boxShadow: '0 6px 20px rgba(22,163,74,0.35)',
+  },
 };
 
 export default function ServiceDetailPage() {
@@ -170,9 +241,9 @@ export default function ServiceDetailPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Payment + satisfaction
   const [paidInfo, setPaidInfo] = useState<PaidInfo | null>(null);
   const [satisfactionOpen, setSatisfactionOpen] = useState(false);
+  const [showPayConfirm, setShowPayConfirm] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
@@ -363,7 +434,6 @@ export default function ServiceDetailPage() {
     }
   };
 
-  // ✅ Pay Now → API call → satisfaction prompt → receipt
   const handlePayNowClick = async () => {
     if (!service || isPaying) return;
     if (!service.provider_id) { alert('This service has no provider attached.'); return; }
@@ -555,7 +625,7 @@ export default function ServiceDetailPage() {
             <button
               type="button"
               style={{ ...styles.ctaPayNow, ...(isPaying ? styles.ctaPayNowBusy : {}) }}
-              onClick={handlePayNowClick}
+              onClick={() => setShowPayConfirm(true)}
               disabled={isPaying}
             >
               <MdStorefront size={18} />
@@ -705,6 +775,48 @@ export default function ServiceDetailPage() {
         )}
       </AnimatePresence>
 
+      {/* Pay confirm modal — matches the item-detail "Are you at the store?" pattern */}
+      {showPayConfirm && service && (
+        <div
+          style={styles.payConfirmOverlay}
+          onClick={() => setShowPayConfirm(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div style={styles.payConfirmCard} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.payConfirmIcon}>
+              <MdStorefront size={28} color="#0504AA" />
+            </div>
+            <h3 style={styles.payConfirmTitle}>Confirm payment</h3>
+            <p style={styles.payConfirmBody}>
+              Pay <strong>{priceLabel}</strong> to <strong>{providerName}</strong>?
+              This is a direct payment — no booking will be created.
+            </p>
+            <div style={styles.payConfirmActions}>
+              <button
+                type="button"
+                style={styles.payConfirmCancel}
+                onClick={() => setShowPayConfirm(false)}
+                disabled={isPaying}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                style={styles.payConfirmConfirm}
+                onClick={() => {
+                  setShowPayConfirm(false);
+                  void handlePayNowClick();
+                }}
+                disabled={isPaying}
+              >
+                {isPaying ? 'Paying…' : `Pay ${priceLabel}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <PickTimeBottomSheet
         isOpen={showPickTime}
         onClose={() => setShowPickTime(false)}
@@ -712,7 +824,6 @@ export default function ServiceDetailPage() {
         mode="service"
       />
 
-      {/* ✅ Satisfaction prompt — fires after successful Pay Now */}
       {satisfactionOpen && paidInfo && service && (
         <SatisfactionPrompt
           bookingId={`instant-${paidInfo.txnId}`}
