@@ -14,8 +14,8 @@ export default function LegacyBookingReceiptRedirect() {
       router.replace('/shopper/saved?tab=Bookings');
       return;
     }
-    // Shopper's debit ref for a booking is `book:<bid>`
-    router.replace(`/receipt/instant/${encodeURIComponent(`book:${bid}`)}`);
+    // Raw reference with colon — do NOT encodeURIComponent, axios passes it through.
+        router.replace(`/receipt/instant/book:${bid}`);
   }, [params.bookingId, router, searchParams]);
 
   return (

@@ -472,7 +472,7 @@ export default function ServiceDetailPage() {
       counterparty: service.business_name || 'Provider',
       created_at: new Date().toISOString(),
     });
-    router.replace(`/receipt/instant/${encodeURIComponent(paidInfo.txnId)}?${q.toString()}`);
+        router.replace(`/receipt/instant/${paidInfo.txnId}?${q.toString()}`);
   };
 
   if (loading) {

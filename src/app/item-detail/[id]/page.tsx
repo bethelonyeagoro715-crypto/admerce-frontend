@@ -322,7 +322,7 @@ export default function ItemDetailPage() {
         created_at: new Date().toISOString(),
       });
 
-      router.replace(`/receipt/instant/${encodeURIComponent(txnId)}?${q.toString()}`);
+            router.replace(`/receipt/instant/${txnId}?${q.toString()}`);
     } catch (err) {
       showToast('error', extractErrorDetail(err, 'Payment failed'));
       setIsLoading(false);

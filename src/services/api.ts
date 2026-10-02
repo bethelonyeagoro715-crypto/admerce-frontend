@@ -1745,8 +1745,8 @@ class ApiService {
     return res.data;
   }
 
-  public async getWalletTransaction(reference: string): Promise<JsonObject> {
-  const res = await this.axios.get(`/wallet/transaction/${encodeURIComponent(reference)}`);
+public async getWalletTransaction(reference: string): Promise<JsonObject> {
+  const res = await this.axios.get(`/wallet/transaction/${reference}`);
   return res.data;
 }
 
