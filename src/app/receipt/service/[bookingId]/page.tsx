@@ -59,9 +59,11 @@ function fmtDateTime(iso: string | undefined | null): string {
 function statusLabel(status: string): string {
   const s = (status || '').toLowerCase();
   if (s === 'locked') return 'In Escrow';
+  if (s === 'accepted') return 'Accepted';
   if (s === 'completed') return 'Completed';
   if (s === 'pending') return 'Pending';
   if (s === 'cancelled') return 'Cancelled';
+  if (s === 'declined') return 'Declined';
   if (s === 'refunded') return 'Refunded';
   return status || 'Unknown';
 }
@@ -70,8 +72,10 @@ function statusColor(status: string): { bg: string; fg: string } {
   const s = (status || '').toLowerCase();
   if (s === 'completed') return { bg: 'var(--success-bg)', fg: 'var(--success-fg)' };
   if (s === 'locked')    return { bg: 'var(--warning-bg)', fg: 'var(--warning-fg)' };
+  if (s === 'accepted')  return { bg: 'var(--purple-bg)',  fg: 'var(--purple-fg)' };
   if (s === 'refunded')  return { bg: 'var(--info-bg)',    fg: 'var(--info-fg)' };
-  if (s === 'cancelled') return { bg: 'var(--danger-bg)',  fg: 'var(--danger-fg)' };
+  if (s === 'cancelled' || s === 'declined')
+    return { bg: 'var(--danger-bg)', fg: 'var(--danger-fg)' };
   return { bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)' };
 }
 
@@ -80,44 +84,29 @@ function ServiceReceiptContent() {
   const params = useParams<{ bookingId: string }>();
   const searchParams = useSearchParams();
 
-  const bookingId =
-    params.bookingId || searchParams.get('booking_id') || 'Unknown';
+  const bookingId = params.bookingId || searchParams.get('booking_id') || 'Unknown';
 
-  const [serviceName, setServiceName] = useState(
-    searchParams.get('service_name') || 'Service',
-  );
-  const [providerName, setProviderName] = useState(
-    searchParams.get('provider_name') || 'Provider',
-  );
-  const [customerName, setCustomerName] = useState(
-    searchParams.get('customer_name') || '',
-  );
+  const [serviceName, setServiceName] = useState(searchParams.get('service_name') || 'Service');
+  const [providerName, setProviderName] = useState(searchParams.get('provider_name') || 'Provider');
+  const [customerName, setCustomerName] = useState(searchParams.get('customer_name') || '');
   const [amount, setAmount] = useState<string>(searchParams.get('amount') || '0');
   const [status, setStatus] = useState<string>(searchParams.get('status') || '');
-  const [scheduledFor, setScheduledFor] = useState<string>(
-    searchParams.get('scheduled_for') || '',
-  );
-  const [createdAt, setCreatedAt] = useState<string>(
-    searchParams.get('created_at') || '',
-  );
+  const [scheduledFor, setScheduledFor] = useState<string>(searchParams.get('scheduled_for') || '');
+  const [createdAt, setCreatedAt] = useState<string>(searchParams.get('created_at') || '');
   const [notes, setNotes] = useState<string>('');
 
   const hasBookingId = Boolean(bookingId && bookingId !== 'Unknown');
   const [loading, setLoading] = useState(hasBookingId);
-  const [error, setError] = useState<string | null>(
-    hasBookingId ? null : 'Missing booking ID.',
-  );
+  const [error, setError] = useState<string | null>(hasBookingId ? null : 'Missing booking ID.');
 
   useEffect(() => {
     if (!bookingId || bookingId === 'Unknown') return;
     let cancelled = false;
-
     (async () => {
       setError(null);
       try {
         const data = (await api.getServiceBookingDetail(bookingId)) as BookingDetail;
         if (cancelled) return;
-
         setServiceName(data.service_title || data.title || 'Service');
         setProviderName(data.provider_name || 'Provider');
         setCustomerName(data.customer_name || '');
@@ -134,7 +123,6 @@ function ServiceReceiptContent() {
         if (!cancelled) setLoading(false);
       }
     })();
-
     return () => { cancelled = true; };
   }, [bookingId]);
 
@@ -142,20 +130,12 @@ function ServiceReceiptContent() {
 
   const handleShare = async () => {
     const shareText = `Admerce receipt for ${serviceName} — ${fmtMoney(amount)}`;
-    const shareUrl =
-      typeof window !== 'undefined' ? window.location.href : '';
-
+    const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
     if (navigator.share) {
       try {
-        await navigator.share({
-          title: 'Admerce Receipt',
-          text: shareText,
-          url: shareUrl,
-        });
+        await navigator.share({ title: 'Admerce Receipt', text: shareText, url: shareUrl });
         return;
-      } catch {
-        // Fall through to copy
-      }
+      } catch { /* fall through */ }
     }
     try {
       await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
@@ -165,11 +145,10 @@ function ServiceReceiptContent() {
     }
   };
 
-  const handleDownload = () => window.print();
-
   const sc = statusColor(status);
   const shortId = bookingId.slice(0, 8);
   const displayDate = scheduledFor || createdAt;
+  const receiptDate = fmtDateTime(createdAt) !== '—' ? fmtDateTime(createdAt) : fmtDateTime(new Date().toISOString());
 
   if (loading) {
     return (
@@ -184,70 +163,49 @@ function ServiceReceiptContent() {
     return (
       <main style={styles.centerScreen}>
         <MdErrorOutline size={56} color="var(--danger-fg)" />
-        <p style={{ marginTop: 12, color: 'var(--danger-fg)', textAlign: 'center' }}>
-          {error}
-        </p>
-        <button onClick={() => router.back()} style={styles.retryBtn}>
-          Go Back
-        </button>
+        <p style={{ marginTop: 12, color: 'var(--danger-fg)', textAlign: 'center' }}>{error}</p>
+        <button onClick={() => router.back()} style={styles.retryBtn}>Go Back</button>
       </main>
     );
   }
 
   return (
     <main style={styles.container}>
-      <div style={styles.header}>
+      <style>{PRINT_CSS}</style>
+
+      <div style={styles.header} className="no-print">
         <button onClick={() => router.back()} style={styles.backBtn} aria-label="Back">
           <MdArrowBack size={22} color="var(--text-primary)" />
         </button>
         <h1 style={styles.title}>Receipt</h1>
         <div style={styles.headerActions}>
-          <button onClick={handlePrint} style={styles.iconBtn} title="Print">
+          <button onClick={handlePrint} style={styles.iconBtn} title="Print" aria-label="Print">
             <MdPrint size={22} color="var(--text-primary)" />
           </button>
-          <button onClick={handleShare} style={styles.iconBtn} title="Share">
+          <button onClick={handleShare} style={styles.iconBtn} title="Share" aria-label="Share">
             <MdShare size={22} color="var(--text-primary)" />
           </button>
-          <button onClick={handleDownload} style={styles.iconBtn} title="Download PDF">
+          <button onClick={handlePrint} style={styles.iconBtn} title="Save as PDF" aria-label="Download PDF">
             <MdDownload size={22} color="var(--text-primary)" />
           </button>
         </div>
       </div>
 
       <div style={styles.cardWrapper}>
-        <div style={styles.receiptCard}>
+        <div style={styles.receiptCard} className="receipt-print-area">
           <div style={styles.cardHeader}>
             <div style={styles.iconWrapper}>
               <MdReceiptLong size={32} color="var(--brand-on-gradient)" />
             </div>
             <h2 style={styles.cardTitle}>Service Receipt</h2>
             <p style={styles.orderId}>Booking #{shortId}</p>
-            <p style={styles.dateTime}>
-              {new Date().toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}
-              {' · '}
-              {new Date().toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-              })}
-            </p>
+            <p style={styles.dateTime}>{receiptDate}</p>
           </div>
 
           {status && (
             <div style={styles.statusRow}>
-              <span
-                style={{
-                  ...styles.statusBadge,
-                  backgroundColor: sc.bg,
-                  color: sc.fg,
-                }}
-              >
-                {status === 'completed' && (
-                  <MdCheckCircle size={14} style={{ marginRight: 4 }} />
-                )}
+              <span style={{ ...styles.statusBadge, backgroundColor: sc.bg, color: sc.fg }}>
+                {status === 'completed' && <MdCheckCircle size={14} style={{ marginRight: 4 }} />}
                 {statusLabel(status)}
               </span>
             </div>
@@ -316,8 +274,6 @@ function ServiceReceiptContent() {
           </div>
         </div>
       </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </main>
   );
 }
@@ -336,6 +292,37 @@ export default function ServiceReceiptPage() {
     </Suspense>
   );
 }
+
+const PRINT_CSS = `
+  @media print {
+    html, body {
+      background: #ffffff !important;
+      color: #000000 !important;
+    }
+    body * { visibility: hidden !important; }
+    .receipt-print-area,
+    .receipt-print-area * { visibility: visible !important; }
+    .receipt-print-area {
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 20px !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      border: none !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+    }
+    .receipt-print-area * {
+      color: #000000 !important;
+      background-image: none !important;
+    }
+    .receipt-print-area [style*="background"] { background: #ffffff !important; }
+    .no-print { display: none !important; }
+  }
+`;
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -393,7 +380,7 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     color: 'var(--text-primary)',
   },
-  headerActions: { display: 'flex', gap: 8 },
+  headerActions: { display: 'flex', gap: 12 },
   iconBtn: {
     background: 'none',
     border: 'none',
@@ -404,7 +391,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardWrapper: {
     padding: 16,
-    maxWidth: 500,
+    maxWidth: 520,
     width: '100%',
     margin: '0 auto',
   },
@@ -446,10 +433,10 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-flex',
     alignItems: 'center',
     padding: '6px 14px',
-    borderRadius: 20,
-    fontSize: 13,
+    borderRadius: 999,
+    fontSize: 12.5,
     fontWeight: 700,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   infoSection: { padding: '4px 0' },
   infoRow: {
@@ -491,10 +478,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
   },
   amountValue: {
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: 800,
     color: 'var(--brand-primary)',
     fontVariantNumeric: 'tabular-nums',
+    letterSpacing: -0.5,
   },
   escrowNote: {
     marginTop: 8,
@@ -533,10 +521,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     fontWeight: 800,
     color: 'var(--brand-primary)',
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
   footerSub: {
-    fontSize: 10,
+    fontSize: 11,
     color: 'var(--text-muted)',
     marginTop: 2,
   },
