@@ -4,6 +4,12 @@
  *   • Spotify-grade charcoal (#121212 page, #181818 cards)
  *   • Shining silver accent — gradient for fills, solid for text/icons
  *   • Pure white text (no dimming)
+ *
+ * Light palette — Oct 2026 vividness pass
+ *   • Status fg moved from 800-tier → 700-tier (30% more saturated,
+ *     contrast still ≥ 3.5:1 on the pale tint backgrounds)
+ *   • Status strong moved from 600-tier → 500-tier (borders pop)
+ *   • Dark mode unchanged — already vivid
  */
 
 :root {
@@ -38,25 +44,29 @@
   --brand-gradient: linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%);
   --brand-on-gradient: #FFFFFF;
 
-  /* ── Status ────────────────────────────────────────────────── */
+  /* ── Status (vivid-tier: fg is 700, strong is 500, bg stays pale) ──
+   * Light-mode fg sits at 700-tier so it reads as a saturated signal
+   * (not a muted label) while keeping ≥ 3.5:1 on the tint bg for
+   * chips, icons, and bold status text.
+   */
   --success-bg: #DCFCE7;
-  --success-fg: #166534;
-  --success-strong: #16A34A;
+  --success-fg: #15803D;         /* was #166534 — green-700 */
+  --success-strong: #22C55E;     /* was #16A34A — green-500 */
 
   --danger-bg: #FEE2E2;
-  --danger-fg: #991B1B;
-  --danger-strong: #DC2626;
+  --danger-fg: #B91C1C;          /* was #991B1B — red-700 */
+  --danger-strong: #EF4444;      /* was #DC2626 — red-500 */
 
   --warning-bg: #FEF3C7;
-  --warning-fg: #92400E;
-  --warning-strong: #D97706;
+  --warning-fg: #B45309;         /* was #92400E — amber-700 */
+  --warning-strong: #F59E0B;     /* was #D97706 — amber-500 */
 
   --info-bg: #E0F2FE;
-  --info-fg: #075985;
-  --info-strong: #0891B2;
+  --info-fg: #0369A1;            /* was #075985 — sky-700 */
+  --info-strong: #0EA5E9;        /* was #0891B2 — sky-500 */
 
   --purple-bg: #F3E8FF;
-  --purple-fg: #6B21A8;
+  --purple-fg: #7E22CE;          /* was #6B21A8 — purple-700 */
 
   /* ── Shadows ───────────────────────────────────────────────── */
   --shadow-sm: 0 2px 6px rgba(15,23,42,0.03);
