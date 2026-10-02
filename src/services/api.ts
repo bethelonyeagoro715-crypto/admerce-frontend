@@ -1744,6 +1744,11 @@ class ApiService {
     const res = await this.axios.get('/community/stats', { params: { room } });
     return res.data;
   }
+
+  public async getWalletTransaction(reference: string): Promise<JsonObject> {
+  const res = await this.axios.get(`/wallet/transaction/${encodeURIComponent(reference)}`);
+  return res.data;
+}
 }
 
 export default ApiService.getInstance();
