@@ -12,7 +12,7 @@ import {
   MdContentCopy,
   MdCheck,
 } from 'react-icons/md';
-import api from '../../../services/api';
+import api from '../../../../services/api';
 
 export const dynamic = 'force-dynamic';
 
