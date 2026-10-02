@@ -22,7 +22,6 @@ import {
 } from 'react-icons/md';
 import api, { extractErrorDetail } from '../../services/api';
 
-// ─── Types ────────────────────────────────────────────────────────
 interface BookingDetail {
   booking_id?: string;
   service_id?: string;
@@ -46,7 +45,6 @@ interface Toast {
   text: string;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────
 function fmtDateTime(iso: string | undefined | null): string {
   if (!iso) return 'Not specified';
   try {
@@ -67,13 +65,11 @@ function shortId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 8)}…` : id;
 }
 
-// Conversation ID convention — matches item-detail and chat pages.
 function buildConversationId(myUserId: string, otherUserId: string): string {
   const pair = [myUserId || 'me', otherUserId].sort();
   return `${pair[0]}_${pair[1]}`;
 }
 
-// ─── Ambient background ───────────────────────────────────────────
 function AmbientBackground() {
   return (
     <div style={styles.bgWrap} aria-hidden>
@@ -84,7 +80,6 @@ function AmbientBackground() {
   );
 }
 
-// ─── Confetti ─────────────────────────────────────────────────────
 function ConfettiBurst({ active }: { active: boolean }) {
   if (!active) return null;
   const pieces = Array.from({ length: 16 });
@@ -118,7 +113,6 @@ function ConfettiBurst({ active }: { active: boolean }) {
   );
 }
 
-// ─── Detail row ───────────────────────────────────────────────────
 function DetailRow({
   icon,
   label,
@@ -155,7 +149,6 @@ function Divider() {
   return <div style={styles.divider} />;
 }
 
-// ─── Page content ─────────────────────────────────────────────────
 function BookingConfirmedContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -216,7 +209,6 @@ function BookingConfirmedContent() {
     [],
   );
 
-  // ── Enrichment ──
   useEffect(() => {
     if (!bookingIdFromUrl) return;
 
@@ -259,7 +251,6 @@ function BookingConfirmedContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingIdFromUrl]);
 
-  // ── Receipt navigation ──
   const goToReceipt = useCallback(
     (overrideStatus?: string) => {
       if (!bookingId) {
@@ -294,7 +285,6 @@ function BookingConfirmedContent() {
     goToReceipt();
   }, [goToReceipt]);
 
-  // ── Job Done ──
   const handleJobDone = useCallback(async () => {
     if (!bookingId) {
       pushToast('error', 'Booking ID missing');
@@ -325,7 +315,6 @@ function BookingConfirmedContent() {
     }
   }, [bookingId, goToReceipt, pushToast]);
 
-  // ── Cancel booking ──
   const handleCancel = useCallback(async () => {
     if (!bookingId) {
       pushToast('error', 'Booking ID missing');
@@ -350,7 +339,6 @@ function BookingConfirmedContent() {
     }
   }, [bookingId, router, pushToast]);
 
-  // ── Message the other party ──
   const handleMessageAboutBooking = useCallback(async () => {
     if (openingChat) return;
     if (!bookingId) {
@@ -443,7 +431,6 @@ function BookingConfirmedContent() {
   const isCompleted = status === 'completed' || justCompleted;
   const isCancelled = status === 'cancelled';
 
-  // ── Loading ──
   if (enriching) {
     return (
       <main style={styles.container}>
@@ -455,7 +442,6 @@ function BookingConfirmedContent() {
     );
   }
 
-  // ── Hard error ──
   if (enrichError && !bookingId) {
     return (
       <main style={styles.container}>
@@ -474,11 +460,25 @@ function BookingConfirmedContent() {
     );
   }
 
+  // Status color drives the dot on the chip. The chip surface itself
+  // stays neutral (card bg + border) so the page doesn't read as
+  // "tinted by status" — only the dot carries the semantic color.
+  const statusDotColor = isCompleted
+    ? 'var(--success-fg)'
+    : isCancelled
+      ? 'var(--text-tertiary)'
+      : 'var(--warning-fg)';
+
+  const statusLabel = isCompleted
+    ? 'Completed'
+    : isCancelled
+      ? 'Cancelled'
+      : 'Confirmed';
+
   return (
     <main style={styles.container}>
       <AmbientBackground />
 
-      {/* Toasts */}
       <div style={styles.toastStack}>
         {toasts.map((t) => (
           <button
@@ -501,7 +501,7 @@ function BookingConfirmedContent() {
       </div>
 
       <div style={styles.content}>
-        {/* ── Hero ── */}
+        {/* Hero */}
         <div style={styles.heroWrap}>
           <ConfettiBurst active={justCompleted} />
 
@@ -543,7 +543,6 @@ function BookingConfirmedContent() {
           </motion.div>
         </div>
 
-        {/* ── Headline ── */}
         <motion.h1
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -572,54 +571,22 @@ function BookingConfirmedContent() {
                 : 'Your service has been booked successfully.'}
         </motion.p>
 
-        {/* ── Status chip ── */}
+        {/* Status chip — neutral pill + colored dot + neutral text.
+            The dot carries the signal, the label stays readable. */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.32 }}
-          style={{
-            ...styles.statusChip,
-            backgroundColor: isCompleted
-              ? 'var(--success-bg)'
-              : isCancelled
-                ? 'var(--bg-tertiary)'
-                : 'var(--warning-bg)',
-            borderColor: isCompleted
-              ? 'var(--success-strong)'
-              : isCancelled
-                ? 'var(--border-strong)'
-                : 'var(--warning-strong)',
-          }}
+          style={styles.statusChip}
         >
           <span
             className="bc-status-dot"
-            style={{
-              backgroundColor: isCompleted
-                ? 'var(--success-fg)'
-                : isCancelled
-                  ? 'var(--text-tertiary)'
-                  : 'var(--warning-fg)',
-            }}
+            style={{ backgroundColor: statusDotColor }}
           />
-          <span
-            style={{
-              ...styles.statusChipText,
-              color: isCompleted
-                ? 'var(--success-fg)'
-                : isCancelled
-                  ? 'var(--text-secondary)'
-                  : 'var(--warning-fg)',
-            }}
-          >
-            {isCompleted
-              ? 'Completed'
-              : isCancelled
-                ? 'Cancelled'
-                : 'Confirmed'}
-          </span>
+          <span style={styles.statusChipText}>{statusLabel}</span>
         </motion.div>
 
-        {/* ── Detail card ── */}
+        {/* Detail card */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -685,7 +652,7 @@ function BookingConfirmedContent() {
           )}
         </motion.div>
 
-        {/* ── Actions ── */}
+        {/* Actions */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -720,24 +687,20 @@ function BookingConfirmedContent() {
                 className="bc-primary"
                 style={{
                   ...styles.primaryBtn,
-                  background: completing
-                    ? 'var(--text-muted)'
-                    : 'var(--success-fg)',
-                  boxShadow: completing ? 'none' : 'var(--shadow-md)',
+                  opacity: completing ? 0.7 : 1,
                   cursor: completing ? 'not-allowed' : 'pointer',
                 }}
               >
                 {completing ? (
                   <span style={styles.inlineSpinner} />
                 ) : (
-                  <MdWork size={20} color="var(--brand-on-primary)" />
+                  <MdWork size={20} color="var(--brand-on-gradient)" />
                 )}
                 <span>{completing ? 'Completing…' : 'Job Done'}</span>
               </button>
             )
           )}
 
-          {/* Secondary actions */}
           {!isCancelled && (
             <div style={styles.secondaryRow}>
               <button
@@ -759,7 +722,6 @@ function BookingConfirmedContent() {
             </div>
           )}
 
-          {/* Message — routes directly to chat with the other party */}
           {bookingId && !isCancelled && (
             <button
               onClick={handleMessageAboutBooking}
@@ -783,7 +745,6 @@ function BookingConfirmedContent() {
           )}
         </motion.div>
 
-        {/* Footer note */}
         <p style={styles.footerNote}>
           {isCancelled
             ? 'You can book again anytime from this provider\u2019s page.'
@@ -792,7 +753,6 @@ function BookingConfirmedContent() {
               : 'You\u2019ll be able to view the receipt once the job is complete.'}
         </p>
 
-        {/* Cancel link */}
         {!isCompleted && !isCancelled && bookingId && (
           <button
             onClick={() => setShowCancelModal(true)}
@@ -805,7 +765,6 @@ function BookingConfirmedContent() {
         )}
       </div>
 
-      {/* ── Cancel confirmation modal ── */}
       <AnimatePresence>
         {showCancelModal && (
           <motion.div
@@ -898,7 +857,6 @@ export default function BookingConfirmedPage() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     position: 'relative',
@@ -964,7 +922,6 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'bcSpin 0.7s linear infinite',
     marginRight: 8,
   },
-
   heroWrap: {
     position: 'relative',
     width: 120,
@@ -1002,7 +959,6 @@ const styles: Record<string, React.CSSProperties> = {
     pointerEvents: 'none',
     zIndex: 3,
   },
-
   heading: {
     fontSize: 30,
     fontWeight: 800,
@@ -1019,23 +975,27 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
     maxWidth: 340,
   },
-
+  // Neutral pill: white in light, elevated in dark. Colored dot
+  // inside carries the semantic status. Border keeps the pill
+  // distinct from the page bg.
   statusChip: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 8,
     padding: '6px 14px',
     borderRadius: 999,
-    border: '1px solid',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     marginTop: 18,
+    boxShadow: 'var(--shadow-sm)',
   },
   statusChipText: {
     fontSize: 12,
-    fontWeight: 800,
+    fontWeight: 700,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    color: 'var(--text-secondary)',
   },
-
   card: {
     width: '100%',
     marginTop: 24,
@@ -1113,7 +1073,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--brand-primary)',
     letterSpacing: 0.2,
   },
-
   actions: {
     width: '100%',
     marginTop: 24,
@@ -1121,6 +1080,8 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 12,
   },
+  // Always brand. Green belongs on the *result* (the "Completed" hero
+  // that appears after Job Done succeeds), not on the action itself.
   primaryBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -1187,7 +1148,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
   },
-
   cancelLink: {
     marginTop: 20,
     background: 'none',
@@ -1201,7 +1161,6 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '6px 10px',
     fontFamily: 'inherit',
   },
-
   errorHalo: {
     width: 84,
     height: 84,
@@ -1237,7 +1196,6 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 320,
     lineHeight: 1.55,
   },
-
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -1323,7 +1281,6 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
-
   toastStack: {
     position: 'fixed',
     top: 14,
@@ -1364,7 +1321,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-// ─── Global CSS ────────────────────────────────────────────────────
 const GLOBAL_CSS = `
   .bc-grid {
     position: absolute;
