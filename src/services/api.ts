@@ -1761,6 +1761,7 @@ public async getInstantTransactions(): Promise<{
   };
 }
 
+
   public async acceptServiceBooking(bookingId: string): Promise<JsonObject> {
     const res = await this.axios.post(`/services/bookings/${bookingId}/accept`);
     return res.data;
@@ -1770,6 +1771,18 @@ public async getInstantTransactions(): Promise<{
     const res = await this.axios.post(`/services/bookings/${bookingId}/decline`, {
       ...(reason ? { reason } : {}),
     });
+    return res.data;
+  }
+
+  // GET a single listing for editing (owner-only on backend)
+  public async getStorekeeperListing(listingId: string): Promise<JsonObject> {
+    const res = await this.axios.get(`/storekeeper/listing/${listingId}`);
+    return res.data;
+  }
+
+  // Update a listing. Multipart FormData; do NOT set Content-Type manually.
+  public async updateStorekeeperListing(listingId: string, formData: FormData): Promise<JsonObject> {
+    const res = await this.axios.put(`/storekeeper/listing/${listingId}`, formData);
     return res.data;
   }
 }
