@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import api from '../../services/api';
 import {
-  MdStorefront,
   MdLocationOn,
   MdFavoriteBorder,
   MdChatBubbleOutline,
@@ -13,14 +12,21 @@ import {
 import type { IconType } from 'react-icons';
 
 // ─── Nav entries (shared by rail and bottom nav) ────────────────────
-type NavEntry = { Icon: IconType; label: string; path: string };
+type NavEntry =
+  | { kind: 'icon'; Icon: IconType; label: string; path: string }
+  | { kind: 'symbol'; symbolSrc: string; label: string; path: string };
 
 const NAV_ENTRIES: NavEntry[] = [
-  { Icon: MdStorefront,           label: 'Home',   path: '/shopper/home'   },
-  { Icon: MdLocationOn,           label: 'Map',    path: '/shopper/map'    },
-  { Icon: MdFavoriteBorder,       label: 'Saved',  path: '/shopper/saved'  },
-  { Icon: MdChatBubbleOutline,    label: 'Inbox',  path: '/shopper/inbox'  },
-  { Icon: MdAccountBalanceWallet, label: 'Wallet', path: '/shopper/wallet' },
+  {
+    kind: 'symbol',
+    symbolSrc: '/admerce_symbol.png',
+    label: 'Home',
+    path: '/shopper/home',
+  },
+  { kind: 'icon', Icon: MdLocationOn,           label: 'Map',    path: '/shopper/map'    },
+  { kind: 'icon', Icon: MdFavoriteBorder,       label: 'Saved',  path: '/shopper/saved'  },
+  { kind: 'icon', Icon: MdChatBubbleOutline,    label: 'Inbox',  path: '/shopper/inbox'  },
+  { kind: 'icon', Icon: MdAccountBalanceWallet, label: 'Wallet', path: '/shopper/wallet' },
 ];
 
 const PROFILE_PATH = '/shopper/profile';
@@ -69,6 +75,32 @@ function UserAvatar({
         <span style={{ fontWeight: 800 }}>{initials}</span>
       )}
     </div>
+  );
+}
+
+function NavGlyph({
+  entry,
+  active,
+  size = 22,
+}: {
+  entry: NavEntry;
+  active: boolean;
+  size?: number;
+}) {
+  if (entry.kind === 'icon') {
+    return <entry.Icon size={size} />;
+  }
+  // Brand symbol: raster, can't inherit color. Active state is carried
+  // by opacity. Rendered slightly larger to compensate for the
+  // transparent padding baked into the 500×500 source.
+  return (
+    <img
+      src={entry.symbolSrc}
+      alt=""
+      width={size + 4}
+      height={size + 4}
+      className={active ? 'shl-symbol shl-symbol-active' : 'shl-symbol'}
+    />
   );
 }
 
@@ -128,7 +160,7 @@ export default function ShopperLayout({
                 aria-current={active ? 'page' : undefined}
                 title={entry.label}
               >
-                <entry.Icon size={22} />
+                <NavGlyph entry={entry} active={active} size={22} />
                 <span className="shl-rail-label">{entry.label}</span>
               </button>
             );
@@ -173,7 +205,7 @@ export default function ShopperLayout({
               className={active ? 'shl-tab shl-tab-active' : 'shl-tab'}
               aria-current={active ? 'page' : undefined}
             >
-              <entry.Icon size={22} />
+              <NavGlyph entry={entry} active={active} size={22} />
               <span className="shl-tab-label">{entry.label}</span>
             </button>
           );
@@ -221,6 +253,17 @@ const CSS = `
     transition: padding 0.18s ease;
   }
 
+  /* ── Brand symbol glyph ──────────────────────────────── */
+  .shl-symbol {
+    display: block;
+    object-fit: contain;
+    opacity: 0.55;
+    transition: opacity 0.15s ease;
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+  .shl-symbol-active { opacity: 1; }
+
   /* ── Desktop side rail (hidden by default) ───────────── */
   .shl-rail {
     display: none;
@@ -264,11 +307,16 @@ const CSS = `
     background: var(--bg-hover);
     color: var(--text-primary);
   }
+  .shl-rail-item:hover .shl-symbol { opacity: 0.8; }
   .shl-rail-item:active { transform: scale(0.97); }
   .shl-rail-item-active,
   .shl-rail-item-active:hover {
     background: var(--brand-soft);
     color: var(--brand-primary);
+  }
+  .shl-rail-item-active .shl-symbol,
+  .shl-rail-item-active:hover .shl-symbol {
+    opacity: 1;
   }
   .shl-rail-item:focus-visible {
     outline: 2px solid var(--brand-primary);
@@ -316,6 +364,7 @@ const CSS = `
     transition: color 0.15s;
   }
   .shl-tab-active { color: var(--brand-primary); }
+  .shl-tab-active .shl-symbol { opacity: 1; }
   .shl-tab-label {
     font-size: 10px;
     font-weight: 400;
