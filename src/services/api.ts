@@ -1745,23 +1745,24 @@ class ApiService {
     return res.data;
   }
 
-public async getWalletTransaction(reference: string): Promise<JsonObject> {
-  const res = await this.axios.get(`/wallet/transaction/${reference}`);
-  return res.data;
-}
+  // ======================== WALLET — INSTANT / RECEIPT ========================
+  public async getWalletTransaction(reference: string): Promise<JsonObject> {
+    const res = await this.axios.get(`/wallet/transaction/${reference}`);
+    return res.data;
+  }
 
-public async getInstantTransactions(): Promise<{
-  pickups: JsonArray;
-  services: JsonArray;
-}> {
-  const res = await this.axios.get('/wallet/instant-transactions');
-  return {
-    pickups: Array.isArray(res.data?.pickups) ? res.data.pickups : [],
-    services: Array.isArray(res.data?.services) ? res.data.services : [],
-  };
-}
+  public async getInstantTransactions(): Promise<{
+    pickups: JsonArray;
+    services: JsonArray;
+  }> {
+    const res = await this.axios.get('/wallet/instant-transactions');
+    return {
+      pickups: Array.isArray(res.data?.pickups) ? res.data.pickups : [],
+      services: Array.isArray(res.data?.services) ? res.data.services : [],
+    };
+  }
 
-
+  // ======================== SERVICE BOOKINGS — PROVIDER SIDE ========================
   public async acceptServiceBooking(bookingId: string): Promise<JsonObject> {
     const res = await this.axios.post(`/services/bookings/${bookingId}/accept`);
     return res.data;
@@ -1774,6 +1775,7 @@ public async getInstantTransactions(): Promise<{
     return res.data;
   }
 
+  // ======================== STOREKEEPER LISTING EDIT ========================
   // GET a single listing for editing (owner-only on backend)
   public async getStorekeeperListing(listingId: string): Promise<JsonObject> {
     const res = await this.axios.get(`/storekeeper/listing/${listingId}`);
