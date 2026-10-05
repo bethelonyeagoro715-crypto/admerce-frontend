@@ -9,7 +9,6 @@ import {
   MdArrowBack,
   MdImage,
   MdErrorOutline,
-  MdRefresh,
   MdPhotoLibrary,
   MdClose,
 } from 'react-icons/md';
@@ -26,10 +25,6 @@ interface Listing {
   category?: string | null;
   [key: string]: unknown;
 }
-
-type ListingApi = {
-  updateListing: (listingId: string, formData: FormData) => Promise<unknown>;
-};
 
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -96,7 +91,7 @@ export default function EditItemPage() {
 
     (async () => {
       try {
-        const data = (await api.getListing(listingId)) as Listing;
+        const data = (await api.getStorekeeperListing(listingId)) as Listing;
         if (!isMountedRef.current) return;
         setTitle(data.title || '');
         setDescription(data.description || '');
@@ -183,7 +178,7 @@ export default function EditItemPage() {
 
     setSaving(true);
     try {
-      await (api as unknown as ListingApi).updateListing(listingId, fd);
+      await api.updateStorekeeperListing(listingId, fd);
       if (isMountedRef.current) router.back();
     } catch (err) {
       await alertDialog({
