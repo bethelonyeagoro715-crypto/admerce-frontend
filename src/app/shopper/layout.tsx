@@ -90,16 +90,22 @@ function NavGlyph({
   if (entry.kind === 'icon') {
     return <entry.Icon size={size} />;
   }
-  // Brand symbol: raster, can't inherit color. Active state is carried
-  // by opacity. Rendered slightly larger to compensate for the
-  // transparent padding baked into the 500×500 source.
+  // Brand symbol is treated as a mask, not an image, so it inherits the
+  // button's `color` exactly like the react-icons do. The PNG's alpha
+  // channel becomes the stencil; `currentColor` paints it.
+  // Rendered slightly larger to compensate for the transparent padding
+  // baked into the 500×500 source.
   return (
-    <img
-      src={entry.symbolSrc}
-      alt=""
-      width={size + 4}
-      height={size + 4}
-      className={active ? 'shl-symbol shl-symbol-active' : 'shl-symbol'}
+    <span
+      aria-hidden="true"
+      data-active={active}
+      className="shl-symbol"
+      style={{
+        width: size + 4,
+        height: size + 4,
+        display: 'block',
+        // The mask URL is set in CSS so the asset path stays in one place.
+      }}
     />
   );
 }
@@ -253,16 +259,23 @@ const CSS = `
     transition: padding 0.18s ease;
   }
 
-  /* ── Brand symbol glyph ──────────────────────────────── */
+  /* ── Brand symbol glyph ──────────────────────────────────
+     Rendered as a mask so it inherits currentColor exactly like
+     the react-icons. The PNG's alpha channel is the stencil;
+     background-color paints the visible pixels. */
   .shl-symbol {
-    display: block;
-    object-fit: contain;
-    opacity: 0.55;
-    transition: opacity 0.15s ease;
+    background-color: currentColor;
+    -webkit-mask-image: url('/admerce_symbol.png');
+    mask-image: url('/admerce_symbol.png');
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
     -webkit-user-drag: none;
     user-select: none;
   }
-  .shl-symbol-active { opacity: 1; }
 
   /* ── Desktop side rail (hidden by default) ───────────── */
   .shl-rail {
@@ -307,16 +320,11 @@ const CSS = `
     background: var(--bg-hover);
     color: var(--text-primary);
   }
-  .shl-rail-item:hover .shl-symbol { opacity: 0.8; }
   .shl-rail-item:active { transform: scale(0.97); }
   .shl-rail-item-active,
   .shl-rail-item-active:hover {
     background: var(--brand-soft);
     color: var(--brand-primary);
-  }
-  .shl-rail-item-active .shl-symbol,
-  .shl-rail-item-active:hover .shl-symbol {
-    opacity: 1;
   }
   .shl-rail-item:focus-visible {
     outline: 2px solid var(--brand-primary);
@@ -364,7 +372,6 @@ const CSS = `
     transition: color 0.15s;
   }
   .shl-tab-active { color: var(--brand-primary); }
-  .shl-tab-active .shl-symbol { opacity: 1; }
   .shl-tab-label {
     font-size: 10px;
     font-weight: 400;
