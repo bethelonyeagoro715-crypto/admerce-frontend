@@ -14,14 +14,21 @@ import {
 import type { IconType } from 'react-icons';
 
 // ─── Nav entries (shared by rail and bottom nav) ────────────────────
-type NavEntry = { Icon: IconType; label: string; path: string };
+type NavEntry =
+  | { kind: 'icon'; Icon: IconType; label: string; path: string }
+  | { kind: 'symbol'; symbolSrc: string; label: string; path: string };
 
 const NAV_ENTRIES: NavEntry[] = [
-  { Icon: MdDashboard,            label: 'Home',   path: '/storekeeper/home'   },
-  { Icon: MdInventory,            label: 'Items',  path: '/storekeeper/items'  },
-  { Icon: MdReceipt,              label: 'Orders', path: '/storekeeper/orders' },
-  { Icon: MdChatBubbleOutline,    label: 'Inbox',  path: '/storekeeper/inbox'  },
-  { Icon: MdAccountBalanceWallet, label: 'Wallet', path: '/storekeeper/wallet' },
+  {
+    kind: 'symbol',
+    symbolSrc: '/admerce_symbol.png',
+    label: 'Home',
+    path: '/storekeeper/home',
+  },
+  { kind: 'icon', Icon: MdInventory,            label: 'Items',  path: '/storekeeper/items'  },
+  { kind: 'icon', Icon: MdReceipt,              label: 'Orders', path: '/storekeeper/orders' },
+  { kind: 'icon', Icon: MdChatBubbleOutline,    label: 'Inbox',  path: '/storekeeper/inbox'  },
+  { kind: 'icon', Icon: MdAccountBalanceWallet, label: 'Wallet', path: '/storekeeper/wallet' },
 ];
 
 const PROFILE_PATH = '/storekeeper/profile';
@@ -70,6 +77,32 @@ function UserAvatar({
         <span style={{ fontWeight: 800 }}>{initials}</span>
       )}
     </div>
+  );
+}
+
+function NavGlyph({
+  entry,
+  active,
+  size = 26,
+}: {
+  entry: NavEntry;
+  active: boolean;
+  size?: number;
+}) {
+  if (entry.kind === 'icon') {
+    return <entry.Icon size={size} />;
+  }
+  return (
+    <span
+      aria-hidden="true"
+      data-active={active}
+      className="skl-symbol"
+      style={{
+        width: size + 4,
+        height: size + 4,
+        display: 'block',
+      }}
+    />
   );
 }
 
@@ -213,7 +246,7 @@ export default function StorekeeperLayout({
                 aria-current={active ? 'page' : undefined}
                 title={entry.label}
               >
-                <entry.Icon size={22} />
+                <NavGlyph entry={entry} active={active} size={24} />
                 <span className="skl-rail-label">{entry.label}</span>
               </button>
             );
@@ -259,7 +292,7 @@ export default function StorekeeperLayout({
                 className={active ? 'skl-tab skl-tab-active' : 'skl-tab'}
                 aria-current={active ? 'page' : undefined}
               >
-                <entry.Icon size={22} />
+                <NavGlyph entry={entry} active={active} size={26} />
                 <span className="skl-tab-label">{entry.label}</span>
               </button>
             );
@@ -281,6 +314,7 @@ export default function StorekeeperLayout({
               imageUrl={profile?.avatar_url}
               name={avatarName}
               active={activeIndex === NAV_ENTRIES.length}
+              size={26}
             />
             <span className="skl-tab-label">{PROFILE_LABEL}</span>
           </button>
@@ -303,8 +337,23 @@ const CSS = `
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    padding-bottom: 72px;
+    padding-bottom: 88px;
     transition: padding 0.18s ease;
+  }
+
+  /* ── Brand symbol glyph ────────────────────────────────── */
+  .skl-symbol {
+    background-color: currentColor;
+    -webkit-mask-image: url('/admerce_symbol.png');
+    mask-image: url('/admerce_symbol.png');
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-user-drag: none;
+    user-select: none;
   }
 
   /* ── Desktop side rail (hidden by default) ───────────── */
@@ -379,7 +428,7 @@ const CSS = `
     align-items: center;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-default);
-    padding: 10px 0 max(8px, env(safe-area-inset-bottom));
+    padding: 12px 0 max(10px, env(safe-area-inset-bottom));
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
     z-index: 100;
@@ -391,8 +440,8 @@ const CSS = `
     align-items: center;
     justify-content: center;
     flex: 1;
-    gap: 2px;
-    padding: 4px 0;
+    gap: 4px;
+    padding: 8px 0;
     border: none;
     background: transparent;
     color: var(--text-muted);
@@ -403,11 +452,12 @@ const CSS = `
   }
   .skl-tab-active { color: var(--brand-primary); }
   .skl-tab-label {
-    font-size: 10px;
-    font-weight: 400;
+    font-size: 11px;
+    font-weight: 500;
     line-height: 1;
+    letter-spacing: 0.1px;
   }
-  .skl-tab-active .skl-tab-label { font-weight: 600; }
+  .skl-tab-active .skl-tab-label { font-weight: 700; }
 
   @media (min-width: 1024px) {
     .skl-rail { display: flex; }

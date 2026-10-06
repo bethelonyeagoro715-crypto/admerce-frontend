@@ -13,14 +13,21 @@ import {
 } from 'react-icons/md';
 import type { IconType } from 'react-icons';
 
-type NavEntry = { Icon: IconType; label: string; path: string };
+type NavEntry =
+  | { kind: 'icon'; Icon: IconType; label: string; path: string }
+  | { kind: 'symbol'; symbolSrc: string; label: string; path: string };
 
 const NAV_ENTRIES: NavEntry[] = [
-  { Icon: MdDashboard,            label: 'Home',     path: '/service-provider/home'     },
-  { Icon: MdCalendarToday,        label: 'Bookings', path: '/service-provider/bookings' },
-  { Icon: MdDesignServices,       label: 'Services', path: '/service-provider/services' },
-  { Icon: MdChatBubbleOutline,    label: 'Inbox',    path: '/service-provider/inbox'    },
-  { Icon: MdAccountBalanceWallet, label: 'Wallet',   path: '/service-provider/wallet'   },
+  {
+    kind: 'symbol',
+    symbolSrc: '/admerce_symbol.png',
+    label: 'Home',
+    path: '/service-provider/home',
+  },
+  { kind: 'icon', Icon: MdCalendarToday,        label: 'Bookings', path: '/service-provider/bookings' },
+  { kind: 'icon', Icon: MdDesignServices,       label: 'Services', path: '/service-provider/services' },
+  { kind: 'icon', Icon: MdChatBubbleOutline,    label: 'Inbox',    path: '/service-provider/inbox'    },
+  { kind: 'icon', Icon: MdAccountBalanceWallet, label: 'Wallet',   path: '/service-provider/wallet'   },
 ];
 
 const PROFILE_PATH = '/service-provider/profile';
@@ -69,6 +76,32 @@ function UserAvatar({
         <span style={{ fontWeight: 800 }}>{initials}</span>
       )}
     </div>
+  );
+}
+
+function NavGlyph({
+  entry,
+  active,
+  size = 26,
+}: {
+  entry: NavEntry;
+  active: boolean;
+  size?: number;
+}) {
+  if (entry.kind === 'icon') {
+    return <entry.Icon size={size} />;
+  }
+  return (
+    <span
+      aria-hidden="true"
+      data-active={active}
+      className="spl-symbol"
+      style={{
+        width: size + 4,
+        height: size + 4,
+        display: 'block',
+      }}
+    />
   );
 }
 
@@ -205,7 +238,7 @@ export default function ServiceProviderLayout({
                 aria-current={active ? 'page' : undefined}
                 title={entry.label}
               >
-                <entry.Icon size={22} />
+                <NavGlyph entry={entry} active={active} size={24} />
                 <span className="spl-rail-label">{entry.label}</span>
               </button>
             );
@@ -249,7 +282,7 @@ export default function ServiceProviderLayout({
                 className={active ? 'spl-tab spl-tab-active' : 'spl-tab'}
                 aria-current={active ? 'page' : undefined}
               >
-                <entry.Icon size={22} />
+                <NavGlyph entry={entry} active={active} size={26} />
                 <span className="spl-tab-label">{entry.label}</span>
               </button>
             );
@@ -271,6 +304,7 @@ export default function ServiceProviderLayout({
               imageUrl={profile?.avatar_url}
               name={avatarName}
               active={activeIndex === NAV_ENTRIES.length}
+              size={26}
             />
             <span className="spl-tab-label">{PROFILE_LABEL}</span>
           </button>
@@ -293,8 +327,23 @@ const CSS = `
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    padding-bottom: 72px;
+    padding-bottom: 88px;
     transition: padding 0.18s ease;
+  }
+
+  /* ── Brand symbol glyph ────────────────────────────────── */
+  .spl-symbol {
+    background-color: currentColor;
+    -webkit-mask-image: url('/admerce_symbol.png');
+    mask-image: url('/admerce_symbol.png');
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-user-drag: none;
+    user-select: none;
   }
 
   .spl-rail {
@@ -367,7 +416,7 @@ const CSS = `
     align-items: center;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-default);
-    padding: 10px 0 max(8px, env(safe-area-inset-bottom));
+    padding: 12px 0 max(10px, env(safe-area-inset-bottom));
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
     z-index: 100;
@@ -379,8 +428,8 @@ const CSS = `
     align-items: center;
     justify-content: center;
     flex: 1;
-    gap: 2px;
-    padding: 4px 0;
+    gap: 4px;
+    padding: 8px 0;
     border: none;
     background: transparent;
     color: var(--text-muted);
@@ -391,11 +440,12 @@ const CSS = `
   }
   .spl-tab-active { color: var(--brand-primary); }
   .spl-tab-label {
-    font-size: 10px;
-    font-weight: 400;
+    font-size: 11px;
+    font-weight: 500;
     line-height: 1;
+    letter-spacing: 0.1px;
   }
-  .spl-tab-active .spl-tab-label { font-weight: 600; }
+  .spl-tab-active .spl-tab-label { font-weight: 700; }
 
   @media (min-width: 1024px) {
     .spl-rail { display: flex; }

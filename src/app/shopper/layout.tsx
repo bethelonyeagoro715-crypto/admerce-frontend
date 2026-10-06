@@ -81,7 +81,7 @@ function UserAvatar({
 function NavGlyph({
   entry,
   active,
-  size = 22,
+  size = 26,
 }: {
   entry: NavEntry;
   active: boolean;
@@ -104,7 +104,6 @@ function NavGlyph({
         width: size + 4,
         height: size + 4,
         display: 'block',
-        // The mask URL is set in CSS so the asset path stays in one place.
       }}
     />
   );
@@ -166,7 +165,7 @@ export default function ShopperLayout({
                 aria-current={active ? 'page' : undefined}
                 title={entry.label}
               >
-                <NavGlyph entry={entry} active={active} size={22} />
+                <NavGlyph entry={entry} active={active} size={24} />
                 <span className="shl-rail-label">{entry.label}</span>
               </button>
             );
@@ -211,7 +210,7 @@ export default function ShopperLayout({
               className={active ? 'shl-tab shl-tab-active' : 'shl-tab'}
               aria-current={active ? 'page' : undefined}
             >
-              <NavGlyph entry={entry} active={active} size={22} />
+              <NavGlyph entry={entry} active={active} size={26} />
               <span className="shl-tab-label">{entry.label}</span>
             </button>
           );
@@ -233,6 +232,7 @@ export default function ShopperLayout({
             imageUrl={profile?.avatar_url}
             name={avatarName}
             active={activeIndex === NAV_ENTRIES.length}
+            size={26}
           />
           <span className="shl-tab-label">{PROFILE_LABEL}</span>
         </button>
@@ -255,7 +255,7 @@ const CSS = `
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    padding-bottom: 72px; /* space for the fixed bottom nav on mobile */
+    padding-bottom: 88px; /* space for the fixed bottom nav on mobile */
     transition: padding 0.18s ease;
   }
 
@@ -349,7 +349,7 @@ const CSS = `
     align-items: center;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-default);
-    padding: 10px 0 max(8px, env(safe-area-inset-bottom));
+    padding: 12px 0 max(10px, env(safe-area-inset-bottom));
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
     z-index: 100;
@@ -361,8 +361,8 @@ const CSS = `
     align-items: center;
     justify-content: center;
     flex: 1;
-    gap: 2px;
-    padding: 4px 0;
+    gap: 4px;
+    padding: 8px 0;
     border: none;
     background: transparent;
     color: var(--text-muted);
@@ -373,11 +373,12 @@ const CSS = `
   }
   .shl-tab-active { color: var(--brand-primary); }
   .shl-tab-label {
-    font-size: 10px;
-    font-weight: 400;
+    font-size: 11px;
+    font-weight: 500;
     line-height: 1;
+    letter-spacing: 0.1px;
   }
-  .shl-tab-active .shl-tab-label { font-weight: 600; }
+  .shl-tab-active .shl-tab-label { font-weight: 700; }
 
   /* ── Desktop breakpoint ─────────────────────────────── */
   @media (min-width: 1024px) {
