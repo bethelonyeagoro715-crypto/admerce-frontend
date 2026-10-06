@@ -38,6 +38,10 @@ interface MapLocation {
   category?: string;
   price?: number;
   listing_count?: number;
+  // Service-provider aggregation fields. Present only when type === 'service'.
+  service_count?: number;
+  min_price?: number;
+  max_price?: number;
   distance_km?: number;
 }
 
@@ -60,6 +64,18 @@ function fmtDistance(km?: number): string {
 function fmtNaira(v?: number): string {
   if (v == null || !Number.isFinite(v)) return '';
   return '₦' + Math.round(v).toLocaleString('en-NG');
+}
+
+// Render a service price as "From ₦X" or a range.
+function fmtServicePrice(loc: MapLocation): string {
+  const min = loc.min_price;
+  const max = loc.max_price;
+  if (min == null && max == null) return '';
+  if (min != null && max != null && min !== max) {
+    return `${fmtNaira(min)} – ${fmtNaira(max)}`;
+  }
+  const single = min ?? max;
+  return `From ${fmtNaira(single)}`;
 }
 
 function resolveImageUrl(url?: string): string | null {
@@ -98,8 +114,11 @@ function markerSvg(type: 'store' | 'service', status: string): string {
         ? '#D97706'
         : '#64748B';
 
+  // Store: stacked bars / shop awning glyph.
+  // Service: Material Design "build" (wrench) — translated and scaled
+  // from the 24×24 source viewBox into the 40×48 marker viewBox.
   const icon = isService
-    ? '<path d="M14 15h12v3H14zm2 5h8v9h-8zm-2-8h12l-1.5-3h-9z" fill="#fff"/>'
+    ? '<g transform="translate(13 16) scale(0.58)"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.4-.4.4-1 0-1.4z" fill="#fff"/></g>'
     : '<path d="M13 16h14v3H13zm0 5h14v3H13zm0 5h14v3H13zm1-13h12l1 3v14a1 1 0 0 1-1 1H13a1 1 0 0 1-1-1V16z" fill="#fff"/>';
 
   return `
@@ -545,9 +564,9 @@ export default function ShopperMapPage() {
                     {fmtDistance(selected.distance_km)} away
                   </span>
                 )}
-                {selected.type === 'service' && selected.price != null && (
+                {selected.type === 'service' && (
                   <span className="ad-mapSheetPrice">
-                    {fmtNaira(selected.price)}
+                    {fmtServicePrice(selected)}
                   </span>
                 )}
               </div>
@@ -566,20 +585,27 @@ export default function ShopperMapPage() {
                 </div>
               )}
 
+              {selected.type === 'service' && selected.service_count != null && (
+                <div className="ad-mapSheetListings">
+                  {selected.service_count}{' '}
+                  {selected.service_count === 1 ? 'service' : 'services'}
+                </div>
+              )}
+
               <button
                 type="button"
                 className="ad-mapSheetCta"
                 onClick={() => {
                   const dest =
                     selected.type === 'service'
-                      ? `/service-detail/${selected.id}`
+                      ? `/provider-services/${selected.id}`
                       : `/store-detail/${selected.id}`;
                   router.push(dest);
                 }}
               >
                 {selected.type === 'service' ? (
                   <>
-                    View service
+                    View services
                     <MdChevronRight size={18} color="var(--brand-on-gradient)" />
                   </>
                 ) : (
