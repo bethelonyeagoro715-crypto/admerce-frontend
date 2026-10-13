@@ -792,16 +792,6 @@ export default function ShopperHomePage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const totalRef = useRef(0);
 
-  // ─── isAtTop ──────────────────────────────────────────────────────
-  // True only when the user is genuinely at the top of the feed.
-  //
-  // The panel itself may not be the actual scroll container — the
-  // layout wraps it in another scrollable element. In that case
-  // panel.scrollTop stays at 0 forever, isAtTop() always returns
-  // true, and pull-to-refresh fires on every upward swipe.
-  //
-  // Fix: walk up from the panel and check every ancestor's scrollTop
-  // too, plus the window/document scroll.
   const isAtTop = () => {
     const panel = activePanelRef.current;
 
@@ -835,9 +825,7 @@ export default function ShopperHomePage() {
       const w = window.innerWidth;
       if (w < 500) setColumns(2);
       else if (w < 800) setColumns(3);
-      else if (w < 1200) setColumns(4);
-      else if (w < 1600) setColumns(5);
-      else setColumns(6);
+      else setColumns(4);
 
       const desktop = w >= 1024;
       setColumnGap(desktop ? COL_GAP_DESKTOP : COL_GAP_MOBILE);
