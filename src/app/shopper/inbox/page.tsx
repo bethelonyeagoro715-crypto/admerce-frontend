@@ -355,7 +355,7 @@ export default function InboxPage() {
       {/* HEADER */}
       <header className="ibx-header">
         <div className="ibx-headerText">
-          <h1 className="ibx-title">Inbox</h1>
+          <h1 className="ibx-title">Chats</h1>
           <p className="ibx-subtitle">
             {isLoading
               ? 'Loading…'
@@ -397,7 +397,7 @@ export default function InboxPage() {
               ref={searchInputRef}
               type="text"
               className="ibx-searchInput"
-              placeholder="Search conversations"
+              placeholder="Search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onSearchKeyDown}
@@ -542,10 +542,6 @@ export default function InboxPage() {
                   <span className="ibx-groupLabel">
                     {bucketLabel(bucket)}
                   </span>
-                  <span className="ibx-groupRule" aria-hidden />
-                  <span className="ibx-groupCount">
-                    {items.length}
-                  </span>
                 </div>
                 <div className="ibx-groupItems">
                   {items.map((conv) => {
@@ -560,22 +556,15 @@ export default function InboxPage() {
                         key={conversationId}
                         className={
                           unread > 0
-                            ? 'ibx-card ibx-cardUnread'
-                            : 'ibx-card'
+                            ? 'ibx-row ibx-rowUnread'
+                            : 'ibx-row'
                         }
                         onClick={() => openChat(conv)}
                         aria-label={`Open chat with ${conv._name}${
                           unread > 0 ? `, ${unread} unread` : ''
                         }`}
                       >
-                        <span
-                          className={
-                            unread > 0
-                              ? 'ibx-avatarWrap ibx-avatarWrapUnread'
-                              : 'ibx-avatarWrap'
-                          }
-                          aria-hidden
-                        >
+                        <span className="ibx-avatarWrap" aria-hidden>
                           {conv._avatar ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -651,7 +640,7 @@ const CSS = `
     100% { background-position: 400px 0; }
   }
   @keyframes ibxFadeIn {
-    from { opacity: 0; transform: translateY(4px); }
+    from { opacity: 0; transform: translateY(2px); }
     to { opacity: 1; transform: translateY(0); }
   }
   @keyframes ibxSpin { to { transform: rotate(360deg); } }
@@ -670,7 +659,7 @@ const CSS = `
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 16px 16px 14px;
+    padding: 14px 16px 12px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-default);
     position: sticky;
@@ -690,7 +679,7 @@ const CSS = `
     gap: 2px;
   }
   .ibx-title {
-    font-size: 22px;
+    font-size: 21px;
     font-weight: 800;
     color: var(--text-primary);
     margin: 0;
@@ -723,10 +712,10 @@ const CSS = `
   /* ── Controls ───────────────────────────────────────────── */
   .ibx-controls {
     background: var(--bg-secondary);
-    padding: 0 16px 14px;
+    padding: 0 16px 12px;
     border-bottom: 1px solid var(--border-default);
     position: sticky;
-    top: 71px;
+    top: 67px;
     z-index: 19;
     box-sizing: border-box;
     width: 100%;
@@ -738,10 +727,10 @@ const CSS = `
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 14px;
+    padding: 9px 14px;
     background: var(--bg-tertiary);
     border: 1.5px solid transparent;
-    border-radius: 14px;
+    border-radius: 12px;
     transition: border-color 0.15s, background 0.15s;
   }
   .ibx-searchBox:focus-within {
@@ -777,7 +766,7 @@ const CSS = `
   .ibx-pillRow {
     display: flex;
     gap: 8px;
-    margin-top: 12px;
+    margin-top: 10px;
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -786,7 +775,7 @@ const CSS = `
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 7px 14px;
+    padding: 6px 14px;
     border-radius: 999px;
     border: 1px solid var(--border-default);
     background: var(--bg-secondary);
@@ -839,10 +828,10 @@ const CSS = `
   /* ── Body ───────────────────────────────────────────────── */
   .ibx-body {
     flex: 1;
-    padding: 16px 12px 40px;
+    padding: 8px 0 40px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
     box-sizing: border-box;
     width: 100%;
     max-width: 720px;
@@ -850,12 +839,11 @@ const CSS = `
   }
 
   /* ── Date group ─────────────────────────────────────────── */
-  .ibx-group { display: flex; flex-direction: column; gap: 8px; }
+  .ibx-group { display: flex; flex-direction: column; }
   .ibx-groupHeader {
+    padding: 10px 16px 6px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 6px 2px;
   }
   .ibx-groupLabel {
     font-size: 11.5px;
@@ -863,99 +851,54 @@ const CSS = `
     color: var(--text-tertiary);
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    flex-shrink: 0;
-  }
-  .ibx-groupRule {
-    flex: 1;
-    height: 1px;
-    background: var(--border-default);
-  }
-  .ibx-groupCount {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-    flex-shrink: 0;
   }
   .ibx-groupItems {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-default);
+    border-bottom: 1px solid var(--border-default);
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
 
-  /* ── Card ───────────────────────────────────────────────── */
-  .ibx-card {
+  /* ── WhatsApp-style row ─────────────────────────────────── */
+  .ibx-row {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
     width: 100%;
-    padding: 12px 14px;
+    padding: 12px 16px;
     background: var(--bg-secondary);
-    border: 1px solid var(--border-default);
-    border-radius: 16px;
+    border: none;
+    border-bottom: 1px solid var(--border-default);
     cursor: pointer;
     text-align: left;
     font-family: inherit;
-    transition:
-      border-color 0.15s,
-      background 0.15s,
-      transform 0.1s,
-      box-shadow 0.15s;
-    animation: ibxFadeIn 0.22s ease both;
+    transition: background 0.12s;
+    animation: ibxFadeIn 0.18s ease both;
     box-sizing: border-box;
   }
-  .ibx-card:hover {
-    border-color: color-mix(
-      in srgb,
-      var(--brand-primary) 40%,
-      var(--border-default)
-    );
-    box-shadow: 0 4px 14px
-      color-mix(in srgb, var(--brand-primary) 10%, transparent);
-  }
-  .ibx-card:active { transform: scale(0.994); }
-  .ibx-card:focus-visible {
+  .ibx-row:last-child { border-bottom: none; }
+  .ibx-row:hover { background: var(--bg-hover); }
+  .ibx-row:active { background: var(--bg-tertiary); }
+  .ibx-row:focus-visible {
     outline: 2px solid var(--brand-primary);
-    outline-offset: 2px;
+    outline-offset: -2px;
   }
-  .ibx-cardUnread {
-    border-color: color-mix(
-      in srgb,
-      var(--brand-primary) 35%,
-      var(--border-default)
-    );
-    background: var(--bg-secondary);
-  }
-  /* Left accent for unread — 3px bar on the card edge */
-  .ibx-cardUnread::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 12px;
-    bottom: 12px;
-    width: 3px;
-    border-radius: 0 3px 3px 0;
-    background: var(--brand-primary);
-  }
+  .ibx-rowUnread { background: var(--bg-secondary); }
 
   /* ── Avatar ─────────────────────────────────────────────── */
   .ibx-avatarWrap {
-    width: 50px;
-    height: 50px;
-    flex: 0 0 50px;
-    border-radius: 15px;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border-radius: 50%;
     overflow: hidden;
     background: var(--brand-soft);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: box-shadow 0.15s;
-  }
-  .ibx-avatarWrapUnread {
-    box-shadow:
-      0 0 0 2px var(--bg-secondary),
-      0 0 0 3.5px var(--brand-primary);
   }
   .ibx-avatarImg {
     width: 100%;
@@ -966,7 +909,7 @@ const CSS = `
   .ibx-avatarInitials {
     color: var(--brand-primary);
     font-weight: 800;
-    font-size: 18px;
+    font-size: 17px;
     letter-spacing: 0.01em;
   }
 
@@ -976,7 +919,7 @@ const CSS = `
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
   }
   .ibx-nameRow {
     display: flex;
@@ -987,7 +930,7 @@ const CSS = `
   .ibx-name {
     flex: 1;
     min-width: 0;
-    font-size: 15px;
+    font-size: 15.5px;
     font-weight: 600;
     color: var(--text-primary);
     letter-spacing: -0.01em;
@@ -1020,15 +963,15 @@ const CSS = `
     flex: 1;
     min-width: 0;
     font-size: 13.5px;
-    color: var(--text-secondary);
-    line-height: 1.4;
+    color: var(--text-tertiary);
+    line-height: 1.35;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .ibx-previewUnread {
-    color: var(--text-primary);
-    font-weight: 600;
+    color: var(--text-secondary);
+    font-weight: 500;
   }
 
   .ibx-badge {
@@ -1036,7 +979,7 @@ const CSS = `
     min-width: 20px;
     height: 20px;
     padding: 0 6px;
-    border-radius: 10px;
+    border-radius: 999px;
     background: var(--brand-primary);
     color: var(--brand-on-primary);
     font-size: 11px;
@@ -1045,8 +988,6 @@ const CSS = `
     align-items: center;
     justify-content: center;
     letter-spacing: 0.02em;
-    box-shadow: 0 2px 6px
-      color-mix(in srgb, var(--brand-primary) 30%, transparent);
   }
 
   .ibx-mark {
@@ -1137,17 +1078,14 @@ const CSS = `
   .ibx-skeletonGroup {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    padding: 0 16px;
   }
   .ibx-skeletonRow {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-default);
-    border-radius: 16px;
-    transition: background-color 0.18s ease, border-color 0.18s ease;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-default);
   }
   .ibx-skeletonBody { flex: 1; min-width: 0; }
   .ibx-skel {
@@ -1157,17 +1095,17 @@ const CSS = `
     border-radius: 8px;
   }
   .ibx-skelAvatar {
-    width: 50px;
-    height: 50px;
-    flex: 0 0 50px;
-    border-radius: 15px;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border-radius: 50%;
   }
   .ibx-skelLine { height: 12px; }
   .ibx-skelSection {
     height: 12px;
     width: 90px;
     border-radius: 4px;
-    margin-left: 6px;
+    margin: 14px 0 6px;
   }
 
   @media (prefers-reduced-motion: reduce) {
