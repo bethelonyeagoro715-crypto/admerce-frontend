@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import api from '../../services/api';
 import {
@@ -13,8 +13,8 @@ import type { IconType } from 'react-icons';
 
 // ─── Nav entries (shared by rail and bottom nav) ────────────────────
 type NavEntry =
-  | { kind: 'icon'; Icon: IconType; label: string; path: string }
-  | { kind: 'symbol'; symbolSrc: string; label: string; path: string };
+  | { kind: 'icon'; Icon: IconType; label: string; path: string; badgeKey?: 'inbox' }
+  | { kind: 'symbol'; symbolSrc: string; label: string; path: string; badgeKey?: 'inbox' };
 
 const NAV_ENTRIES: NavEntry[] = [
   {
@@ -25,12 +25,52 @@ const NAV_ENTRIES: NavEntry[] = [
   },
   { kind: 'icon', Icon: MdLocationOn,           label: 'Map',    path: '/shopper/map'    },
   { kind: 'icon', Icon: MdFavoriteBorder,       label: 'Saved',  path: '/shopper/saved'  },
-  { kind: 'icon', Icon: MdChatBubbleOutline,    label: 'Inbox',  path: '/shopper/inbox'  },
+  { kind: 'icon', Icon: MdChatBubbleOutline,    label: 'Inbox',  path: '/shopper/inbox', badgeKey: 'inbox' },
   { kind: 'icon', Icon: MdAccountBalanceWallet, label: 'Wallet', path: '/shopper/wallet' },
 ];
 
 const PROFILE_PATH = '/shopper/profile';
 const PROFILE_LABEL = 'Profile';
+
+const UNREAD_POLL_MS = 10_000;
+
+// ─── Notification chime (Web Audio, no assets) ──────────────────────
+let _audioCtx: AudioContext | null = null;
+function playChime() {
+  try {
+    const Ctx =
+      typeof window !== 'undefined'
+        ? (window.AudioContext ||
+            (window as unknown as { webkitAudioContext?: typeof AudioContext })
+              .webkitAudioContext)
+        : null;
+    if (!Ctx) return;
+    if (!_audioCtx) _audioCtx = new Ctx();
+    const ctx = _audioCtx;
+    if (ctx.state === 'suspended') void ctx.resume();
+
+    const now = ctx.currentTime;
+    const notes = [
+      { freq: 780, start: now, dur: 0.09 },
+      { freq: 1040, start: now + 0.09, dur: 0.12 },
+    ];
+    for (const n of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = n.freq;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.0001, n.start);
+      gain.gain.exponentialRampToValueAtTime(0.12, n.start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, n.start + n.dur);
+      osc.start(n.start);
+      osc.stop(n.start + n.dur + 0.02);
+    }
+  } catch {
+    /* silent — sound is best-effort */
+  }
+}
 
 function UserAvatar({
   imageUrl,
@@ -90,11 +130,6 @@ function NavGlyph({
   if (entry.kind === 'icon') {
     return <entry.Icon size={size} />;
   }
-  // Brand symbol is treated as a mask, not an image, so it inherits the
-  // button's `color` exactly like the react-icons do. The PNG's alpha
-  // channel becomes the stencil; `currentColor` paints it.
-  // Rendered slightly larger to compensate for the transparent padding
-  // baked into the 500×500 source.
   return (
     <span
       aria-hidden="true"
@@ -122,6 +157,10 @@ export default function ShopperLayout({
     phone?: string;
   } | null>(null);
 
+  const [unreadCount, setUnreadCount] = useState(0);
+  const prevUnreadRef = useRef<number | null>(null);
+  const seededRef = useRef(false);
+
   useEffect(() => {
     (async () => {
       try {
@@ -130,6 +169,68 @@ export default function ShopperLayout({
       } catch {}
     })();
   }, []);
+
+  // ── Poll conversations for unread count ───────────────────────
+  const checkUnread = useCallback(async () => {
+    try {
+      const convs = (await api.getConversations()) as Array<{
+        conversation_id?: string;
+        unread_count?: number;
+      }>;
+
+      // Exclude the SEAI system conversation from the badge
+      const total = (convs || []).reduce((sum, c) => {
+        const cid = String(c.conversation_id || '');
+        if (cid.endsWith('_seai')) return sum;
+        return sum + (c.unread_count ?? 0);
+      }, 0);
+
+      // First successful check: seed, don't chime
+      if (!seededRef.current) {
+        seededRef.current = true;
+        prevUnreadRef.current = total;
+        setUnreadCount(total);
+        return;
+      }
+
+      // Only chime if the count went UP and we aren't already on the chat page
+      const prev = prevUnreadRef.current ?? 0;
+      if (total > prev) {
+        const onChatPage = pathname.startsWith('/chat');
+        const onInbox = pathname.startsWith('/shopper/inbox');
+        if (!onChatPage && !onInbox) {
+          playChime();
+        }
+      }
+      prevUnreadRef.current = total;
+      setUnreadCount(total);
+    } catch {
+      /* silent — badge is best-effort */
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    const runCheck = () => {
+      window.setTimeout(() => {
+        void checkUnread();
+      }, 0);
+    };
+
+    runCheck();
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      runCheck();
+    }, UNREAD_POLL_MS);
+
+    const onVisible = () => {
+      if (!document.hidden) runCheck();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [checkUnread]);
 
   let activeIndex = 0;
   for (let i = 0; i < NAV_ENTRIES.length; i++) {
@@ -142,6 +243,7 @@ export default function ShopperLayout({
 
   const avatarName = profile?.nickname || profile?.phone || '';
   const go = (path: string) => router.replace(path);
+  const hasUnread = unreadCount > 0;
 
   return (
     <div className="shl-root">
@@ -152,6 +254,7 @@ export default function ShopperLayout({
         <nav className="shl-rail-nav">
           {NAV_ENTRIES.map((entry, i) => {
             const active = activeIndex === i;
+            const showBadge = entry.badgeKey === 'inbox' && hasUnread;
             return (
               <button
                 key={entry.path}
@@ -163,9 +266,19 @@ export default function ShopperLayout({
                     : 'shl-rail-item'
                 }
                 aria-current={active ? 'page' : undefined}
+                aria-label={
+                  showBadge
+                    ? `${entry.label}, ${unreadCount} unread`
+                    : entry.label
+                }
                 title={entry.label}
               >
-                <NavGlyph entry={entry} active={active} size={24} />
+                <span className="shl-glyph-wrap">
+                  <NavGlyph entry={entry} active={active} size={24} />
+                  {showBadge && (
+                    <span className="shl-dot" aria-hidden="true" />
+                  )}
+                </span>
                 <span className="shl-rail-label">{entry.label}</span>
               </button>
             );
@@ -202,6 +315,7 @@ export default function ShopperLayout({
       <nav className="shl-bottom" aria-label="Shopper navigation">
         {NAV_ENTRIES.map((entry, i) => {
           const active = activeIndex === i;
+          const showBadge = entry.badgeKey === 'inbox' && hasUnread;
           return (
             <button
               key={entry.path}
@@ -209,8 +323,18 @@ export default function ShopperLayout({
               onClick={() => go(entry.path)}
               className={active ? 'shl-tab shl-tab-active' : 'shl-tab'}
               aria-current={active ? 'page' : undefined}
+              aria-label={
+                showBadge
+                  ? `${entry.label}, ${unreadCount} unread`
+                  : entry.label
+              }
             >
-              <NavGlyph entry={entry} active={active} size={26} />
+              <span className="shl-glyph-wrap">
+                <NavGlyph entry={entry} active={active} size={26} />
+                {showBadge && (
+                  <span className="shl-dot" aria-hidden="true" />
+                )}
+              </span>
               <span className="shl-tab-label">{entry.label}</span>
             </button>
           );
@@ -255,14 +379,10 @@ const CSS = `
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    padding-bottom: 88px; /* space for the fixed bottom nav on mobile */
+    padding-bottom: 88px;
     transition: padding 0.18s ease;
   }
 
-  /* ── Brand symbol glyph ──────────────────────────────────
-     Rendered as a mask so it inherits currentColor exactly like
-     the react-icons. The PNG's alpha channel is the stencil;
-     background-color paints the visible pixels. */
   .shl-symbol {
     background-color: currentColor;
     -webkit-mask-image: url('/admerce_symbol.png');
@@ -275,6 +395,33 @@ const CSS = `
     mask-position: center;
     -webkit-user-drag: none;
     user-select: none;
+  }
+
+  /* ── Glyph wrapper holds the icon + the red dot ───────── */
+  .shl-glyph-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+  }
+  .shl-dot {
+    position: absolute;
+    top: -2px;
+    right: -3px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #EF4444;
+    box-shadow:
+      0 0 0 2px var(--bg-secondary),
+      0 0 6px rgba(239, 68, 68, 0.5);
+    animation: shlDotPulse 2s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes shlDotPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.9; }
   }
 
   /* ── Desktop side rail (hidden by default) ───────────── */
