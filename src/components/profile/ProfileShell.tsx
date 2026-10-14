@@ -1,5 +1,7 @@
 'use client';
 
+'use client';
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api, { extractErrorDetail } from '../../services/api';
@@ -35,6 +37,15 @@ import {
   MdStar,
   MdBuild,
   MdTrendingUp,
+  MdPersonAdd,
+  MdChatBubbleOutline,
+  MdShare,
+  MdMoreHoriz,
+  MdGridOn,
+  MdInfoOutline,
+  MdStore,
+  MdAccessTime,
+  MdCheckCircle,
 } from 'react-icons/md';
 
 // ─────────────────────────────────────────────────────────────
@@ -55,6 +66,11 @@ interface Profile {
   role?: string;
   verified?: boolean;
   created_at?: string;
+  bio?: string;
+  residence_address?: string;
+  lga?: string;
+  state_of_origin?: string;
+  business_name?: string;
   [key: string]: unknown;
 }
 
@@ -83,11 +99,18 @@ interface ProviderStats extends BaseStats {
 
 type Stats = ShopperStats | StorekeeperStats | ProviderStats;
 
-interface StatTile {
-  icon: React.ReactNode;
+interface HighlightChip {
+  id: string;
   label: string;
-  value: string;
-  onClick: () => void;
+  emoji: string;
+}
+
+interface GridItem {
+  id: string;
+  title: string;
+  imageUrl: string | null;
+  price?: string;
+  kind: 'listing' | 'service';
 }
 
 interface ActivityRow {
@@ -98,6 +121,8 @@ interface ActivityRow {
   subtitle?: string;
   onClick?: () => void;
 }
+
+type Tab = 'content' | 'about' | 'wallet';
 
 // ─────────────────────────────────────────────────────────────
 // Constants
@@ -112,6 +137,12 @@ const ROLE_LABEL: Record<ProfileRole, string> = {
   shopper: 'Shopper',
   storekeeper: 'Storekeeper',
   service_provider: 'Service Provider',
+};
+
+const ROLE_EMOJI: Record<ProfileRole, string> = {
+  shopper: '🛒',
+  storekeeper: '🏪',
+  service_provider: '🛠️',
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -155,6 +186,14 @@ function fmtMemberSince(iso?: string): string {
   }
 }
 
+function fmtCompact(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return '0';
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 10_000) return `${Math.round(v / 1000)}K`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return String(Math.round(v));
+}
+
 function fmtBalance(v: number): string {
   if (!Number.isFinite(v) || v <= 0) return '₦0';
   if (v >= 1_000_000) return `₦${(v / 1_000_000).toFixed(1)}M`;
@@ -166,8 +205,35 @@ function displayName(p: Profile | null): string {
   if (!p) return 'User';
   const full = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
   return (
-    p.nickname || full || p.real_name || p.username || p.phone || 'User'
+    p.nickname ||
+    p.business_name ||
+    full ||
+    p.real_name ||
+    p.username ||
+    p.phone ||
+    'User'
   );
+}
+
+function buildBio(p: Profile | null, role: ProfileRole): string {
+  if (!p) return '';
+  if (p.bio && String(p.bio).trim()) return String(p.bio).trim();
+
+  const parts: string[] = [];
+  if (role === 'storekeeper') {
+    parts.push('🏪 Storekeeper on Admerce');
+    if (p.business_name) parts.push(`· ${p.business_name}`);
+  } else if (role === 'service_provider') {
+    parts.push('🛠️ Service provider on Admerce');
+  } else {
+    parts.push('🛒 Shopping on Admerce');
+  }
+  if (p.lga && p.state_of_origin) {
+    parts.push(`· ${p.lga}, ${p.state_of_origin}`);
+  } else if (p.residence_address) {
+    parts.push(`· ${p.residence_address}`);
+  }
+  return parts.join(' ');
 }
 
 function isNumberArray(v: unknown): v is unknown[] {
@@ -278,6 +344,85 @@ const LOADERS: Record<ProfileRole, () => Promise<Stats>> = {
 };
 
 // ─────────────────────────────────────────────────────────────
+// Role stats → three-stat row (Instagram-style)
+// ─────────────────────────────────────────────────────────────
+function statTrio(
+  role: ProfileRole,
+  stats: Stats | null,
+): { value: string; label: string; onClick: () => void }[] {
+  if (role === 'shopper') {
+    const s = (stats as ShopperStats | null) ?? {
+      savedCount: 0,
+      wantedCount: 0,
+      ordersCount: 0,
+      walletBalance: 0,
+    };
+    return [
+      { value: String(s.savedCount), label: 'Saved', onClick: () => {} },
+      { value: String(s.wantedCount), label: 'Wanted', onClick: () => {} },
+      { value: String(s.ordersCount), label: 'Orders', onClick: () => {} },
+    ];
+  }
+  if (role === 'storekeeper') {
+    const s = (stats as StorekeeperStats | null) ?? {
+      storeId: null,
+      listingsCount: 0,
+      ordersCount: 0,
+      viewsCount: 0,
+      walletBalance: 0,
+    };
+    return [
+      { value: String(s.listingsCount), label: 'Listings', onClick: () => {} },
+      { value: String(s.ordersCount), label: 'Orders', onClick: () => {} },
+      { value: fmtCompact(s.viewsCount), label: 'Views', onClick: () => {} },
+    ];
+  }
+  const s = (stats as ProviderStats | null) ?? {
+    servicesCount: 0,
+    bookingsCount: 0,
+    rating: 0,
+    walletBalance: 0,
+  };
+  return [
+    { value: String(s.servicesCount), label: 'Services', onClick: () => {} },
+    { value: String(s.bookingsCount), label: 'Bookings', onClick: () => {} },
+    {
+      value: s.rating > 0 ? s.rating.toFixed(1) : '—',
+      label: 'Rating',
+      onClick: () => {},
+    },
+  ];
+}
+
+// ─────────────────────────────────────────────────────────────
+// Role-specific highlights (Instagram story-style chips)
+// ─────────────────────────────────────────────────────────────
+function roleHighlights(role: ProfileRole): HighlightChip[] {
+  if (role === 'storekeeper') {
+    return [
+      { id: 'new', label: 'New', emoji: '🆕' },
+      { id: 'deals', label: 'Deals', emoji: '🔥' },
+      { id: 'featured', label: 'Featured', emoji: '⭐' },
+      { id: 'reviews', label: 'Reviews', emoji: '💬' },
+      { id: 'policies', label: 'Policies', emoji: '📋' },
+    ];
+  }
+  if (role === 'service_provider') {
+    return [
+      { id: 'portfolio', label: 'Portfolio', emoji: '📸' },
+      { id: 'availability', label: 'Availability', emoji: '📅' },
+      { id: 'reviews', label: 'Reviews', emoji: '⭐' },
+      { id: 'process', label: 'Process', emoji: '📋' },
+    ];
+  }
+  return [
+    { id: 'wishlist', label: 'Wishlist', emoji: '❤️' },
+    { id: 'wanted', label: 'Wanted', emoji: '🔍' },
+    { id: 'orders', label: 'Orders', emoji: '📦' },
+  ];
+}
+
+// ─────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────
 export function ProfileShell({ role }: { role: ProfileRole }) {
@@ -289,6 +434,9 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [errored, setErrored] = useState(false);
+  const [tab, setTab] = useState<Tab>('content');
+  const [following, setFollowing] = useState(false);
+  const [followersCount] = useState(0);
 
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -390,6 +538,26 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
     }
   };
 
+  const handleShare = async () => {
+    const url =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/${roleSlug}/profile`
+        : '';
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Admerce profile', url });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        await alertDialog({
+          title: 'Link copied',
+          body: 'Profile link copied to clipboard.',
+        });
+      }
+    } catch {
+      /* user cancelled */
+    }
+  };
+
   // ── Loading skeleton ─────────────────────────────────────────
   if (loading) {
     return (
@@ -413,11 +581,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
               <div style={css.avatarSkeleton} />
               <div style={css.skelLine} />
               <div
-                style={{
-                  ...css.skelLine,
-                  width: 140,
-                  marginTop: 10,
-                }}
+                style={{ ...css.skelLine, width: 140, marginTop: 10 }}
               />
             </div>
           </div>
@@ -441,9 +605,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         <div style={css.errorHalo}>
           <MdErrorOutline size={40} color="var(--danger-fg)" />
         </div>
-        <h2 style={css.errorHeading}>
-          Couldn&apos;t load your profile
-        </h2>
+        <h2 style={css.errorHeading}>Couldn&apos;t load your profile</h2>
         <p style={css.errorBody}>
           Check your connection and try again. If this keeps happening,
           sign out and back in.
@@ -463,15 +625,15 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
   const isVerified = profile.verified === true;
   const memberSince = fmtMemberSince(profile.created_at);
   const initial = (name.charAt(0) || '?').toUpperCase();
-
-  const tiles = buildStatTiles(role, stats);
-  const activity = buildActivityRows(role, stats);
+  const bio = buildBio(profile, role);
+  const trio = statTrio(role, stats);
+  const highlights = roleHighlights(role);
   const walletTitle =
     role === 'storekeeper'
       ? 'Store revenue'
       : role === 'service_provider'
         ? 'Earnings'
-        : 'Available balance';
+        : 'Escrow balance';
 
   return (
     <main style={css.root}>
@@ -479,23 +641,44 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
       <style>{CSS}</style>
 
       <div className="ps-shell">
-        {/* HERO */}
+        {/* ═════════ HERO ═════════ */}
         <div style={css.hero}>
           <div style={css.heroGlow} aria-hidden />
 
           <div style={css.topBar}>
-            <span style={css.topTitle}>Profile</span>
             <button
-              onClick={() => router.push(`/settings/${roleSlug}`)}
-              style={css.ghostBtn}
-              aria-label="Settings"
+              onClick={() => router.back()}
+              style={css.ghostIconBtn}
+              aria-label="Back"
             >
-              <MdSettings size={22} color="var(--brand-on-gradient)" />
+              <MdChevronRight
+                size={22}
+                color="var(--brand-on-gradient)"
+                style={{ transform: 'rotate(180deg)' }}
+              />
             </button>
+            <span style={css.topTitle}>{name.split(' ')[0]}</span>
+            <div style={css.topActions}>
+              <button
+                onClick={handleShare}
+                style={css.ghostIconBtn}
+                aria-label="Share profile"
+              >
+                <MdShare size={20} color="var(--brand-on-gradient)" />
+              </button>
+              <button
+                onClick={() => router.push(`/settings/${roleSlug}`)}
+                style={css.ghostIconBtn}
+                aria-label="Settings"
+              >
+                <MdMoreHoriz size={22} color="var(--brand-on-gradient)" />
+              </button>
+            </div>
           </div>
 
-          <div style={css.heroBody}>
-            <div style={css.avatarContainer}>
+          {/* Identity row — avatar left, stats right */}
+          <div style={css.identityRow}>
+            <div style={css.avatarRingWrap}>
               <button
                 type="button"
                 onClick={openAvatarModal}
@@ -510,25 +693,58 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                 )}
               </button>
               <span style={css.cameraBadge} aria-hidden>
-                <MdCameraAlt size={14} color="var(--brand-primary)" />
+                <MdCameraAlt size={12} color="var(--brand-primary)" />
               </span>
             </div>
 
+            <div style={css.statsRow}>
+              {trio.map((s, i) => (
+                <button
+                  key={i}
+                  onClick={s.onClick}
+                  style={css.statItem}
+                  className="ps-stat-item"
+                >
+                  <span style={css.statValue}>{s.value}</span>
+                  <span style={css.statLabel}>{s.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Name + verify + role */}
+          <div style={css.nameBlock}>
             <div style={css.nameRow}>
               <h1 style={css.name}>{name}</h1>
               {isVerified && (
-                <span title="Verified" style={css.verifiedWrap}>
-                  <MdVerified size={18} color="var(--info-fg)" />
-                </span>
+                <MdVerified
+                  size={16}
+                  color="#A7F3D0"
+                  aria-label="Verified"
+                />
               )}
             </div>
 
-            {(phone || email) && (
+            <div style={css.roleRow}>
+              <span style={css.rolePill}>
+                {ROLE_EMOJI[role]} {ROLE_LABEL[role]}
+              </span>
+              {memberSince && (
+                <span style={css.metaDot}>·</span>
+              )}
+              {memberSince && (
+                <span style={css.metaText}>Since {memberSince}</span>
+              )}
+            </div>
+
+            {bio && <p style={css.bio}>{bio}</p>}
+
+            {(email || phone) && (
               <div style={css.contactRow}>
                 {phone && (
                   <span style={css.contactItem}>
                     <MdPhone
-                      size={12}
+                      size={11}
                       color="color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)"
                     />
                     <span>{phone}</span>
@@ -537,7 +753,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                 {email && (
                   <span style={css.contactItem}>
                     <MdEmail
-                      size={12}
+                      size={11}
                       color="color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)"
                     />
                     <span>{email}</span>
@@ -545,120 +761,182 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                 )}
               </div>
             )}
+          </div>
 
-            <div style={css.metaRow}>
-              <span style={css.roleChip}>
-                {ROLE_LABEL[role].toUpperCase()}
-              </span>
-              {memberSince && (
+          {/* Action row — Follow / Message / Edit */}
+          <div style={css.actionsRow}>
+            <button
+              type="button"
+              onClick={() => setFollowing((v) => !v)}
+              style={{
+                ...css.followBtn,
+                backgroundColor: following
+                  ? 'color-mix(in srgb, var(--brand-on-gradient) 12%, transparent)'
+                  : 'var(--bg-secondary)',
+                color: following
+                  ? 'var(--brand-on-gradient)'
+                  : 'var(--brand-primary)',
+                borderColor: following
+                  ? 'color-mix(in srgb, var(--brand-on-gradient) 40%, transparent)'
+                  : 'transparent',
+              }}
+              className="ps-action"
+            >
+              {following ? (
                 <>
-                  <span style={css.metaDot}>·</span>
-                  <span style={css.metaText}>Since {memberSince}</span>
+                  <MdCheckCircle size={16} />
+                  <span>Following</span>
+                </>
+              ) : (
+                <>
+                  <MdPersonAdd size={16} />
+                  <span>Follow</span>
                 </>
               )}
-            </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push(`/${roleSlug}/wallet`)}
+              style={css.messageBtn}
+              className="ps-action"
+            >
+              <MdChatBubbleOutline
+                size={16}
+                color="var(--brand-on-gradient)"
+              />
+              <span>Wallet</span>
+            </button>
 
             <button
               type="button"
               onClick={() => router.push(`/${roleSlug}/profile/edit`)}
-              style={css.editBtn}
-              className="ps-edit"
+              style={css.editIconBtn}
+              aria-label="Edit profile"
+              className="ps-action"
             >
-              <MdEdit size={16} color="var(--brand-primary)" />
-              <span>Edit profile</span>
+              <MdEdit size={18} color="var(--brand-on-gradient)" />
             </button>
           </div>
         </div>
 
-        {/* SHEET */}
-        <div style={css.sheet}>
-          {/* STATS — role-specific */}
-          <div style={css.statsCard}>
-            {tiles.map((tile, i) => (
-              <div key={i} style={{ display: 'contents' }}>
-                {i > 0 && <div style={css.statDivider} />}
-                <button
-                  onClick={tile.onClick}
-                  style={css.statTile}
-                  className="ps-stat-tile"
-                >
-                  <div style={css.statIconWrap}>{tile.icon}</div>
-                  <div style={css.statValue}>{tile.value}</div>
-                  <div style={css.statLabel}>{tile.label}</div>
-                </button>
-              </div>
+        {/* ═════════ HIGHLIGHTS STRIP ═════════ */}
+        <div style={css.highlightsSection}>
+          <div style={css.highlightsScroll}>
+            <button
+              type="button"
+              style={css.highlightChip}
+              onClick={() => router.push(`/${roleSlug}/profile/edit`)}
+              className="ps-highlight"
+            >
+              <span style={css.highlightAddIcon}>
+                <MdAdd size={20} color="var(--brand-primary)" />
+              </span>
+              <span style={css.highlightLabel}>New</span>
+            </button>
+
+            {highlights.map((h) => (
+              <button
+                key={h.id}
+                type="button"
+                style={css.highlightChip}
+                className="ps-highlight"
+              >
+                <span style={css.highlightRing}>
+                  <span style={css.highlightEmoji}>{h.emoji}</span>
+                </span>
+                <span style={css.highlightLabel}>{h.label}</span>
+              </button>
             ))}
           </div>
+        </div>
 
-          {/* ACTIVITY — role-specific */}
-          <h3 style={css.sectionLabel}>{activity.title}</h3>
-          <div style={css.section}>
-            {activity.rows.map((row, i) => (
-              <Row key={i} {...row} />
-            ))}
-          </div>
+        {/* ═════════ TABS ═════════ */}
+        <div style={css.tabBar}>
+          <button
+            type="button"
+            onClick={() => setTab('content')}
+            style={{
+              ...css.tabBtn,
+              color:
+                tab === 'content'
+                  ? 'var(--brand-primary)'
+                  : 'var(--text-muted)',
+              borderBottomColor:
+                tab === 'content'
+                  ? 'var(--brand-primary)'
+                  : 'transparent',
+            }}
+          >
+            <MdGridOn size={20} />
+            <span>Content</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('about')}
+            style={{
+              ...css.tabBtn,
+              color:
+                tab === 'about'
+                  ? 'var(--brand-primary)'
+                  : 'var(--text-muted)',
+              borderBottomColor:
+                tab === 'about'
+                  ? 'var(--brand-primary)'
+                  : 'transparent',
+            }}
+          >
+            <MdInfoOutline size={20} />
+            <span>About</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('wallet')}
+            style={{
+              ...css.tabBtn,
+              color:
+                tab === 'wallet'
+                  ? 'var(--brand-primary)'
+                  : 'var(--text-muted)',
+              borderBottomColor:
+                tab === 'wallet'
+                  ? 'var(--brand-primary)'
+                  : 'transparent',
+            }}
+          >
+            <MdAccountBalanceWallet size={20} />
+            <span>Wallet</span>
+          </button>
+        </div>
 
-          {/* WALLET */}
-          <h3 style={css.sectionLabel}>{walletTitle}</h3>
-          <div style={css.walletCard}>
-            <div style={css.walletTop}>
-              <div style={css.walletLabelRow}>
-                <MdAccountBalanceWallet
-                  size={16}
-                  color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)"
-                />
-                <span style={css.walletLabel}>Available balance</span>
-              </div>
-              <div style={css.walletBalance}>
-                {fmtBalance(stats?.walletBalance ?? 0)}
-              </div>
-            </div>
-            <div style={css.walletActions}>
-              <button
-                type="button"
-                onClick={() => router.push(`/${roleSlug}/wallet`)}
-                style={css.walletPrimary}
-                className="ps-wallet-btn"
-              >
-                {role === 'shopper' ? (
-                  <>
-                    <MdAdd size={16} color="var(--brand-primary)" />
-                    <span>Top up</span>
-                  </>
-                ) : (
-                  <span>Withdraw</span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push(`/${roleSlug}/wallet`)}
-                style={css.walletSecondary}
-                className="ps-wallet-btn2"
-              >
-                <span>View wallet</span>
-                <MdArrowForward
-                  size={16}
-                  color="var(--brand-on-gradient)"
-                />
-              </button>
-            </div>
-          </div>
+        {/* ═════════ TAB CONTENT ═════════ */}
+        <div style={css.tabContent}>
+          {tab === 'content' && (
+            <ContentTab role={role} stats={stats} />
+          )}
 
-          {/* ACCOUNT */}
-          <h3 style={css.sectionLabel}>Account</h3>
-          <div style={css.section}>
-            <Row
-              icon={
-                <MdSwapHoriz size={18} color="var(--success-fg)" />
-              }
-              iconBg="var(--success-bg)"
-              label="Switch role"
-              subtitle={ROLE_LABEL[role]}
-              onClick={() => router.push('/onboarding?mode=switch')}
+          {tab === 'about' && (
+            <AboutTab
+              profile={profile}
+              role={role}
+              memberSince={memberSince}
+              followersCount={followersCount}
             />
-          </div>
+          )}
 
-          {/* LOG OUT */}
+          {tab === 'wallet' && (
+            <WalletTab
+              role={role}
+              stats={stats}
+              roleSlug={roleSlug}
+              walletTitle={walletTitle}
+              router={router}
+            />
+          )}
+        </div>
+
+        {/* Logout */}
+        <div style={css.logoutWrap}>
           <button
             onClick={handleLogout}
             style={css.logoutBtn}
@@ -667,12 +945,10 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
             <MdLogout size={20} color="var(--danger-fg)" />
             <span>Log Out</span>
           </button>
-
-          <div style={{ height: 24 }} />
         </div>
       </div>
 
-      {/* AVATAR MODAL */}
+      {/* AVATAR MODAL — unchanged behaviour */}
       {showAvatarModal && (
         <div
           style={css.modalOverlay}
@@ -777,303 +1053,404 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Role-specific tile + activity builders
+// Tab: Content (grid of listings/services)
 // ─────────────────────────────────────────────────────────────
-function buildStatTiles(
-  role: ProfileRole,
-  stats: Stats | null,
-): StatTile[] {
-  if (role === 'shopper') {
-    const s = (stats as ShopperStats | null) ?? {
-      savedCount: 0,
-      wantedCount: 0,
-      ordersCount: 0,
-      walletBalance: 0,
+function ContentTab({
+  role,
+  stats,
+}: {
+  role: ProfileRole;
+  stats: Stats | null;
+}) {
+  const router = useRouter();
+  const [items, setItems] = useState<GridItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const collected: GridItem[] = [];
+        if (role === 'storekeeper') {
+          const s = stats as StorekeeperStats | null;
+          if (s?.storeId) {
+            const listings = (await api.getStoreItems(
+              s.storeId,
+            )) as Array<Record<string, unknown>>;
+            for (const l of listings || []) {
+              collected.push({
+                id: String(l.listing_id ?? ''),
+                title: String(l.title ?? 'Listing'),
+                imageUrl: resolveImageUrl(
+                  (l.image_url as string) ?? null,
+                ),
+                price: l.price ? `₦${Number(l.price).toLocaleString()}` : undefined,
+                kind: 'listing',
+              });
+            }
+          }
+        } else if (role === 'service_provider') {
+          const services = (await api.getProviderServices()) as Array<
+            Record<string, unknown>
+          >;
+          for (const sv of services || []) {
+            collected.push({
+              id: String(sv.service_id ?? ''),
+              title: String(sv.title ?? 'Service'),
+              imageUrl: resolveImageUrl(
+                (sv.image_url as string) ?? null,
+              ),
+              price: sv.price
+                ? `₦${Number(sv.price).toLocaleString()}`
+                : undefined,
+              kind: 'service',
+            });
+          }
+        } else {
+          // Shopper — show saved items
+          const saved = (await api.getSavedItems()) as Array<
+            Record<string, unknown>
+          >;
+          for (const s of saved || []) {
+            collected.push({
+              id: String(s.listing_id ?? ''),
+              title: String(s.title ?? 'Saved item'),
+              imageUrl: resolveImageUrl(
+                (s.image_url as string) ?? null,
+              ),
+              price: s.price ? `₦${Number(s.price).toLocaleString()}` : undefined,
+              kind: 'listing',
+            });
+          }
+        }
+        if (!cancelled) setItems(collected);
+      } catch {
+        if (!cancelled) setItems([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
-    return [
-      {
-        icon: (
-          <MdFavoriteBorder size={20} color="var(--brand-primary)" />
-        ),
-        label: 'Saved',
-        value: String(s.savedCount),
-        onClick: () => {},
-      },
-      {
-        icon: <MdSearch size={20} color="var(--info-fg)" />,
-        label: 'Wanted',
-        value: String(s.wantedCount),
-        onClick: () => {},
-      },
-      {
-        icon: <MdShoppingBag size={20} color="var(--purple-fg)" />,
-        label: 'Orders',
-        value: String(s.ordersCount),
-        onClick: () => {},
-      },
-      {
-        icon: (
-          <MdAccountBalanceWallet
-            size={20}
-            color="var(--success-fg)"
-          />
-        ),
-        label: 'Wallet',
-        value: fmtBalance(s.walletBalance),
-        onClick: () => {},
-      },
-    ];
+  }, [role, stats]);
+
+  if (loading) {
+    return (
+      <div style={grid.grid}>
+        {Array.from({ length: 9 }).map((_, i) => (
+          <div key={i} style={grid.cell} className="ps-grid-skel" />
+        ))}
+      </div>
+    );
   }
 
-  if (role === 'storekeeper') {
-    const s = (stats as StorekeeperStats | null) ?? {
-      storeId: null,
-      listingsCount: 0,
-      ordersCount: 0,
-      viewsCount: 0,
-      walletBalance: 0,
-    };
-    return [
-      {
-        icon: <MdInventory2 size={20} color="var(--brand-primary)" />,
-        label: 'Listings',
-        value: String(s.listingsCount),
-        onClick: () => {},
-      },
-      {
-        icon: <MdReceiptLong size={20} color="var(--info-fg)" />,
-        label: 'Orders',
-        value: String(s.ordersCount),
-        onClick: () => {},
-      },
-      {
-        icon: <MdVisibility size={20} color="var(--purple-fg)" />,
-        label: 'Views',
-        value:
-          s.viewsCount >= 1000
-            ? `${(s.viewsCount / 1000).toFixed(1)}k`
-            : String(s.viewsCount),
-        onClick: () => {},
-      },
-      {
-        icon: (
-          <MdAccountBalanceWallet
-            size={20}
-            color="var(--success-fg)"
-          />
-        ),
-        label: 'Revenue',
-        value: fmtBalance(s.walletBalance),
-        onClick: () => {},
-      },
-    ];
+  if (items.length === 0) {
+    return (
+      <div style={grid.empty}>
+        <div style={grid.emptyIcon}>
+          <MdStore size={32} color="var(--brand-primary)" />
+        </div>
+        <h3 style={grid.emptyTitle}>Nothing here yet</h3>
+        <p style={grid.emptyBody}>
+          {role === 'shopper'
+            ? 'Save items you love and they will show up here.'
+            : role === 'storekeeper'
+              ? 'Add your first listing to start selling.'
+              : 'Add your first service to start earning.'}
+        </p>
+      </div>
+    );
   }
 
-  // service_provider
-  const s = (stats as ProviderStats | null) ?? {
-    servicesCount: 0,
-    bookingsCount: 0,
-    rating: 0,
-    walletBalance: 0,
-  };
-  return [
-    {
-      icon: <MdBuild size={20} color="var(--brand-primary)" />,
-      label: 'Services',
-      value: String(s.servicesCount),
-      onClick: () => {},
-    },
-    {
-      icon: <MdEventAvailable size={20} color="var(--info-fg)" />,
-      label: 'Bookings',
-      value: String(s.bookingsCount),
-      onClick: () => {},
-    },
-    {
-      icon: <MdStar size={20} color="var(--warning-fg)" />,
-      label: 'Rating',
-      value: s.rating > 0 ? s.rating.toFixed(1) : '—',
-      onClick: () => {},
-    },
-    {
-      icon: <MdTrendingUp size={20} color="var(--success-fg)" />,
-      label: 'Earnings',
-      value: fmtBalance(s.walletBalance),
-      onClick: () => {},
-    },
-  ];
-}
-
-function buildActivityRows(
-  role: ProfileRole,
-  stats: Stats | null,
-): { title: string; rows: ActivityRow[] } {
-  if (role === 'shopper') {
-    const s = (stats as ShopperStats | null) ?? {
-      savedCount: 0,
-      wantedCount: 0,
-      ordersCount: 0,
-      walletBalance: 0,
-    };
-    return {
-      title: 'Your activity',
-      rows: [
-        {
-          icon: (
-            <MdFavoriteBorder
-              size={18}
-              color="var(--brand-primary)"
-            />
-          ),
-          iconBg: 'var(--brand-soft)',
-          label: 'Saved items',
-          value: String(s.savedCount),
-        },
-        {
-          icon: <MdSearch size={18} color="var(--info-fg)" />,
-          iconBg: 'var(--info-bg)',
-          label: 'Wanted alerts',
-          value: String(s.wantedCount),
-        },
-        {
-          icon: <MdReceiptLong size={18} color="var(--purple-fg)" />,
-          iconBg: 'var(--purple-bg)',
-          label: 'Orders',
-          value: String(s.ordersCount),
-        },
-        {
-          icon: <MdLocationOn size={18} color="var(--warning-fg)" />,
-          iconBg: 'var(--warning-bg)',
-          label: 'Delivery addresses',
-        },
-      ],
-    };
-  }
-
-  if (role === 'storekeeper') {
-    const s = (stats as StorekeeperStats | null) ?? {
-      storeId: null,
-      listingsCount: 0,
-      ordersCount: 0,
-      viewsCount: 0,
-      walletBalance: 0,
-    };
-    return {
-      title: 'Your store',
-      rows: [
-        {
-          icon: (
-            <MdStorefront size={18} color="var(--brand-primary)" />
-          ),
-          iconBg: 'var(--brand-soft)',
-          label: 'Store profile',
-        },
-        {
-          icon: <MdInventory2 size={18} color="var(--info-fg)" />,
-          iconBg: 'var(--info-bg)',
-          label: 'Listings',
-          value: String(s.listingsCount),
-        },
-        {
-          icon: <MdReceiptLong size={18} color="var(--purple-fg)" />,
-          iconBg: 'var(--purple-bg)',
-          label: 'Orders received',
-          value: String(s.ordersCount),
-        },
-        {
-          icon: <MdVerified size={18} color="var(--success-fg)" />,
-          iconBg: 'var(--success-bg)',
-          label: 'Verification',
-        },
-      ],
-    };
-  }
-
-  const s = (stats as ProviderStats | null) ?? {
-    servicesCount: 0,
-    bookingsCount: 0,
-    rating: 0,
-    walletBalance: 0,
-  };
-  return {
-    title: 'Your work',
-    rows: [
-      {
-        icon: <MdBuild size={18} color="var(--brand-primary)" />,
-        iconBg: 'var(--brand-soft)',
-        label: 'My services',
-        value: String(s.servicesCount),
-      },
-      {
-        icon: (
-          <MdEventAvailable size={18} color="var(--info-fg)" />
-        ),
-        iconBg: 'var(--info-bg)',
-        label: 'Bookings',
-        value: String(s.bookingsCount),
-      },
-      {
-        icon: <MdStar size={18} color="var(--warning-fg)" />,
-        iconBg: 'var(--warning-bg)',
-        label: 'Reviews',
-        value: s.rating > 0 ? s.rating.toFixed(1) : '—',
-      },
-      {
-        icon: <MdTrendingUp size={18} color="var(--success-fg)" />,
-        iconBg: 'var(--success-bg)',
-        label: 'Availability',
-      },
-    ],
-  };
+  return (
+    <div style={grid.grid}>
+      {items.map((it) => (
+        <button
+          key={it.id}
+          type="button"
+          style={grid.cell}
+          className="ps-grid-cell"
+          onClick={() =>
+            router.push(
+              it.kind === 'service'
+                ? `/service-detail/${it.id}`
+                : `/item-detail/${it.id}`,
+            )
+          }
+        >
+          {it.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={it.imageUrl} alt="" style={grid.img} />
+          ) : (
+            <div style={grid.imgPlaceholder}>
+              <MdStorefront
+                size={20}
+                color="var(--text-muted)"
+              />
+            </div>
+          )}
+          {it.price && (
+            <span style={grid.priceTag}>{it.price}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Sub-components
+// Tab: About
 // ─────────────────────────────────────────────────────────────
-function Row({
+function AboutTab({
+  profile,
+  role,
+  memberSince,
+  followersCount,
+}: {
+  profile: Profile;
+  role: ProfileRole;
+  memberSince: string;
+  followersCount: number;
+}) {
+  return (
+    <>
+      <h3 style={css.sectionLabel}>Trust & activity</h3>
+      <div style={css.section}>
+        <AboutRow
+          icon={<MdVerified size={18} color="var(--success-fg)" />}
+          iconBg="var(--success-bg)"
+          label="Verification"
+          value={profile.verified ? 'Verified' : 'Not verified'}
+        />
+        <AboutRow
+          icon={<MdPersonAdd size={18} color="var(--brand-primary)" />}
+          iconBg="var(--brand-soft)"
+          label="Followers"
+          value={String(followersCount)}
+        />
+        <AboutRow
+          icon={
+            <MdAccessTime size={18} color="var(--warning-fg)" />
+          }
+          iconBg="var(--warning-bg)"
+          label="Member since"
+          value={memberSince || '—'}
+        />
+      </div>
+
+      <h3 style={css.sectionLabel}>Details</h3>
+      <div style={css.section}>
+        <AboutRow
+          icon={<MdStorefront size={18} color="var(--brand-primary)" />}
+          iconBg="var(--brand-soft)"
+          label="Role"
+          value={ROLE_LABEL[role]}
+        />
+        {profile.business_name && (
+          <AboutRow
+            icon={<MdStore size={18} color="var(--info-fg)" />}
+            iconBg="var(--info-bg)"
+            label="Business name"
+            value={String(profile.business_name)}
+          />
+        )}
+        {(profile.lga || profile.state_of_origin) && (
+          <AboutRow
+            icon={<MdLocationOn size={18} color="var(--purple-fg)" />}
+            iconBg="var(--purple-bg)"
+            label="Location"
+            value={[profile.lga, profile.state_of_origin]
+              .filter(Boolean)
+              .join(', ')}
+          />
+        )}
+        {profile.phone && (
+          <AboutRow
+            icon={<MdPhone size={18} color="var(--info-fg)" />}
+            iconBg="var(--info-bg)"
+            label="Phone"
+            value={String(profile.phone)}
+          />
+        )}
+        {profile.email && (
+          <AboutRow
+            icon={<MdEmail size={18} color="var(--info-fg)" />}
+            iconBg="var(--info-bg)"
+            label="Email"
+            value={String(profile.email)}
+          />
+        )}
+      </div>
+
+      <h3 style={css.sectionLabel}>Account</h3>
+      <div style={css.section}>
+        <AboutRow
+          icon={<MdSwapHoriz size={18} color="var(--success-fg)" />}
+          iconBg="var(--success-bg)"
+          label="Switch role"
+          value={ROLE_LABEL[role]}
+          onClick={() =>
+            (window.location.href = '/onboarding?mode=switch')
+          }
+        />
+      </div>
+    </>
+  );
+}
+
+function AboutRow({
   icon,
   iconBg,
   label,
-  subtitle,
   value,
   onClick,
 }: {
   icon: React.ReactNode;
   iconBg: string;
   label: string;
-  subtitle?: string;
-  value?: string;
+  value: string;
   onClick?: () => void;
 }) {
   return (
-    <button onClick={onClick} style={css.row} className="ps-row">
+    <button
+      onClick={onClick}
+      style={css.row}
+      className={onClick ? 'ps-row' : ''}
+    >
       <span style={{ ...css.rowIconWrap, backgroundColor: iconBg }}>
         {icon}
       </span>
       <span style={css.rowBody}>
         <span style={css.rowLabel}>{label}</span>
-        {subtitle && <span style={css.rowSubtitle}>{subtitle}</span>}
       </span>
-      {value && <span style={css.rowValue}>{value}</span>}
-      <MdChevronRight size={18} color="var(--border-strong)" />
+      <span style={css.rowValue}>{value}</span>
+      {onClick && (
+        <MdChevronRight size={18} color="var(--border-strong)" />
+      )}
     </button>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Responsive CSS
+// Tab: Wallet
+// ─────────────────────────────────────────────────────────────
+function WalletTab({
+  role,
+  stats,
+  roleSlug,
+  walletTitle,
+  router,
+}: {
+  role: ProfileRole;
+  stats: Stats | null;
+  roleSlug: string;
+  walletTitle: string;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const balance = stats?.walletBalance ?? 0;
+
+  return (
+    <>
+      <div style={css.walletCard}>
+        <div style={css.walletTop}>
+          <div style={css.walletLabelRow}>
+            <MdAccountBalanceWallet
+              size={16}
+              color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)"
+            />
+            <span style={css.walletLabel}>{walletTitle}</span>
+          </div>
+          <div style={css.walletBalance}>{fmtBalance(balance)}</div>
+          <div style={css.walletFootnote}>
+            Funds held securely in escrow by our licensed partner.
+          </div>
+        </div>
+        <div style={css.walletActions}>
+          {role === 'shopper' ? (
+            <button
+              type="button"
+              onClick={() => router.push(`/${roleSlug}/wallet`)}
+              style={css.walletPrimary}
+              className="ps-action"
+            >
+              <MdAdd size={16} color="var(--brand-primary)" />
+              <span>Add money</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => router.push(`/${roleSlug}/wallet`)}
+              style={css.walletPrimary}
+              className="ps-action"
+            >
+              <span>Withdraw</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => router.push(`/${roleSlug}/wallet`)}
+            style={css.walletSecondary}
+            className="ps-action"
+          >
+            <span>View wallet</span>
+            <MdArrowForward
+              size={16}
+              color="var(--brand-on-gradient)"
+            />
+          </button>
+        </div>
+      </div>
+
+      <h3 style={css.sectionLabel}>Recent activity</h3>
+      <div style={css.section}>
+        <AboutRow
+          icon={<MdReceiptLong size={18} color="var(--purple-fg)" />}
+          iconBg="var(--purple-bg)"
+          label="Transactions"
+          value="View all"
+          onClick={() => router.push(`/${roleSlug}/wallet`)}
+        />
+        <AboutRow
+          icon={<MdTrendingUp size={18} color="var(--success-fg)" />}
+          iconBg="var(--success-bg)"
+          label="This week"
+          value={fmtBalance(0)}
+        />
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CSS
 // ─────────────────────────────────────────────────────────────
 const CSS = `
-  /* Profile shell: caps content column, centered */
   .ps-shell {
     width: 100%;
-    max-width: 560px;
+    max-width: 640px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    padding-bottom: 40px;
   }
+  .ps-stat-item:hover { opacity: 0.85; }
+  .ps-stat-item:active { transform: scale(0.97); }
+  .ps-action:active { transform: scale(0.97); }
+  .ps-action:hover { opacity: 0.94; }
+  .ps-highlight:active { transform: scale(0.95); }
+  .ps-highlight:hover { opacity: 0.92; }
+  .ps-grid-cell:active { opacity: 0.9; }
+  .ps-grid-skel {
+    background: var(--skeleton);
+    animation: psShimmer 1.4s ease-in-out infinite;
+    aspect-ratio: 1 / 1;
+  }
+  .ps-row:hover { background-color: var(--bg-hover); }
+  .ps-logout:hover { background-color: var(--danger-bg); }
+  .ps-logout:active { transform: scale(0.99); }
 
   @media (min-width: 1024px) {
     .ps-modal-overlay {
@@ -1088,21 +1465,9 @@ const CSS = `
   }
 `;
 
-// ─────────────────────────────────────────────────────────────
-// Keyframes
-// ─────────────────────────────────────────────────────────────
 const KF = `
   @keyframes psShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
   @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-  .ps-stat-tile:hover { background-color: var(--bg-hover); }
-  .ps-stat-tile:active { transform: scale(0.97); }
-  .ps-row:hover { background-color: var(--bg-hover); }
-  .ps-edit:hover { background-color: var(--brand-soft); }
-  .ps-edit:active { transform: scale(0.98); }
-  .ps-wallet-btn:active { transform: scale(0.98); }
-  .ps-wallet-btn2:active { transform: scale(0.98); }
-  .ps-logout:hover { background-color: var(--danger-bg); }
-  .ps-logout:active { transform: scale(0.99); }
 `;
 
 // ─────────────────────────────────────────────────────────────
@@ -1121,7 +1486,7 @@ const css: Record<string, React.CSSProperties> = {
   hero: {
     position: 'relative',
     background: 'var(--brand-gradient)',
-    padding: '0 20px 56px',
+    padding: '0 20px 22px',
     overflow: 'hidden',
     transition: 'background 0.18s ease',
   },
@@ -1140,18 +1505,22 @@ const css: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 14,
-    paddingBottom: 4,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   topTitle: {
     fontSize: 15,
-    fontWeight: 600,
+    fontWeight: 700,
     color: 'var(--brand-on-gradient)',
     letterSpacing: 0.3,
   },
-  ghostBtn: {
+  topActions: {
+    display: 'flex',
+    gap: 4,
+  },
+  ghostIconBtn: {
     background:
-      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
+      'color-mix(in srgb, var(--brand-on-gradient) 10%, transparent)',
     border: 'none',
     cursor: 'pointer',
     padding: 8,
@@ -1159,34 +1528,38 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 10,
-    minWidth: 38,
-    minHeight: 38,
+    minWidth: 36,
+    minHeight: 36,
   },
-  heroBody: {
+  identityRow: {
     display: 'flex',
-    flexDirection: 'column',
     alignItems: 'center',
-    paddingTop: 8,
+    gap: 20,
+    paddingTop: 6,
   },
-  avatarContainer: {
+  avatarRingWrap: {
     position: 'relative',
-    width: 96,
-    height: 96,
+    width: 88,
+    height: 88,
+    flexShrink: 0,
+    padding: 3,
+    borderRadius: '50%',
+    background:
+      'linear-gradient(135deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.6) 100%)',
   },
   avatarWrap: {
-    width: 96,
-    height: 96,
+    width: '100%',
+    height: '100%',
     borderRadius: '50%',
-    border:
-      '3px solid color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
-    background:
-      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
+    border: '2px solid var(--brand-primary)',
+    background: 'var(--bg-secondary)',
     cursor: 'pointer',
     padding: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    boxSizing: 'border-box',
   },
   avatarImg: {
     width: '100%',
@@ -1201,27 +1574,17 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     color: 'var(--brand-on-gradient)',
-    fontSize: 36,
+    backgroundColor: 'var(--brand-primary)',
+    fontSize: 30,
     fontWeight: 800,
     letterSpacing: -1,
   },
-  avatarFallbackLarge: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: 'var(--brand-primary)',
-    fontSize: 44,
-    fontWeight: 800,
-    backgroundColor: 'var(--brand-soft)',
-  },
   cameraBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 30,
-    height: 30,
+    bottom: -2,
+    right: -2,
+    width: 26,
+    height: 26,
     borderRadius: '50%',
     backgroundColor: 'var(--bg-secondary)',
     display: 'flex',
@@ -1230,147 +1593,262 @@ const css: Record<string, React.CSSProperties> = {
     boxShadow: 'var(--shadow-md)',
     border: '2px solid var(--brand-primary)',
     pointerEvents: 'none',
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+  },
+  statsRow: {
+    flex: 1,
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 2,
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    padding: '4px 6px',
+    transition: 'opacity 0.15s, transform 0.12s',
+  },
+  statValue: {
+    fontSize: 17,
+    fontWeight: 800,
+    color: 'var(--brand-on-gradient)',
+    letterSpacing: -0.3,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: 600,
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
+  },
+  nameBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    marginTop: 16,
   },
   nameRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
-    marginTop: 16,
-    marginBottom: 6,
   },
   name: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 800,
     color: 'var(--brand-on-gradient)',
     margin: 0,
     letterSpacing: -0.3,
-    textAlign: 'center',
   },
-  verifiedWrap: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contactRow: {
+  roleRow: {
     display: 'flex',
-    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  rolePill: {
+    display: 'inline-flex',
     alignItems: 'center',
     gap: 4,
-    marginTop: 4,
-  },
-  contactItem: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    fontSize: 12.5,
-    color:
-      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
-    fontWeight: 500,
-  },
-  metaRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-  },
-  roleChip: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: 800,
-    letterSpacing: 0.6,
-    color: 'var(--brand-primary)',
-    backgroundColor: 'var(--bg-secondary)',
-    padding: '4px 10px',
+    letterSpacing: 0.4,
+    padding: '3px 10px',
     borderRadius: 999,
-    transition: 'background-color 0.18s ease, color 0.18s ease',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 14%, transparent)',
+    color: 'var(--brand-on-gradient)',
+    textTransform: 'uppercase',
   },
   metaDot: {
     color:
       'color-mix(in srgb, var(--brand-on-gradient) 40%, transparent)',
+    fontSize: 12,
   },
   metaText: {
     fontSize: 11.5,
     color:
-      'color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)',
+      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
     fontWeight: 500,
   },
-  editBtn: {
+  bio: {
+    fontSize: 13,
+    lineHeight: 1.5,
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 90%, transparent)',
+    margin: 0,
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+  },
+  contactRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 2,
+  },
+  contactItem: {
     display: 'inline-flex',
     alignItems: 'center',
+    gap: 5,
+    fontSize: 11.5,
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
+    fontWeight: 500,
+  },
+  actionsRow: {
+    display: 'flex',
     gap: 8,
     marginTop: 18,
-    padding: '10px 20px',
-    borderRadius: 14,
-    border: 'none',
-    backgroundColor: 'var(--bg-secondary)',
-    color: 'var(--brand-primary)',
-    fontSize: 13.5,
-    fontWeight: 800,
+  },
+  followBtn: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: '11px 14px',
+    borderRadius: 12,
+    border: '1.5px solid',
+    fontSize: 14,
+    fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    letterSpacing: -0.1,
-    transition: 'background-color 0.15s, transform 0.12s',
-    boxShadow: 'var(--shadow-md)',
+    transition:
+      'background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.12s',
   },
-  sheet: {
+  messageBtn: {
     flex: 1,
-    marginTop: -40,
-    padding: '0 20px 40px',
-    position: 'relative',
-  },
-  statsCard: {
     display: 'flex',
-    alignItems: 'stretch',
-    backgroundColor: 'var(--bg-secondary)',
-    borderRadius: 20,
-    border: '1px solid var(--border-default)',
-    boxShadow: 'var(--shadow-md)',
-    padding: '14px 6px',
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: '11px 14px',
+    borderRadius: 12,
+    border:
+      '1.5px solid color-mix(in srgb, var(--brand-on-gradient) 35%, transparent)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
+    color: 'var(--brand-on-gradient)',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'transform 0.12s, opacity 0.15s',
   },
-  statTile: {
-    flex: 1,
+  editIconBtn: {
+    width: 46,
+    padding: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    border:
+      '1.5px solid color-mix(in srgb, var(--brand-on-gradient) 35%, transparent)',
+    backgroundColor:
+      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'transform 0.12s, opacity 0.15s',
+  },
+  highlightsSection: {
+    backgroundColor: 'var(--bg-primary)',
+    paddingTop: 16,
+    paddingBottom: 4,
+  },
+  highlightsScroll: {
+    display: 'flex',
+    gap: 16,
+    padding: '0 20px',
+    overflowX: 'auto',
+    scrollbarWidth: 'none',
+  },
+  highlightChip: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    padding: '6px 4px',
+    gap: 6,
+    background: 'none',
     border: 'none',
-    background: 'transparent',
     cursor: 'pointer',
     fontFamily: 'inherit',
-    borderRadius: 12,
-    transition: 'background-color 0.15s, transform 0.12s',
+    padding: 0,
+    flexShrink: 0,
+    transition: 'transform 0.12s, opacity 0.15s',
   },
-  statIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    backgroundColor: 'var(--brand-soft)',
+  highlightRing: {
+    width: 62,
+    height: 62,
+    borderRadius: '50%',
+    padding: 2,
+    background:
+      'linear-gradient(135deg, var(--brand-primary) 0%, var(--purple-fg, #7C3AED) 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
-    transition: 'background-color 0.18s ease',
   },
-  statValue: {
-    fontSize: 15,
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    letterSpacing: -0.3,
-    fontVariantNumeric: 'tabular-nums',
+  highlightEmoji: {
+    width: '100%',
+    height: '100%',
+    borderRadius: '50%',
+    backgroundColor: 'var(--bg-secondary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 24,
   },
-  statLabel: {
-    fontSize: 10.5,
+  highlightAddIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: '50%',
+    border:
+      '2px dashed color-mix(in srgb, var(--brand-primary) 55%, transparent)',
+    backgroundColor: 'var(--bg-secondary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxSizing: 'border-box',
+  },
+  highlightLabel: {
+    fontSize: 11,
     fontWeight: 600,
-    color: 'var(--text-tertiary)',
-    letterSpacing: 0.2,
+    color: 'var(--text-secondary)',
+    maxWidth: 68,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
-  statDivider: {
-    width: 1,
-    backgroundColor: 'var(--border-subtle)',
-    margin: '10px 0',
+  tabBar: {
+    display: 'flex',
+    borderBottom: '1px solid var(--border-default)',
+    marginTop: 12,
+    backgroundColor: 'var(--bg-primary)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+  },
+  tabBtn: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: '12px 4px',
+    background: 'none',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontSize: 12.5,
+    fontWeight: 700,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    transition: 'color 0.15s, border-color 0.15s',
+  },
+  tabContent: {
+    padding: '16px 16px 0',
+    minHeight: 200,
   },
   sectionLabel: {
     fontSize: 11.5,
@@ -1378,11 +1856,11 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--text-tertiary)',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    margin: '22px 0 8px 4px',
+    margin: '20px 0 8px 4px',
   },
   section: {
     backgroundColor: 'var(--bg-secondary)',
-    borderRadius: 18,
+    borderRadius: 16,
     border: '1px solid var(--border-default)',
     overflow: 'hidden',
     transition: 'background-color 0.18s ease, border-color 0.18s ease',
@@ -1417,14 +1895,10 @@ const css: Record<string, React.CSSProperties> = {
     minWidth: 0,
   },
   rowLabel: {
-    fontSize: 14.5,
+    fontSize: 14,
     fontWeight: 600,
     color: 'var(--text-primary)',
     letterSpacing: -0.1,
-  },
-  rowSubtitle: {
-    fontSize: 12,
-    color: 'var(--text-muted)',
   },
   rowValue: {
     fontSize: 13,
@@ -1464,6 +1938,13 @@ const css: Record<string, React.CSSProperties> = {
     fontVariantNumeric: 'tabular-nums',
     color: 'var(--brand-on-gradient)',
   },
+  walletFootnote: {
+    fontSize: 11.5,
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
+    marginTop: 2,
+    lineHeight: 1.4,
+  },
   walletActions: {
     display: 'flex',
     gap: 10,
@@ -1476,7 +1957,7 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 6,
     padding: '12px 14px',
-    borderRadius: 14,
+    borderRadius: 12,
     border: 'none',
     backgroundColor: 'var(--bg-secondary)',
     color: 'var(--brand-primary)',
@@ -1484,7 +1965,7 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    transition: 'transform 0.12s, background-color 0.18s ease',
+    transition: 'transform 0.12s',
   },
   walletSecondary: {
     flex: 1,
@@ -1493,7 +1974,7 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 6,
     padding: '12px 14px',
-    borderRadius: 14,
+    borderRadius: 12,
     border:
       '1.5px solid color-mix(in srgb, var(--brand-on-gradient) 40%, transparent)',
     backgroundColor:
@@ -1505,13 +1986,15 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     transition: 'transform 0.12s',
   },
+  logoutWrap: {
+    padding: '30px 16px 0',
+  },
   logoutBtn: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
     width: '100%',
-    marginTop: 22,
     padding: '14px 20px',
     borderRadius: 16,
     border: '1.5px solid var(--danger-strong)',
@@ -1561,7 +2044,6 @@ const css: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    transition: 'background-color 0.18s ease',
   },
   modalTitle: {
     fontSize: 20,
@@ -1587,7 +2069,17 @@ const css: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     cursor: 'pointer',
     border: '3px solid var(--brand-soft)',
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+  },
+  avatarFallbackLarge: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--brand-primary)',
+    fontSize: 44,
+    fontWeight: 800,
+    backgroundColor: 'var(--brand-soft)',
   },
   modalActions: {
     display: 'flex',
@@ -1609,8 +2101,6 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    transition:
-      'background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease',
   },
   modalPrimary: {
     width: '100%',
@@ -1626,8 +2116,8 @@ const css: Record<string, React.CSSProperties> = {
     boxShadow: 'var(--shadow-brand)',
   },
   avatarSkeleton: {
-    width: 96,
-    height: 96,
+    width: 88,
+    height: 88,
     borderRadius: '50%',
     backgroundColor:
       'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
@@ -1647,7 +2137,6 @@ const css: Record<string, React.CSSProperties> = {
     backgroundColor: 'var(--bg-secondary)',
     border: '1px solid var(--border-default)',
     animation: 'psShimmer 1.4s ease-in-out infinite',
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   sectionSkeleton: {
     height: 120,
@@ -1656,7 +2145,6 @@ const css: Record<string, React.CSSProperties> = {
     border: '1px solid var(--border-default)',
     marginTop: 18,
     animation: 'psShimmer 1.4s ease-in-out infinite',
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   errorRoot: {
     display: 'flex',
@@ -1668,7 +2156,6 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--text-primary)',
     padding: 24,
     textAlign: 'center',
-    transition: 'background-color 0.18s ease, color 0.18s ease',
   },
   errorHalo: {
     width: 84,
@@ -1710,5 +2197,87 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     fontFamily: 'inherit',
     boxShadow: 'var(--shadow-brand)',
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
+// Grid styles
+// ─────────────────────────────────────────────────────────────
+const grid: Record<string, React.CSSProperties> = {
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: 3,
+    marginTop: 8,
+  },
+  cell: {
+    position: 'relative',
+    aspectRatio: '1 / 1',
+    border: 'none',
+    padding: 0,
+    backgroundColor: 'var(--bg-tertiary)',
+    cursor: 'pointer',
+    overflow: 'hidden',
+    fontFamily: 'inherit',
+  },
+  img: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  },
+  imgPlaceholder: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'var(--bg-tertiary)',
+  },
+  priceTag: {
+    position: 'absolute',
+    left: 6,
+    bottom: 6,
+    padding: '3px 8px',
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    color: '#FFFFFF',
+    fontSize: 10.5,
+    fontWeight: 800,
+    letterSpacing: 0.2,
+    backdropFilter: 'blur(4px)',
+  },
+  empty: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '48px 24px',
+    textAlign: 'center',
+    gap: 4,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: 'var(--brand-soft)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: 800,
+    color: 'var(--text-primary)',
+    margin: 0,
+    letterSpacing: -0.2,
+  },
+  emptyBody: {
+    fontSize: 13.5,
+    color: 'var(--text-tertiary)',
+    margin: '4px 0 0',
+    maxWidth: 300,
+    lineHeight: 1.5,
   },
 };
