@@ -107,6 +107,8 @@ const AT_BOTTOM_THRESHOLD_PX = 80;
 const MAX_TOASTS = 3;
 const PRESENCE_POLL_MS = 30_000;
 const HEARTBEAT_INTERVAL_MS = 60_000;
+const TYPING_POLL_MS = 2_000;
+const TYPING_PING_THROTTLE_MS = 2_000;
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
@@ -258,8 +260,6 @@ function VoiceBubblePlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Colors route through CSS vars — the bubble background flips
-  // blue→silver in dark, so the accent must flip with it.
   const accent = isMine
     ? 'var(--brand-on-primary)'
     : 'var(--brand-primary)';
@@ -768,6 +768,7 @@ function ChatContent() {
   }, [otherUserId]);
 
   const [presence, setPresence] = useState<PresenceInfo | null>(null);
+  const [otherTyping, setOtherTyping] = useState(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -804,6 +805,7 @@ function ChatContent() {
   );
   const isAtBottomRef = useRef(true);
   const prevMessageCountRef = useRef(0);
+  const lastTypingPingRef = useRef(0);
 
   const isSeaiConversation =
     otherUserId.toLowerCase() === 'seai' ||
@@ -819,7 +821,9 @@ function ChatContent() {
   const displayAvatar = resolveImageUrl(displayAvatarRaw);
   const publicUrl = presence?.public_url || null;
   const isOnline = presence?.online === true;
-  const statusLabel = isOnline
+  const statusLabel = otherTyping
+    ? 'typing…'
+    : isOnline
     ? 'Online'
     : presence?.last_seen
       ? formatLastSeen(presence.last_seen)
@@ -885,6 +889,16 @@ function ChatContent() {
     }
   }, []);
 
+  const sendTypingPing = useCallback(() => {
+    if (isSeaiConversation) return;
+    const now = Date.now();
+    if (now - lastTypingPingRef.current < TYPING_PING_THROTTLE_MS) return;
+    lastTypingPingRef.current = now;
+    api.setTyping(conversationId).catch(() => {
+      /* silent — typing is best-effort */
+    });
+  }, [conversationId, isSeaiConversation]);
+
   useEffect(() => {
     if (isSeaiConversation) {
       router.replace('/seai/ask');
@@ -945,6 +959,23 @@ function ChatContent() {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [hasRecipient, isSeaiConversation, fetchPresence, sendHeartbeat]);
+
+  // ── Typing poll ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!hasRecipient || isSeaiConversation) return;
+
+    const typingTimer = setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        const { typing } = await api.getTyping(conversationId);
+        setOtherTyping(Boolean(typing));
+      } catch {
+        // silent — don't spam toasts on transient failures
+      }
+    }, TYPING_POLL_MS);
+
+    return () => clearInterval(typingTimer);
+  }, [conversationId, hasRecipient, isSeaiConversation]);
 
   useEffect(() => {
     const count = messages.length;
@@ -1430,7 +1461,7 @@ function ChatContent() {
                   {displayName.charAt(0).toUpperCase()}
                 </span>
               )}
-              {isOnline && (
+              {isOnline && !otherTyping && (
                 <span style={s.presenceDot} aria-hidden="true" />
               )}
             </div>
@@ -1441,7 +1472,9 @@ function ChatContent() {
               </span>
               <span
                 className={
-                  isOnline
+                  otherTyping
+                    ? 'chat-header-status chat-header-status-typing'
+                    : isOnline
                     ? 'chat-header-status chat-header-status-online'
                     : 'chat-header-status'
                 }
@@ -1819,7 +1852,11 @@ function ChatContent() {
                   editDraft ? 'Edit message…' : 'Type a message'
                 }
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setInputText(v);
+                  if (v.trim()) sendTypingPing();
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -2570,8 +2607,11 @@ const CSS = `
     from { opacity: 0; }
     to { opacity: 1; }
   }
+  @keyframes chatTypingPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
 
-  /* ─── Chat shell: caps column at 820px, centered ──────────── */
   .chat-shell {
     display: flex;
     flex-direction: column;
@@ -2584,7 +2624,6 @@ const CSS = `
     transition: background-color 0.18s ease;
   }
 
-  /* ─── Wallpaper: dot pattern reading brand token ──────────── */
   .chat-wallpaper {
     position: absolute;
     inset: 0;
@@ -2600,7 +2639,6 @@ const CSS = `
     z-index: 0;
   }
 
-  /* ─── Header status text ──────────────────────────────────── */
   .chat-header-status {
     font-size: 11.5px;
     font-weight: 600;
@@ -2615,11 +2653,17 @@ const CSS = `
     color: #A7F3D0;
     font-weight: 700;
   }
-  [data-theme='dark'] .chat-header-status-online {
+  .chat-header-status-typing {
+    color: #A7F3D0;
+    font-weight: 700;
+    font-style: italic;
+    animation: chatTypingPulse 1.4s ease-in-out infinite;
+  }
+  [data-theme='dark'] .chat-header-status-online,
+  [data-theme='dark'] .chat-header-status-typing {
     color: #065F46;
   }
 
-  /* ─── Skeleton pieces ─────────────────────────────────────── */
   .chat-skel-header {
     height: 54px;
     display: flex;

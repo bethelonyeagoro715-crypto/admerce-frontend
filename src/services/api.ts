@@ -1787,6 +1787,21 @@ class ApiService {
     const res = await this.axios.put(`/storekeeper/listing/${listingId}`, formData);
     return res.data;
   }
+
+    // Set the caller as "typing" in a conversation.
+  public async setTyping(conversationId: string): Promise<{ ok: boolean }> {
+    const res = await this.axios.post('/chat/typing', {
+      conversation_id: conversationId,
+    });
+    return res.data;
+  }
+
+  // Ask whether the other user in this conversation is typing.
+  public async getTyping(conversationId: string): Promise<{ typing: boolean }> {
+    const res = await this.axios.get(`/chat/typing/${conversationId}`);
+    return res.data;
+  }
+  
 }
 
 export default ApiService.getInstance();
