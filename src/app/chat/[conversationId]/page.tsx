@@ -87,7 +87,7 @@ interface PresenceInfo {
   public_url: string | null;
 }
 
-// ─── Brand tokens (all resolve through CSS vars) ────────────────────
+// ─── Brand tokens ───────────────────────────────────────────────────
 const BRAND = {
   primary: 'var(--brand-primary)',
   bubbleMine: 'var(--brand-primary)',
@@ -109,6 +109,7 @@ const PRESENCE_POLL_MS = 30_000;
 const HEARTBEAT_INTERVAL_MS = 60_000;
 const TYPING_POLL_MS = 2_000;
 const TYPING_PING_THROTTLE_MS = 2_000;
+const MESSAGE_POLL_MS = 2_500;
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
@@ -229,6 +230,44 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+// ─── Notification sound (Web Audio, no assets) ──────────────────────
+let _chatAudioCtx: AudioContext | null = null;
+function playNotificationSound() {
+  try {
+    const Ctx =
+      typeof window !== 'undefined'
+        ? (window.AudioContext ||
+            (window as unknown as { webkitAudioContext?: typeof AudioContext })
+              .webkitAudioContext)
+        : null;
+    if (!Ctx) return;
+    if (!_chatAudioCtx) _chatAudioCtx = new Ctx();
+    const ctx = _chatAudioCtx;
+    if (ctx.state === 'suspended') void ctx.resume();
+
+    const now = ctx.currentTime;
+    const notes = [
+      { freq: 780, start: now, dur: 0.09 },
+      { freq: 1040, start: now + 0.09, dur: 0.12 },
+    ];
+    for (const n of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = n.freq;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.0001, n.start);
+      gain.gain.exponentialRampToValueAtTime(0.12, n.start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, n.start + n.dur);
+      osc.start(n.start);
+      osc.stop(n.start + n.dur + 0.02);
+    }
+  } catch {
+    /* silent — sound is best-effort */
   }
 }
 
@@ -806,6 +845,12 @@ function ChatContent() {
   const isAtBottomRef = useRef(true);
   const prevMessageCountRef = useRef(0);
   const lastTypingPingRef = useRef(0);
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const currentUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUserId;
+  }, [currentUserId]);
 
   const isSeaiConversation =
     otherUserId.toLowerCase() === 'seai' ||
@@ -855,7 +900,13 @@ function ChatContent() {
       const d = (await api.getMessagesByUser(recipientId)) as {
         messages?: ChatMessage[];
       };
-      setMessages(d.messages || []);
+      const initial = d.messages || [];
+      knownMessageIdsRef.current = new Set(
+        initial
+          .map((m) => (m.id != null ? String(m.id) : ''))
+          .filter(Boolean),
+      );
+      setMessages(initial);
     } catch (e) {
       setError(extractErrorDetail(e, 'Failed to load messages'));
     } finally {
@@ -899,6 +950,57 @@ function ChatContent() {
     });
   }, [conversationId, isSeaiConversation]);
 
+  const pollNewMessages = useCallback(async () => {
+    if (!otherUserId || document.hidden) return;
+    try {
+      const d = (await api.getMessagesByUser(otherUserId)) as {
+        messages?: ChatMessage[];
+      };
+      const incoming = d.messages || [];
+
+      // First call: seed known ids so we don't chime for history
+      if (!knownMessageIdsRef.current.size) {
+        for (const m of incoming) {
+          if (m.id != null) knownMessageIdsRef.current.add(String(m.id));
+        }
+        return;
+      }
+
+      const fresh: ChatMessage[] = [];
+      for (const m of incoming) {
+        if (m.id == null) continue;
+        const sid = String(m.id);
+        if (knownMessageIdsRef.current.has(sid)) continue;
+        knownMessageIdsRef.current.add(sid);
+        fresh.push(m);
+      }
+      if (fresh.length === 0) return;
+
+      const myId = currentUserIdRef.current;
+      const hasFromOther = fresh.some(
+        (m) => m.sender_id && myId && m.sender_id !== myId,
+      );
+
+      setMessages((prev) => {
+        const prevIds = new Set(
+          prev.map((m) => (m.id != null ? String(m.id) : '')).filter(Boolean),
+        );
+        const toAppend = fresh.filter(
+          (m) => m.id != null && !prevIds.has(String(m.id)),
+        );
+        if (toAppend.length === 0) return prev;
+        return [...prev, ...toAppend];
+      });
+
+      if (hasFromOther) {
+        playNotificationSound();
+        if (!isAtBottomRef.current) setHasNewWhileScrolled(true);
+      }
+    } catch {
+      /* silent — transient network hiccups shouldn't spam toasts */
+    }
+  }, [otherUserId]);
+
   useEffect(() => {
     if (isSeaiConversation) {
       router.replace('/seai/ask');
@@ -909,7 +1011,11 @@ function ChatContent() {
     const t = setTimeout(async () => {
       try {
         const p = (await api.getMyProfile()) as Record<string, unknown>;
-        if (!cancelled) setCurrentUserId((p.id as string) || null);
+        if (!cancelled) {
+          const id = (p.id as string) || null;
+          setCurrentUserId(id);
+          currentUserIdRef.current = id;
+        }
       } catch {
         /* ignore */
       }
@@ -970,12 +1076,43 @@ function ChatContent() {
         const { typing } = await api.getTyping(conversationId);
         setOtherTyping(Boolean(typing));
       } catch {
-        // silent — don't spam toasts on transient failures
+        // silent
       }
     }, TYPING_POLL_MS);
 
     return () => clearInterval(typingTimer);
   }, [conversationId, hasRecipient, isSeaiConversation]);
+
+  // ── Message poll — new messages without a reload ───────────────
+  useEffect(() => {
+    if (!hasRecipient || isSeaiConversation) return;
+    if (isLoading) return;
+
+    const initialPoll = setTimeout(() => {
+      if (!document.hidden) void pollNewMessages();
+    }, 0);
+
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      void pollNewMessages();
+    }, MESSAGE_POLL_MS);
+
+    const onVisible = () => {
+      if (!document.hidden) void pollNewMessages();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearTimeout(initialPoll);
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [
+    hasRecipient,
+    isSeaiConversation,
+    isLoading,
+    pollNewMessages,
+  ]);
 
   useEffect(() => {
     const count = messages.length;
@@ -1081,11 +1218,13 @@ function ChatContent() {
         created_at?: string;
         reply_to_id?: number | null;
       };
+      const realId = result.id ?? Date.now();
+      knownMessageIdsRef.current.add(String(realId));
       isAtBottomRef.current = true;
       setMessages((prev) => [
         ...prev,
         {
-          id: result.id || Date.now(),
+          id: realId,
           sender_id: currentUserId || 'me',
           receiver_id: otherUserId,
           audio_url: result.audio_url,
@@ -1182,11 +1321,13 @@ function ChatContent() {
         created_at?: string;
         reply_to_id?: number | null;
       };
+      const realId = result.id ?? Date.now();
+      knownMessageIdsRef.current.add(String(realId));
       isAtBottomRef.current = true;
       setMessages((prev) => [
         ...prev,
         {
-          id: result.id || Date.now(),
+          id: realId,
           sender_id: currentUserId || 'me',
           receiver_id: otherUserId,
           text,
