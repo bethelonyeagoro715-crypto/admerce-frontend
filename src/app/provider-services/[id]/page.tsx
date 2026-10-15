@@ -13,6 +13,15 @@ import {
   MdBuild,
   MdRefresh,
   MdSearch,
+  MdVerified,
+  MdChatBubbleOutline,
+  MdShare,
+  MdStar,
+  MdStarBorder,
+  MdCheck,
+  MdGridOn,
+  MdInfoOutline,
+  MdStarOutline,
 } from 'react-icons/md';
 import api from '../../../services/api';
 import ServiceReelCard, {
@@ -28,7 +37,21 @@ interface ProviderServiceResponse {
   description?: string | null;
   business_name?: string | null;
   username?: string | null;
+  real_name?: string | null;
+  nickname?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  business_image_url?: string | null;
+  avatar_url?: string | null;
+  category?: string | null;
+  verification_status?: string | null;
+  business_verification_status?: string | null;
+  provider_verification_status?: string | null;
+  created_at?: string | null;
+  [key: string]: unknown;
 }
+
+type Tab = 'services' | 'about' | 'reviews';
 
 function formatPrice(raw: unknown): string {
   if (raw === null || raw === undefined || raw === '') return 'Free';
@@ -39,8 +62,46 @@ function formatPrice(raw: unknown): string {
   })}`;
 }
 
+function resolveMediaUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  const t = url.trim();
+  if (!t) return '';
+  if (/^https?:\/\//i.test(t)) return t;
+  if (/^blob:/i.test(t)) return t;
+  if (/^\/\//.test(t)) return `https:${t}`;
+  const base =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_API_BASE ||
+    '';
+  const clean = base.replace(/\/+$/, '');
+  if (t.startsWith('/')) return clean ? `${clean}${t}` : t;
+  return clean ? `${clean}/${t}` : t;
+}
+
+function memberSince(iso?: string | null): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-GB', {
+      month: 'long',
+      year: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function providerHandle(name: string, id: string): string {
+  const base = (name || 'provider')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 20);
+  return base || id.slice(0, 8);
+}
+
 function ServiceSkeleton() {
-  return <div className="psp-skeletonCard" aria-hidden="true" />;
+  return <div className="pp-skel" aria-hidden="true" />;
 }
 
 function ProviderServicesContent() {
@@ -55,11 +116,19 @@ function ProviderServicesContent() {
   const [providerName, setProviderName] = useState(
     urlName || 'Service Provider',
   );
+  const [providerMeta, setProviderMeta] =
+    useState<ProviderServiceResponse | null>(null);
   const [services, setServices] = useState<ServiceReel[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [tab, setTab] = useState<Tab>('services');
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,15 +145,10 @@ function ProviderServicesContent() {
       setError(null);
 
       try {
-        const raw =
-          await api.getProviderServicesByUserId(providerId);
+        const raw = await api.getProviderServicesByUserId(providerId);
         if (cancelled) return;
 
         if (!Array.isArray(raw)) {
-          console.warn(
-            'Provider services response is not an array:',
-            raw,
-          );
           setServices([]);
           return;
         }
@@ -94,6 +158,12 @@ function ProviderServicesContent() {
         const apiName =
           firstRaw?.business_name?.trim() ||
           firstRaw?.username?.trim() ||
+          firstRaw?.real_name?.trim() ||
+          firstRaw?.nickname?.trim() ||
+          [firstRaw?.first_name, firstRaw?.last_name]
+            .filter(Boolean)
+            .join(' ')
+            .trim() ||
           '';
 
         const list: ServiceReel[] = rawList
@@ -111,6 +181,7 @@ function ProviderServicesContent() {
           }));
 
         setServices(list);
+        if (firstRaw) setProviderMeta(firstRaw);
 
         if (apiName) {
           setProviderName(apiName);
@@ -119,7 +190,6 @@ function ProviderServicesContent() {
         }
       } catch (err: unknown) {
         if (cancelled) return;
-        console.error('Failed to load services:', err);
         const message =
           err instanceof Error
             ? err.message
@@ -165,399 +235,402 @@ function ProviderServicesContent() {
 
   const handleRetry = () => setRetryKey((n) => n + 1);
 
+  const isVerified =
+    providerMeta?.verification_status === 'verified' ||
+    providerMeta?.business_verification_status === 'verified' ||
+    providerMeta?.provider_verification_status === 'verified';
+
+  const avatarRaw =
+    providerMeta?.business_image_url ||
+    providerMeta?.avatar_url ||
+    null;
+  const avatarUrl = resolveMediaUrl(avatarRaw as string | null);
+  const handle = providerHandle(providerName, providerId);
+  const since = memberSince(
+    (providerMeta?.created_at as string | null) ?? null,
+  );
+  const bio = (providerMeta?.description as string | null) || '';
+
+  const toggleFollow = () => {
+    if (followLoading) return;
+    setFollowLoading(true);
+    // Local toggle only — wire to a real endpoint when ready.
+    setTimeout(() => {
+      setIsFollowing((v) => !v);
+      setFollowLoading(false);
+    }, 200);
+  };
+
+  const shareProvider = async () => {
+    const url =
+      typeof window !== 'undefined'
+        ? window.location.href
+        : `https://admerce.com/provider-services/${providerId}`;
+    const message = `Check out ${providerName} on Admerce!`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Check out ${providerName} on Admerce!`,
+          text: message,
+          url,
+        });
+        return;
+      }
+      await navigator.clipboard.writeText(`${message}\n${url}`);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1600);
+    } catch {
+      /* user cancelled */
+    }
+  };
+
+  const openChat = () => {
+    if (!providerId) return;
+    const name = encodeURIComponent(providerName);
+    router.push(
+      `/chat/user_${providerId}?otherUserId=${providerId}&otherUserName=${name}`,
+    );
+  };
+
   const countLabel = `${services.length} ${
     services.length === 1 ? 'service' : 'services'
   }`;
 
   return (
-    <main className="psp-page">
-      <style>{`
-        .psp-page {
-          --psp-primary: var(--brand-primary);
-          --psp-primarySoft: var(--brand-soft);
-          --psp-text: var(--text-primary);
-          --psp-muted: var(--text-tertiary);
-          --psp-border: var(--border-default);
-          --psp-surface: var(--bg-secondary);
-          --psp-page: var(--bg-primary);
-          min-height: 100dvh;
-          background: var(--psp-page);
-          color: var(--psp-text);
-          font-family: inherit;
-          overflow-x: hidden;
-          transition: background-color 0.18s ease, color 0.18s ease;
-        }
+    <main className="pp-page">
+      <style>{CSS}</style>
 
-        .psp-shell {
-          width: min(1180px, 100%);
-          margin: 0 auto;
-          padding: 0 18px 32px;
-          box-sizing: border-box;
-        }
-
-        .psp-header {
-          position: sticky;
-          top: 0;
-          z-index: 20;
-          border-bottom: 1px solid
-            color-mix(in srgb, var(--border-default) 92%, transparent);
-          background:
-            color-mix(in srgb, var(--bg-secondary) 94%, transparent);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          transition: background-color 0.18s ease, border-color 0.18s ease;
-        }
-
-        .psp-headerInner {
-          width: min(1180px, 100%);
-          margin: 0 auto;
-          min-height: 68px;
-          padding: 10px 18px;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          box-sizing: border-box;
-        }
-
-        .psp-backButton {
-          width: 40px;
-          height: 40px;
-          flex: 0 0 40px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border: 1px solid var(--psp-border);
-          border-radius: 12px;
-          background: var(--psp-surface);
-          color: var(--psp-text);
-          cursor: pointer;
-          transition: 160ms ease;
-        }
-        .psp-backButton:hover {
-          border-color:
-            color-mix(in srgb, var(--brand-primary) 40%, transparent);
-          color: var(--psp-primary);
-          transform: translateY(-1px);
-        }
-        .psp-backButton:focus-visible,
-        .psp-search:focus-within {
-          outline: 3px solid
-            color-mix(in srgb, var(--brand-primary) 18%, transparent);
-          outline-offset: 2px;
-        }
-
-        .psp-heading { min-width: 0; flex: 1; }
-
-        .psp-providerName {
-          margin: 0;
-          font-size: clamp(17px, 2.4vw, 21px);
-          line-height: 1.15;
-          font-weight: 800;
-          letter-spacing: -0.02em;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .psp-providerMeta {
-          margin: 4px 0 0;
-          color: var(--psp-muted);
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .psp-contentHeader {
-          display: flex;
-          align-items: flex-end;
-          justify-content: space-between;
-          gap: 16px;
-          padding: 24px 0 18px;
-          box-sizing: border-box;
-          min-width: 0;
-        }
-
-        .psp-pageTitle {
-          margin: 0;
-          font-size: clamp(24px, 4vw, 34px);
-          line-height: 1.05;
-          letter-spacing: -0.035em;
-          font-weight: 850;
-        }
-
-        .psp-pageSubtitle {
-          margin: 8px 0 0;
-          color: var(--psp-muted);
-          font-size: 14px;
-        }
-
-        .psp-search {
-          width: min(320px, 100%);
-          min-height: 44px;
-          display: flex;
-          align-items: center;
-          gap: 9px;
-          padding: 0 13px;
-          border: 1px solid var(--psp-border);
-          border-radius: 14px;
-          background: var(--psp-surface);
-          transition: 160ms ease;
-          box-sizing: border-box;
-        }
-        .psp-search svg {
-          color: var(--text-tertiary);
-          flex: 0 0 auto;
-        }
-        .psp-search input {
-          width: 100%;
-          min-width: 0;
-          border: 0;
-          outline: 0;
-          background: transparent;
-          color: var(--psp-text);
-          font: inherit;
-          font-size: 14px;
-        }
-        .psp-search input::placeholder { color: var(--text-muted); }
-
-        .psp-grid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 16px;
-          min-width: 0;
-        }
-
-        .psp-skeletonCard {
-          position: relative;
-          width: 100%;
-          aspect-ratio: 9 / 16;
-          border-radius: 16px;
-          background: var(--bg-tertiary);
-          overflow: hidden;
-        }
-        .psp-skeletonCard::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          transform: translateX(-100%);
-          background: linear-gradient(
-            90deg,
-            transparent,
-            color-mix(in srgb, var(--bg-hover) 60%, transparent),
-            transparent
-          );
-          animation: pspShimmer 1.25s infinite;
-        }
-
-        .psp-center {
-          min-height: 48vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 48px 16px;
-          text-align: center;
-        }
-
-        .psp-spinner {
-          width: 38px;
-          height: 38px;
-          border: 3px solid var(--border-default);
-          border-top-color: var(--brand-primary);
-          border-radius: 50%;
-          animation: pspSpin 700ms linear infinite;
-        }
-
-        .psp-stateIcon {
-          width: 62px;
-          height: 62px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 18px;
-          background: var(--psp-primarySoft);
-          color: var(--psp-primary);
-        }
-
-        .psp-stateTitle {
-          margin: 15px 0 0;
-          font-size: 17px;
-          font-weight: 800;
-        }
-
-        .psp-stateText {
-          max-width: 380px;
-          margin: 7px 0 0;
-          color: var(--psp-muted);
-          font-size: 14px;
-          line-height: 1.5;
-          word-break: break-word;
-        }
-
-        .psp-retry {
-          margin-top: 15px;
-          min-height: 42px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 0 15px;
-          border: 0;
-          border-radius: 12px;
-          background: var(--brand-gradient);
-          color: var(--brand-on-gradient);
-          font: inherit;
-          font-size: 13px;
-          font-weight: 750;
-          cursor: pointer;
-          transition: 160ms ease;
-          font-family: inherit;
-        }
-        .psp-retry:hover {
-          transform: translateY(-1px);
-          filter: brightness(1.06);
-        }
-
-        .psp-noResults {
-          grid-column: 1 / -1;
-          padding: 52px 18px;
-          border: 1px dashed var(--border-default);
-          border-radius: 18px;
-          text-align: center;
-          background:
-            color-mix(in srgb, var(--bg-secondary) 72%, transparent);
-          color: var(--psp-muted);
-          word-break: break-word;
-        }
-
-        @keyframes pspSpin { to { transform: rotate(360deg); } }
-        @keyframes pspShimmer { 100% { transform: translateX(100%); } }
-
-        @media (max-width: 980px) {
-          .psp-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
-          }
-        }
-
-        @media (max-width: 720px) {
-          .psp-shell { padding: 0 14px 26px; }
-          .psp-headerInner { padding: 9px 14px; }
-          .psp-contentHeader {
-            align-items: stretch;
-            flex-direction: column;
-            padding-top: 20px;
-          }
-          .psp-search { width: 100%; }
-          .psp-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-          }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .psp-backButton, .psp-retry { transition: none; }
-          .psp-spinner, .psp-skeletonCard::after { animation: none; }
-        }
-      `}</style>
-
-      <header className="psp-header">
-        <div className="psp-headerInner">
+      {/* ── Top bar ─────────────────────────────────────── */}
+      <header className="pp-topbar">
+        <div className="pp-topbarInner">
           <button
             type="button"
-            className="psp-backButton"
+            className="pp-iconBtn"
             onClick={handleBack}
             aria-label="Go back"
           >
-            <MdArrowBack size={21} />
+            <MdArrowBack size={20} />
           </button>
 
-          <div className="psp-heading">
-            <h1 className="psp-providerName">{providerName}</h1>
-            <p className="psp-providerMeta">{countLabel}</p>
+          <div className="pp-topbarTitle">
+            <div className="pp-topbarNameRow">
+              <span className="pp-topbarName">{providerName}</span>
+              {isVerified && (
+                <MdVerified
+                  size={15}
+                  color="var(--brand-primary)"
+                  aria-label="Verified"
+                />
+              )}
+            </div>
+            <span className="pp-topbarMeta">
+              {loading ? 'Loading…' : countLabel}
+            </span>
           </div>
+
+          <button
+            type="button"
+            className="pp-iconBtn"
+            onClick={() => setSearchOpen((v) => !v)}
+            aria-label="Search services"
+            disabled={loading || services.length === 0}
+          >
+            <MdSearch size={20} />
+          </button>
         </div>
+
+        {searchOpen && (
+          <div className="pp-searchBar">
+            <MdSearch size={18} aria-hidden />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search services"
+              aria-label="Search services"
+              type="search"
+              autoFocus
+            />
+          </div>
+        )}
       </header>
 
-      <div className="psp-shell">
-        <section className="psp-contentHeader">
-          <div>
-            <h2 className="psp-pageTitle">Services</h2>
-            <p className="psp-pageSubtitle">
-              Tap any reel to book this provider.
-            </p>
+      <div className="pp-shell">
+        {/* ── Profile header ──────────────────────────── */}
+        <section className="pp-profile">
+          {/* Banner */}
+          <div className="pp-banner">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="pp-bannerImg" />
+            ) : (
+              <div className="pp-bannerFallback" aria-hidden>
+                <MdBuild size={52} />
+              </div>
+            )}
+            <div className="pp-bannerGradient" aria-hidden />
           </div>
 
-          {!loading && services.length > 0 && (
-            <label className="psp-search">
-              <MdSearch size={19} aria-hidden="true" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search services"
-                aria-label="Search services"
-                type="search"
-              />
-            </label>
-          )}
-        </section>
-
-        {loading ? (
-          <div
-            className="psp-grid"
-            aria-busy="true"
-            aria-label="Loading services"
-          >
-            {Array.from({ length: 6 }).map((_, i) => (
-              <ServiceSkeleton key={i} />
-            ))}
-          </div>
-        ) : error ? (
-          <div className="psp-center">
-            <div className="psp-stateIcon" aria-hidden="true">
-              <MdBuild size={32} />
+          {/* Avatar + actions */}
+          <div className="pp-identityRow">
+            <div className="pp-avatarWrap">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="pp-avatarImg" />
+              ) : (
+                <div className="pp-avatarFallback">
+                  {providerName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              {isVerified && (
+                <span className="pp-avatarBadge" aria-hidden>
+                  <MdVerified size={16} color="#FFFFFF" />
+                </span>
+              )}
             </div>
-            <h2 className="psp-stateTitle">
-              We couldn&apos;t load these services
-            </h2>
-            <p className="psp-stateText">{error}</p>
+
+            <div className="pp-actionRow">
+              <button
+                type="button"
+                onClick={toggleFollow}
+                disabled={followLoading || loading}
+                className={
+                  isFollowing
+                    ? 'pp-followBtn pp-followBtnFollowing'
+                    : 'pp-followBtn'
+                }
+              >
+                {isFollowing ? (
+                  <>
+                    <MdStar size={15} />
+                    <span>Following</span>
+                  </>
+                ) : (
+                  <>
+                    <MdStarBorder size={15} />
+                    <span>Follow</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={openChat}
+                disabled={loading || !providerId}
+                className="pp-messageBtn"
+                aria-label="Message provider"
+              >
+                <MdChatBubbleOutline size={18} />
+              </button>
+
+              <button
+                type="button"
+                onClick={shareProvider}
+                disabled={loading}
+                className="pp-iconBtn pp-iconBtnSmall"
+                aria-label="Share provider"
+              >
+                {linkCopied ? (
+                  <MdCheck size={18} color="var(--success-fg)" />
+                ) : (
+                  <MdShare size={18} />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Identity text */}
+          <div className="pp-identityText">
+            <div className="pp-nameRow">
+              <h1 className="pp-displayName">{providerName}</h1>
+              {isVerified && (
+                <MdVerified
+                  size={18}
+                  color="var(--brand-primary)"
+                  aria-label="Verified"
+                />
+              )}
+            </div>
+
+            <span className="pp-handle">@{handle}</span>
+
+            {bio && <p className="pp-bio">{bio}</p>}
+
+            <div className="pp-metaRow">
+              <span className="pp-rolePill">🛠️ Service Provider</span>
+              {since && (
+                <span className="pp-metaItem">· Since {since}</span>
+              )}
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="pp-stats">
             <button
               type="button"
-              className="psp-retry"
-              onClick={handleRetry}
+              className="pp-stat"
+              onClick={() => setTab('services')}
             >
-              <MdRefresh size={18} />
-              Try again
+              <span className="pp-statNum">{services.length}</span>
+              <span className="pp-statLabel">Services</span>
+            </button>
+            <button type="button" className="pp-stat" disabled>
+              <span className="pp-statNum">—</span>
+              <span className="pp-statLabel">Followers</span>
+            </button>
+            <button
+              type="button"
+              className="pp-stat"
+              onClick={() => setTab('reviews')}
+            >
+              <span className="pp-statNum">—</span>
+              <span className="pp-statLabel">Rating</span>
             </button>
           </div>
-        ) : services.length === 0 ? (
-          <div className="psp-center">
-            <div className="psp-stateIcon" aria-hidden="true">
-              <MdBuild size={32} />
-            </div>
-            <h2 className="psp-stateTitle">No services yet</h2>
-            <p className="psp-stateText">
-              This provider hasn&apos;t published any services yet.
-            </p>
-          </div>
-        ) : filteredServices.length === 0 ? (
-          <div className="psp-noResults">
-            No services match{' '}
-            <strong>&quot;{search.trim()}&quot;</strong>.
-          </div>
-        ) : (
-          <section
-            className="psp-grid"
-            aria-label={`${providerName} services`}
+        </section>
+
+        {/* ── Tabs ────────────────────────────────────── */}
+        <nav className="pp-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={tab === 'services'}
+            className={
+              tab === 'services' ? 'pp-tab pp-tabActive' : 'pp-tab'
+            }
+            onClick={() => setTab('services')}
           >
-            {filteredServices.map((service) => (
-              <ServiceReelCard
-                key={service.id}
-                service={service}
-                onOpen={handleOpenService}
-              />
-            ))}
-          </section>
-        )}
+            <MdGridOn size={16} />
+            <span>Services</span>
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'about'}
+            className={
+              tab === 'about' ? 'pp-tab pp-tabActive' : 'pp-tab'
+            }
+            onClick={() => setTab('about')}
+          >
+            <MdInfoOutline size={16} />
+            <span>About</span>
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'reviews'}
+            className={
+              tab === 'reviews' ? 'pp-tab pp-tabActive' : 'pp-tab'
+            }
+            onClick={() => setTab('reviews')}
+          >
+            <MdStarOutline size={16} />
+            <span>Reviews</span>
+          </button>
+        </nav>
+
+        {/* ── Content ─────────────────────────────────── */}
+        <section className="pp-content">
+          {tab === 'services' && (
+            <>
+              {loading ? (
+                <div className="pp-grid" aria-busy="true">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <ServiceSkeleton key={i} />
+                  ))}
+                </div>
+              ) : error ? (
+                <div className="pp-empty">
+                  <div className="pp-emptyIcon" aria-hidden>
+                    <MdBuild size={28} />
+                  </div>
+                  <h2 className="pp-emptyTitle">
+                    We couldn&apos;t load these services
+                  </h2>
+                  <p className="pp-emptyBody">{error}</p>
+                  <button
+                    type="button"
+                    className="pp-retry"
+                    onClick={handleRetry}
+                  >
+                    <MdRefresh size={17} />
+                    Try again
+                  </button>
+                </div>
+              ) : services.length === 0 ? (
+                <div className="pp-empty">
+                  <div className="pp-emptyIcon" aria-hidden>
+                    <MdBuild size={28} />
+                  </div>
+                  <h2 className="pp-emptyTitle">No services yet</h2>
+                  <p className="pp-emptyBody">
+                    This provider hasn&apos;t published any services yet.
+                  </p>
+                </div>
+              ) : filteredServices.length === 0 ? (
+                <div className="pp-empty">
+                  <p className="pp-emptyBody">
+                    No services match{' '}
+                    <strong>&quot;{search.trim()}&quot;</strong>.
+                  </p>
+                </div>
+              ) : (
+                <div className="pp-grid">
+                  {filteredServices.map((service) => (
+                    <ServiceReelCard
+                      key={service.id}
+                      service={service}
+                      onOpen={handleOpenService}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === 'about' && (
+            <div className="pp-about">
+              <div className="pp-aboutRow">
+                <span className="pp-aboutLabel">Name</span>
+                <span className="pp-aboutValue">{providerName}</span>
+              </div>
+              <div className="pp-aboutRow">
+                <span className="pp-aboutLabel">Handle</span>
+                <span className="pp-aboutValue">@{handle}</span>
+              </div>
+              <div className="pp-aboutRow">
+                <span className="pp-aboutLabel">Role</span>
+                <span className="pp-aboutValue">Service Provider</span>
+              </div>
+              {since && (
+                <div className="pp-aboutRow">
+                  <span className="pp-aboutLabel">Member since</span>
+                  <span className="pp-aboutValue">{since}</span>
+                </div>
+              )}
+              <div className="pp-aboutRow">
+                <span className="pp-aboutLabel">Status</span>
+                <span className="pp-aboutValue">
+                  {isVerified ? 'Verified provider' : 'Unverified'}
+                </span>
+              </div>
+              {bio && (
+                <div className="pp-aboutRow pp-aboutRowBlock">
+                  <span className="pp-aboutLabel">Bio</span>
+                  <span className="pp-aboutValue pp-aboutValueLeft">
+                    {bio}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'reviews' && (
+            <div className="pp-empty">
+              <div className="pp-emptyIcon" aria-hidden>
+                <MdStarOutline size={28} />
+              </div>
+              <h2 className="pp-emptyTitle">No reviews yet</h2>
+              <p className="pp-emptyBody">
+                Be the first to book {providerName} and leave a review.
+              </p>
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );
@@ -567,27 +640,25 @@ export default function ProviderServicesPage() {
   return (
     <Suspense
       fallback={
-        <main className="psp-page">
+        <main
+          style={{
+            minHeight: '100dvh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-primary)',
+          }}
+        >
           <div
+            aria-label="Loading"
             style={{
-              minHeight: '100dvh',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'var(--bg-primary)',
+              width: 36,
+              height: 36,
+              border: '3px solid var(--border-default)',
+              borderTopColor: 'var(--brand-primary)',
+              borderRadius: '50%',
             }}
-          >
-            <div
-              aria-label="Loading"
-              style={{
-                width: 36,
-                height: 36,
-                border: '3px solid var(--border-default)',
-                borderTopColor: 'var(--brand-primary)',
-                borderRadius: '50%',
-              }}
-            />
-          </div>
+          />
         </main>
       }
     >
@@ -595,3 +666,539 @@ export default function ProviderServicesPage() {
     </Suspense>
   );
 }
+
+const CSS = `
+  .pp-page {
+    min-height: 100dvh;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: inherit;
+    overflow-x: hidden;
+    transition: background-color 0.18s ease, color 0.18s ease;
+    padding-bottom: 40px;
+  }
+
+  /* ── Top bar ─────────────────────────────────────── */
+  .pp-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border-default);
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .pp-topbarInner {
+    width: min(720px, 100%);
+    margin: 0 auto;
+    min-height: 56px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-sizing: border-box;
+  }
+  .pp-topbarTitle {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .pp-topbarNameRow {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .pp-topbarName {
+    font-size: 15.5px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pp-topbarMeta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-weight: 600;
+  }
+
+  .pp-iconBtn {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, transform 0.12s;
+  }
+  .pp-iconBtn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--brand-primary);
+  }
+  .pp-iconBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .pp-iconBtnSmall {
+    border: 1.5px solid var(--border-default);
+    background: var(--bg-secondary);
+  }
+
+  .pp-searchBar {
+    width: min(720px, 100%);
+    margin: 0 auto;
+    padding: 0 12px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+  }
+  .pp-searchBar input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border-default);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 14px;
+    outline: none;
+  }
+  .pp-searchBar input:focus {
+    border-color: var(--brand-primary);
+    background: var(--bg-secondary);
+  }
+
+  /* ── Shell ───────────────────────────────────────── */
+  .pp-shell {
+    width: min(720px, 100%);
+    margin: 0 auto;
+    padding: 0 14px;
+    box-sizing: border-box;
+  }
+
+  /* ── Profile ─────────────────────────────────────── */
+  .pp-profile {
+    display: flex;
+    flex-direction: column;
+    margin-top: 14px;
+  }
+
+  .pp-banner {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 6;
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--brand-gradient);
+    box-shadow: var(--shadow-sm);
+  }
+  .pp-bannerImg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .pp-bannerFallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: color-mix(in srgb, var(--brand-on-gradient) 55%, transparent);
+  }
+  .pp-bannerGradient {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top,
+      color-mix(in srgb, var(--bg-primary) 40%, transparent) 0%,
+      transparent 55%
+    );
+    pointer-events: none;
+  }
+
+  .pp-identityRow {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: -34px;
+    padding: 0 6px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .pp-avatarWrap {
+    position: relative;
+    width: 84px;
+    height: 84px;
+    flex: 0 0 84px;
+  }
+  .pp-avatarImg {
+    width: 100%;
+    height: 100%;
+    border-radius: 24px;
+    object-fit: cover;
+    display: block;
+    border: 4px solid var(--bg-primary);
+    background: var(--bg-secondary);
+    box-sizing: border-box;
+  }
+  .pp-avatarFallback {
+    width: 100%;
+    height: 100%;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--brand-gradient);
+    color: var(--brand-on-gradient);
+    font-size: 32px;
+    font-weight: 800;
+    border: 4px solid var(--bg-primary);
+    box-sizing: border-box;
+  }
+  .pp-avatarBadge {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--brand-primary);
+    border: 3px solid var(--bg-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  .pp-actionRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+
+  .pp-followBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 16px;
+    border-radius: 999px;
+    border: 1.5px solid transparent;
+    background: var(--brand-gradient);
+    color: var(--brand-on-gradient);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform 0.12s, opacity 0.15s;
+    box-shadow: var(--shadow-brand);
+  }
+  .pp-followBtn:hover { opacity: 0.94; }
+  .pp-followBtn:active { transform: scale(0.97); }
+  .pp-followBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .pp-followBtnFollowing {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-default);
+    box-shadow: none;
+  }
+
+  .pp-messageBtn {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border-default);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, transform 0.12s;
+  }
+  .pp-messageBtn:hover:not(:disabled) {
+    border-color: var(--brand-primary);
+    color: var(--brand-primary);
+  }
+  .pp-messageBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .pp-identityText {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 6px 0;
+  }
+  .pp-nameRow {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .pp-displayName {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.15;
+    font-weight: 850;
+    letter-spacing: -0.03em;
+  }
+  .pp-handle {
+    color: var(--text-tertiary);
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  .pp-bio {
+    margin: 4px 0 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .pp-metaRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+  }
+  .pp-rolePill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--brand-soft);
+    color: var(--brand-primary);
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+  .pp-metaItem {
+    font-size: 12.5px;
+    color: var(--text-tertiary);
+    font-weight: 600;
+  }
+
+  /* ── Stats ───────────────────────────────────────── */
+  .pp-stats {
+    display: flex;
+    gap: 0;
+    margin-top: 14px;
+    padding: 12px 4px;
+    border-top: 1px solid var(--border-default);
+    border-bottom: 1px solid var(--border-default);
+  }
+  .pp-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font: inherit;
+    padding: 4px;
+    transition: opacity 0.15s;
+  }
+  .pp-stat:disabled { cursor: default; opacity: 0.7; }
+  .pp-stat:hover:not(:disabled) { opacity: 0.85; }
+  .pp-statNum {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .pp-statLabel {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Tabs ────────────────────────────────────────── */
+  .pp-tabs {
+    display: flex;
+    margin-top: 10px;
+    border-bottom: 1px solid var(--border-default);
+    position: sticky;
+    top: 56px;
+    background: var(--bg-primary);
+    z-index: 5;
+    transition: background-color 0.18s ease;
+  }
+  .pp-tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 13px 8px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .pp-tab:hover { color: var(--text-primary); }
+  .pp-tabActive {
+    color: var(--brand-primary);
+    border-bottom-color: var(--brand-primary);
+  }
+
+  /* ── Content ─────────────────────────────────────── */
+  .pp-content {
+    padding-top: 14px;
+    min-height: 240px;
+  }
+
+  /* ── Services grid (reels stay 9:16) ────────────── */
+  .pp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .pp-skel {
+    width: 100%;
+    aspect-ratio: 9 / 16;
+    border-radius: 16px;
+    background: var(--bg-tertiary);
+    animation: ppShimmer 1.4s ease-in-out infinite;
+  }
+
+  /* ── About ───────────────────────────────────────── */
+  .pp-about {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-default);
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+  .pp-aboutRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .pp-aboutRow:last-child { border-bottom: none; }
+  .pp-aboutRowBlock {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .pp-aboutLabel {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+  }
+  .pp-aboutValue {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-align: right;
+    word-break: break-word;
+  }
+  .pp-aboutValueLeft {
+    text-align: left;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  /* ── Empty ───────────────────────────────────────── */
+  .pp-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    text-align: center;
+    gap: 6px;
+  }
+  .pp-emptyIcon {
+    width: 62px;
+    height: 62px;
+    border-radius: 20px;
+    background: var(--brand-soft);
+    color: var(--brand-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+  .pp-emptyTitle {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-primary);
+  }
+  .pp-emptyBody {
+    margin: 4px 0 0;
+    font-size: 13.5px;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+    max-width: 340px;
+  }
+  .pp-retry {
+    margin-top: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 12px;
+    background: var(--brand-gradient);
+    color: var(--brand-on-gradient);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: var(--shadow-brand);
+    transition: transform 0.12s, opacity 0.15s;
+  }
+  .pp-retry:hover { opacity: 0.94; }
+  .pp-retry:active { transform: scale(0.97); }
+
+  @keyframes ppShimmer {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+
+  /* ── Desktop ─────────────────────────────────────── */
+  @media (min-width: 720px) {
+    .pp-shell { padding: 0 20px; }
+    .pp-topbarInner { padding: 8px 20px; }
+    .pp-searchBar { padding: 0 20px 10px; }
+    .pp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .pp-avatarWrap { width: 96px; height: 96px; flex: 0 0 96px; }
+    .pp-avatarImg, .pp-avatarFallback { border-radius: 28px; }
+    .pp-displayName { font-size: 24px; }
+  }
+
+  @media (min-width: 1024px) {
+    .pp-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pp-skel, .pp-followBtn, .pp-retry, .pp-iconBtn, .pp-messageBtn {
+      animation: none;
+      transition: none;
+    }
+  }
+`;
