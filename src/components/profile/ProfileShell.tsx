@@ -1,8 +1,6 @@
 'use client';
 
-'use client';
-
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api, { extractErrorDetail } from '../../services/api';
 import { clear as clearLocalStorage } from '../../services/localStorage';
@@ -23,7 +21,6 @@ import {
   MdShoppingBag,
   MdAccountBalanceWallet,
   MdLocationOn,
-  MdAdd,
   MdErrorOutline,
   MdRefresh,
   MdArrowForward,
@@ -38,19 +35,15 @@ import {
   MdBuild,
   MdTrendingUp,
   MdPersonAdd,
-  MdChatBubbleOutline,
-  MdShare,
-  MdMoreHoriz,
+  MdCheckCircle,
+  MdAdd,
+  MdImage,
   MdGridOn,
   MdInfoOutline,
-  MdStore,
+  MdDeleteOutline,
   MdAccessTime,
-  MdCheckCircle,
 } from 'react-icons/md';
 
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
 export type ProfileRole = 'shopper' | 'storekeeper' | 'service_provider';
 
 interface Profile {
@@ -99,18 +92,11 @@ interface ProviderStats extends BaseStats {
 
 type Stats = ShopperStats | StorekeeperStats | ProviderStats;
 
-interface HighlightChip {
-  id: string;
+interface StatTile {
+  icon: React.ReactNode;
   label: string;
-  emoji: string;
-}
-
-interface GridItem {
-  id: string;
-  title: string;
-  imageUrl: string | null;
-  price?: string;
-  kind: 'listing' | 'service';
+  value: string;
+  onClick: () => void;
 }
 
 interface ActivityRow {
@@ -122,11 +108,24 @@ interface ActivityRow {
   onClick?: () => void;
 }
 
+interface Highlight {
+  id: string;
+  emoji: string;
+  label: string;
+  route: string;
+}
+
+interface ContentItem {
+  id: string;
+  title: string;
+  price?: string;
+  imageUrl: string | null;
+  kind: 'listing' | 'service';
+  routeTo: string;
+}
+
 type Tab = 'content' | 'about' | 'wallet';
 
-// ─────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────
 const ROLE_SLUG: Record<ProfileRole, string> = {
   shopper: 'shopper',
   storekeeper: 'storekeeper',
@@ -145,9 +144,21 @@ const ROLE_EMOJI: Record<ProfileRole, string> = {
   service_provider: '🛠️',
 };
 
-// ─────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────
+const HIGHLIGHT_PRESETS: Array<{
+  emoji: string;
+  label: string;
+  route: string;
+}> = [
+  { emoji: '🔖', label: 'Saved',    route: '/shopper/saved?tab=Items' },
+  { emoji: '📦', label: 'Orders',   route: '/shopper/saved?tab=History' },
+  { emoji: '🔍', label: 'Wanted',   route: '/shopper/saved?tab=Wanted' },
+  { emoji: '🧺', label: 'Basket',   route: '/basket' },
+  { emoji: '💬', label: 'Community',route: '/community' },
+  { emoji: '💰', label: 'Wallet',   route: '/shopper/wallet' },
+  { emoji: '🏪', label: 'Store',    route: '/storekeeper/store' },
+  { emoji: '🛠️', label: 'Services', route: '/service-provider/services' },
+];
+
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (
@@ -186,6 +197,13 @@ function fmtMemberSince(iso?: string): string {
   }
 }
 
+function fmtBalance(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return '₦0';
+  if (v >= 1_000_000) return `₦${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `₦${(v / 1_000).toFixed(1)}k`;
+  return `₦${Math.round(v).toLocaleString('en-NG')}`;
+}
+
 function fmtCompact(v: number): string {
   if (!Number.isFinite(v) || v <= 0) return '0';
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -194,11 +212,10 @@ function fmtCompact(v: number): string {
   return String(Math.round(v));
 }
 
-function fmtBalance(v: number): string {
-  if (!Number.isFinite(v) || v <= 0) return '₦0';
-  if (v >= 1_000_000) return `₦${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `₦${(v / 1_000).toFixed(1)}k`;
-  return `₦${Math.round(v).toLocaleString('en-NG')}`;
+function fmtPrice(raw: unknown): string {
+  const n = Number(raw ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return 'Free';
+  return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
 }
 
 function displayName(p: Profile | null): string {
@@ -240,9 +257,6 @@ function isNumberArray(v: unknown): v is unknown[] {
   return Array.isArray(v);
 }
 
-// ─────────────────────────────────────────────────────────────
-// Role-specific stat loaders
-// ─────────────────────────────────────────────────────────────
 async function loadShopperStats(): Promise<ShopperStats> {
   const [saved, wanted, orders, balance] = await Promise.allSettled([
     api.getSavedItems(),
@@ -273,9 +287,7 @@ async function loadShopperStats(): Promise<ShopperStats> {
 async function loadStorekeeperStats(): Promise<StorekeeperStats> {
   let storeId: string | null = null;
   try {
-    const store = (await api.getMyStore()) as {
-      store_id?: string;
-    } | null;
+    const store = (await api.getMyStore()) as { store_id?: string } | null;
     storeId = store?.store_id ?? null;
   } catch {
     storeId = null;
@@ -316,7 +328,6 @@ async function loadProviderStats(): Promise<ProviderStats> {
     api.getProviderStats(),
     api.getWalletBalance(),
   ]);
-
   return {
     servicesCount:
       services.status === 'fulfilled' && isNumberArray(services.value)
@@ -343,12 +354,64 @@ const LOADERS: Record<ProfileRole, () => Promise<Stats>> = {
   service_provider: loadProviderStats,
 };
 
-// ─────────────────────────────────────────────────────────────
-// Role stats → three-stat row (Instagram-style)
-// ─────────────────────────────────────────────────────────────
+async function loadContentItems(
+  role: ProfileRole,
+  stats: Stats | null,
+): Promise<ContentItem[]> {
+  try {
+    if (role === 'storekeeper') {
+      const s = stats as StorekeeperStats | null;
+      if (!s?.storeId) return [];
+      const rows = (await api.getStoreItems(s.storeId)) as Array<
+        Record<string, unknown>
+      >;
+      return rows
+        .filter((r) => r?.listing_id)
+        .map((r) => ({
+          id: String(r.listing_id),
+          title: String(r.title ?? 'Listing'),
+          price: fmtPrice(r.price),
+          imageUrl: resolveImageUrl((r.image_url as string) ?? null),
+          kind: 'listing' as const,
+          routeTo: `/item-detail/${r.listing_id}`,
+        }));
+    }
+    if (role === 'service_provider') {
+      const rows = (await api.getProviderServices()) as Array<
+        Record<string, unknown>
+      >;
+      return rows
+        .filter((r) => r?.service_id)
+        .map((r) => ({
+          id: String(r.service_id),
+          title: String(r.title ?? 'Service'),
+          price: fmtPrice(r.price),
+          imageUrl: resolveImageUrl((r.image_url as string) ?? null),
+          kind: 'service' as const,
+          routeTo: `/service-detail/${r.service_id}`,
+        }));
+    }
+    // shopper: saved listings
+    const rows = (await api.getSavedItems()) as Array<Record<string, unknown>>;
+    return rows
+      .filter((r) => r?.listing_id)
+      .map((r) => ({
+        id: String(r.listing_id),
+        title: String(r.title ?? 'Saved item'),
+        price: fmtPrice(r.price),
+        imageUrl: resolveImageUrl((r.image_url as string) ?? null),
+        kind: 'listing' as const,
+        routeTo: `/item-detail/${r.listing_id}`,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 function statTrio(
   role: ProfileRole,
   stats: Stats | null,
+  followersCount: number,
 ): { value: string; label: string; onClick: () => void }[] {
   if (role === 'shopper') {
     const s = (stats as ShopperStats | null) ?? {
@@ -360,7 +423,7 @@ function statTrio(
     return [
       { value: String(s.savedCount), label: 'Saved', onClick: () => {} },
       { value: String(s.wantedCount), label: 'Wanted', onClick: () => {} },
-      { value: String(s.ordersCount), label: 'Orders', onClick: () => {} },
+      { value: String(followersCount), label: 'Followers', onClick: () => {} },
     ];
   }
   if (role === 'storekeeper') {
@@ -374,7 +437,7 @@ function statTrio(
     return [
       { value: String(s.listingsCount), label: 'Listings', onClick: () => {} },
       { value: String(s.ordersCount), label: 'Orders', onClick: () => {} },
-      { value: fmtCompact(s.viewsCount), label: 'Views', onClick: () => {} },
+      { value: String(followersCount), label: 'Followers', onClick: () => {} },
     ];
   }
   const s = (stats as ProviderStats | null) ?? {
@@ -386,45 +449,10 @@ function statTrio(
   return [
     { value: String(s.servicesCount), label: 'Services', onClick: () => {} },
     { value: String(s.bookingsCount), label: 'Bookings', onClick: () => {} },
-    {
-      value: s.rating > 0 ? s.rating.toFixed(1) : '—',
-      label: 'Rating',
-      onClick: () => {},
-    },
+    { value: String(followersCount), label: 'Followers', onClick: () => {} },
   ];
 }
 
-// ─────────────────────────────────────────────────────────────
-// Role-specific highlights (Instagram story-style chips)
-// ─────────────────────────────────────────────────────────────
-function roleHighlights(role: ProfileRole): HighlightChip[] {
-  if (role === 'storekeeper') {
-    return [
-      { id: 'new', label: 'New', emoji: '🆕' },
-      { id: 'deals', label: 'Deals', emoji: '🔥' },
-      { id: 'featured', label: 'Featured', emoji: '⭐' },
-      { id: 'reviews', label: 'Reviews', emoji: '💬' },
-      { id: 'policies', label: 'Policies', emoji: '📋' },
-    ];
-  }
-  if (role === 'service_provider') {
-    return [
-      { id: 'portfolio', label: 'Portfolio', emoji: '📸' },
-      { id: 'availability', label: 'Availability', emoji: '📅' },
-      { id: 'reviews', label: 'Reviews', emoji: '⭐' },
-      { id: 'process', label: 'Process', emoji: '📋' },
-    ];
-  }
-  return [
-    { id: 'wishlist', label: 'Wishlist', emoji: '❤️' },
-    { id: 'wanted', label: 'Wanted', emoji: '🔍' },
-    { id: 'orders', label: 'Orders', emoji: '📦' },
-  ];
-}
-
-// ─────────────────────────────────────────────────────────────
-// Main component
-// ─────────────────────────────────────────────────────────────
 export function ProfileShell({ role }: { role: ProfileRole }) {
   useAuthGuard();
   const router = useRouter();
@@ -432,17 +460,21 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [followersCount, setFollowersCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [errored, setErrored] = useState(false);
   const [tab, setTab] = useState<Tab>('content');
-  const [following, setFollowing] = useState(false);
-  const [followersCount] = useState(0);
 
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const [showHighlightModal, setShowHighlightModal] = useState(false);
+  const [highlightSaving, setHighlightSaving] = useState(false);
 
   const reqSeq = useRef(0);
   const isMountedRef = useRef(true);
@@ -464,9 +496,34 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         if (seq !== reqSeq.current || !isMountedRef.current) return;
         setProfile(profileData);
 
-        const roleStats = await LOADERS[role]();
+        const [roleStats, hi, follow] = await Promise.all([
+          LOADERS[role](),
+          api.getMyHighlights().catch(() => [] as Highlight[]),
+          profileData.id
+            ? api
+                .getUserFollowStatus(profileData.id)
+                .catch(() => ({
+                  is_following: false,
+                  followers_count: 0,
+                  following_count: 0,
+                  is_self: true,
+                }))
+            : Promise.resolve({
+                is_following: false,
+                followers_count: 0,
+                following_count: 0,
+                is_self: true,
+              }),
+        ]);
+
         if (seq !== reqSeq.current || !isMountedRef.current) return;
         setStats(roleStats);
+        setHighlights(Array.isArray(hi) ? hi : []);
+        setFollowersCount(follow.followers_count || 0);
+
+        const items = await loadContentItems(role, roleStats);
+        if (seq !== reqSeq.current || !isMountedRef.current) return;
+        setContentItems(items);
       } catch {
         if (seq === reqSeq.current && isMountedRef.current)
           setErrored(true);
@@ -538,27 +595,46 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
     }
   };
 
-  const handleShare = async () => {
-    const url =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}/${roleSlug}/profile`
-        : '';
+  const addHighlight = async (preset: {
+    emoji: string;
+    label: string;
+    route: string;
+  }) => {
+    setHighlightSaving(true);
     try {
-      if (navigator.share) {
-        await navigator.share({ title: 'Admerce profile', url });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(url);
-        await alertDialog({
-          title: 'Link copied',
-          body: 'Profile link copied to clipboard.',
-        });
-      }
-    } catch {
-      /* user cancelled */
+      const created = await api.createHighlight(preset);
+      setHighlights((prev) => [...prev, created]);
+      setShowHighlightModal(false);
+    } catch (err) {
+      await alertDialog({
+        title: 'Could not add highlight',
+        body: extractErrorDetail(err, 'Try again later.'),
+        kind: 'danger',
+      });
+    } finally {
+      if (isMountedRef.current) setHighlightSaving(false);
     }
   };
 
-  // ── Loading skeleton ─────────────────────────────────────────
+  const removeHighlight = async (id: string) => {
+    const ok = await confirmDialog({
+      title: 'Remove highlight?',
+      body: 'This only removes the shortcut from your profile. Nothing is deleted.',
+      kind: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await api.deleteHighlight(id);
+      setHighlights((prev) => prev.filter((h) => h.id !== id));
+    } catch (err) {
+      await alertDialog({
+        title: 'Could not remove',
+        body: extractErrorDetail(err, 'Try again later.'),
+        kind: 'danger',
+      });
+    }
+  };
+
   if (loading) {
     return (
       <main style={css.root}>
@@ -570,33 +646,12 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
               <span style={css.topTitle}>Profile</span>
               <div style={{ width: 38 }} />
             </div>
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                paddingTop: 8,
-              }}
-            >
-              <div style={css.avatarSkeleton} />
-              <div style={css.skelLine} />
-              <div
-                style={{ ...css.skelLine, width: 140, marginTop: 10 }}
-              />
-            </div>
-          </div>
-          <div style={css.sheet}>
-            <div style={css.statsSkeleton} />
-            {[0, 1, 2].map((i) => (
-              <div key={i} style={css.sectionSkeleton} />
-            ))}
           </div>
         </div>
       </main>
     );
   }
 
-  // ── Error ────────────────────────────────────────────────────
   if (errored || !profile) {
     return (
       <main style={css.errorRoot}>
@@ -605,7 +660,9 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         <div style={css.errorHalo}>
           <MdErrorOutline size={40} color="var(--danger-fg)" />
         </div>
-        <h2 style={css.errorHeading}>Couldn&apos;t load your profile</h2>
+        <h2 style={css.errorHeading}>
+          Couldn&apos;t load your profile
+        </h2>
         <p style={css.errorBody}>
           Check your connection and try again. If this keeps happening,
           sign out and back in.
@@ -626,8 +683,8 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
   const memberSince = fmtMemberSince(profile.created_at);
   const initial = (name.charAt(0) || '?').toUpperCase();
   const bio = buildBio(profile, role);
-  const trio = statTrio(role, stats);
-  const highlights = roleHighlights(role);
+  const trio = statTrio(role, stats, followersCount);
+
   const walletTitle =
     role === 'storekeeper'
       ? 'Store revenue'
@@ -635,48 +692,28 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         ? 'Earnings'
         : 'Escrow balance';
 
+  const activity = buildActivityRows(role, stats);
+
   return (
     <main style={css.root}>
       <style>{KF}</style>
       <style>{CSS}</style>
 
       <div className="ps-shell">
-        {/* ═════════ HERO ═════════ */}
         <div style={css.hero}>
           <div style={css.heroGlow} aria-hidden />
 
           <div style={css.topBar}>
+            <span style={css.topTitle}>Profile</span>
             <button
-              onClick={() => router.back()}
-              style={css.ghostIconBtn}
-              aria-label="Back"
+              onClick={() => router.push(`/settings/${roleSlug}`)}
+              style={css.ghostBtn}
+              aria-label="Settings"
             >
-              <MdChevronRight
-                size={22}
-                color="var(--brand-on-gradient)"
-                style={{ transform: 'rotate(180deg)' }}
-              />
+              <MdSettings size={22} color="var(--brand-on-gradient)" />
             </button>
-            <span style={css.topTitle}>{name.split(' ')[0]}</span>
-            <div style={css.topActions}>
-              <button
-                onClick={handleShare}
-                style={css.ghostIconBtn}
-                aria-label="Share profile"
-              >
-                <MdShare size={20} color="var(--brand-on-gradient)" />
-              </button>
-              <button
-                onClick={() => router.push(`/settings/${roleSlug}`)}
-                style={css.ghostIconBtn}
-                aria-label="Settings"
-              >
-                <MdMoreHoriz size={22} color="var(--brand-on-gradient)" />
-              </button>
-            </div>
           </div>
 
-          {/* Identity row — avatar left, stats right */}
           <div style={css.identityRow}>
             <div style={css.avatarRingWrap}>
               <button
@@ -712,7 +749,6 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
             </div>
           </div>
 
-          {/* Name + verify + role */}
           <div style={css.nameBlock}>
             <div style={css.nameRow}>
               <h1 style={css.name}>{name}</h1>
@@ -730,10 +766,10 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                 {ROLE_EMOJI[role]} {ROLE_LABEL[role]}
               </span>
               {memberSince && (
-                <span style={css.metaDot}>·</span>
-              )}
-              {memberSince && (
-                <span style={css.metaText}>Since {memberSince}</span>
+                <>
+                  <span style={css.metaDot}>·</span>
+                  <span style={css.metaText}>Since {memberSince}</span>
+                </>
               )}
             </div>
 
@@ -763,45 +799,14 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
             )}
           </div>
 
-          {/* Action row — Follow / Message / Edit */}
           <div style={css.actionsRow}>
-            <button
-              type="button"
-              onClick={() => setFollowing((v) => !v)}
-              style={{
-                ...css.followBtn,
-                backgroundColor: following
-                  ? 'color-mix(in srgb, var(--brand-on-gradient) 12%, transparent)'
-                  : 'var(--bg-secondary)',
-                color: following
-                  ? 'var(--brand-on-gradient)'
-                  : 'var(--brand-primary)',
-                borderColor: following
-                  ? 'color-mix(in srgb, var(--brand-on-gradient) 40%, transparent)'
-                  : 'transparent',
-              }}
-              className="ps-action"
-            >
-              {following ? (
-                <>
-                  <MdCheckCircle size={16} />
-                  <span>Following</span>
-                </>
-              ) : (
-                <>
-                  <MdPersonAdd size={16} />
-                  <span>Follow</span>
-                </>
-              )}
-            </button>
-
             <button
               type="button"
               onClick={() => router.push(`/${roleSlug}/wallet`)}
               style={css.messageBtn}
               className="ps-action"
             >
-              <MdChatBubbleOutline
+              <MdAccountBalanceWallet
                 size={16}
                 color="var(--brand-on-gradient)"
               />
@@ -811,23 +816,24 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
             <button
               type="button"
               onClick={() => router.push(`/${roleSlug}/profile/edit`)}
-              style={css.editIconBtn}
-              aria-label="Edit profile"
+              style={css.editBtn}
               className="ps-action"
             >
-              <MdEdit size={18} color="var(--brand-on-gradient)" />
+              <MdEdit size={16} color="var(--brand-on-gradient)" />
+              <span>Edit profile</span>
             </button>
           </div>
         </div>
 
-        {/* ═════════ HIGHLIGHTS STRIP ═════════ */}
+        {/* ── Highlights strip ─────────────────────────────── */}
         <div style={css.highlightsSection}>
-          <div style={css.highlightsScroll}>
+          <div style={css.highlightsScroll} className="ps-highlights">
             <button
               type="button"
+              onClick={() => setShowHighlightModal(true)}
               style={css.highlightChip}
-              onClick={() => router.push(`/${roleSlug}/profile/edit`)}
               className="ps-highlight"
+              aria-label="Add highlight"
             >
               <span style={css.highlightAddIcon}>
                 <MdAdd size={20} color="var(--brand-primary)" />
@@ -836,22 +842,37 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
             </button>
 
             {highlights.map((h) => (
-              <button
+              <div
                 key={h.id}
-                type="button"
-                style={css.highlightChip}
-                className="ps-highlight"
+                style={css.highlightChipWrap}
               >
-                <span style={css.highlightRing}>
-                  <span style={css.highlightEmoji}>{h.emoji}</span>
-                </span>
-                <span style={css.highlightLabel}>{h.label}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(h.route)}
+                  style={css.highlightChip}
+                  className="ps-highlight"
+                  aria-label={h.label}
+                >
+                  <span style={css.highlightRing}>
+                    <span style={css.highlightEmoji}>{h.emoji}</span>
+                  </span>
+                  <span style={css.highlightLabel}>{h.label}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeHighlight(h.id)}
+                  style={css.highlightDelete}
+                  aria-label={`Remove ${h.label}`}
+                  className="ps-highlight-del"
+                >
+                  <MdClose size={11} color="#fff" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
 
-        {/* ═════════ TABS ═════════ */}
+        {/* ── Tabs ─────────────────────────────────────────── */}
         <div style={css.tabBar}>
           <button
             type="button"
@@ -868,7 +889,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                   : 'transparent',
             }}
           >
-            <MdGridOn size={20} />
+            <MdGridOn size={18} />
             <span>Content</span>
           </button>
           <button
@@ -886,7 +907,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                   : 'transparent',
             }}
           >
-            <MdInfoOutline size={20} />
+            <MdInfoOutline size={18} />
             <span>About</span>
           </button>
           <button
@@ -904,51 +925,177 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                   : 'transparent',
             }}
           >
-            <MdAccountBalanceWallet size={20} />
+            <MdAccountBalanceWallet size={18} />
             <span>Wallet</span>
           </button>
         </div>
 
-        {/* ═════════ TAB CONTENT ═════════ */}
         <div style={css.tabContent}>
           {tab === 'content' && (
-            <ContentTab role={role} stats={stats} />
+            <>
+              {contentItems.length === 0 ? (
+                <div style={css.empty}>
+                  <div style={css.emptyIcon}>
+                    <MdStorefront
+                      size={28}
+                      color="var(--brand-primary)"
+                    />
+                  </div>
+                  <h3 style={css.emptyTitle}>Nothing here yet</h3>
+                  <p style={css.emptyBody}>
+                    {role === 'shopper'
+                      ? 'Save items you love and they will show up here.'
+                      : role === 'storekeeper'
+                        ? 'Add your first listing to start selling.'
+                        : 'Add your first service to start earning.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="ps-grid">
+                  {contentItems.map((it) => (
+                    <button
+                      key={`${it.kind}-${it.id}`}
+                      type="button"
+                      className="ps-grid-cell"
+                      onClick={() => router.push(it.routeTo)}
+                      aria-label={it.title}
+                    >
+                      {it.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={it.imageUrl}
+                          alt=""
+                          loading="lazy"
+                          className="ps-grid-img"
+                        />
+                      ) : (
+                        <div className="ps-grid-fallback">
+                          <MdImage
+                            size={28}
+                            color="var(--text-muted)"
+                          />
+                        </div>
+                      )}
+                      <div className="ps-grid-overlay">
+                        <span className="ps-grid-price">
+                          {it.price || '—'}
+                        </span>
+                      </div>
+                      <div className="ps-grid-meta">
+                        <div className="ps-grid-title">{it.title}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
 
           {tab === 'about' && (
-            <AboutTab
-              profile={profile}
-              role={role}
-              memberSince={memberSince}
-              followersCount={followersCount}
-            />
+            <>
+              <h3 style={css.sectionLabel}>Details</h3>
+              <div style={css.section}>
+                {activity.map((row, i) => (
+                  <Row key={i} {...row} />
+                ))}
+              </div>
+
+              <h3 style={css.sectionLabel}>Account</h3>
+              <div style={css.section}>
+                <Row
+                  icon={
+                    <MdSwapHoriz
+                      size={18}
+                      color="var(--success-fg)"
+                    />
+                  }
+                  iconBg="var(--success-bg)"
+                  label="Switch role"
+                  subtitle={ROLE_LABEL[role]}
+                  onClick={() =>
+                    router.push('/onboarding?mode=switch')
+                  }
+                />
+              </div>
+            </>
           )}
 
           {tab === 'wallet' && (
-            <WalletTab
-              role={role}
-              stats={stats}
-              roleSlug={roleSlug}
-              walletTitle={walletTitle}
-              router={router}
-            />
+            <>
+              <div style={css.walletCard}>
+                <div style={css.walletTop}>
+                  <div style={css.walletLabelRow}>
+                    <MdAccountBalanceWallet
+                      size={16}
+                      color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)"
+                    />
+                    <span style={css.walletLabel}>{walletTitle}</span>
+                  </div>
+                  <div style={css.walletBalance}>
+                    {fmtBalance(stats?.walletBalance ?? 0)}
+                  </div>
+                  <div style={css.walletFootnote}>
+                    Funds held securely in escrow by our licensed
+                    partner.
+                  </div>
+                </div>
+                <div style={css.walletActions}>
+                  {role === 'shopper' ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(`/${roleSlug}/wallet`)
+                      }
+                      style={css.walletPrimary}
+                      className="ps-action"
+                    >
+                      <span>Add money</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(`/${roleSlug}/wallet`)
+                      }
+                      style={css.walletPrimary}
+                      className="ps-action"
+                    >
+                      <span>Withdraw</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(`/${roleSlug}/wallet`)
+                    }
+                    style={css.walletSecondary}
+                    className="ps-action"
+                  >
+                    <span>View wallet</span>
+                    <MdArrowForward
+                      size={16}
+                      color="var(--brand-on-gradient)"
+                    />
+                  </button>
+                </div>
+              </div>
+            </>
           )}
-        </div>
 
-        {/* Logout */}
-        <div style={css.logoutWrap}>
-          <button
-            onClick={handleLogout}
-            style={css.logoutBtn}
-            className="ps-logout"
-          >
-            <MdLogout size={20} color="var(--danger-fg)" />
-            <span>Log Out</span>
-          </button>
+          <div style={css.logoutWrap}>
+            <button
+              onClick={handleLogout}
+              style={css.logoutBtn}
+              className="ps-logout"
+            >
+              <MdLogout size={20} color="var(--danger-fg)" />
+              <span>Log Out</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* AVATAR MODAL — unchanged behaviour */}
+      {/* Avatar modal */}
       {showAvatarModal && (
         <div
           style={css.modalOverlay}
@@ -1048,409 +1195,303 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
           </div>
         </div>
       )}
+
+      {/* Highlights modal */}
+      {showHighlightModal && (
+        <div
+          style={css.modalOverlay}
+          className="ps-modal-overlay"
+          onClick={() => !highlightSaving && setShowHighlightModal(false)}
+        >
+          <div
+            style={css.modalCard}
+            className="ps-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowHighlightModal(false)}
+              style={css.modalClose}
+              aria-label="Close"
+              disabled={highlightSaving}
+            >
+              <MdClose size={20} color="var(--text-tertiary)" />
+            </button>
+            <h3 style={css.modalTitle}>Add a highlight</h3>
+            <p style={css.modalSub}>
+              Shortcuts that live on your profile.
+            </p>
+
+            <div style={css.presetList}>
+              {HIGHLIGHT_PRESETS.map((p) => (
+                <button
+                  key={`${p.emoji}-${p.label}`}
+                  type="button"
+                  onClick={() => addHighlight(p)}
+                  disabled={highlightSaving}
+                  style={css.presetRow}
+                >
+                  <span style={css.presetEmoji}>{p.emoji}</span>
+                  <span style={css.presetLabel}>{p.label}</span>
+                  <MdChevronRight
+                    size={18}
+                    color="var(--text-tertiary)"
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Tab: Content (grid of listings/services)
-// ─────────────────────────────────────────────────────────────
-function ContentTab({
-  role,
-  stats,
-}: {
-  role: ProfileRole;
-  stats: Stats | null;
-}) {
-  const router = useRouter();
-  const [items, setItems] = useState<GridItem[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const collected: GridItem[] = [];
-        if (role === 'storekeeper') {
-          const s = stats as StorekeeperStats | null;
-          if (s?.storeId) {
-            const listings = (await api.getStoreItems(
-              s.storeId,
-            )) as Array<Record<string, unknown>>;
-            for (const l of listings || []) {
-              collected.push({
-                id: String(l.listing_id ?? ''),
-                title: String(l.title ?? 'Listing'),
-                imageUrl: resolveImageUrl(
-                  (l.image_url as string) ?? null,
-                ),
-                price: l.price ? `₦${Number(l.price).toLocaleString()}` : undefined,
-                kind: 'listing',
-              });
-            }
-          }
-        } else if (role === 'service_provider') {
-          const services = (await api.getProviderServices()) as Array<
-            Record<string, unknown>
-          >;
-          for (const sv of services || []) {
-            collected.push({
-              id: String(sv.service_id ?? ''),
-              title: String(sv.title ?? 'Service'),
-              imageUrl: resolveImageUrl(
-                (sv.image_url as string) ?? null,
-              ),
-              price: sv.price
-                ? `₦${Number(sv.price).toLocaleString()}`
-                : undefined,
-              kind: 'service',
-            });
-          }
-        } else {
-          // Shopper — show saved items
-          const saved = (await api.getSavedItems()) as Array<
-            Record<string, unknown>
-          >;
-          for (const s of saved || []) {
-            collected.push({
-              id: String(s.listing_id ?? ''),
-              title: String(s.title ?? 'Saved item'),
-              imageUrl: resolveImageUrl(
-                (s.image_url as string) ?? null,
-              ),
-              price: s.price ? `₦${Number(s.price).toLocaleString()}` : undefined,
-              kind: 'listing',
-            });
-          }
-        }
-        if (!cancelled) setItems(collected);
-      } catch {
-        if (!cancelled) setItems([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
+function buildActivityRows(
+  role: ProfileRole,
+  stats: Stats | null,
+): ActivityRow[] {
+  if (role === 'shopper') {
+    const s = (stats as ShopperStats | null) ?? {
+      savedCount: 0,
+      wantedCount: 0,
+      ordersCount: 0,
+      walletBalance: 0,
     };
-  }, [role, stats]);
-
-  if (loading) {
-    return (
-      <div style={grid.grid}>
-        {Array.from({ length: 9 }).map((_, i) => (
-          <div key={i} style={grid.cell} className="ps-grid-skel" />
-        ))}
-      </div>
-    );
+    return [
+      {
+        icon: (
+          <MdFavoriteBorder size={18} color="var(--brand-primary)" />
+        ),
+        iconBg: 'var(--brand-soft)',
+        label: 'Saved items',
+        value: String(s.savedCount),
+      },
+      {
+        icon: <MdSearch size={18} color="var(--info-fg)" />,
+        iconBg: 'var(--info-bg)',
+        label: 'Wanted alerts',
+        value: String(s.wantedCount),
+      },
+      {
+        icon: <MdReceiptLong size={18} color="var(--purple-fg)" />,
+        iconBg: 'var(--purple-bg)',
+        label: 'Orders',
+        value: String(s.ordersCount),
+      },
+      {
+        icon: <MdLocationOn size={18} color="var(--warning-fg)" />,
+        iconBg: 'var(--warning-bg)',
+        label: 'Delivery addresses',
+      },
+    ];
   }
 
-  if (items.length === 0) {
-    return (
-      <div style={grid.empty}>
-        <div style={grid.emptyIcon}>
-          <MdStore size={32} color="var(--brand-primary)" />
-        </div>
-        <h3 style={grid.emptyTitle}>Nothing here yet</h3>
-        <p style={grid.emptyBody}>
-          {role === 'shopper'
-            ? 'Save items you love and they will show up here.'
-            : role === 'storekeeper'
-              ? 'Add your first listing to start selling.'
-              : 'Add your first service to start earning.'}
-        </p>
-      </div>
-    );
+  if (role === 'storekeeper') {
+    const s = (stats as StorekeeperStats | null) ?? {
+      storeId: null,
+      listingsCount: 0,
+      ordersCount: 0,
+      viewsCount: 0,
+      walletBalance: 0,
+    };
+    return [
+      {
+        icon: (
+          <MdStorefront size={18} color="var(--brand-primary)" />
+        ),
+        iconBg: 'var(--brand-soft)',
+        label: 'Store profile',
+      },
+      {
+        icon: <MdInventory2 size={18} color="var(--info-fg)" />,
+        iconBg: 'var(--info-bg)',
+        label: 'Listings',
+        value: String(s.listingsCount),
+      },
+      {
+        icon: <MdReceiptLong size={18} color="var(--purple-fg)" />,
+        iconBg: 'var(--purple-bg)',
+        label: 'Orders received',
+        value: String(s.ordersCount),
+      },
+      {
+        icon: <MdVerified size={18} color="var(--success-fg)" />,
+        iconBg: 'var(--success-bg)',
+        label: 'Verification',
+      },
+    ];
   }
 
-  return (
-    <div style={grid.grid}>
-      {items.map((it) => (
-        <button
-          key={it.id}
-          type="button"
-          style={grid.cell}
-          className="ps-grid-cell"
-          onClick={() =>
-            router.push(
-              it.kind === 'service'
-                ? `/service-detail/${it.id}`
-                : `/item-detail/${it.id}`,
-            )
-          }
-        >
-          {it.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={it.imageUrl} alt="" style={grid.img} />
-          ) : (
-            <div style={grid.imgPlaceholder}>
-              <MdStorefront
-                size={20}
-                color="var(--text-muted)"
-              />
-            </div>
-          )}
-          {it.price && (
-            <span style={grid.priceTag}>{it.price}</span>
-          )}
-        </button>
-      ))}
-    </div>
-  );
+  const s = (stats as ProviderStats | null) ?? {
+    servicesCount: 0,
+    bookingsCount: 0,
+    rating: 0,
+    walletBalance: 0,
+  };
+  return [
+    {
+      icon: <MdBuild size={18} color="var(--brand-primary)" />,
+      iconBg: 'var(--brand-soft)',
+      label: 'My services',
+      value: String(s.servicesCount),
+    },
+    {
+      icon: <MdEventAvailable size={18} color="var(--info-fg)" />,
+      iconBg: 'var(--info-bg)',
+      label: 'Bookings',
+      value: String(s.bookingsCount),
+    },
+    {
+      icon: <MdStar size={18} color="var(--warning-fg)" />,
+      iconBg: 'var(--warning-bg)',
+      label: 'Reviews',
+      value: s.rating > 0 ? s.rating.toFixed(1) : '—',
+    },
+    {
+      icon: <MdTrendingUp size={18} color="var(--success-fg)" />,
+      iconBg: 'var(--success-bg)',
+      label: 'Availability',
+    },
+  ];
 }
 
-// ─────────────────────────────────────────────────────────────
-// Tab: About
-// ─────────────────────────────────────────────────────────────
-function AboutTab({
-  profile,
-  role,
-  memberSince,
-  followersCount,
-}: {
-  profile: Profile;
-  role: ProfileRole;
-  memberSince: string;
-  followersCount: number;
-}) {
-  return (
-    <>
-      <h3 style={css.sectionLabel}>Trust & activity</h3>
-      <div style={css.section}>
-        <AboutRow
-          icon={<MdVerified size={18} color="var(--success-fg)" />}
-          iconBg="var(--success-bg)"
-          label="Verification"
-          value={profile.verified ? 'Verified' : 'Not verified'}
-        />
-        <AboutRow
-          icon={<MdPersonAdd size={18} color="var(--brand-primary)" />}
-          iconBg="var(--brand-soft)"
-          label="Followers"
-          value={String(followersCount)}
-        />
-        <AboutRow
-          icon={
-            <MdAccessTime size={18} color="var(--warning-fg)" />
-          }
-          iconBg="var(--warning-bg)"
-          label="Member since"
-          value={memberSince || '—'}
-        />
-      </div>
-
-      <h3 style={css.sectionLabel}>Details</h3>
-      <div style={css.section}>
-        <AboutRow
-          icon={<MdStorefront size={18} color="var(--brand-primary)" />}
-          iconBg="var(--brand-soft)"
-          label="Role"
-          value={ROLE_LABEL[role]}
-        />
-        {profile.business_name && (
-          <AboutRow
-            icon={<MdStore size={18} color="var(--info-fg)" />}
-            iconBg="var(--info-bg)"
-            label="Business name"
-            value={String(profile.business_name)}
-          />
-        )}
-        {(profile.lga || profile.state_of_origin) && (
-          <AboutRow
-            icon={<MdLocationOn size={18} color="var(--purple-fg)" />}
-            iconBg="var(--purple-bg)"
-            label="Location"
-            value={[profile.lga, profile.state_of_origin]
-              .filter(Boolean)
-              .join(', ')}
-          />
-        )}
-        {profile.phone && (
-          <AboutRow
-            icon={<MdPhone size={18} color="var(--info-fg)" />}
-            iconBg="var(--info-bg)"
-            label="Phone"
-            value={String(profile.phone)}
-          />
-        )}
-        {profile.email && (
-          <AboutRow
-            icon={<MdEmail size={18} color="var(--info-fg)" />}
-            iconBg="var(--info-bg)"
-            label="Email"
-            value={String(profile.email)}
-          />
-        )}
-      </div>
-
-      <h3 style={css.sectionLabel}>Account</h3>
-      <div style={css.section}>
-        <AboutRow
-          icon={<MdSwapHoriz size={18} color="var(--success-fg)" />}
-          iconBg="var(--success-bg)"
-          label="Switch role"
-          value={ROLE_LABEL[role]}
-          onClick={() =>
-            (window.location.href = '/onboarding?mode=switch')
-          }
-        />
-      </div>
-    </>
-  );
-}
-
-function AboutRow({
+function Row({
   icon,
   iconBg,
   label,
+  subtitle,
   value,
   onClick,
 }: {
   icon: React.ReactNode;
   iconBg: string;
   label: string;
-  value: string;
+  subtitle?: string;
+  value?: string;
   onClick?: () => void;
 }) {
   return (
-    <button
-      onClick={onClick}
-      style={css.row}
-      className={onClick ? 'ps-row' : ''}
-    >
+    <button onClick={onClick} style={css.row} className="ps-row">
       <span style={{ ...css.rowIconWrap, backgroundColor: iconBg }}>
         {icon}
       </span>
       <span style={css.rowBody}>
         <span style={css.rowLabel}>{label}</span>
+        {subtitle && <span style={css.rowSubtitle}>{subtitle}</span>}
       </span>
-      <span style={css.rowValue}>{value}</span>
-      {onClick && (
-        <MdChevronRight size={18} color="var(--border-strong)" />
-      )}
+      {value && <span style={css.rowValue}>{value}</span>}
+      <MdChevronRight size={18} color="var(--border-strong)" />
     </button>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Tab: Wallet
-// ─────────────────────────────────────────────────────────────
-function WalletTab({
-  role,
-  stats,
-  roleSlug,
-  walletTitle,
-  router,
-}: {
-  role: ProfileRole;
-  stats: Stats | null;
-  roleSlug: string;
-  walletTitle: string;
-  router: ReturnType<typeof useRouter>;
-}) {
-  const balance = stats?.walletBalance ?? 0;
-
-  return (
-    <>
-      <div style={css.walletCard}>
-        <div style={css.walletTop}>
-          <div style={css.walletLabelRow}>
-            <MdAccountBalanceWallet
-              size={16}
-              color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)"
-            />
-            <span style={css.walletLabel}>{walletTitle}</span>
-          </div>
-          <div style={css.walletBalance}>{fmtBalance(balance)}</div>
-          <div style={css.walletFootnote}>
-            Funds held securely in escrow by our licensed partner.
-          </div>
-        </div>
-        <div style={css.walletActions}>
-          {role === 'shopper' ? (
-            <button
-              type="button"
-              onClick={() => router.push(`/${roleSlug}/wallet`)}
-              style={css.walletPrimary}
-              className="ps-action"
-            >
-              <MdAdd size={16} color="var(--brand-primary)" />
-              <span>Add money</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => router.push(`/${roleSlug}/wallet`)}
-              style={css.walletPrimary}
-              className="ps-action"
-            >
-              <span>Withdraw</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => router.push(`/${roleSlug}/wallet`)}
-            style={css.walletSecondary}
-            className="ps-action"
-          >
-            <span>View wallet</span>
-            <MdArrowForward
-              size={16}
-              color="var(--brand-on-gradient)"
-            />
-          </button>
-        </div>
-      </div>
-
-      <h3 style={css.sectionLabel}>Recent activity</h3>
-      <div style={css.section}>
-        <AboutRow
-          icon={<MdReceiptLong size={18} color="var(--purple-fg)" />}
-          iconBg="var(--purple-bg)"
-          label="Transactions"
-          value="View all"
-          onClick={() => router.push(`/${roleSlug}/wallet`)}
-        />
-        <AboutRow
-          icon={<MdTrendingUp size={18} color="var(--success-fg)" />}
-          iconBg="var(--success-bg)"
-          label="This week"
-          value={fmtBalance(0)}
-        />
-      </div>
-    </>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// CSS
-// ─────────────────────────────────────────────────────────────
 const CSS = `
   .ps-shell {
     width: 100%;
-    max-width: 640px;
+    max-width: 560px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    padding-bottom: 40px;
   }
   .ps-stat-item:hover { opacity: 0.85; }
   .ps-stat-item:active { transform: scale(0.97); }
   .ps-action:active { transform: scale(0.97); }
   .ps-action:hover { opacity: 0.94; }
-  .ps-highlight:active { transform: scale(0.95); }
-  .ps-highlight:hover { opacity: 0.92; }
-  .ps-grid-cell:active { opacity: 0.9; }
-  .ps-grid-skel {
-    background: var(--skeleton);
-    animation: psShimmer 1.4s ease-in-out infinite;
-    aspect-ratio: 1 / 1;
-  }
   .ps-row:hover { background-color: var(--bg-hover); }
   .ps-logout:hover { background-color: var(--danger-bg); }
   .ps-logout:active { transform: scale(0.99); }
+  .ps-highlight:active { transform: scale(0.95); }
+  .ps-highlight:hover { opacity: 0.92; }
+  .ps-highlight-del:hover { opacity: 1; }
+
+  /* Highlights horizontal scroll */
+  .ps-highlights {
+    display: flex;
+    gap: 14px;
+    padding: 0 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .ps-highlights::-webkit-scrollbar { display: none; }
+
+  /* Content grid */
+  .ps-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px;
+  }
+  .ps-grid-cell {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    padding: 0;
+    border: none;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    overflow: hidden;
+    font-family: inherit;
+    text-align: left;
+  }
+  .ps-grid-cell:active { opacity: 0.85; }
+  .ps-grid-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .ps-grid-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+  }
+  .ps-grid-overlay {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 24px 8px 30px;
+    background: linear-gradient(
+      to top,
+      rgba(0,0,0,0.72) 0%,
+      transparent 90%
+    );
+    pointer-events: none;
+  }
+  .ps-grid-price {
+    position: absolute;
+    top: -18px;
+    right: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #fff;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    font-variant-numeric: tabular-nums;
+  }
+  .ps-grid-meta {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 8px 8px 10px;
+    color: #fff;
+    pointer-events: none;
+  }
+  .ps-grid-title {
+    font-size: 11px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+
+  @media (min-width: 720px) {
+    .ps-grid { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  }
 
   @media (min-width: 1024px) {
     .ps-modal-overlay {
@@ -1462,6 +1503,7 @@ const CSS = `
       max-height: 80vh;
       overflow-y: auto;
     }
+    .ps-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
   }
 `;
 
@@ -1470,9 +1512,6 @@ const KF = `
   @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 `;
 
-// ─────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
@@ -1514,11 +1553,7 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--brand-on-gradient)',
     letterSpacing: 0.3,
   },
-  topActions: {
-    display: 'flex',
-    gap: 4,
-  },
-  ghostIconBtn: {
+  ghostBtn: {
     background:
       'color-mix(in srgb, var(--brand-on-gradient) 10%, transparent)',
     border: 'none',
@@ -1704,22 +1739,6 @@ const css: Record<string, React.CSSProperties> = {
     gap: 8,
     marginTop: 18,
   },
-  followBtn: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    padding: '11px 14px',
-    borderRadius: 12,
-    border: '1.5px solid',
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition:
-      'background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.12s',
-  },
   messageBtn: {
     flex: 1,
     display: 'flex',
@@ -1739,32 +1758,39 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     transition: 'transform 0.12s, opacity 0.15s',
   },
-  editIconBtn: {
-    width: 46,
-    padding: 0,
+  editBtn: {
+    flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    padding: '11px 14px',
     borderRadius: 12,
     border:
       '1.5px solid color-mix(in srgb, var(--brand-on-gradient) 35%, transparent)',
     backgroundColor:
       'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
+    color: 'var(--brand-on-gradient)',
+    fontSize: 14,
+    fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
     transition: 'transform 0.12s, opacity 0.15s',
   },
+
   highlightsSection: {
-    backgroundColor: 'var(--bg-primary)',
-    paddingTop: 16,
+    paddingTop: 18,
     paddingBottom: 4,
   },
   highlightsScroll: {
     display: 'flex',
-    gap: 16,
+    gap: 14,
     padding: '0 20px',
     overflowX: 'auto',
-    scrollbarWidth: 'none',
+  },
+  highlightChipWrap: {
+    position: 'relative',
+    flexShrink: 0,
   },
   highlightChip: {
     display: 'flex',
@@ -1821,10 +1847,29 @@ const css: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  highlightDelete: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: '50%',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    border: '2px solid var(--bg-primary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    opacity: 0.85,
+    transition: 'opacity 0.15s',
+    boxSizing: 'border-box',
+  },
+
   tabBar: {
     display: 'flex',
     borderBottom: '1px solid var(--border-default)',
-    marginTop: 12,
+    marginTop: 14,
     backgroundColor: 'var(--bg-primary)',
     transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
@@ -1849,6 +1894,7 @@ const css: Record<string, React.CSSProperties> = {
   tabContent: {
     padding: '16px 16px 0',
     minHeight: 200,
+    paddingBottom: 40,
   },
   sectionLabel: {
     fontSize: 11.5,
@@ -1900,11 +1946,50 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--text-primary)',
     letterSpacing: -0.1,
   },
+  rowSubtitle: {
+    fontSize: 12,
+    color: 'var(--text-muted)',
+  },
   rowValue: {
     fontSize: 13,
     fontWeight: 500,
     color: 'var(--text-muted)',
   },
+
+  empty: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '48px 24px',
+    textAlign: 'center',
+    gap: 4,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: 'var(--brand-soft)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: 800,
+    color: 'var(--text-primary)',
+    margin: 0,
+    letterSpacing: -0.2,
+  },
+  emptyBody: {
+    fontSize: 13.5,
+    color: 'var(--text-tertiary)',
+    margin: '4px 0 0',
+    maxWidth: 300,
+    lineHeight: 1.5,
+  },
+
   walletCard: {
     background: 'var(--brand-gradient)',
     borderRadius: 20,
@@ -1912,6 +1997,7 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--brand-on-gradient)',
     boxShadow: 'var(--shadow-brand)',
     transition: 'background 0.18s ease',
+    marginTop: 6,
   },
   walletTop: {
     display: 'flex',
@@ -1987,7 +2073,7 @@ const css: Record<string, React.CSSProperties> = {
     transition: 'transform 0.12s',
   },
   logoutWrap: {
-    padding: '30px 16px 0',
+    padding: '30px 0 0',
   },
   logoutBtn: {
     display: 'flex',
@@ -2008,6 +2094,7 @@ const css: Record<string, React.CSSProperties> = {
     transition:
       'background-color 0.15s, transform 0.12s, border-color 0.18s ease, color 0.18s ease',
   },
+
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -2115,6 +2202,36 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     boxShadow: 'var(--shadow-brand)',
   },
+  presetList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  presetRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    width: '100%',
+    padding: '14px 16px',
+    border: '1px solid var(--border-default)',
+    borderRadius: 14,
+    backgroundColor: 'var(--bg-secondary)',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+  },
+  presetEmoji: {
+    fontSize: 20,
+    width: 26,
+    textAlign: 'center',
+    flexShrink: 0,
+  },
+  presetLabel: {
+    flex: 1,
+    fontSize: 14.5,
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+  },
   avatarSkeleton: {
     width: 88,
     height: 88,
@@ -2130,21 +2247,6 @@ const css: Record<string, React.CSSProperties> = {
     backgroundColor:
       'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
     marginTop: 16,
-  },
-  statsSkeleton: {
-    height: 100,
-    borderRadius: 20,
-    backgroundColor: 'var(--bg-secondary)',
-    border: '1px solid var(--border-default)',
-    animation: 'psShimmer 1.4s ease-in-out infinite',
-  },
-  sectionSkeleton: {
-    height: 120,
-    borderRadius: 18,
-    backgroundColor: 'var(--bg-secondary)',
-    border: '1px solid var(--border-default)',
-    marginTop: 18,
-    animation: 'psShimmer 1.4s ease-in-out infinite',
   },
   errorRoot: {
     display: 'flex',
@@ -2197,87 +2299,5 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     fontFamily: 'inherit',
     boxShadow: 'var(--shadow-brand)',
-  },
-};
-
-// ─────────────────────────────────────────────────────────────
-// Grid styles
-// ─────────────────────────────────────────────────────────────
-const grid: Record<string, React.CSSProperties> = {
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 3,
-    marginTop: 8,
-  },
-  cell: {
-    position: 'relative',
-    aspectRatio: '1 / 1',
-    border: 'none',
-    padding: 0,
-    backgroundColor: 'var(--bg-tertiary)',
-    cursor: 'pointer',
-    overflow: 'hidden',
-    fontFamily: 'inherit',
-  },
-  img: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    display: 'block',
-  },
-  imgPlaceholder: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'var(--bg-tertiary)',
-  },
-  priceTag: {
-    position: 'absolute',
-    left: 6,
-    bottom: 6,
-    padding: '3px 8px',
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    color: '#FFFFFF',
-    fontSize: 10.5,
-    fontWeight: 800,
-    letterSpacing: 0.2,
-    backdropFilter: 'blur(4px)',
-  },
-  empty: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '48px 24px',
-    textAlign: 'center',
-    gap: 4,
-  },
-  emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    backgroundColor: 'var(--brand-soft)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    margin: 0,
-    letterSpacing: -0.2,
-  },
-  emptyBody: {
-    fontSize: 13.5,
-    color: 'var(--text-tertiary)',
-    margin: '4px 0 0',
-    maxWidth: 300,
-    lineHeight: 1.5,
   },
 };

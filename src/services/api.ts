@@ -404,9 +404,6 @@ class ApiService {
     await this.axios.put('/profile/settings', { role, settings });
   }
 
-  public async updateProfile(displayName: string): Promise<void> {
-    await this.axios.put('/profile/update', { display_name: displayName });
-  }
 
   public async updateProviderProfile(displayName: string, businessName: string): Promise<void> {
     await this.axios.put('/profile/update-provider-profile', {
@@ -1826,6 +1823,52 @@ public async getFundingHistory(limit = 20): Promise<
   const res = await this.axios.get(`/funding/history?limit=${limit}`);
   return res.data;
 }
+
+  // ── User follow ────────────────────────────────────────────
+  public async getUserFollowStatus(userId: string): Promise<{
+    is_following: boolean;
+    followers_count: number;
+    following_count: number;
+    is_self: boolean;
+  }> {
+    const res = await this.axios.get(`/profile/${userId}/follow-status`);
+    return res.data;
+  }
+
+  public async followUser(
+    userId: string,
+  ): Promise<{ following: boolean; followers_count: number }> {
+    const res = await this.axios.post(`/profile/${userId}/follow`);
+    return res.data;
+  }
+
+  public async unfollowUser(
+    userId: string,
+  ): Promise<{ following: boolean; followers_count: number }> {
+    const res = await this.axios.delete(`/profile/${userId}/follow`);
+    return res.data;
+  }
+
+  // ── Profile highlights ─────────────────────────────────────
+  public async getMyHighlights(): Promise<
+    Array<{ id: string; emoji: string; label: string; route: string }>
+  > {
+    const res = await this.axios.get('/profile/highlights');
+    return Array.isArray(res.data) ? res.data : [];
+  }
+
+  public async createHighlight(payload: {
+    emoji: string;
+    label: string;
+    route: string;
+  }): Promise<{ id: string; emoji: string; label: string; route: string }> {
+    const res = await this.axios.post('/profile/highlights', payload);
+    return res.data;
+  }
+
+  public async deleteHighlight(id: string): Promise<void> {
+    await this.axios.delete(`/profile/highlights/${id}`);
+  }
   
 }
 
