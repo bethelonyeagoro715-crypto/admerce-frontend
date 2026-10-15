@@ -19,8 +19,6 @@ import {
   MdImage,
   MdAdd,
   MdDeleteOutline,
-  MdToggleOn,
-  MdToggleOff,
   MdClose,
   MdAccessTime,
   MdTimer,
@@ -29,9 +27,18 @@ import {
   MdInventory2,
   MdCalendarToday,
   MdReceiptLong,
+  MdClose as MdClear,
+  MdFavoriteBorder,
+  MdFavorite,
+  MdBookmark,
+  MdBookmarkBorder,
+  MdMoreHoriz,
+  MdChatBubbleOutline,
+  MdSend,
+  MdVerified,
 } from 'react-icons/md';
 
-// ─── Types ──────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────
 interface SavedListing {
   listing_id: string;
   title?: string | null;
@@ -146,10 +153,23 @@ const TABS = [
 
 type Tab = (typeof TABS)[number];
 
+const TAB_EMOJI: Record<Tab, string> = {
+  Items: '🔖',
+  Wanted: '🔍',
+  Pickups: '🛍️',
+  Jobs: '🛠️',
+  Reservations: '📌',
+  Deliveries: '🚚',
+  Bookings: '📅',
+  Basket: '🧺',
+  History: '🕘',
+};
+
 function isValidTab(value: string | null): value is Tab {
   return !!value && (TABS as readonly string[]).includes(value);
 }
 
+// ─── Formatters ─────────────────────────────────────────────────
 function fmtNaira(v: unknown): string {
   const n = Number(v ?? 0);
   if (!Number.isFinite(n)) return '₦0';
@@ -186,6 +206,24 @@ function fmtDateTime(iso: string | undefined | null): string {
   } catch {
     return iso ?? '—';
   }
+}
+
+/** Instagram-style relative time ("2h", "3d", "6w") */
+function fmtRelative(iso?: string | null): string {
+  if (!iso) return '';
+  const t = parseAsUtc(iso);
+  if (Number.isNaN(t)) return '';
+  const secs = Math.floor((Date.now() - t) / 1000);
+  if (secs < 60) return 'now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 52) return `${weeks}w`;
+  return `${Math.floor(days / 365)}y`;
 }
 
 function resolveImageUrl(url: string | null | undefined): string | null {
@@ -230,25 +268,24 @@ function statusMeta(status?: string): {
   label: string;
   bg: string;
   fg: string;
-  border: string;
 } {
   switch ((status || '').toLowerCase()) {
     case 'locked':
-      return { label: 'Reserved', bg: 'var(--brand-soft)', fg: 'var(--brand-primary)', border: 'var(--brand-primary)' };
+      return { label: 'Reserved', bg: 'var(--brand-soft)', fg: 'var(--brand-primary)' };
     case 'accepted':
-      return { label: 'Holding for pickup', bg: 'var(--purple-bg)', fg: 'var(--purple-fg)', border: 'color-mix(in srgb, var(--purple-fg) 40%, transparent)' };
+      return { label: 'Holding', bg: 'var(--purple-bg)', fg: 'var(--purple-fg)' };
     case 'picked_up':
-      return { label: 'Picked up', bg: 'var(--success-bg)', fg: 'var(--success-fg)', border: 'var(--success-strong)' };
+      return { label: 'Picked up', bg: 'var(--success-bg)', fg: 'var(--success-fg)' };
     case 'dispatched':
-      return { label: 'Out for delivery', bg: 'var(--info-bg)', fg: 'var(--info-fg)', border: 'color-mix(in srgb, var(--info-fg) 40%, transparent)' };
+      return { label: 'Out for delivery', bg: 'var(--info-bg)', fg: 'var(--info-fg)' };
     case 'returned':
-      return { label: 'Returned', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
+      return { label: 'Returned', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)' };
     case 'expired':
-      return { label: 'Expired', bg: 'var(--bg-tertiary)', fg: 'var(--text-muted)', border: 'var(--border-default)' };
+      return { label: 'Expired', bg: 'var(--bg-tertiary)', fg: 'var(--text-muted)' };
     case 'reversed':
-      return { label: 'Reversed', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
+      return { label: 'Reversed', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)' };
     default:
-      return { label: status ? status : 'Unknown', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
+      return { label: status ?? 'Unknown', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)' };
   }
 }
 
@@ -256,21 +293,20 @@ function bookingStatusMeta(status?: string): {
   label: string;
   bg: string;
   fg: string;
-  border: string;
 } {
   switch ((status || '').toLowerCase()) {
     case 'locked':
-      return { label: 'Booked', bg: 'var(--brand-soft)', fg: 'var(--brand-primary)', border: 'var(--brand-primary)' };
+      return { label: 'Booked', bg: 'var(--brand-soft)', fg: 'var(--brand-primary)' };
     case 'accepted':
-      return { label: 'Provider confirmed', bg: 'var(--purple-bg)', fg: 'var(--purple-fg)', border: 'color-mix(in srgb, var(--purple-fg) 40%, transparent)' };
+      return { label: 'Confirmed', bg: 'var(--purple-bg)', fg: 'var(--purple-fg)' };
     case 'completed':
-      return { label: 'Completed', bg: 'var(--success-bg)', fg: 'var(--success-fg)', border: 'var(--success-strong)' };
+      return { label: 'Completed', bg: 'var(--success-bg)', fg: 'var(--success-fg)' };
     case 'cancelled':
-      return { label: 'Cancelled', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
+      return { label: 'Cancelled', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)' };
     case 'declined':
-      return { label: 'Declined', bg: 'var(--danger-bg)', fg: 'var(--danger-fg)', border: 'var(--danger-strong)' };
+      return { label: 'Declined', bg: 'var(--danger-bg)', fg: 'var(--danger-fg)' };
     default:
-      return { label: status ? status : 'Unknown', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)', border: 'var(--border-default)' };
+      return { label: status ?? 'Unknown', bg: 'var(--bg-tertiary)', fg: 'var(--text-secondary)' };
   }
 }
 
@@ -283,6 +319,7 @@ function shortAddress(addr?: string | null): string {
 
 const EXPIRING_SOON_MS = 30 * 60 * 1000;
 
+// ─── Main component ─────────────────────────────────────────────
 function SavedPageContent() {
   useAuthGuard();
 
@@ -298,6 +335,7 @@ function SavedPageContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const [savedItems, setSavedItems] = useState<SavedListing[]>([]);
   const [wantedAlerts, setWantedAlerts] = useState<WantedAlert[]>([]);
@@ -309,6 +347,9 @@ function SavedPageContent() {
   const [basketItems, setBasketItems] = useState<BasketItem[]>([]);
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
+
+  // Local-only likes for now — persists visually within the session
+  const [liked, setLiked] = useState<Set<string>>(new Set());
 
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   useEffect(() => {
@@ -358,50 +399,65 @@ function SavedPageContent() {
       instantResult,
     ] = results;
 
-    if (savedResult.status === 'fulfilled') {
-      const raw = savedResult.value;
-      setSavedItems(Array.isArray(raw) ? (raw as SavedListing[]) : []);
-    } else setSavedItems([]);
-
-    if (wantedResult.status === 'fulfilled') {
-      const raw = wantedResult.value;
-      setWantedAlerts(Array.isArray(raw) ? (raw as WantedAlert[]) : []);
-    } else setWantedAlerts([]);
-
-    if (reservationsResult.status === 'fulfilled') {
-      const raw = reservationsResult.value;
-      setReservations(Array.isArray(raw) ? (raw as WalletOrder[]) : []);
-    } else setReservations([]);
-
-    if (deliveriesResult.status === 'fulfilled') {
-      const raw = deliveriesResult.value;
-      setDeliveries(Array.isArray(raw) ? (raw as WalletOrder[]) : []);
-    } else setDeliveries([]);
-
-    if (bookingsResult.status === 'fulfilled') {
-      const raw = bookingsResult.value;
-      setBookings(Array.isArray(raw) ? (raw as ServiceBooking[]) : []);
-    } else setBookings([]);
-
+    setSavedItems(
+      savedResult.status === 'fulfilled' && Array.isArray(savedResult.value)
+        ? (savedResult.value as SavedListing[])
+        : [],
+    );
+    setWantedAlerts(
+      wantedResult.status === 'fulfilled' && Array.isArray(wantedResult.value)
+        ? (wantedResult.value as WantedAlert[])
+        : [],
+    );
+    setReservations(
+      reservationsResult.status === 'fulfilled' &&
+        Array.isArray(reservationsResult.value)
+        ? (reservationsResult.value as WalletOrder[])
+        : [],
+    );
+    setDeliveries(
+      deliveriesResult.status === 'fulfilled' &&
+        Array.isArray(deliveriesResult.value)
+        ? (deliveriesResult.value as WalletOrder[])
+        : [],
+    );
+    setBookings(
+      bookingsResult.status === 'fulfilled' &&
+        Array.isArray(bookingsResult.value)
+        ? (bookingsResult.value as ServiceBooking[])
+        : [],
+    );
     if (basketResult.status === 'fulfilled') {
       const raw = basketResult.value as BasketResponse | null;
-      const items = Array.isArray(raw?.items) ? (raw!.items as BasketItem[]) : [];
-      setBasketItems(items);
+      setBasketItems(
+        Array.isArray(raw?.items) ? (raw!.items as BasketItem[]) : [],
+      );
       setBasketTotal(Number(raw?.total ?? 0));
     } else {
       setBasketItems([]);
       setBasketTotal(0);
     }
-
-    if (historyResult.status === 'fulfilled') {
-      const raw = historyResult.value;
-      setHistory(Array.isArray(raw) ? (raw as WalletOrder[]) : []);
-    } else setHistory([]);
-
+    setHistory(
+      historyResult.status === 'fulfilled' &&
+        Array.isArray(historyResult.value)
+        ? (historyResult.value as WalletOrder[])
+        : [],
+    );
     if (instantResult.status === 'fulfilled') {
-      const raw = instantResult.value as { pickups: unknown[]; services: unknown[] };
-      setInstantPickups(Array.isArray(raw?.pickups) ? (raw.pickups as InstantTransaction[]) : []);
-      setInstantJobs(Array.isArray(raw?.services) ? (raw.services as InstantTransaction[]) : []);
+      const raw = instantResult.value as {
+        pickups: unknown[];
+        services: unknown[];
+      };
+      setInstantPickups(
+        Array.isArray(raw?.pickups)
+          ? (raw.pickups as InstantTransaction[])
+          : [],
+      );
+      setInstantJobs(
+        Array.isArray(raw?.services)
+          ? (raw.services as InstantTransaction[])
+          : [],
+      );
     } else {
       setInstantPickups([]);
       setInstantJobs([]);
@@ -433,9 +489,17 @@ function SavedPageContent() {
     setIsRefreshing(false);
   };
 
-  const openReservation = (order: WalletOrder) => {
-    router.push(`/reservation-confirmed?order_id=${order.order_id}`);
+  const toggleLike = (key: string) => {
+    setLiked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
+
+  const openReservation = (order: WalletOrder) =>
+    router.push(`/reservation-confirmed?order_id=${order.order_id}`);
 
   const openBooking = (booking: ServiceBooking) => {
     if (booking.booking_id) {
@@ -447,9 +511,8 @@ function SavedPageContent() {
     }
   };
 
-  const openInstantReceipt = (reference: string) => {
+  const openInstantReceipt = (reference: string) =>
     router.push(`/receipt/instant/${encodeURIComponent(reference)}`);
-  };
 
   const openStoreOnMap = (order: WalletOrder, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -469,8 +532,13 @@ function SavedPageContent() {
     setCreatingWanted(true);
     setCreateWantedError(null);
     try {
-      const budgetNum = newWantedBudget.trim() ? Number(newWantedBudget) : undefined;
-      if (budgetNum !== undefined && (!Number.isFinite(budgetNum) || budgetNum < 0)) {
+      const budgetNum = newWantedBudget.trim()
+        ? Number(newWantedBudget)
+        : undefined;
+      if (
+        budgetNum !== undefined &&
+        (!Number.isFinite(budgetNum) || budgetNum < 0)
+      ) {
         setCreateWantedError('Budget must be a positive number.');
         setCreatingWanted(false);
         return;
@@ -486,7 +554,8 @@ function SavedPageContent() {
       setNewWantedBudget('');
       await loadAllData();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not create alert.';
+      const msg =
+        err instanceof Error ? err.message : 'Could not create alert.';
       setCreateWantedError(msg);
     } finally {
       setCreatingWanted(false);
@@ -508,7 +577,9 @@ function SavedPageContent() {
       const res = (await api.toggleWantedAlert(id)) as { is_active?: boolean };
       setWantedAlerts((prev) =>
         prev.map((a) =>
-          a.id === id ? { ...a, is_active: res.is_active ?? !a.is_active } : a,
+          a.id === id
+            ? { ...a, is_active: res.is_active ?? !a.is_active }
+            : a,
         ),
       );
     } catch (err) {
@@ -516,6 +587,7 @@ function SavedPageContent() {
     }
   };
 
+  // ─── Filtering ──────────────────────────────────────────────────
   const q = query.trim().toLowerCase();
 
   const applyFilter = <T extends Record<string, unknown>>(
@@ -524,7 +596,9 @@ function SavedPageContent() {
   ): T[] => {
     if (!q) return list;
     return list.filter((item) =>
-      fields.some((f) => String(item[f] ?? '').toLowerCase().includes(q)),
+      fields.some((f) =>
+        String(item[f] ?? '').toLowerCase().includes(q),
+      ),
     );
   };
 
@@ -614,324 +688,284 @@ function SavedPageContent() {
     [basketItems, q],
   );
 
-  const renderOrderCard = (
-    order: WalletOrder,
-    opts: { showExpiry: boolean },
-  ) => {
-    const storeImage = resolveImageUrl(order.store_image_url);
-    const itemTitle = (order.listing_title as string) || '';
-    const storeName = (order.store_name as string) || 'Store';
-    const address = (order.store_address as string) || '';
-    const expiresMs = parseAsUtc(order.expires_at);
-    const expired =
-      Number.isFinite(expiresMs) &&
-      expiresMs <= nowMs &&
-      order.status !== 'picked_up';
-    const expiresSoon =
-      !expired &&
-      opts.showExpiry &&
-      Number.isFinite(expiresMs) &&
-      expiresMs - nowMs < EXPIRING_SOON_MS &&
-      expiresMs - nowMs > 0;
-    const meta = statusMeta(order.status);
-    const qty = Number(order.quantity ?? 1);
-    const hasCoords =
-      Number.isFinite(Number(order.store_latitude)) &&
-      Number.isFinite(Number(order.store_longitude));
+  // ─── Tab counts ────────────────────────────────────────────────
+  const tabCounts = useMemo<Record<Tab, number>>(
+    () => ({
+      Items: savedItems.length,
+      Wanted: wantedAlerts.length,
+      Pickups: instantPickups.length,
+      Jobs: instantJobs.length,
+      Reservations: reservations.length,
+      Deliveries: deliveries.length,
+      Bookings: bookings.length,
+      Basket: basketItems.length,
+      History: history.length,
+    }),
+    [
+      savedItems.length,
+      wantedAlerts.length,
+      instantPickups.length,
+      instantJobs.length,
+      reservations.length,
+      deliveries.length,
+      bookings.length,
+      basketItems.length,
+      history.length,
+    ],
+  );
 
+  // ─── Instagram-style post card ─────────────────────────────────
+  interface PostProps {
+    postKey: string;
+    avatarUrl: string | null;
+    avatarFallback: React.ReactNode;
+    authorName: string;
+    authorSubtitle?: string;
+    verified?: boolean;
+    timestamp?: string;
+    mediaUrl: string | null;
+    mediaFallback: React.ReactNode;
+    mediaAspect?: string;
+    title?: string;
+    caption?: string;
+    price?: string;
+    chipLabel?: string;
+    chipBg?: string;
+    chipFg?: string;
+    footerLeft?: React.ReactNode;
+    onPrimary: () => void;
+    primaryLabel: string;
+  }
+
+  const renderPost = ({
+    postKey,
+    avatarUrl,
+    avatarFallback,
+    authorName,
+    authorSubtitle,
+    verified,
+    timestamp,
+    mediaUrl,
+    mediaFallback,
+    mediaAspect = '1 / 1',
+    title,
+    caption,
+    price,
+    chipLabel,
+    chipBg,
+    chipFg,
+    footerLeft,
+    onPrimary,
+    primaryLabel,
+  }: PostProps) => {
+    const isLiked = liked.has(postKey);
+    const [expanded, setExpanded] = [false, () => {}] as const; // eslint-disable-line @typescript-eslint/no-unused-vars
     return (
-      <div
-        key={order.order_id}
-        style={{
-          ...styles.resCard,
-          ...(expired ? styles.resCardExpired : null),
-        }}
-        onClick={() => openReservation(order)}
-        role="button"
-        tabIndex={0}
-      >
-        <div style={styles.resTopRow}>
-          <div style={styles.resThumb}>
-            {storeImage ? (
-              <img src={storeImage} alt="" loading="lazy" style={styles.resThumbImg} />
+      <article key={postKey} style={styles.post}>
+        {/* ─── Post header ─── */}
+        <div style={styles.postHeader}>
+          <div style={styles.postAvatar}>
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt=""
+                loading="lazy"
+                style={styles.postAvatarImg}
+              />
             ) : (
-              <MdStorefront size={22} color="var(--text-muted)" />
+              <div style={styles.postAvatarFallback}>{avatarFallback}</div>
             )}
           </div>
 
-          <div style={styles.resInfo}>
-            <div style={styles.resStoreName} title={storeName}>
-              {storeName}
+          <div style={styles.postHeaderText}>
+            <div style={styles.postAuthorRow}>
+              <span style={styles.postAuthorName} title={authorName}>
+                {authorName}
+              </span>
+              {verified && (
+                <MdVerified
+                  size={14}
+                  color="var(--brand-primary)"
+                  aria-label="Verified"
+                />
+              )}
+              {authorSubtitle && (
+                <span style={styles.postAuthorSub}>
+                  · {authorSubtitle}
+                </span>
+              )}
             </div>
-
-            {itemTitle ? (
-              <div style={styles.resItemLine} title={itemTitle}>
-                <MdInventory2 size={12} color="var(--text-tertiary)" />
-                <span style={styles.resItemText}>
-                  {itemTitle}
-                  {qty > 1 ? ` × ${qty}` : ''}
-                </span>
-              </div>
-            ) : (
-              <div style={styles.resItemLine}>
-                <MdInventory2 size={12} color="var(--text-muted)" />
-                <span style={{ ...styles.resItemText, color: 'var(--text-muted)' }}>
-                  Order #{shortId(order.order_id)}
-                </span>
-              </div>
+            {timestamp && (
+              <span style={styles.postTimestamp}>{timestamp}</span>
             )}
-
-            {address ? (
-              <button
-                type="button"
-                onClick={(e) => openStoreOnMap(order, e)}
-                style={styles.resAddressBtn}
-                disabled={!hasCoords}
-                title={hasCoords ? 'Open in map' : address}
-              >
-                <MdLocationOn size={12} color="var(--text-tertiary)" />
-                <span style={styles.resAddressText}>{shortAddress(address)}</span>
-              </button>
-            ) : null}
           </div>
 
-          <div style={styles.resAmount}>{fmtNaira(order.total_amount)}</div>
+          <button
+            type="button"
+            style={styles.postMenuBtn}
+            aria-label="More"
+          >
+            <MdMoreHoriz size={20} color="var(--text-tertiary)" />
+          </button>
         </div>
 
-        <div style={styles.resBottomRow}>
-          <span
-            style={{
-              ...styles.resChip,
-              backgroundColor: meta.bg,
-              color: meta.fg,
-              borderColor: meta.border,
-            }}
-          >
-            {meta.label}
-          </span>
+        {/* ─── Media ─── */}
+        <button
+          type="button"
+          onClick={onPrimary}
+          style={{ ...styles.postMedia, aspectRatio: mediaAspect }}
+          aria-label={title || primaryLabel}
+        >
+          {mediaUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={mediaUrl}
+              alt=""
+              loading="lazy"
+              style={styles.postMediaImg}
+            />
+          ) : (
+            <div style={styles.postMediaFallback}>{mediaFallback}</div>
+          )}
 
-          {opts.showExpiry && Number.isFinite(expiresMs) ? (
+          {/* Chips overlaid on media */}
+          {chipLabel && (
             <span
               style={{
-                ...styles.resCountdown,
-                ...(expired ? styles.resCountdownExpired : null),
-                ...(expiresSoon ? styles.resCountdownWarn : null),
+                ...styles.postChipOverlay,
+                backgroundColor: chipBg || 'rgba(0,0,0,0.7)',
+                color: chipFg || '#fff',
               }}
             >
-              <MdAccessTime size={13} />
-              <span>
-                {expired
-                  ? 'Expired'
-                  : `Expires ${formatRemaining(expiresMs, nowMs)}`}
-              </span>
-            </span>
-          ) : (
-            <span style={styles.resCountdown}>
-              <MdAccessTime size={13} />
-              <span>Ordered {fmtDate(order.created_at)}</span>
+              {chipLabel}
             </span>
           )}
+        </button>
+
+        {/* ─── Action row (Instagram style) ─── */}
+        <div style={styles.postActions}>
+          <button
+            type="button"
+            onClick={() => toggleLike(postKey)}
+            style={styles.postActionBtn}
+            aria-label={isLiked ? 'Unlike' : 'Like'}
+          >
+            {isLiked ? (
+              <MdFavorite size={24} color="#ED4956" />
+            ) : (
+              <MdFavoriteBorder size={24} color="var(--text-primary)" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onPrimary}
+            style={styles.postActionBtn}
+            aria-label="Comment"
+          >
+            <MdChatBubbleOutline size={24} color="var(--text-primary)" />
+          </button>
+
+          <button
+            type="button"
+            onClick={onPrimary}
+            style={styles.postActionBtn}
+            aria-label="Share"
+          >
+            <MdSend size={22} color="var(--text-primary)" />
+          </button>
+
+          <div style={{ flex: 1 }} />
+
+          <button
+            type="button"
+            style={styles.postActionBtn}
+            aria-label="Save"
+            title="Saved"
+          >
+            <MdBookmark size={24} color="var(--text-primary)" />
+          </button>
         </div>
 
-        {expiresSoon && (
-          <div style={styles.resWarnRow}>
-            <MdTimer size={14} color="var(--warning-fg)" />
-            <span>Expiring soon — pick up before it&apos;s cancelled</span>
-          </div>
-        )}
-      </div>
-    );
-  };
+        {/* ─── Body: price / title / caption ─── */}
+        <div style={styles.postBody}>
+          {price && (
+            <div style={styles.postPrice}>{price}</div>
+          )}
 
-  const renderBookingCard = (booking: ServiceBooking) => {
-    const providerImage = resolveImageUrl(
-      booking.provider_image_url || booking.provider_avatar,
-    );
-    const serviceImage = resolveImageUrl(booking.service_image_url);
-    const thumb = providerImage || serviceImage;
-    const title = booking.service_title || booking.title || 'Service booking';
-    const meta = bookingStatusMeta(booking.status);
-    const scheduled = booking.scheduled_for ? fmtDateTime(booking.scheduled_for) : null;
-    const created = booking.created_at ? fmtDate(booking.created_at) : '';
-
-    return (
-      <div
-        key={booking.booking_id || booking.service_id}
-        style={styles.resCard}
-        onClick={() => openBooking(booking)}
-        role="button"
-        tabIndex={0}
-      >
-        <div style={styles.resTopRow}>
-          <div style={styles.resThumb}>
-            {thumb ? (
-              <img src={thumb} alt="" loading="lazy" style={styles.resThumbImg} />
-            ) : (
-              <MdBuild size={22} color="var(--text-muted)" />
-            )}
-          </div>
-
-          <div style={styles.resInfo}>
-            <div style={styles.resStoreName} title={title}>
+          {title && (
+            <div style={styles.postTitle}>
+              <span style={styles.postAuthorInline}>{authorName}</span>{' '}
               {title}
             </div>
+          )}
 
-            {booking.provider_name ? (
-              <div style={styles.resItemLine}>
-                <MdStorefront size={12} color="var(--text-tertiary)" />
-                <span style={styles.resItemText}>{booking.provider_name}</span>
-              </div>
-            ) : null}
+          {caption && (
+            <div style={styles.postCaption}>{caption}</div>
+          )}
 
-            {scheduled ? (
-              <div style={styles.resItemLine}>
-                <MdCalendarToday size={12} color="var(--text-tertiary)" />
-                <span style={styles.resItemText}>{scheduled}</span>
-              </div>
-            ) : null}
-          </div>
+          {footerLeft && (
+            <div style={styles.postFooterLeft}>{footerLeft}</div>
+          )}
 
-          <div style={styles.resAmount}>{fmtNaira(booking.amount)}</div>
-        </div>
-
-        <div style={styles.resBottomRow}>
-          <span
-            style={{
-              ...styles.resChip,
-              backgroundColor: meta.bg,
-              color: meta.fg,
-              borderColor: meta.border,
-            }}
+          <button
+            type="button"
+            onClick={onPrimary}
+            style={styles.postCtaRow}
           >
-            {meta.label}
-          </span>
-
-          <span style={styles.resCountdown}>
-            <MdAccessTime size={13} />
-            <span>{created ? `Booked ${created}` : 'View booking'}</span>
-          </span>
+            <span>{primaryLabel}</span>
+            <MdChevronRight size={16} color="var(--brand-primary)" />
+          </button>
         </div>
-      </div>
+      </article>
     );
   };
 
-  const renderInstantCard = (txn: InstantTransaction, kind: 'pickup' | 'job') => {
-    const ref = txn.reference;
-    const amount = Number(txn.amount ?? 0);
-    const description = txn.description || (kind === 'pickup' ? 'Instant pickup' : 'Service payment');
-    const status = (txn.status || 'completed').toLowerCase();
-    const cp = txn.counterparty || null;
-
-    const counterpartyLabel = kind === 'pickup'
-      ? (cp?.store_name || cp?.display_name || 'Store')
-      : (cp?.business_name || cp?.display_name || 'Provider');
-
-    const statusColor =
-      status === 'completed'
-        ? { bg: 'var(--success-bg)', fg: 'var(--success-fg)', border: 'var(--success-strong)' }
-        : status === 'pending'
-        ? { bg: 'var(--warning-bg)', fg: 'var(--warning-fg)', border: 'var(--warning-strong)' }
-        : { bg: 'var(--danger-bg)', fg: 'var(--danger-fg)', border: 'var(--danger-strong)' };
-
-    return (
-      <div
-        key={ref}
-        style={styles.resCard}
-        onClick={() => openInstantReceipt(ref)}
-        role="button"
-        tabIndex={0}
-      >
-        <div style={styles.resTopRow}>
-          <div style={styles.resThumb}>
-            {kind === 'pickup' ? (
-              <MdInventory2 size={22} color="var(--text-muted)" />
-            ) : (
-              <MdBuild size={22} color="var(--text-muted)" />
-            )}
-          </div>
-
-          <div style={styles.resInfo}>
-            <div style={styles.resStoreName} title={counterpartyLabel}>
-              {counterpartyLabel}
-            </div>
-            <div style={styles.resItemLine}>
-              <MdReceiptLong size={12} color="var(--text-tertiary)" />
-              <span style={styles.resItemText}>
-                {description.length > 60 ? `${description.slice(0, 58)}…` : description}
-              </span>
-            </div>
-            {txn.created_at && (
-              <div style={styles.resItemLine}>
-                <MdAccessTime size={12} color="var(--text-tertiary)" />
-                <span style={styles.resItemText}>{fmtDateTime(txn.created_at)}</span>
-              </div>
-            )}
-          </div>
-
-          <div style={styles.resAmount}>{fmtNaira(amount)}</div>
-        </div>
-
-        <div style={styles.resBottomRow}>
-          <span
-            style={{
-              ...styles.resChip,
-              backgroundColor: statusColor.bg,
-              color: statusColor.fg,
-              borderColor: statusColor.border,
-            }}
-          >
-            {status === 'completed' ? 'PAID' : status.toUpperCase()}
-          </span>
-
-          <span style={styles.resCountdown}>
-            <MdReceiptLong size={13} />
-            <span>View receipt</span>
-          </span>
-        </div>
-      </div>
-    );
-  };
-
+  // ─── Renderers per tab ─────────────────────────────────────────
   const renderItemsTab = () => {
     if (filteredSaved.length === 0) {
       return (
         <EmptyState
-          icon={<MdInventory size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
-          text={q ? `No saved items match "${query}"` : 'No saved items yet.'}
+          icon={
+            <MdInventory
+              size={44}
+              color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+            />
+          }
+          text={
+            q
+              ? `No saved items match "${query}"`
+              : 'No saved items yet. Tap the bookmark on any listing to save it.'
+          }
         />
       );
     }
 
     return (
-      <div style={styles.list}>
+      <div style={styles.feed}>
         {filteredSaved.map((item) => {
           const image = resolveImageUrl(item.image_url);
-          return (
-            <div
-              key={item.listing_id}
-              style={styles.card}
-              onClick={() => router.push(`/item-detail/${item.listing_id}`)}
-              role="button"
-              tabIndex={0}
-            >
-              <div style={styles.thumb}>
-                {image ? (
-                  <img src={image} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <MdImage size={22} color="var(--text-muted)" />
-                )}
-              </div>
-              <div style={styles.cardContent}>
-                <div style={styles.cardTitle}>{item.title || 'Listing'}</div>
-                <div style={styles.cardSubtitle}>
-                  {item.store_name || 'Store'}
-                  {item.saved_at ? ` · Saved ${fmtDate(item.saved_at)}` : ''}
-                </div>
-              </div>
-              <div style={styles.cardTrailing}>{fmtNaira(item.price)}</div>
-              <MdChevronRight size={16} color="var(--text-muted)" />
-            </div>
-          );
+          const key = `saved-${item.listing_id}`;
+          return renderPost({
+            postKey: key,
+            avatarUrl: null,
+            avatarFallback: (
+              <span style={styles.avatarInitial}>
+                {(item.store_name || 'S').charAt(0).toUpperCase()}
+              </span>
+            ),
+            authorName: item.store_name || 'Store',
+            timestamp: item.saved_at ? fmtRelative(item.saved_at) : undefined,
+            mediaUrl: image,
+            mediaFallback: (
+              <MdImage size={44} color="var(--text-muted)" />
+            ),
+            title: item.title || 'Listing',
+            price: fmtNaira(item.price),
+            primaryLabel: 'View listing',
+            onPrimary: () => router.push(`/item-detail/${item.listing_id}`),
+          });
         })}
       </div>
     );
@@ -940,246 +974,310 @@ function SavedPageContent() {
   const renderWantedTab = () => {
     return (
       <>
-        <button onClick={() => setShowCreateWanted(true)} style={styles.createAlertBtn}>
+        <button
+          onClick={() => setShowCreateWanted(true)}
+          style={styles.createAlertBtn}
+        >
           <MdAdd size={20} color="var(--brand-on-gradient)" />
-          <span style={{ marginLeft: 6 }}>Post what you&apos;re looking for</span>
+          <span style={{ marginLeft: 6 }}>
+            Post what you&apos;re looking for
+          </span>
         </button>
 
         {filteredWanted.length === 0 ? (
           <EmptyState
-            icon={<MdNotificationsActive size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
-            text={q ? `No alerts match "${query}"` : 'No wanted alerts yet. Post one so sellers can find you.'}
+            icon={
+              <MdNotificationsActive
+                size={44}
+                color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+              />
+            }
+            text={
+              q
+                ? `No alerts match "${query}"`
+                : 'No wanted alerts yet. Post one so sellers can find you.'
+            }
           />
         ) : (
-          <div style={styles.list}>
-            {filteredWanted.map((alert) => (
-              <div
-                key={alert.id}
-                style={{ ...styles.card, opacity: alert.is_active ? 1 : 0.55 }}
-              >
-                <MdNotificationsActive
-                  size={20}
-                  color={alert.is_active ? 'var(--brand-primary)' : 'var(--text-muted)'}
-                  style={{ marginRight: 8 }}
-                />
-                <div style={styles.cardContent}>
-                  <div style={styles.cardTitle}>{alert.title}</div>
-                  {alert.notes ? <div style={styles.cardSubtitle}>{alert.notes}</div> : null}
-                  <div style={styles.cardMeta}>
-                    {alert.budget != null && `Budget: ${fmtNaira(alert.budget)} · `}
-                    {alert.is_active ? 'Active' : 'Paused'}
-                    {alert.created_at ? ` · ${fmtDate(alert.created_at)}` : ''}
+          <div style={styles.feed}>
+            {filteredWanted.map((alert) => {
+              const key = `wanted-${alert.id}`;
+              return (
+                <article key={key} style={styles.post}>
+                  <div style={styles.postHeader}>
+                    <div
+                      style={{
+                        ...styles.postAvatar,
+                        backgroundColor: alert.is_active
+                          ? 'var(--brand-soft)'
+                          : 'var(--bg-tertiary)',
+                      }}
+                    >
+                      <MdNotificationsActive
+                        size={20}
+                        color={
+                          alert.is_active
+                            ? 'var(--brand-primary)'
+                            : 'var(--text-muted)'
+                        }
+                      />
+                    </div>
+                    <div style={styles.postHeaderText}>
+                      <div style={styles.postAuthorRow}>
+                        <span style={styles.postAuthorName}>
+                          Your wanted alert
+                        </span>
+                        <span
+                          style={{
+                            ...styles.wantedStatusPill,
+                            backgroundColor: alert.is_active
+                              ? 'var(--success-bg)'
+                              : 'var(--bg-tertiary)',
+                            color: alert.is_active
+                              ? 'var(--success-fg)'
+                              : 'var(--text-muted)',
+                          }}
+                        >
+                          {alert.is_active ? 'Active' : 'Paused'}
+                        </span>
+                      </div>
+                      {alert.created_at && (
+                        <span style={styles.postTimestamp}>
+                          {fmtRelative(alert.created_at)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <button onClick={() => handleToggleWanted(alert.id)} style={styles.iconBtn} title={alert.is_active ? 'Pause alert' : 'Resume alert'}>
-                  {alert.is_active ? (
-                    <MdToggleOn size={24} color="var(--brand-primary)" />
-                  ) : (
-                    <MdToggleOff size={24} color="var(--text-muted)" />
-                  )}
-                </button>
-                <button onClick={() => handleDeleteWanted(alert.id)} style={styles.iconBtn} title="Delete">
-                  <MdDeleteOutline size={20} color="var(--danger-fg)" />
-                </button>
-              </div>
-            ))}
+                  <div style={styles.wantedBody}>
+                    <div style={styles.wantedTitle}>{alert.title}</div>
+                    {alert.notes && (
+                      <div style={styles.wantedNotes}>{alert.notes}</div>
+                    )}
+                    {alert.budget != null && (
+                      <div style={styles.wantedBudget}>
+                        Budget: {fmtNaira(alert.budget)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={styles.wantedActions}>
+                    <button
+                      onClick={() => handleToggleWanted(alert.id)}
+                      style={styles.wantedActionBtn}
+                    >
+                      {alert.is_active ? 'Pause' : 'Resume'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteWanted(alert.id)}
+                      style={{
+                        ...styles.wantedActionBtn,
+                        color: 'var(--danger-fg)',
+                        borderColor: 'var(--danger-strong)',
+                      }}
+                    >
+                      <MdDeleteOutline size={16} />
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </>
     );
   };
 
-  const renderPickupsTab = () => {
-    if (filteredPickups.length === 0) {
-      return (
-        <EmptyState
-          icon={<MdInventory size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
-          text={q ? `No pickups match "${query}"` : 'No instant pickups yet. Pay at a store to see them here.'}
-        />
-      );
-    }
-    return (
-      <div style={styles.list}>
-        {filteredPickups.map((p) => renderInstantCard(p, 'pickup'))}
-      </div>
-    );
-  };
+  const renderOrderPost = (
+    order: WalletOrder,
+    opts: { showExpiry: boolean }
+  ) => {
+    const storeImage = resolveImageUrl(order.store_image_url);
+    const listingImage = resolveImageUrl(order.listing_image_url);
+    const media = listingImage || storeImage;
+    const storeName = (order.store_name as string) || 'Store';
+    const itemTitle = (order.listing_title as string) || '';
+    const address = (order.store_address as string) || '';
+    const expiresMs = parseAsUtc(order.expires_at);
+    const expired =
+      Number.isFinite(expiresMs) &&
+      expiresMs <= nowMs &&
+      order.status !== 'picked_up';
+    const meta = statusMeta(order.status);
+    const qty = Number(order.quantity ?? 1);
+    const key = `order-${order.order_id}`;
 
-  const renderJobsTab = () => {
-    if (filteredJobs.length === 0) {
-      return (
-        <EmptyState
-          icon={<MdBuild size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
-          text={q ? `No jobs match "${query}"` : 'No instant service payments yet.'}
-        />
-      );
-    }
-    return (
-      <div style={styles.list}>
-        {filteredJobs.map((j) => renderInstantCard(j, 'job'))}
-      </div>
-    );
-  };
+    const caption = address ? `📍 ${shortAddress(address)}` : undefined;
 
-  const renderReservationsTab = () => {
-    if (filteredReservations.length === 0) {
-      return (
-        <EmptyState
-          icon={<MdEventNote size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
-          text={q ? `No reservations match "${query}"` : 'No active reservations.'}
-        />
-      );
-    }
-    const sorted = [...filteredReservations].sort((a, b) => {
-      const ta = parseAsUtc(a.expires_at);
-      const tb = parseAsUtc(b.expires_at);
-      if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
-      if (Number.isNaN(ta)) return 1;
-      if (Number.isNaN(tb)) return -1;
-      return ta - tb;
-    });
-    return (
-      <div style={styles.list}>
-        {sorted.map((order) => renderOrderCard(order, { showExpiry: true }))}
-      </div>
-    );
-  };
-
-  const renderDeliveriesTab = () => {
-    if (filteredDeliveries.length === 0) {
-      return (
-        <EmptyState
-          icon={<MdLocalShipping size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
-          text={q ? `No deliveries match "${query}"` : 'No active deliveries.'}
-        />
-      );
-    }
-    const sorted = [...filteredDeliveries].sort((a, b) => {
-      const ta = parseAsUtc(a.created_at);
-      const tb = parseAsUtc(b.created_at);
-      if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
-      if (Number.isNaN(ta)) return 1;
-      if (Number.isNaN(tb)) return -1;
-      return tb - ta;
-    });
-    return (
-      <div style={styles.list}>
-        {sorted.map((order) => renderOrderCard(order, { showExpiry: false }))}
-      </div>
-    );
-  };
-
-  const renderBookingsTab = () => {
-    if (filteredBookings.length === 0) {
-      return (
-        <EmptyState
-          icon={<MdBuild size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
-          text={q ? `No bookings match "${query}"` : 'No service bookings.'}
-        />
-      );
-    }
-    const sorted = [...filteredBookings].sort((a, b) => {
-      const ta = parseAsUtc(a.created_at);
-      const tb = parseAsUtc(b.created_at);
-      if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
-      if (Number.isNaN(ta)) return 1;
-      if (Number.isNaN(tb)) return -1;
-      return tb - ta;
-    });
-    return (
-      <div style={styles.list}>
-        {sorted.map((booking) => renderBookingCard(booking))}
-      </div>
-    );
-  };
-
-  const renderBasketTab = () => {
-    if (filteredBasket.length === 0) {
-      return (
-        <EmptyState
-          icon={<MdShoppingBasket size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
-          text={q ? `No basket items match "${query}"` : 'Basket is empty.'}
-        />
-      );
-    }
-    return (
-      <div style={styles.list}>
-        {filteredBasket.map((item, i) => {
-          const image = resolveImageUrl(item.image_url);
-          const lineTotal = Number(item.price || 0) * (item.quantity ?? 1);
-          return (
-            <div
-              key={item.id || item.listing_id || i}
-              style={styles.resCard}
-              onClick={() => router.push(`/item-detail/${item.listing_id}`)}
-              role="button"
-              tabIndex={0}
-            >
-              <div style={styles.resTopRow}>
-                <div style={styles.resThumb}>
-                  {image ? (
-                    <img src={image} alt="" loading="lazy" style={styles.resThumbImg} />
-                  ) : (
-                    <MdImage size={22} color="var(--text-muted)" />
-                  )}
-                </div>
-                <div style={styles.resInfo}>
-                  <div style={styles.resStoreName} title={item.title || 'Item'}>
-                    {item.title || 'Item'}
-                  </div>
-                  {item.store_name ? (
-                    <div style={styles.resItemLine}>
-                      <MdStorefront size={12} color="var(--text-tertiary)" />
-                      <span style={styles.resItemText}>{item.store_name}</span>
-                    </div>
-                  ) : null}
-                  <div style={styles.resItemLine}>
-                    <MdInventory2 size={12} color="var(--text-tertiary)" />
-                    <span style={styles.resItemText}>Qty {item.quantity ?? 1}</span>
-                  </div>
-                </div>
-                <div style={styles.resAmount}>{fmtNaira(lineTotal)}</div>
-              </div>
-            </div>
-          );
-        })}
-
-        <div style={styles.basketFooter}>
-          <div style={styles.basketTotalRow}>
-            <span style={styles.basketLabel}>Subtotal</span>
-            <span style={styles.basketValue}>{fmtNaira(basketTotal)}</span>
-          </div>
-          <button onClick={() => router.push('/basket')} style={styles.primaryBtn}>
-            View basket &amp; checkout
-          </button>
+    return renderPost({
+      postKey: key,
+      avatarUrl: storeImage,
+      avatarFallback: (
+        <span style={styles.avatarInitial}>
+          {storeName.charAt(0).toUpperCase()}
+        </span>
+      ),
+      authorName: storeName,
+      timestamp: order.created_at ? fmtRelative(order.created_at) : undefined,
+      mediaUrl: media,
+      mediaFallback: (
+        <MdStorefront size={44} color="var(--text-muted)" />
+      ),
+      mediaAspect: '1 / 1',
+      title: itemTitle
+        ? `${itemTitle}${qty > 1 ? ` × ${qty}` : ''}`
+        : `Order #${shortId(order.order_id)}`,
+      caption,
+      price: fmtNaira(order.total_amount),
+      chipLabel: meta.label.toUpperCase(),
+      chipBg: meta.bg,
+      chipFg: meta.fg,
+      footerLeft: opts.showExpiry && Number.isFinite(expiresMs) ? (
+        <div
+          style={{
+            ...styles.expiryRow,
+            ...(expired ? styles.expiryRowMuted : null),
+          }}
+        >
+          <MdAccessTime size={13} />
+          <span>
+            {expired
+              ? 'Expired'
+              : `Expires ${formatRemaining(expiresMs, nowMs)}`}
+          </span>
         </div>
-      </div>
-    );
+      ) : (
+        <div style={styles.expiryRow}>
+          <MdAccessTime size={13} />
+          <span>Ordered {fmtDate(order.created_at)}</span>
+        </div>
+      ),
+      primaryLabel: 'Open order',
+      onPrimary: () => openReservation(order),
+    });
   };
 
-  const renderHistoryTab = () => {
-    if (filteredHistory.length === 0) {
-      return (
-        <EmptyState
-          icon={<MdCheckCircle size={44} color="color-mix(in srgb, var(--brand-primary) 55%, transparent)" />}
-          text={q ? `No orders match "${query}"` : 'No past orders.'}
-        />
-      );
-    }
-    const sorted = [...filteredHistory].sort((a, b) => {
-      const ta = parseAsUtc(a.created_at);
-      const tb = parseAsUtc(b.created_at);
-      if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
-      if (Number.isNaN(ta)) return 1;
-      if (Number.isNaN(tb)) return -1;
-      return tb - ta;
-    });
-    return (
-      <div style={styles.list}>
-        {sorted.map((order) => renderOrderCard(order, { showExpiry: false }))}
-      </div>
+  const renderBookingPost = (booking: ServiceBooking) => {
+    const providerImage = resolveImageUrl(
+      booking.provider_image_url || booking.provider_avatar
     );
+    const serviceImage = resolveImageUrl(booking.service_image_url);
+    const media = serviceImage || providerImage;
+    const title =
+      booking.service_title || booking.title || 'Service booking';
+    const providerName = booking.provider_name || 'Provider';
+    const meta = bookingStatusMeta(booking.status);
+    const scheduled = booking.scheduled_for
+      ? fmtDateTime(booking.scheduled_for)
+      : null;
+    const key = `booking-${booking.booking_id || booking.service_id}`;
+
+    return renderPost({
+      postKey: key,
+      avatarUrl: providerImage,
+      avatarFallback: (
+        <span style={styles.avatarInitial}>
+          {providerName.charAt(0).toUpperCase()}
+        </span>
+      ),
+      authorName: providerName,
+      timestamp: booking.created_at
+        ? fmtRelative(booking.created_at)
+        : undefined,
+      mediaUrl: media,
+      mediaFallback: <MdBuild size={44} color="var(--text-muted)" />,
+      mediaAspect: '16 / 10',
+      title,
+      caption: scheduled ? `📅 ${scheduled}` : undefined,
+      price: fmtNaira(booking.amount),
+      chipLabel: meta.label.toUpperCase(),
+      chipBg: meta.bg,
+      chipFg: meta.fg,
+      primaryLabel: 'View booking',
+      onPrimary: () => openBooking(booking),
+    });
+  };
+
+  const renderInstantPost = (
+    txn: InstantTransaction,
+    kind: 'pickup' | 'job'
+  ) => {
+    const ref = txn.reference;
+    const amount = Number(txn.amount ?? 0);
+    const description =
+      txn.description ||
+      (kind === 'pickup' ? 'Instant pickup' : 'Service payment');
+    const status = (txn.status || 'completed').toLowerCase();
+    const cp = txn.counterparty || null;
+
+    const counterpartyLabel =
+      kind === 'pickup'
+        ? cp?.store_name || cp?.display_name || 'Store'
+        : cp?.business_name || cp?.display_name || 'Provider';
+
+    const statusChip =
+      status === 'completed'
+        ? { bg: 'var(--success-bg)', fg: 'var(--success-fg)' }
+        : status === 'pending'
+          ? { bg: 'var(--warning-bg)', fg: 'var(--warning-fg)' }
+          : { bg: 'var(--danger-bg)', fg: 'var(--danger-fg)' };
+
+    const key = `instant-${ref}`;
+
+    return renderPost({
+      postKey: key,
+      avatarUrl: null,
+      avatarFallback:
+        kind === 'pickup' ? (
+          <MdInventory2 size={20} color="var(--brand-primary)" />
+        ) : (
+          <MdBuild size={20} color="var(--brand-primary)" />
+        ),
+      authorName: counterpartyLabel,
+      timestamp: txn.created_at ? fmtRelative(txn.created_at) : undefined,
+      mediaUrl: null,
+      mediaFallback:
+        kind === 'pickup' ? (
+          <MdInventory2 size={44} color="var(--text-muted)" />
+        ) : (
+          <MdBuild size={44} color="var(--text-muted)" />
+        ),
+      mediaAspect: '16 / 9',
+      title: description,
+      price: fmtNaira(amount),
+      chipLabel: status === 'completed' ? 'PAID' : status.toUpperCase(),
+      chipBg: statusChip.bg,
+      chipFg: statusChip.fg,
+      primaryLabel: 'View receipt',
+      onPrimary: () => openInstantReceipt(ref),
+    });
+  };
+
+  const renderBasketPost = (item: BasketItem, index: number) => {
+    const image = resolveImageUrl(item.image_url);
+    const lineTotal = Number(item.price || 0) * (item.quantity ?? 1);
+    const key = `basket-${item.id || item.listing_id || index}`;
+    const storeName = item.store_name || 'Store';
+
+    return renderPost({
+      postKey: key,
+      avatarUrl: null,
+      avatarFallback: (
+        <span style={styles.avatarInitial}>
+          {storeName.charAt(0).toUpperCase()}
+        </span>
+      ),
+      authorName: storeName,
+      timestamp: 'in basket',
+      mediaUrl: image,
+      mediaFallback: <MdImage size={44} color="var(--text-muted)" />,
+      title: item.title || 'Item',
+      caption: `Qty ${item.quantity ?? 1}`,
+      price: fmtNaira(lineTotal),
+      primaryLabel: 'View listing',
+      onPrimary: () => router.push(`/item-detail/${item.listing_id}`),
+    });
   };
 
   const renderActiveTab = () => {
@@ -1189,73 +1287,352 @@ function SavedPageContent() {
       case 'Wanted':
         return renderWantedTab();
       case 'Pickups':
-        return renderPickupsTab();
+        if (filteredPickups.length === 0) {
+          return (
+            <EmptyState
+              icon={
+                <MdInventory
+                  size={44}
+                  color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+                />
+              }
+              text={
+                q
+                  ? `No pickups match "${query}"`
+                  : 'No instant pickups yet. Pay at a store to see them here.'
+              }
+            />
+          );
+        }
+        return (
+          <div style={styles.feed}>
+            {filteredPickups.map((p) => renderInstantPost(p, 'pickup'))}
+          </div>
+        );
       case 'Jobs':
-        return renderJobsTab();
+        if (filteredJobs.length === 0) {
+          return (
+            <EmptyState
+              icon={
+                <MdBuild
+                  size={44}
+                  color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+                />
+              }
+              text={
+                q
+                  ? `No jobs match "${query}"`
+                  : 'No instant service payments yet.'
+              }
+            />
+          );
+        }
+        return (
+          <div style={styles.feed}>
+            {filteredJobs.map((j) => renderInstantPost(j, 'job'))}
+          </div>
+        );
       case 'Reservations':
-        return renderReservationsTab();
+        if (filteredReservations.length === 0) {
+          return (
+            <EmptyState
+              icon={
+                <MdEventNote
+                  size={44}
+                  color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+                />
+              }
+              text={
+                q
+                  ? `No reservations match "${query}"`
+                  : 'No active reservations.'
+              }
+            />
+          );
+        }
+        return (
+          <div style={styles.feed}>
+            {[...filteredReservations]
+              .sort((a, b) => {
+                const ta = parseAsUtc(a.expires_at);
+                const tb = parseAsUtc(b.expires_at);
+                if (Number.isNaN(ta)) return 1;
+                if (Number.isNaN(tb)) return -1;
+                return ta - tb;
+              })
+              .map((order) => renderOrderPost(order, { showExpiry: true }))}
+          </div>
+        );
       case 'Deliveries':
-        return renderDeliveriesTab();
+        if (filteredDeliveries.length === 0) {
+          return (
+            <EmptyState
+              icon={
+                <MdLocalShipping
+                  size={44}
+                  color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+                />
+              }
+              text={
+                q
+                  ? `No deliveries match "${query}"`
+                  : 'No active deliveries.'
+              }
+            />
+          );
+        }
+        return (
+          <div style={styles.feed}>
+            {[...filteredDeliveries]
+              .sort((a, b) => {
+                const ta = parseAsUtc(a.created_at);
+                const tb = parseAsUtc(b.created_at);
+                if (Number.isNaN(ta)) return 1;
+                if (Number.isNaN(tb)) return -1;
+                return tb - ta;
+              })
+              .map((order) => renderOrderPost(order, { showExpiry: false }))}
+          </div>
+        );
       case 'Bookings':
-        return renderBookingsTab();
+        if (filteredBookings.length === 0) {
+          return (
+            <EmptyState
+              icon={
+                <MdBuild
+                  size={44}
+                  color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+                />
+              }
+              text={
+                q
+                  ? `No bookings match "${query}"`
+                  : 'No service bookings.'
+              }
+            />
+          );
+        }
+        return (
+          <div style={styles.feed}>
+            {[...filteredBookings]
+              .sort((a, b) => {
+                const ta = parseAsUtc(a.created_at);
+                const tb = parseAsUtc(b.created_at);
+                if (Number.isNaN(ta)) return 1;
+                if (Number.isNaN(tb)) return -1;
+                return tb - ta;
+              })
+              .map((booking) => renderBookingPost(booking))}
+          </div>
+        );
       case 'Basket':
-        return renderBasketTab();
+        if (filteredBasket.length === 0) {
+          return (
+            <EmptyState
+              icon={
+                <MdShoppingBasket
+                  size={44}
+                  color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+                />
+              }
+              text={
+                q ? `No basket items match "${query}"` : 'Basket is empty.'
+              }
+            />
+          );
+        }
+        return (
+          <div style={styles.feed}>
+            {filteredBasket.map((item, i) => renderBasketPost(item, i))}
+            <div style={styles.basketFooter}>
+              <div style={styles.basketTotalRow}>
+                <span style={styles.basketLabel}>Subtotal</span>
+                <span style={styles.basketValue}>
+                  {fmtNaira(basketTotal)}
+                </span>
+              </div>
+              <button
+                onClick={() => router.push('/basket')}
+                style={styles.primaryBtn}
+              >
+                View basket &amp; checkout
+              </button>
+            </div>
+          </div>
+        );
       case 'History':
-        return renderHistoryTab();
+        if (filteredHistory.length === 0) {
+          return (
+            <EmptyState
+              icon={
+                <MdCheckCircle
+                  size={44}
+                  color="color-mix(in srgb, var(--brand-primary) 55%, transparent)"
+                />
+              }
+              text={
+                q ? `No orders match "${query}"` : 'No past orders.'
+              }
+            />
+          );
+        }
+        return (
+          <div style={styles.feed}>
+            {[...filteredHistory]
+              .sort((a, b) => {
+                const ta = parseAsUtc(a.created_at);
+                const tb = parseAsUtc(b.created_at);
+                if (Number.isNaN(ta)) return 1;
+                if (Number.isNaN(tb)) return -1;
+                return tb - ta;
+              })
+              .map((order) => renderOrderPost(order, { showExpiry: false }))}
+          </div>
+        );
     }
   };
 
+  const totalActivity =
+    savedItems.length +
+    wantedAlerts.length +
+    instantPickups.length +
+    instantJobs.length +
+    reservations.length +
+    deliveries.length +
+    bookings.length +
+    basketItems.length +
+    history.length;
+
   return (
-    <main style={styles.container} className="sv-main">
+    <main style={styles.root} className="sv-root">
+      <style>{KF}</style>
       <style>{CSS}</style>
 
-      <div style={styles.tabBar} className="sv-tabbar">
-        {TABS.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className="sv-tab"
-            style={{
-              ...styles.tab,
-              borderBottom:
-                activeTab === tab
-                  ? '2px solid var(--brand-primary)'
-                  : '2px solid transparent',
-              color:
-                activeTab === tab
+      {/* ═══ Header ══════════════════════════════════════════ */}
+      <header style={styles.header}>
+        <div style={styles.headerInner}>
+          <div style={styles.headerText}>
+            <h1 style={styles.headerTitle}>Saved</h1>
+            <p style={styles.headerSub}>
+              {isLoading
+                ? 'Loading…'
+                : totalActivity === 0
+                  ? 'Your bookmarks, orders, and alerts'
+                  : `${totalActivity} ${totalActivity === 1 ? 'item' : 'items'} in your activity`}
+            </p>
+          </div>
+
+          <div style={styles.headerActions}>
+            <button
+              onClick={() => setSearchOpen((v) => !v)}
+              style={{
+                ...styles.iconBtn,
+                backgroundColor: searchOpen
+                  ? 'var(--brand-soft)'
+                  : 'transparent',
+                color: searchOpen
                   ? 'var(--brand-primary)'
-                  : 'var(--text-tertiary)',
-              fontWeight: activeTab === tab ? 700 : 500,
-            }}
-          >
-            {tab}
-          </button>
-        ))}
-        <button
-          onClick={handleRefresh}
-          style={styles.refreshBtn}
-          title="Refresh"
-          aria-label="Refresh"
-        >
-          <MdRefresh
-            size={22}
-            color="var(--brand-primary)"
-            style={{ animation: isRefreshing ? 'spin 0.8s linear infinite' : 'none' }}
-          />
-        </button>
-      </div>
+                  : 'var(--text-primary)',
+              }}
+              aria-label="Search"
+              title="Search"
+            >
+              <MdSearch size={22} />
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              style={styles.iconBtn}
+              aria-label="Refresh"
+              title="Refresh"
+            >
+              <MdRefresh
+                size={22}
+                style={{
+                  animation: isRefreshing
+                    ? 'spin 0.8s linear infinite'
+                    : 'none',
+                }}
+              />
+            </button>
+          </div>
+        </div>
 
-      <div style={styles.searchWrap} className="sv-search-wrap">
-        <MdSearch size={18} color="var(--text-muted)" />
-        <input
-          type="text"
-          placeholder={`Search ${activeTab.toLowerCase()}…`}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={styles.searchInput}
-        />
-      </div>
+        {searchOpen && (
+          <div style={styles.searchBar}>
+            <MdSearch size={18} color="var(--text-muted)" />
+            <input
+              autoFocus
+              type="text"
+              placeholder={`Search ${activeTab.toLowerCase()}…`}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={styles.searchInput}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                style={styles.searchClear}
+                aria-label="Clear search"
+              >
+                <MdClear size={16} color="var(--text-tertiary)" />
+              </button>
+            )}
+          </div>
+        )}
+      </header>
 
+      {/* ═══ Tab pills ═══════════════════════════════════════ */}
+      <nav style={styles.tabStrip} className="sv-tab-strip" role="tablist">
+        {TABS.map((tab) => {
+          const active = activeTab === tab;
+          const count = tabCounts[tab];
+          return (
+            <button
+              key={tab}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveTab(tab)}
+              className={active ? 'sv-pill sv-pill-active' : 'sv-pill'}
+              style={{
+                ...styles.pill,
+                backgroundColor: active
+                  ? 'var(--brand-primary)'
+                  : 'var(--bg-secondary)',
+                backgroundImage: active ? 'var(--brand-gradient)' : 'none',
+                color: active
+                  ? 'var(--brand-on-gradient)'
+                  : 'var(--text-secondary)',
+                borderColor: active
+                  ? 'transparent'
+                  : 'var(--border-default)',
+                boxShadow: active ? 'var(--shadow-brand)' : 'none',
+              }}
+            >
+              <span aria-hidden>{TAB_EMOJI[tab]}</span>
+              <span>{tab}</span>
+              {count > 0 && (
+                <span
+                  style={{
+                    ...styles.pillBadge,
+                    backgroundColor: active
+                      ? 'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)'
+                      : 'var(--bg-tertiary)',
+                    color: active
+                      ? 'var(--brand-on-gradient)'
+                      : 'var(--text-tertiary)',
+                  }}
+                >
+                  {count > 99 ? '99+' : count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* ═══ Content ═════════════════════════════════════════ */}
       <div style={styles.content} className="sv-content">
         {isLoading ? (
           <div style={styles.center}>
@@ -1274,22 +1651,33 @@ function SavedPageContent() {
         )}
       </div>
 
+      {/* ═══ Wanted modal ════════════════════════════════════ */}
       {showCreateWanted && (
         <div
           style={styles.modalOverlay}
           className="sv-modal-overlay"
           onClick={() => !creatingWanted && setShowCreateWanted(false)}
         >
-          <div style={styles.sheet} className="sv-sheet" onClick={(e) => e.stopPropagation()}>
+          <div
+            style={styles.sheet}
+            className="sv-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={styles.sheetHeader}>
               <h3 style={styles.sheetTitle}>Post a wanted alert</h3>
-              <button onClick={() => setShowCreateWanted(false)} style={styles.iconBtn} disabled={creatingWanted}>
+              <button
+                onClick={() => setShowCreateWanted(false)}
+                style={styles.iconBtn}
+                disabled={creatingWanted}
+                aria-label="Close"
+              >
                 <MdClose size={22} color="var(--text-tertiary)" />
               </button>
             </div>
 
             <p style={styles.sheetHelper}>
-              Tell sellers what you&apos;re looking for. Your alert stays active for 30 days.
+              Tell sellers what you&apos;re looking for. Your alert stays
+              active for 30 days.
             </p>
 
             <label style={styles.fieldLabel}>
@@ -1311,7 +1699,11 @@ function SavedPageContent() {
                 value={newWantedNotes}
                 onChange={(e) => setNewWantedNotes(e.target.value)}
                 placeholder="Any specific requirements?"
-                style={{ ...styles.textInput, minHeight: 72, resize: 'vertical' }}
+                style={{
+                  ...styles.textInput,
+                  minHeight: 72,
+                  resize: 'vertical',
+                }}
                 maxLength={500}
               />
             </label>
@@ -1329,7 +1721,9 @@ function SavedPageContent() {
               />
             </label>
 
-            {createWantedError && <div style={styles.inlineError}>{createWantedError}</div>}
+            {createWantedError && (
+              <div style={styles.inlineError}>{createWantedError}</div>
+            )}
 
             <button
               onClick={handleCreateWanted}
@@ -1337,8 +1731,12 @@ function SavedPageContent() {
               style={{
                 ...styles.primaryBtn,
                 marginTop: 16,
-                opacity: creatingWanted || !newWantedTitle.trim() ? 0.5 : 1,
-                cursor: creatingWanted || !newWantedTitle.trim() ? 'not-allowed' : 'pointer',
+                opacity:
+                  creatingWanted || !newWantedTitle.trim() ? 0.5 : 1,
+                cursor:
+                  creatingWanted || !newWantedTitle.trim()
+                    ? 'not-allowed'
+                    : 'pointer',
               }}
             >
               {creatingWanted ? 'Posting…' : 'Post alert'}
@@ -1373,17 +1771,116 @@ export default function SavedPage() {
   );
 }
 
-function EmptyState({ icon, text }: { icon: React.ReactNode; text: string }) {
+function EmptyState({
+  icon,
+  text,
+}: {
+  icon: React.ReactNode;
+  text: string;
+}) {
   return (
-    <div style={styles.center}>
-      {icon}
+    <div style={styles.emptyCenter}>
+      <div style={styles.emptyIconWrap}>{icon}</div>
       <p style={styles.emptyText}>{text}</p>
     </div>
   );
 }
 
+// ─── Keyframes + layout CSS ─────────────────────────────────────
+const KF = `
+  @keyframes spin { to { transform: rotate(360deg); } }
+`;
+
+const CSS = `
+  .sv-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.18s ease, color 0.18s ease;
+  }
+
+  /* Pill tabs — horizontal scroll */
+  .sv-tab-strip {
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px 14px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--bg-primary);
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .sv-tab-strip::-webkit-scrollbar { display: none; }
+
+  .sv-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 14px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      transform 0.12s ease,
+      box-shadow 0.18s ease,
+      background 0.2s ease,
+      color 0.2s ease,
+      border-color 0.2s ease;
+  }
+  .sv-pill:hover:not(.sv-pill-active) {
+    background-color: var(--bg-hover) !important;
+    border-color: var(--border-strong) !important;
+    transform: translateY(-1px);
+  }
+  .sv-pill:active {
+    transform: scale(0.97);
+  }
+
+  @media (min-width: 1024px) {
+    .sv-root {
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .sv-tab-strip {
+      padding: 12px 20px 16px;
+    }
+    .sv-content {
+      padding: 24px 20px 40px !important;
+    }
+    .sv-pill {
+      padding: 10px 16px;
+      font-size: 13.5px;
+    }
+    .sv-modal-overlay {
+      align-items: center !important;
+      padding: 24px;
+    }
+    .sv-sheet {
+      border-radius: 20px !important;
+      max-height: 80vh;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+`;
+
 const styles: Record<string, React.CSSProperties> = {
-  container: {
+  root: {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
@@ -1391,66 +1888,124 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-primary)',
     transition: 'background-color 0.18s ease, color 0.18s ease',
   },
-  tabBar: {
-    display: 'flex',
-    alignItems: 'center',
-    borderBottom: '1px solid var(--border-default)',
-    overflowX: 'auto',
-    whiteSpace: 'nowrap',
-    flexShrink: 0,
-    transition: 'border-color 0.18s ease',
+
+  header: {
+    padding: '14px 16px 8px',
+    backgroundColor: 'var(--bg-primary)',
+    transition: 'background-color 0.18s ease',
   },
-  tab: {
-    background: 'none',
-    border: 'none',
+  headerInner: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerText: { minWidth: 0, flex: 1 },
+  headerTitle: {
+    fontSize: 24,
+    lineHeight: 1.1,
+    fontWeight: 850,
+    letterSpacing: '-0.03em',
+    margin: 0,
+    color: 'var(--text-primary)',
+  },
+  headerSub: {
     fontSize: 13,
-    cursor: 'pointer',
-    flexShrink: 0,
-    fontFamily: 'inherit',
-    transition: 'color 0.15s',
+    color: 'var(--text-tertiary)',
+    margin: '4px 0 0',
+    fontWeight: 500,
   },
-  refreshBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 8,
-    display: 'flex',
-    alignItems: 'center',
-    marginLeft: 'auto',
-  },
+  headerActions: { display: 'flex', gap: 6, flexShrink: 0 },
   iconBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 4,
-    display: 'flex',
+    width: 38,
+    height: 38,
+    display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 12,
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: 'var(--text-primary)',
+    cursor: 'pointer',
+    transition: 'background-color 0.15s, color 0.15s, transform 0.12s',
   },
-  searchWrap: {
+
+  searchBar: {
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
-    padding: '8px 12px',
+    gap: 10,
+    marginTop: 12,
+    padding: '10px 14px',
     backgroundColor: 'var(--bg-tertiary)',
-    borderRadius: 10,
-    border: '1px solid var(--border-default)',
-    flexShrink: 0,
+    borderRadius: 14,
+    border: '1.5px solid transparent',
     transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     border: 'none',
     outline: 'none',
-    fontSize: 14,
-    backgroundColor: 'transparent',
+    background: 'transparent',
+    fontSize: 14.5,
     color: 'var(--text-primary)',
     fontFamily: 'inherit',
   },
+  searchClear: {
+    width: 22,
+    height: 22,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    border: 'none',
+    backgroundColor: 'var(--border-default)',
+    cursor: 'pointer',
+    padding: 0,
+  },
+
+  tabStrip: {
+    display: 'flex',
+    gap: 8,
+    padding: '10px 16px 14px',
+    overflowX: 'auto',
+    borderBottom: '1px solid var(--border-default)',
+    backgroundColor: 'var(--bg-primary)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+  },
+  pill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '9px 14px',
+    borderRadius: 999,
+    border: '1px solid',
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
+    flexShrink: 0,
+    fontFamily: 'inherit',
+  },
+  pillBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 18,
+    height: 18,
+    padding: '0 5px',
+    borderRadius: 999,
+    fontSize: 10.5,
+    fontWeight: 800,
+    lineHeight: 1,
+  },
+
   content: {
     flex: 1,
     overflowY: 'auto',
     minHeight: 0,
+    padding: '14px 0 32px',
   },
   center: {
     display: 'flex',
@@ -1462,6 +2017,31 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
     textAlign: 'center',
     color: 'var(--text-muted)',
+  },
+  emptyCenter: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '56px 24px',
+    gap: 12,
+    textAlign: 'center',
+  },
+  emptyIconWrap: {
+    width: 78,
+    height: 78,
+    borderRadius: 26,
+    backgroundColor: 'var(--bg-tertiary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: 'var(--text-tertiary)',
+    margin: 0,
+    maxWidth: 320,
+    lineHeight: 1.5,
   },
   spinner: {
     width: 36,
@@ -1478,240 +2058,310 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 320,
     lineHeight: 1.5,
   },
-  emptyText: {
-    fontSize: 14,
-    color: 'var(--text-muted)',
-    margin: 0,
-    maxWidth: 300,
-    lineHeight: 1.5,
-  },
-  list: {
+
+  // ─── Feed ─────────────────────────────────────────────────
+  feed: {
     display: 'flex',
     flexDirection: 'column',
+    gap: 18,
   },
-  card: {
+
+  // ─── Instagram-style post ─────────────────────────────────
+  post: {
+    backgroundColor: 'var(--bg-primary)',
+    borderTop: '1px solid var(--border-default)',
+    borderBottom: '1px solid var(--border-default)',
+    transition: 'background-color 0.18s ease, border-color 0.18s ease',
+  },
+
+  // Header
+  postHeader: {
     display: 'flex',
     alignItems: 'center',
-    padding: 12,
-    marginBottom: 10,
-    backgroundColor: 'var(--bg-secondary)',
-    borderRadius: 12,
-    border: '1px solid var(--border-default)',
-    cursor: 'pointer',
-    transition: 'background-color 0.15s, border-color 0.15s',
-  },
-  thumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    backgroundColor: 'var(--bg-tertiary)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    marginRight: 10,
-    flexShrink: 0,
-  },
-  cardContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    color: 'var(--text-tertiary)',
-    marginTop: 2,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  cardMeta: {
-    fontSize: 11,
-    color: 'var(--text-muted)',
-    marginTop: 3,
-  },
-  cardTrailing: {
-    fontSize: 15,
-    fontWeight: 600,
-    color: 'var(--brand-primary)',
-    marginLeft: 8,
-    whiteSpace: 'nowrap',
-    fontVariantNumeric: 'tabular-nums',
-  },
-  resCard: {
-    padding: 14,
-    marginBottom: 10,
-    backgroundColor: 'var(--bg-secondary)',
-    borderRadius: 14,
-    border: '1px solid var(--border-default)',
-    cursor: 'pointer',
-    transition: 'background-color 0.15s, border-color 0.15s, box-shadow 0.15s',
-    display: 'flex',
-    flexDirection: 'column',
     gap: 10,
+    padding: '10px 14px',
   },
-  resCardExpired: {
-    backgroundColor: 'var(--bg-tertiary)',
-    borderColor: 'var(--border-subtle)',
-  },
-  resTopRow: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  resThumb: {
-    width: 48,
-    height: 48,
-    flex: '0 0 48px',
-    borderRadius: 12,
+  postAvatar: {
+    width: 36,
+    height: 36,
+    flex: '0 0 36px',
+    borderRadius: '50%',
     backgroundColor: 'var(--bg-tertiary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    boxShadow:
+      '0 0 0 2px var(--bg-primary), 0 0 0 3.5px var(--brand-primary)',
   },
-  resThumbImg: {
+  postAvatarImg: {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
+    display: 'block',
   },
-  resInfo: {
+  postAvatarFallback: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--brand-primary)',
+    backgroundColor: 'var(--brand-soft)',
+  },
+  avatarInitial: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: 'var(--brand-primary)',
+  },
+  postHeaderText: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: 3,
+    gap: 1,
   },
-  resStoreName: {
-    fontSize: 15,
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    letterSpacing: '-0.01em',
-  },
-  resItemLine: {
+  postAuthorRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     minWidth: 0,
   },
-  resItemText: {
-    fontSize: 12.5,
-    fontWeight: 600,
-    color: 'var(--text-secondary)',
+  postAuthorName: {
+    fontSize: 13.5,
+    fontWeight: 800,
+    color: 'var(--text-primary)',
+    letterSpacing: '-0.01em',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  resAddressBtn: {
-    display: 'inline-flex',
+  postAuthorSub: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: 'var(--text-tertiary)',
+  },
+  postTimestamp: {
+    fontSize: 11.5,
+    color: 'var(--text-muted)',
+    fontWeight: 500,
+  },
+  postMenuBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 4,
+    display: 'flex',
+    alignItems: 'center',
+  },
+
+  // Media
+  postMedia: {
+    position: 'relative',
+    width: '100%',
+    padding: 0,
+    border: 'none',
+    backgroundColor: 'var(--bg-tertiary)',
+    cursor: 'pointer',
+    overflow: 'hidden',
+    fontFamily: 'inherit',
+    display: 'block',
+  },
+  postMediaImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  },
+  postMediaFallback: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'var(--bg-tertiary)',
+  },
+  postChipOverlay: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    padding: '4px 10px',
+    borderRadius: 999,
+    fontSize: 10.5,
+    fontWeight: 800,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    backdropFilter: 'blur(6px)',
+    WebkitBackdropFilter: 'blur(6px)',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+    pointerEvents: 'none',
+  },
+
+  // Action row
+  postActions: {
+    display: 'flex',
     alignItems: 'center',
     gap: 4,
+    padding: '6px 8px 2px',
+  },
+  postActionBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 8,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    transition: 'transform 0.12s',
+  },
+
+  // Body
+  postBody: {
+    padding: '0 14px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  postPrice: {
+    fontSize: 16,
+    fontWeight: 800,
+    color: 'var(--brand-primary)',
+    letterSpacing: '-0.02em',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  postTitle: {
+    fontSize: 14,
+    lineHeight: 1.5,
+    color: 'var(--text-primary)',
+    wordBreak: 'break-word',
+  },
+  postAuthorInline: {
+    fontWeight: 800,
+    marginRight: 4,
+  },
+  postCaption: {
+    fontSize: 13.5,
+    color: 'var(--text-secondary)',
+    lineHeight: 1.5,
+    wordBreak: 'break-word',
+  },
+  postFooterLeft: {
+    marginTop: 2,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  postCtaRow: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 4,
     padding: 0,
     border: 'none',
     background: 'none',
-    textAlign: 'left',
-    minWidth: 0,
+    color: 'var(--brand-primary)',
+    fontSize: 13.5,
+    fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    marginTop: 1,
+    alignSelf: 'flex-start',
   },
-  resAddressText: {
-    fontSize: 11.5,
-    fontWeight: 500,
-    color: 'var(--text-tertiary)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  resAmount: {
-    fontSize: 15,
-    fontWeight: 800,
-    color: 'var(--brand-primary)',
-    whiteSpace: 'nowrap',
-    letterSpacing: '-0.01em',
-    marginTop: 2,
-    fontVariantNumeric: 'tabular-nums',
-  },
-  resBottomRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  resChip: {
+
+  // Expiry row inside post footer
+  expiryRow: {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '4px 10px',
-    borderRadius: 999,
-    border: '1px solid',
-    fontSize: 11,
-    fontWeight: 800,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  resCountdown: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 5,
+    gap: 6,
     fontSize: 12.5,
     fontWeight: 600,
     color: 'var(--text-tertiary)',
   },
-  resCountdownWarn: {
-    color: 'var(--warning-fg)',
-    fontWeight: 800,
-  },
-  resCountdownExpired: {
+  expiryRowMuted: {
     color: 'var(--text-muted)',
   },
-  resWarnRow: {
+
+  // Wanted card (custom, not using renderPost)
+  wantedBody: {
+    padding: '4px 14px 12px',
     display: 'flex',
-    alignItems: 'center',
+    flexDirection: 'column',
     gap: 6,
-    padding: '8px 10px',
-    marginTop: 2,
-    backgroundColor: 'var(--warning-bg)',
-    border: '1px solid var(--warning-strong)',
-    borderRadius: 10,
-    fontSize: 12,
-    fontWeight: 700,
-    color: 'var(--warning-fg)',
-    lineHeight: 1.4,
   },
+  wantedTitle: {
+    fontSize: 17,
+    fontWeight: 800,
+    color: 'var(--text-primary)',
+    letterSpacing: '-0.02em',
+  },
+  wantedNotes: {
+    fontSize: 14,
+    color: 'var(--text-secondary)',
+    lineHeight: 1.55,
+    wordBreak: 'break-word',
+  },
+  wantedBudget: {
+    fontSize: 13.5,
+    fontWeight: 700,
+    color: 'var(--brand-primary)',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  wantedStatusPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '2px 8px',
+    borderRadius: 999,
+    fontSize: 10.5,
+    fontWeight: 800,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginLeft: 6,
+  },
+  wantedActions: {
+    display: 'flex',
+    gap: 8,
+    padding: '0 14px 14px',
+  },
+  wantedActionBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    padding: '7px 14px',
+    borderRadius: 999,
+    border: '1px solid var(--border-default)',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-secondary)',
+    fontSize: 12.5,
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+
+  // Create wanted button
   createAlertBtn: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
     padding: '12px 20px',
-    marginBottom: 12,
+    marginBottom: 18,
     backgroundColor: 'var(--brand-primary)',
     backgroundImage: 'var(--brand-gradient)',
     color: 'var(--brand-on-gradient)',
     border: 'none',
-    borderRadius: 12,
+    borderRadius: 14,
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
     boxShadow: 'var(--shadow-brand)',
   },
+
   basketFooter: {
-    marginTop: 12,
+    marginTop: 10,
     padding: 16,
     backgroundColor: 'var(--bg-tertiary)',
-    borderRadius: 12,
+    borderRadius: 14,
     border: '1px solid var(--border-default)',
     display: 'flex',
     flexDirection: 'column',
@@ -1739,7 +2389,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'var(--brand-primary)',
     color: 'var(--brand-on-gradient)',
     border: 'none',
-    borderRadius: 10,
+    borderRadius: 12,
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
@@ -1747,6 +2397,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     boxShadow: 'var(--shadow-brand)',
   },
+
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -1765,8 +2416,8 @@ const styles: Record<string, React.CSSProperties> = {
     overflowY: 'auto',
     backgroundColor: 'var(--bg-secondary)',
     color: 'var(--text-primary)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     padding: '16px 20px 32px',
     boxShadow: 'var(--shadow-lg)',
     transition: 'background-color 0.18s ease, color 0.18s ease',
@@ -1779,9 +2430,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sheetTitle: {
     fontSize: 18,
-    fontWeight: 700,
+    fontWeight: 800,
     color: 'var(--text-primary)',
     margin: 0,
+    letterSpacing: '-0.02em',
   },
   sheetHelper: {
     fontSize: 13,
@@ -1805,7 +2457,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-primary)',
     backgroundColor: 'var(--bg-tertiary)',
     border: '1px solid var(--border-default)',
-    borderRadius: 10,
+    borderRadius: 12,
     outline: 'none',
     boxSizing: 'border-box',
     fontFamily: 'inherit',
@@ -1814,69 +2466,8 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 12px',
     backgroundColor: 'var(--danger-bg)',
     border: '1px solid var(--danger-strong)',
-    borderRadius: 10,
+    borderRadius: 12,
     color: 'var(--danger-fg)',
     fontSize: 13,
   },
 };
-
-const CSS = `
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .sv-tabbar {
-    padding: 0 8px;
-  }
-  .sv-tab {
-    padding: 12px 10px;
-  }
-  .sv-search-wrap {
-    margin: 8px 12px 4px;
-  }
-  .sv-content {
-    padding: 12px 16px 24px;
-  }
-
-  @media (min-width: 1024px) {
-    .sv-tabbar {
-      max-width: 900px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 0 24px;
-      justify-content: center;
-      overflow-x: visible;
-    }
-    .sv-tab {
-      padding: 14px 16px;
-      font-size: 13px;
-    }
-    .sv-search-wrap {
-      width: calc(100% - 48px);
-      max-width: 900px;
-      margin: 16px auto 8px;
-      box-sizing: border-box;
-    }
-    .sv-content {
-      width: 100%;
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 20px 24px 32px;
-      box-sizing: border-box;
-    }
-    .sv-modal-overlay {
-      align-items: center !important;
-      padding: 24px;
-    }
-    .sv-sheet {
-      border-radius: 20px !important;
-      max-height: 80vh;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    * {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-    }
-  }
-`;
