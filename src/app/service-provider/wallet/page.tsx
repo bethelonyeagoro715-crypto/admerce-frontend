@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
-import { initializePaystack } from '../../../services/paymentService';
+import { AddMoneySheet } from '../../../components/AddMoneySheet';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
 import {
   MdAdd,
@@ -32,8 +32,12 @@ import {
   MdPersonOutline,
 } from 'react-icons/md';
 
-interface BalanceResponse { balance?: number }
-interface ProfileResponse { email?: string }
+interface BalanceResponse {
+  balance?: number;
+}
+interface ProfileResponse {
+  email?: string;
+}
 interface RawTransaction {
   id: string | number;
   type?: string;
@@ -125,10 +129,6 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
   }
 }
 
-const PRESET_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
-const MIN_TOPUP = 100;
-const MAX_TOPUP = 100_000_000;
-
 const PENDING_BOOKING_STATUSES = new Set(['locked', 'accepted']);
 
 const fmt = (v: number) =>
@@ -178,15 +178,6 @@ const fmtDateTime = (s?: string) => {
     return s;
   }
 };
-
-function formatAmountInput(raw: string): string {
-  const digits = raw.replace(/[^\d]/g, '');
-  if (!digits) return '';
-  const n = parseInt(digits, 10);
-  if (!Number.isFinite(n)) return '';
-  if (n > MAX_TOPUP) return MAX_TOPUP.toLocaleString('en-NG');
-  return n.toLocaleString('en-NG');
-}
 
 function normalizeTransactions(raw: unknown): Transaction[] {
   if (!Array.isArray(raw)) return [];
@@ -267,13 +258,10 @@ export default function ServiceProviderWalletPage() {
   const router = useRouter();
 
   const [state, dispatch] = useReducer(walletReducer, initialState);
-  const { balance, email, transactions, pendingBookings, loading, errored } = state;
+  const { balance, transactions, pendingBookings, loading, errored } = state;
 
   const [refreshing, setRefreshing] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [amountTouched, setAmountTouched] = useState(false);
-  const [paying, setPaying] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [copied, setCopied] = useState(false);
 
@@ -318,40 +306,6 @@ export default function ServiceProviderWalletPage() {
     } catch {}
   };
 
-  const amountNum = useMemo(
-    () => Number(amount.replace(/,/g, '')) || 0,
-    [amount],
-  );
-  const hasEmail = email?.includes('@');
-  const belowMin = amountNum > 0 && amountNum < MIN_TOPUP;
-  const topUpDisabled = paying || !hasEmail || !amountNum || belowMin;
-
-  const handleTopUp = async () => {
-    if (topUpDisabled) return;
-    setPaying(true);
-    try {
-      await initializePaystack({
-        email,
-        amount: amountNum,
-        onSuccess: async () => {
-          setShowTopUp(false);
-          setAmount('');
-          setAmountTouched(false);
-          await loadData(false);
-        },
-        onClose: () => setShowTopUp(false),
-      });
-    } finally {
-      setPaying(false);
-    }
-  };
-
-  const closeTopUp = () => {
-    setShowTopUp(false);
-    setAmount('');
-    setAmountTouched(false);
-  };
-
   const pendingTotal = useMemo(
     () => pendingBookings.reduce((s, b) => s + b.amount, 0),
     [pendingBookings],
@@ -369,21 +323,6 @@ export default function ServiceProviderWalletPage() {
               <span style={css.heroTitle}>Earnings</span>
               <div style={{ width: 38 }} />
             </div>
-            <div style={{ padding: '8px 0 26px' }}>
-              <div style={{ width: 140, height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)' }} />
-              <div style={{ width: 200, height: 42, borderRadius: 6, background: 'color-mix(in srgb, var(--brand-on-gradient) 24%, transparent)', marginTop: 16 }} />
-            </div>
-          </div>
-          <div style={css.sheet}>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-              {[0, 1, 2].map((i) => (
-                <div key={i} style={{ flex: 1, height: 52, borderRadius: 14, background: 'var(--bg-tertiary)', animation: 'spWalletShimmer 1.4s ease-in-out infinite' }} />
-              ))}
-            </div>
-            <div style={{ height: 1, background: 'var(--border-subtle)', margin: '20px 0' }} />
-            {[0, 1, 2].map((i) => (
-              <div key={i} style={{ height: 56, borderRadius: 12, background: 'var(--bg-tertiary)', marginBottom: 10, animation: 'spWalletShimmer 1.4s ease-in-out infinite' }} />
-            ))}
           </div>
         </div>
       </div>
@@ -503,7 +442,7 @@ export default function ServiceProviderWalletPage() {
               <div style={css.secondaryIconAdd}>
                 <MdAdd size={16} color="var(--brand-primary)" />
               </div>
-              <span style={css.secondaryLabel}>Top up</span>
+              <span style={css.secondaryLabel}>Add money</span>
             </button>
             <button type="button" onClick={() => router.push('/service-provider/wallet/history')} style={css.secondaryBtn} className="sp-secondary">
               <div style={css.secondaryIconHistory}>
@@ -658,104 +597,7 @@ export default function ServiceProviderWalletPage() {
       </div>
 
       {showTopUp && (
-        <div style={css.overlay} className="sp-wallet-overlay" onClick={closeTopUp}>
-          <div style={css.bottomSheet} className="sp-wallet-sheet" onClick={(e) => e.stopPropagation()}>
-            <div style={css.sheetHandle} />
-            <h2 style={css.modalTitle}>Add money</h2>
-            <p style={css.modalSub}>
-              Top up your wallet to spend on Admerce as a buyer
-            </p>
-
-            {!hasEmail && (
-              <div style={css.warnBox}>
-                <strong>Email required.</strong> Add an email to your profile
-                to receive a Paystack receipt and unlock top-ups.
-              </div>
-            )}
-
-            <div style={css.presets}>
-              {PRESET_AMOUNTS.map((p) => {
-                const active = amount === p.toLocaleString('en-NG');
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    style={{
-                      ...css.preset,
-                      background: active ? 'var(--brand-gradient)' : 'var(--brand-soft)',
-                      color: active ? 'var(--brand-on-gradient)' : 'var(--brand-primary)',
-                    }}
-                    onClick={() => {
-                      setAmount(p.toLocaleString('en-NG'));
-                      setAmountTouched(true);
-                    }}
-                  >
-                    {fmtShort(p)}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div
-              style={{
-                ...css.inputWrap,
-                borderColor:
-                  belowMin || (amountTouched && !amountNum)
-                    ? 'var(--danger-fg)'
-                    : 'var(--border-default)',
-              }}
-            >
-              <span style={css.inputPrefix}>₦</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="Enter amount"
-                value={amount}
-                onChange={(e) => {
-                  setAmount(formatAmountInput(e.target.value));
-                  setAmountTouched(true);
-                }}
-                style={css.amtInput}
-                autoFocus
-                disabled={!hasEmail}
-              />
-            </div>
-
-            {hasEmail && belowMin && (
-              <div style={css.inlineError}>
-                Minimum top-up is {fmtShort(MIN_TOPUP)}
-              </div>
-            )}
-            {hasEmail && amountTouched && !amountNum && (
-              <div style={css.inlineError}>Enter an amount to continue</div>
-            )}
-
-            <button
-              type="button"
-              onClick={handleTopUp}
-              disabled={topUpDisabled}
-              style={{
-                ...css.payBtn,
-                opacity: topUpDisabled ? 0.5 : 1,
-                cursor: topUpDisabled ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {paying
-                ? 'Opening Paystack…'
-                : !hasEmail
-                  ? 'Add email to continue'
-                  : belowMin
-                    ? `Minimum ${fmtShort(MIN_TOPUP)}`
-                    : amountNum
-                      ? `Pay ${fmt(amountNum)} with Paystack`
-                      : 'Enter an amount'}
-            </button>
-
-            <button style={css.cancelBtn} onClick={closeTopUp}>
-              Cancel
-            </button>
-          </div>
-        </div>
+        <AddMoneySheet onClose={() => setShowTopUp(false)} />
       )}
     </div>
   );
@@ -765,7 +607,6 @@ const KF = `
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes spWalletShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-  @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
   .sp-primary-withdraw:hover { transform: translateY(-2px); box-shadow: 0 14px 30px color-mix(in srgb, var(--brand-primary) 32%, transparent); }
   .sp-primary-withdraw:active { transform: translateY(0) scale(0.985); }
@@ -792,11 +633,6 @@ const SHELL_CSS = `
     flex-direction: column;
     flex: 1;
     min-height: 0;
-  }
-  .sp-wallet-overlay { align-items: flex-end; }
-  @media (min-width: 1024px) {
-    .sp-wallet-overlay { align-items: center !important; padding: 24px; }
-    .sp-wallet-sheet { border-radius: 24px !important; max-height: 80vh; overflow-y: auto; }
   }
 `;
 
@@ -921,7 +757,6 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     marginLeft: 4,
   },
-
   sheet: {
     flex: 1,
     backgroundColor: 'var(--bg-secondary)',
@@ -932,7 +767,6 @@ const css: Record<string, React.CSSProperties> = {
     position: 'relative',
     transition: 'background-color 0.18s ease',
   },
-
   primaryWithdraw: {
     display: 'flex',
     alignItems: 'center',
@@ -991,13 +825,11 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--text-primary)',
     letterSpacing: -0.1,
   },
-
   divider: {
     height: 1,
     backgroundColor: 'var(--border-subtle)',
     margin: '22px 0',
   },
-
   secHead: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1040,7 +872,6 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     padding: 4,
   },
-
   pendingList: { display: 'flex', flexDirection: 'column', gap: 8 },
   pendingCard: {
     display: 'flex',
@@ -1119,7 +950,6 @@ const css: Record<string, React.CSSProperties> = {
   },
   pendingDot: { color: 'var(--border-strong)' },
   pendingExpiry: { fontWeight: 500, color: 'var(--text-muted)' },
-
   txnList: { display: 'flex', flexDirection: 'column', gap: 10 },
   txnCard: {
     display: 'flex',
@@ -1167,7 +997,6 @@ const css: Record<string, React.CSSProperties> = {
     fontVariantNumeric: 'tabular-nums',
     whiteSpace: 'nowrap',
   },
-
   emptySmall: {
     display: 'flex',
     alignItems: 'center',
@@ -1211,135 +1040,6 @@ const css: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
-
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'var(--overlay)',
-    backdropFilter: 'blur(6px)',
-    WebkitBackdropFilter: 'blur(6px)',
-    zIndex: 200,
-    display: 'flex',
-    alignItems: 'flex-end',
-  },
-  bottomSheet: {
-    width: '100%',
-    maxWidth: 520,
-    margin: '0 auto',
-    backgroundColor: 'var(--bg-secondary)',
-    color: 'var(--text-primary)',
-    borderRadius: '24px 24px 0 0',
-    padding: '12px 24px calc(32px + env(safe-area-inset-bottom))',
-    boxShadow: 'var(--shadow-lg)',
-    animation: 'sheetUp 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
-    transition: 'background-color 0.18s ease, color 0.18s ease',
-  },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: 'var(--border-default)',
-    borderRadius: 2,
-    margin: '0 auto 20px',
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    margin: '0 0 4px',
-    letterSpacing: -0.3,
-  },
-  modalSub: {
-    fontSize: 13,
-    color: 'var(--text-muted)',
-    margin: '0 0 20px',
-  },
-  warnBox: {
-    padding: '12px 14px',
-    borderRadius: 12,
-    backgroundColor: 'var(--warning-bg)',
-    border: '1px solid var(--warning-strong)',
-    marginBottom: 18,
-    fontSize: 12.5,
-    color: 'var(--warning-fg)',
-    lineHeight: 1.5,
-    fontWeight: 500,
-  },
-  presets: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 8,
-    marginBottom: 18,
-  },
-  preset: {
-    padding: '12px 8px',
-    borderRadius: 12,
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 700,
-    fontFamily: 'inherit',
-  },
-  inputWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    border: '1.5px solid var(--border-default)',
-    borderRadius: 14,
-    padding: '0 16px',
-    marginBottom: 8,
-    backgroundColor: 'var(--bg-tertiary)',
-  },
-  inputPrefix: {
-    fontSize: 20,
-    fontWeight: 800,
-    color: 'var(--brand-primary)',
-    marginRight: 8,
-  },
-  amtInput: {
-    flex: 1,
-    padding: '16px 0',
-    fontSize: 20,
-    fontWeight: 700,
-    border: 'none',
-    outline: 'none',
-    backgroundColor: 'transparent',
-    color: 'var(--text-primary)',
-    fontFamily: 'inherit',
-    fontVariantNumeric: 'tabular-nums',
-  },
-  inlineError: {
-    fontSize: 12,
-    color: 'var(--danger-fg)',
-    fontWeight: 600,
-    marginBottom: 14,
-    paddingLeft: 4,
-  },
-  payBtn: {
-    width: '100%',
-    padding: 16,
-    marginTop: 8,
-    background: 'var(--brand-gradient)',
-    color: 'var(--brand-on-gradient)',
-    border: 'none',
-    borderRadius: 14,
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    boxShadow: 'var(--shadow-brand)',
-  },
-  cancelBtn: {
-    width: '100%',
-    padding: 14,
-    backgroundColor: 'transparent',
-    color: 'var(--text-muted)',
-    border: 'none',
-    borderRadius: 14,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-
   errorRoot: {
     display: 'flex',
     flexDirection: 'column',

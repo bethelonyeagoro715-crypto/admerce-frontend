@@ -1801,6 +1801,31 @@ class ApiService {
     const res = await this.axios.get(`/chat/typing/${conversationId}`);
     return res.data;
   }
+
+  public async getFundingDetails(): Promise<{
+  account_number: string;
+  bank_name: string;
+  account_name: string;
+  note: string;
+  kyc_status: string;
+}> {
+  const res = await this.axios.get('/funding/details');
+  return res.data;
+}
+
+public async getFundingHistory(limit = 20): Promise<
+  Array<{
+    id: number;
+    amount: number;
+    description: string;
+    reference: string;
+    status: string;
+    created_at: string;
+  }>
+> {
+  const res = await this.axios.get(`/funding/history?limit=${limit}`);
+  return res.data;
+}
   
 }
 

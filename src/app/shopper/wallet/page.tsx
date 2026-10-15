@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
-import { initializePaystack } from '../../../services/paymentService';
+import { AddMoneySheet } from '../../../components/AddMoneySheet';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
 import {
   MdAdd,
@@ -25,17 +25,14 @@ import {
   MdCheck,
   MdContentCopy,
   MdShield,
-  MdWarning,
   MdErrorOutline,
   MdLock,
   MdAccessTime,
   MdEventNote,
   MdBuild,
   MdChevronRight,
-  MdMailOutline,
 } from 'react-icons/md';
 
-// ─── API response shapes ────────────────────────────────────────────
 interface BalanceResponse {
   balance?: number;
 }
@@ -73,7 +70,6 @@ interface RawBooking {
   [key: string]: unknown;
 }
 
-// ─── Domain types ────────────────────────────────────────────────────
 interface Transaction {
   id: string;
   type: 'credit' | 'debit';
@@ -93,7 +89,6 @@ interface InFlightItem {
   routeTo: string;
 }
 
-// ─── Fetch state + reducer ───────────────────────────────────────────
 interface WalletState {
   balance: number;
   email: string;
@@ -147,12 +142,6 @@ function walletReducer(state: WalletState, action: WalletAction): WalletState {
   }
 }
 
-// ─── Constants ───────────────────────────────────────────────────────
-const PRESET_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
-const MIN_TOPUP = 100;
-const MAX_TOPUP = 100_000_000;
-
-// ─── Helpers ─────────────────────────────────────────────────────────
 const fmt = (v: number) =>
   '₦' +
   v.toLocaleString('en-NG', {
@@ -170,25 +159,9 @@ function parseAsUtc(iso?: string | null): number {
   return new Date(hasTz ? trimmed : `${trimmed}Z`).getTime();
 }
 
-const fmtDate = (s: string) => {
-  if (!s) return '—';
-  const t = parseAsUtc(s);
-  if (Number.isNaN(t)) return s;
-  try {
-    return new Date(t).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return s;
-  }
-};
-
 function normalizeType(raw: unknown): 'credit' | 'debit' | null {
   if (typeof raw !== 'string') return null;
   const v = raw.toLowerCase().trim().replace(/[\s_-]/g, '');
-
   if (
     v === 'credit' ||
     v === 'topup' ||
@@ -205,7 +178,6 @@ function normalizeType(raw: unknown): 'credit' | 'debit' | null {
   ) {
     return 'credit';
   }
-
   if (
     v === 'debit' ||
     v === 'payment' ||
@@ -221,7 +193,6 @@ function normalizeType(raw: unknown): 'credit' | 'debit' | null {
   ) {
     return 'debit';
   }
-
   return null;
 }
 
@@ -230,7 +201,6 @@ function inferTypeFromDescription(
 ): 'credit' | 'debit' | null {
   if (!desc) return null;
   const d = desc.toLowerCase();
-
   if (
     /\btop[\s-]?up\b/.test(d) ||
     /\bdeposit(ed)?\b/.test(d) ||
@@ -245,7 +215,6 @@ function inferTypeFromDescription(
   ) {
     return 'credit';
   }
-
   if (
     /\bwithdraw(al|n)?\b/.test(d) ||
     /\bpayment\b/.test(d) ||
@@ -257,7 +226,6 @@ function inferTypeFromDescription(
   ) {
     return 'debit';
   }
-
   return null;
 }
 
@@ -268,7 +236,6 @@ function normalizeTransactions(raw: unknown): Transaction[] {
     const explicit = normalizeType(t.type);
     const inferred = explicit ?? inferTypeFromDescription(desc);
     const type: 'credit' | 'debit' = inferred ?? 'debit';
-
     return {
       id: String(t.id),
       type,
@@ -278,15 +245,6 @@ function normalizeTransactions(raw: unknown): Transaction[] {
       date: t.created_at ?? '',
     };
   });
-}
-
-function formatAmountInput(raw: string): string {
-  const digits = raw.replace(/[^\d]/g, '');
-  if (!digits) return '';
-  const n = parseInt(digits, 10);
-  if (!Number.isFinite(n)) return '';
-  if (n > MAX_TOPUP) return MAX_TOPUP.toLocaleString('en-NG');
-  return n.toLocaleString('en-NG');
 }
 
 function relativeFrom(ms: number, nowMs: number): string {
@@ -315,7 +273,6 @@ function formatTimeRemaining(expiresMs: number, nowMs: number): string {
   return `${days}d ${hrs % 24}h left`;
 }
 
-// ─── Component ───────────────────────────────────────────────────────
 export default function WalletPage() {
   useAuthGuard();
 
@@ -324,7 +281,6 @@ export default function WalletPage() {
   const [state, dispatch] = useReducer(walletReducer, initialState);
   const {
     balance,
-    email,
     transactions,
     escrows,
     bookings,
@@ -334,9 +290,6 @@ export default function WalletPage() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [amountTouched, setAmountTouched] = useState(false);
-  const [paying, setPaying] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [copied, setCopied] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number>(() => Date.now());
@@ -389,40 +342,6 @@ export default function WalletPage() {
     setRefreshing(false);
   };
 
-  const amountNum = useMemo(
-    () => Number(amount.replace(/,/g, '')) || 0,
-    [amount],
-  );
-  const hasEmail = email?.includes('@');
-  const belowMin = amountNum > 0 && amountNum < MIN_TOPUP;
-  const topUpDisabled = paying || !hasEmail || !amountNum || belowMin;
-
-  const handleTopUp = async () => {
-    if (topUpDisabled) return;
-    setPaying(true);
-    try {
-      await initializePaystack({
-        email,
-        amount: amountNum,
-        onSuccess: async () => {
-          setShowTopUp(false);
-          setAmount('');
-          setAmountTouched(false);
-          await loadData(false);
-        },
-        onClose: () => setShowTopUp(false),
-      });
-    } finally {
-      setPaying(false);
-    }
-  };
-
-  const closeTopUp = () => {
-    setShowTopUp(false);
-    setAmount('');
-    setAmountTouched(false);
-  };
-
   const handleCopyBalance = async () => {
     if (!balance) return;
     try {
@@ -430,7 +349,7 @@ export default function WalletPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      // Silent — non-critical
+      // silent
     }
   };
 
@@ -533,89 +452,6 @@ export default function WalletPage() {
               <span style={css.heroTitle}>My Wallet</span>
               <div style={{ width: 38 }} />
             </div>
-            <div style={{ padding: '8px 0 26px' }}>
-              <div
-                style={{
-                  width: 140,
-                  height: 10,
-                  borderRadius: 6,
-                  background:
-                    'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
-                }}
-              />
-              <div
-                style={{
-                  width: 220,
-                  height: 42,
-                  borderRadius: 6,
-                  background:
-                    'color-mix(in srgb, var(--brand-on-gradient) 24%, transparent)',
-                  marginTop: 18,
-                }}
-              />
-              <div
-                style={{
-                  width: 180,
-                  height: 12,
-                  borderRadius: 6,
-                  background:
-                    'color-mix(in srgb, var(--brand-on-gradient) 14%, transparent)',
-                  marginTop: 16,
-                }}
-              />
-            </div>
-          </div>
-          <div style={css.sheet}>
-            <div style={css.actionsGrid}>
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  style={{ ...css.actionBtn, pointerEvents: 'none' }}
-                >
-                  <div
-                    style={{
-                      ...css.actionIcon,
-                      background: 'var(--skeleton)',
-                      animation: 'skelPulse 1.4s ease-in-out infinite',
-                    }}
-                  />
-                  <div
-                    style={{
-                      width: 40,
-                      height: 10,
-                      borderRadius: 4,
-                      background: 'var(--skeleton)',
-                      marginTop: 4,
-                      animation: 'skelPulse 1.4s ease-in-out infinite',
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-            <div style={css.divider} />
-            <div
-              style={{
-                width: 100,
-                height: 12,
-                borderRadius: 4,
-                background: 'var(--skeleton)',
-                marginBottom: 18,
-                animation: 'skelPulse 1.4s ease-in-out infinite',
-              }}
-            />
-            {[0, 1].map((i) => (
-              <div
-                key={i}
-                style={{
-                  height: 74,
-                  borderRadius: 14,
-                  backgroundColor: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border-default)',
-                  marginBottom: 10,
-                  animation: 'skelPulse 1.4s ease-in-out infinite',
-                }}
-              />
-            ))}
           </div>
         </div>
       </div>
@@ -652,7 +488,6 @@ export default function WalletPage() {
       <style>{CSS}</style>
 
       <div className="wallet-shell">
-        {/* ═══ HERO ════════════════════════════════════════════════ */}
         <div style={css.hero}>
           <div style={css.heroGlow} aria-hidden />
 
@@ -689,7 +524,7 @@ export default function WalletPage() {
               color="color-mix(in srgb, var(--brand-on-gradient) 90%, transparent)"
             />
             <span style={css.statusChipText}>
-              Admerce Wallet · Secured
+              Held with licensed partner
             </span>
           </div>
 
@@ -700,7 +535,7 @@ export default function WalletPage() {
             aria-label="Copy balance"
           >
             <span style={css.balLabel}>
-              Available balance
+              Escrow balance
               <button
                 type="button"
                 style={css.eyeBtn}
@@ -774,12 +609,11 @@ export default function WalletPage() {
           </div>
         </div>
 
-        {/* ═══ SHEET ═══════════════════════════════════════════════ */}
         <div style={css.sheet}>
           <div style={css.actionsGrid}>
             <ActionButton
               icon={<MdAdd size={20} color="#FFFFFF" />}
-              label="Top Up"
+              label="Add money"
               bg="linear-gradient(135deg, #0504AA 0%, #3D3BFF 100%)"
               onClick={() => setShowTopUp(true)}
             />
@@ -798,27 +632,6 @@ export default function WalletPage() {
           </div>
 
           <div style={css.divider} />
-
-          {!hasEmail && (
-            <button
-              type="button"
-              onClick={() => router.push('/shopper/profile')}
-              style={css.nudge}
-            >
-              <div style={css.nudgeIcon}>
-                <MdMailOutline size={18} color="var(--warning-fg)" />
-              </div>
-              <div style={css.nudgeBody}>
-                <span style={css.nudgeTitle}>
-                  Add an email to unlock top-ups
-                </span>
-                <span style={css.nudgeSub}>
-                  Paystack needs it for receipts and payment confirmation.
-                </span>
-              </div>
-              <MdChevronRight size={20} color="var(--warning-fg)" />
-            </button>
-          )}
 
           <div style={css.secHead}>
             <span style={css.secTitle}>
@@ -846,8 +659,8 @@ export default function WalletPage() {
                 </div>
                 <h3 style={css.emptyTitle}>Start your wallet</h3>
                 <p style={css.emptyBody}>
-                  Top up to pay for pickups, reservations, and services
-                  — all in one place.
+                  Add money to pay for pickups, reservations, and
+                  services — all in one place.
                 </p>
                 <button
                   type="button"
@@ -855,7 +668,7 @@ export default function WalletPage() {
                   style={css.emptyCta}
                 >
                   <MdAdd size={18} color="var(--brand-on-gradient)" />
-                  <span>Top up now</span>
+                  <span>Add money</span>
                 </button>
               </div>
             ) : (
@@ -865,8 +678,8 @@ export default function WalletPage() {
                 </div>
                 <h3 style={css.emptyTitle}>Nothing in flight</h3>
                 <p style={css.emptyBody}>
-                  Your wallet is settled. Reservations and bookings you
-                  make will show up here while their funds are held.
+                  Your wallet is settled. Reservations and bookings
+                  will show up here while their funds are held.
                 </p>
               </div>
             )
@@ -898,10 +711,7 @@ export default function WalletPage() {
                       )}
                     </div>
                     <div style={css.inFlightMeta}>
-                      <span
-                        style={css.inFlightTitle}
-                        title={item.title}
-                      >
+                      <span style={css.inFlightTitle} title={item.title}>
                         {item.title}
                       </span>
                       <span
@@ -934,8 +744,8 @@ export default function WalletPage() {
               <p style={css.inFlightNote}>
                 <MdLock size={12} color="var(--text-tertiary)" />
                 <span>
-                  Held funds release to the store when you confirm
-                  pickup.
+                  Funds held by our licensed escrow partner, released
+                  when you confirm pickup.
                 </span>
               </p>
             </div>
@@ -943,138 +753,13 @@ export default function WalletPage() {
         </div>
       </div>
 
-      {/* ═══ TOP-UP BOTTOM SHEET ════════════════════════════════ */}
       {showTopUp && (
-        <div
-          style={css.overlay}
-          className="wallet-overlay"
-          onClick={closeTopUp}
-        >
-          <div
-            style={css.bottomSheet}
-            className="wallet-sheet"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={css.sheetHandle} />
-
-            <h2 style={css.modalTitle}>Add money</h2>
-            <p style={css.modalSub}>
-              Choose a preset or enter a custom amount
-            </p>
-
-            {!hasEmail && (
-              <div style={css.warnBox}>
-                <MdWarning size={16} color="var(--warning-fg)" />
-                <div style={css.warnText}>
-                  <strong>Email required.</strong> Add an email to your
-                  profile to receive a Paystack receipt and unlock
-                  top-ups.
-                </div>
-              </div>
-            )}
-
-            <div style={css.presets}>
-              {PRESET_AMOUNTS.map((p) => {
-                const active = amount === p.toLocaleString('en-NG');
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    style={{
-                      ...css.preset,
-                      background: active
-                        ? 'var(--brand-gradient)'
-                        : 'var(--brand-soft)',
-                      color: active
-                        ? 'var(--brand-on-gradient)'
-                        : 'var(--brand-primary)',
-                    }}
-                    onClick={() => {
-                      setAmount(p.toLocaleString('en-NG'));
-                      setAmountTouched(true);
-                    }}
-                  >
-                    {fmtShort(p)}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div
-              style={{
-                ...css.inputWrap,
-                borderColor:
-                  belowMin || (amountTouched && !amountNum)
-                    ? 'var(--danger-fg)'
-                    : 'var(--border-default)',
-              }}
-            >
-              <span style={css.inputPrefix}>₦</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="Enter amount"
-                value={amount}
-                onChange={(e) => {
-                  setAmount(formatAmountInput(e.target.value));
-                  setAmountTouched(true);
-                }}
-                style={css.amtInput}
-                autoFocus
-                disabled={!hasEmail}
-              />
-            </div>
-
-            {hasEmail && belowMin && (
-              <div style={css.inlineError}>
-                <MdWarning size={13} color="var(--danger-fg)" />
-                <span>Minimum top-up is {fmtShort(MIN_TOPUP)}</span>
-              </div>
-            )}
-            {hasEmail && amountTouched && !amountNum && (
-              <div style={css.inlineError}>
-                <MdWarning size={13} color="var(--danger-fg)" />
-                <span>Enter an amount to continue</span>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={handleTopUp}
-              disabled={topUpDisabled}
-              style={{
-                ...css.payBtn,
-                opacity: topUpDisabled ? 0.5 : 1,
-                cursor: topUpDisabled ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {paying
-                ? 'Opening Paystack…'
-                : !hasEmail
-                  ? 'Add email to continue'
-                  : belowMin
-                    ? `Minimum ${fmtShort(MIN_TOPUP)}`
-                    : amountNum
-                      ? `Pay ${fmt(amountNum)} with Paystack`
-                      : 'Enter an amount'}
-            </button>
-
-            <p style={css.paystackNote}>
-              Payments are processed securely by Paystack. You&apos;ll
-              be redirected to complete the payment.
-            </p>
-
-            <button style={css.cancelBtn} onClick={closeTopUp}>
-              Cancel
-            </button>
-          </div>
-        </div>
+        <AddMoneySheet onClose={() => setShowTopUp(false)} />
       )}
     </div>
   );
 }
 
-// ─── Action button helper ────────────────────────────────────────────
 function ActionButton({
   icon,
   label,
@@ -1094,7 +779,6 @@ function ActionButton({
   );
 }
 
-// ─── Keyframes ────────────────────────────────────────────────────────
 const KF = `
   @keyframes spin       { to { transform: rotate(360deg); } }
   @keyframes fadeUp     { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -1103,9 +787,7 @@ const KF = `
   .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 `;
 
-// ─── Responsive CSS ───────────────────────────────────────────────────
 const CSS = `
-  /* Wallet shell: caps content column, centered */
   .wallet-shell {
     width: 100%;
     max-width: 560px;
@@ -1115,25 +797,11 @@ const CSS = `
     flex: 1;
     min-height: 0;
   }
-
-  .wallet-overlay {
-    align-items: flex-end;
-  }
-
   @media (min-width: 1024px) {
-    .wallet-overlay {
-      align-items: center !important;
-      padding: 24px;
-    }
-    .wallet-sheet {
-      border-radius: 24px !important;
-      max-height: 80vh;
-      overflow-y: auto;
-    }
+    .wallet-shell { padding: 0 8px; }
   }
 `;
 
-// ─── Styles ───────────────────────────────────────────────────────────
 const css: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
@@ -1144,8 +812,6 @@ const css: Record<string, React.CSSProperties> = {
     overflowX: 'hidden',
     transition: 'background-color 0.18s ease, color 0.18s ease',
   },
-
-  // ── Hero
   hero: {
     position: 'relative',
     background: 'var(--brand-gradient)',
@@ -1190,7 +856,6 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--brand-on-gradient)',
     letterSpacing: 0.3,
   },
-
   statusChip: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -1211,7 +876,6 @@ const css: Record<string, React.CSSProperties> = {
       'color-mix(in srgb, var(--brand-on-gradient) 90%, transparent)',
     textTransform: 'uppercase',
   },
-
   balanceBlock: {
     display: 'flex',
     flexDirection: 'column',
@@ -1263,7 +927,6 @@ const css: Record<string, React.CSSProperties> = {
     marginTop: 8,
     letterSpacing: 0.2,
   },
-
   insight: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -1293,8 +956,6 @@ const css: Record<string, React.CSSProperties> = {
       'color-mix(in srgb, var(--brand-on-gradient) 35%, transparent)',
     margin: '0 2px',
   },
-
-  // ── Sheet
   sheet: {
     flex: 1,
     backgroundColor: 'var(--bg-secondary)',
@@ -1305,7 +966,6 @@ const css: Record<string, React.CSSProperties> = {
     position: 'relative',
     transition: 'background-color 0.18s ease',
   },
-
   actionsGrid: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1338,60 +998,11 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--text-secondary)',
     letterSpacing: 0.2,
   },
-
   divider: {
     height: 1,
     backgroundColor: 'var(--border-subtle)',
     margin: '20px 0',
   },
-
-  // ── Nudge
-  nudge: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '14px 14px',
-    borderRadius: 14,
-    backgroundColor: 'var(--warning-bg)',
-    border: '1px solid var(--warning-strong)',
-    marginBottom: 20,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    textAlign: 'left',
-    width: '100%',
-  },
-  nudgeIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor:
-      'color-mix(in srgb, var(--warning-fg) 12%, transparent)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  nudgeBody: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    minWidth: 0,
-  },
-  nudgeTitle: {
-    fontSize: 13.5,
-    fontWeight: 700,
-    color: 'var(--warning-fg)',
-    letterSpacing: -0.1,
-  },
-  nudgeSub: {
-    fontSize: 12,
-    color: 'var(--warning-fg)',
-    opacity: 0.85,
-    lineHeight: 1.4,
-  },
-
-  // ── Section header
   secHead: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1414,8 +1025,6 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     padding: 4,
   },
-
-  // ── In-flight list
   inFlightList: {
     display: 'flex',
     flexDirection: 'column',
@@ -1503,8 +1112,6 @@ const css: Record<string, React.CSSProperties> = {
     paddingLeft: 4,
     lineHeight: 1.4,
   },
-
-  // ── Empty states
   empty: {
     display: 'flex',
     flexDirection: 'column',
@@ -1575,8 +1182,6 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     boxShadow: 'var(--shadow-brand)',
   },
-
-  // ── Error state
   errorRoot: {
     display: 'flex',
     flexDirection: 'column',
@@ -1640,163 +1245,6 @@ const css: Record<string, React.CSSProperties> = {
     fontSize: 13.5,
     textDecoration: 'underline',
     textUnderlineOffset: 3,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-
-  // ── Top-up sheet
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'var(--overlay)',
-    backdropFilter: 'blur(6px)',
-    WebkitBackdropFilter: 'blur(6px)',
-    zIndex: 200,
-    display: 'flex',
-    alignItems: 'flex-end',
-  },
-  bottomSheet: {
-    width: '100%',
-    maxWidth: 520,
-    margin: '0 auto',
-    backgroundColor: 'var(--bg-secondary)',
-    color: 'var(--text-primary)',
-    borderRadius: '24px 24px 0 0',
-    padding: '12px 24px calc(32px + env(safe-area-inset-bottom))',
-    boxShadow: 'var(--shadow-lg)',
-    animation: 'sheetUp 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
-    transition: 'background-color 0.18s ease, color 0.18s ease',
-  },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: 'var(--border-default)',
-    borderRadius: 2,
-    margin: '0 auto 20px',
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    margin: '0 0 4px',
-    letterSpacing: -0.3,
-  },
-  modalSub: {
-    fontSize: 13,
-    color: 'var(--text-muted)',
-    margin: '0 0 20px',
-  },
-
-  warnBox: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 10,
-    padding: '12px 14px',
-    borderRadius: 12,
-    backgroundColor: 'var(--warning-bg)',
-    border: '1px solid var(--warning-strong)',
-    marginBottom: 18,
-  },
-  warnText: {
-    flex: 1,
-    fontSize: 12.5,
-    color: 'var(--warning-fg)',
-    lineHeight: 1.5,
-    fontWeight: 500,
-  },
-
-  presets: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 8,
-    marginBottom: 18,
-  },
-  preset: {
-    padding: '12px 8px',
-    borderRadius: 12,
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 700,
-    fontFamily: 'inherit',
-    transition: 'background-color 0.15s, color 0.15s',
-  },
-
-  inputWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    border: '1.5px solid var(--border-default)',
-    borderRadius: 14,
-    padding: '0 16px',
-    marginBottom: 8,
-    backgroundColor: 'var(--bg-tertiary)',
-    transition: 'border-color 0.15s, background-color 0.18s ease',
-  },
-  inputPrefix: {
-    fontSize: 20,
-    fontWeight: 800,
-    color: 'var(--brand-primary)',
-    marginRight: 8,
-  },
-  amtInput: {
-    flex: 1,
-    padding: '16px 0',
-    fontSize: 20,
-    fontWeight: 700,
-    border: 'none',
-    outline: 'none',
-    backgroundColor: 'transparent',
-    color: 'var(--text-primary)',
-    fontFamily: 'inherit',
-    fontVariantNumeric: 'tabular-nums',
-    letterSpacing: -0.3,
-    minWidth: 0,
-  },
-  inlineError: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 5,
-    fontSize: 12,
-    color: 'var(--danger-fg)',
-    fontWeight: 600,
-    marginBottom: 14,
-    paddingLeft: 4,
-  },
-
-  payBtn: {
-    width: '100%',
-    padding: 16,
-    marginTop: 8,
-    background: 'var(--brand-gradient)',
-    color: 'var(--brand-on-gradient)',
-    border: 'none',
-    borderRadius: 14,
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    letterSpacing: 0.2,
-    boxShadow: 'var(--shadow-brand)',
-    transition: 'opacity 0.15s, transform 0.15s',
-  },
-  paystackNote: {
-    fontSize: 11.5,
-    color: 'var(--text-muted)',
-    textAlign: 'center',
-    lineHeight: 1.5,
-    margin: '14px 0 8px',
-    paddingLeft: 8,
-    paddingRight: 8,
-  },
-  cancelBtn: {
-    width: '100%',
-    padding: 14,
-    backgroundColor: 'transparent',
-    color: 'var(--text-muted)',
-    border: 'none',
-    borderRadius: 14,
-    fontSize: 14,
-    fontWeight: 600,
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
