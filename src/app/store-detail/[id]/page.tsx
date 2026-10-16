@@ -37,6 +37,7 @@ interface Store {
   verification_status?: string;
   owner_id?: string;
   created_at?: string;
+  patronizer_count?: number;
   [key: string]: unknown;
 }
 
@@ -217,6 +218,7 @@ export default function StoreDetailPage() {
 
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
+  const [patronizerCount, setPatronizerCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -247,6 +249,11 @@ export default function StoreDetailPage() {
         if (cancelled) return;
 
         setStore(storeData);
+        setPatronizerCount(
+          Number(
+            (storeData as Record<string, unknown>).patronizer_count,
+          ) || 0,
+        );
         setIsFollowing(Boolean(followData?.is_following));
         setFollowersCount(Number(followData?.followers_count) || 0);
 
@@ -338,7 +345,6 @@ export default function StoreDetailPage() {
 
     const prevFollowing = isFollowing;
     const prevCount = followersCount;
-    // Optimistic
     setIsFollowing(!prevFollowing);
     setFollowersCount(prevCount + (prevFollowing ? -1 : 1));
 
@@ -349,7 +355,6 @@ export default function StoreDetailPage() {
       setIsFollowing(Boolean(res?.is_following ?? !prevFollowing));
       setFollowersCount(Number(res?.followers_count ?? 0));
     } catch (err) {
-      // Roll back
       setIsFollowing(prevFollowing);
       setFollowersCount(prevCount);
       alert('Error: ' + (err instanceof Error ? err.message : ''));
@@ -400,7 +405,6 @@ export default function StoreDetailPage() {
     <main className="sp-page">
       <style>{CSS}</style>
 
-      {/* ── Top bar ──────────────────────────────────────── */}
       <header className="sp-topbar">
         <div className="sp-topbarInner">
           <button
@@ -455,7 +459,6 @@ export default function StoreDetailPage() {
       </header>
 
       <div className="sp-shell">
-        {/* ═══ LEFT COLUMN ═══════════════════════════════════ */}
         <aside className="sp-left">
           <div className="sp-profileCard">
             <div className="sp-banner">
@@ -593,6 +596,10 @@ export default function StoreDetailPage() {
                 <span className="sp-statLabel">Items</span>
               </button>
               <div className="sp-stat sp-statStatic">
+                <span className="sp-statNum">{patronizerCount}</span>
+                <span className="sp-statLabel">Patronizers</span>
+              </div>
+              <div className="sp-stat sp-statStatic">
                 <span className="sp-statNum">{followersCount}</span>
                 <span className="sp-statLabel">Followers</span>
               </div>
@@ -600,7 +607,6 @@ export default function StoreDetailPage() {
           </div>
         </aside>
 
-        {/* ═══ RIGHT COLUMN ══════════════════════════════════ */}
         <section className="sp-right">
           <nav className="sp-tabs" role="tablist">
             <button
@@ -705,6 +711,10 @@ export default function StoreDetailPage() {
                 <div className="sp-aboutRow">
                   <span className="sp-aboutLabel">Handle</span>
                   <span className="sp-aboutValue">@{handle}</span>
+                </div>
+                <div className="sp-aboutRow">
+                  <span className="sp-aboutLabel">Patronizers</span>
+                  <span className="sp-aboutValue">{patronizerCount}</span>
                 </div>
                 <div className="sp-aboutRow">
                   <span className="sp-aboutLabel">Followers</span>
