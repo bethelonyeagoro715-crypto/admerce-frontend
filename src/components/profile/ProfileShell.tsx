@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api, { extractErrorDetail } from '../../services/api';
 import { clear as clearLocalStorage } from '../../services/localStorage';
@@ -18,7 +18,6 @@ import {
   MdChevronRight,
   MdFavoriteBorder,
   MdSearch,
-  MdShoppingBag,
   MdAccountBalanceWallet,
   MdLocationOn,
   MdErrorOutline,
@@ -29,19 +28,14 @@ import {
   MdLogout,
   MdStorefront,
   MdInventory2,
-  MdVisibility,
   MdEventAvailable,
   MdStar,
   MdBuild,
   MdTrendingUp,
-  MdPersonAdd,
-  MdCheckCircle,
   MdAdd,
   MdImage,
   MdGridOn,
   MdInfoOutline,
-  MdDeleteOutline,
-  MdAccessTime,
 } from 'react-icons/md';
 
 export type ProfileRole = 'shopper' | 'storekeeper' | 'service_provider';
@@ -91,13 +85,6 @@ interface ProviderStats extends BaseStats {
 }
 
 type Stats = ShopperStats | StorekeeperStats | ProviderStats;
-
-interface StatTile {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  onClick: () => void;
-}
 
 interface ActivityRow {
   icon: React.ReactNode;
@@ -149,14 +136,14 @@ const HIGHLIGHT_PRESETS: Array<{
   label: string;
   route: string;
 }> = [
-  { emoji: '🔖', label: 'Saved',    route: '/shopper/saved?tab=Items' },
-  { emoji: '📦', label: 'Orders',   route: '/shopper/saved?tab=History' },
-  { emoji: '🔍', label: 'Wanted',   route: '/shopper/saved?tab=Wanted' },
-  { emoji: '🧺', label: 'Basket',   route: '/basket' },
-  { emoji: '💬', label: 'Community',route: '/community' },
-  { emoji: '💰', label: 'Wallet',   route: '/shopper/wallet' },
-  { emoji: '🏪', label: 'Store',    route: '/storekeeper/store' },
-  { emoji: '🛠️', label: 'Services', route: '/service-provider/services' },
+  { emoji: '🔖', label: 'Saved',     route: '/shopper/saved?tab=Items' },
+  { emoji: '📦', label: 'Orders',    route: '/shopper/saved?tab=History' },
+  { emoji: '🔍', label: 'Wanted',    route: '/shopper/saved?tab=Wanted' },
+  { emoji: '🧺', label: 'Basket',    route: '/basket' },
+  { emoji: '💬', label: 'Community', route: '/community' },
+  { emoji: '💰', label: 'Wallet',    route: '/shopper/wallet' },
+  { emoji: '🏪', label: 'Store',     route: '/storekeeper/store' },
+  { emoji: '🛠️', label: 'Services',  route: '/service-provider/services' },
 ];
 
 function resolveImageUrl(url: string | null | undefined): string | null {
@@ -204,14 +191,6 @@ function fmtBalance(v: number): string {
   return `₦${Math.round(v).toLocaleString('en-NG')}`;
 }
 
-function fmtCompact(v: number): string {
-  if (!Number.isFinite(v) || v <= 0) return '0';
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 10_000) return `${Math.round(v / 1000)}K`;
-  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
-  return String(Math.round(v));
-}
-
 function fmtPrice(raw: unknown): string {
   const n = Number(raw ?? 0);
   if (!Number.isFinite(n) || n <= 0) return 'Free';
@@ -235,7 +214,6 @@ function displayName(p: Profile | null): string {
 function buildBio(p: Profile | null, role: ProfileRole): string {
   if (!p) return '';
   if (p.bio && String(p.bio).trim()) return String(p.bio).trim();
-
   const parts: string[] = [];
   if (role === 'storekeeper') {
     parts.push('🏪 Storekeeper on Admerce');
@@ -292,14 +270,12 @@ async function loadStorekeeperStats(): Promise<StorekeeperStats> {
   } catch {
     storeId = null;
   }
-
   const [items, orders, stats, balance] = await Promise.allSettled([
     storeId ? api.getStoreItems(storeId) : Promise.resolve([]),
     storeId ? api.getStoreOrders(storeId) : Promise.resolve([]),
     storeId ? api.getStoreStats() : Promise.resolve({}),
     api.getWalletBalance(),
   ]);
-
   return {
     storeId,
     listingsCount:
@@ -391,7 +367,6 @@ async function loadContentItems(
           routeTo: `/service-detail/${r.service_id}`,
         }));
     }
-    // shopper: saved listings
     const rows = (await api.getSavedItems()) as Array<Record<string, unknown>>;
     return rows
       .filter((r) => r?.listing_id)
@@ -408,6 +383,11 @@ async function loadContentItems(
   }
 }
 
+/**
+ * Role-aware stat trio. Followers count is only meaningful for public
+ * profiles — storekeeper and service_provider. Shoppers get their
+ * own activity stats instead.
+ */
 function statTrio(
   role: ProfileRole,
   stats: Stats | null,
@@ -421,9 +401,9 @@ function statTrio(
       walletBalance: 0,
     };
     return [
-      { value: String(s.savedCount), label: 'Saved', onClick: () => {} },
+      { value: String(s.savedCount),  label: 'Saved',  onClick: () => {} },
       { value: String(s.wantedCount), label: 'Wanted', onClick: () => {} },
-      { value: String(followersCount), label: 'Followers', onClick: () => {} },
+      { value: String(s.ordersCount), label: 'Orders', onClick: () => {} },
     ];
   }
   if (role === 'storekeeper') {
@@ -435,9 +415,9 @@ function statTrio(
       walletBalance: 0,
     };
     return [
-      { value: String(s.listingsCount), label: 'Listings', onClick: () => {} },
-      { value: String(s.ordersCount), label: 'Orders', onClick: () => {} },
-      { value: String(followersCount), label: 'Followers', onClick: () => {} },
+      { value: String(s.listingsCount), label: 'Listings',  onClick: () => {} },
+      { value: String(s.ordersCount),   label: 'Orders',    onClick: () => {} },
+      { value: String(followersCount),  label: 'Followers', onClick: () => {} },
     ];
   }
   const s = (stats as ProviderStats | null) ?? {
@@ -447,9 +427,9 @@ function statTrio(
     walletBalance: 0,
   };
   return [
-    { value: String(s.servicesCount), label: 'Services', onClick: () => {} },
-    { value: String(s.bookingsCount), label: 'Bookings', onClick: () => {} },
-    { value: String(followersCount), label: 'Followers', onClick: () => {} },
+    { value: String(s.servicesCount), label: 'Services',  onClick: () => {} },
+    { value: String(s.bookingsCount), label: 'Bookings',  onClick: () => {} },
+    { value: String(followersCount),  label: 'Followers', onClick: () => {} },
   ];
 }
 
@@ -496,10 +476,14 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         if (seq !== reqSeq.current || !isMountedRef.current) return;
         setProfile(profileData);
 
+        // Followers only matter for public profiles. Shopper skips the call.
+        const wantsFollowers =
+          role === 'storekeeper' || role === 'service_provider';
+
         const [roleStats, hi, follow] = await Promise.all([
           LOADERS[role](),
           api.getMyHighlights().catch(() => [] as Highlight[]),
-          profileData.id
+          wantsFollowers && profileData.id
             ? api
                 .getUserFollowStatus(profileData.id)
                 .catch(() => ({
@@ -563,9 +547,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
     setAvatarPreview(null);
   };
 
-  const handleAvatarChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setAvatarFile(file);
@@ -637,15 +619,13 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
 
   if (loading) {
     return (
-      <main style={css.root}>
+      <main style={css.root} className="ps-root">
         <style>{KF}</style>
         <style>{CSS}</style>
         <div className="ps-shell">
-          <div style={css.hero}>
-            <div style={css.topBar}>
-              <span style={css.topTitle}>Profile</span>
-              <div style={{ width: 38 }} />
-            </div>
+          <div className="ps-topbar">
+            <span className="ps-topbar-title">Profile</span>
+            <div style={{ width: 38 }} />
           </div>
         </div>
       </main>
@@ -660,9 +640,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         <div style={css.errorHalo}>
           <MdErrorOutline size={40} color="var(--danger-fg)" />
         </div>
-        <h2 style={css.errorHeading}>
-          Couldn&apos;t load your profile
-        </h2>
+        <h2 style={css.errorHeading}>Couldn&apos;t load your profile</h2>
         <p style={css.errorBody}>
           Check your connection and try again. If this keeps happening,
           sign out and back in.
@@ -695,403 +673,393 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
   const activity = buildActivityRows(role, stats);
 
   return (
-    <main style={css.root}>
+    <main style={css.root} className="ps-root">
       <style>{KF}</style>
       <style>{CSS}</style>
 
       <div className="ps-shell">
-        <div style={css.hero}>
-          <div style={css.heroGlow} aria-hidden />
-
-          <div style={css.topBar}>
-            <span style={css.topTitle}>Profile</span>
-            <button
-              onClick={() => router.push(`/settings/${roleSlug}`)}
-              style={css.ghostBtn}
-              aria-label="Settings"
-            >
-              <MdSettings size={22} color="var(--brand-on-gradient)" />
-            </button>
-          </div>
-
-          <div style={css.identityRow}>
-            <div style={css.avatarRingWrap}>
-              <button
-                type="button"
-                onClick={openAvatarModal}
-                style={css.avatarWrap}
-                aria-label="Change profile photo"
-              >
-                {avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarUrl} alt="" style={css.avatarImg} />
-                ) : (
-                  <div style={css.avatarFallback}>{initial}</div>
-                )}
-              </button>
-              <span style={css.cameraBadge} aria-hidden>
-                <MdCameraAlt size={12} color="var(--brand-primary)" />
-              </span>
-            </div>
-
-            <div style={css.statsRow}>
-              {trio.map((s, i) => (
-                <button
-                  key={i}
-                  onClick={s.onClick}
-                  style={css.statItem}
-                  className="ps-stat-item"
-                >
-                  <span style={css.statValue}>{s.value}</span>
-                  <span style={css.statLabel}>{s.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={css.nameBlock}>
-            <div style={css.nameRow}>
-              <h1 style={css.name}>{name}</h1>
-              {isVerified && (
-                <MdVerified
-                  size={16}
-                  color="#A7F3D0"
-                  aria-label="Verified"
-                />
-              )}
-            </div>
-
-            <div style={css.roleRow}>
-              <span style={css.rolePill}>
-                {ROLE_EMOJI[role]} {ROLE_LABEL[role]}
-              </span>
-              {memberSince && (
-                <>
-                  <span style={css.metaDot}>·</span>
-                  <span style={css.metaText}>Since {memberSince}</span>
-                </>
-              )}
-            </div>
-
-            {bio && <p style={css.bio}>{bio}</p>}
-
-            {(email || phone) && (
-              <div style={css.contactRow}>
-                {phone && (
-                  <span style={css.contactItem}>
-                    <MdPhone
-                      size={11}
-                      color="color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)"
-                    />
-                    <span>{phone}</span>
-                  </span>
-                )}
-                {email && (
-                  <span style={css.contactItem}>
-                    <MdEmail
-                      size={11}
-                      color="color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)"
-                    />
-                    <span>{email}</span>
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div style={css.actionsRow}>
-            <button
-              type="button"
-              onClick={() => router.push(`/${roleSlug}/wallet`)}
-              style={css.messageBtn}
-              className="ps-action"
-            >
-              <MdAccountBalanceWallet
-                size={16}
-                color="var(--brand-on-gradient)"
-              />
-              <span>Wallet</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push(`/${roleSlug}/profile/edit`)}
-              style={css.editBtn}
-              className="ps-action"
-            >
-              <MdEdit size={16} color="var(--brand-on-gradient)" />
-              <span>Edit profile</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ── Highlights strip ─────────────────────────────── */}
-        <div style={css.highlightsSection}>
-          <div style={css.highlightsScroll} className="ps-highlights">
-            <button
-              type="button"
-              onClick={() => setShowHighlightModal(true)}
-              style={css.highlightChip}
-              className="ps-highlight"
-              aria-label="Add highlight"
-            >
-              <span style={css.highlightAddIcon}>
-                <MdAdd size={20} color="var(--brand-primary)" />
-              </span>
-              <span style={css.highlightLabel}>New</span>
-            </button>
-
-            {highlights.map((h) => (
-              <div
-                key={h.id}
-                style={css.highlightChipWrap}
-              >
-                <button
-                  type="button"
-                  onClick={() => router.push(h.route)}
-                  style={css.highlightChip}
-                  className="ps-highlight"
-                  aria-label={h.label}
-                >
-                  <span style={css.highlightRing}>
-                    <span style={css.highlightEmoji}>{h.emoji}</span>
-                  </span>
-                  <span style={css.highlightLabel}>{h.label}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeHighlight(h.id)}
-                  style={css.highlightDelete}
-                  aria-label={`Remove ${h.label}`}
-                  className="ps-highlight-del"
-                >
-                  <MdClose size={11} color="#fff" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Tabs ─────────────────────────────────────────── */}
-        <div style={css.tabBar}>
+        {/* ═══ TOP BAR ═════════════════════════════════════════ */}
+        <header className="ps-topbar">
+          <span className="ps-topbar-title">Profile</span>
           <button
-            type="button"
-            onClick={() => setTab('content')}
-            style={{
-              ...css.tabBtn,
-              color:
-                tab === 'content'
-                  ? 'var(--brand-primary)'
-                  : 'var(--text-muted)',
-              borderBottomColor:
-                tab === 'content'
-                  ? 'var(--brand-primary)'
-                  : 'transparent',
-            }}
+            onClick={() => router.push(`/settings/${roleSlug}`)}
+            style={css.ghostBtn}
+            aria-label="Settings"
           >
-            <MdGridOn size={18} />
-            <span>Content</span>
+            <MdSettings size={22} color="var(--brand-on-gradient)" />
           </button>
-          <button
-            type="button"
-            onClick={() => setTab('about')}
-            style={{
-              ...css.tabBtn,
-              color:
-                tab === 'about'
-                  ? 'var(--brand-primary)'
-                  : 'var(--text-muted)',
-              borderBottomColor:
-                tab === 'about'
-                  ? 'var(--brand-primary)'
-                  : 'transparent',
-            }}
-          >
-            <MdInfoOutline size={18} />
-            <span>About</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('wallet')}
-            style={{
-              ...css.tabBtn,
-              color:
-                tab === 'wallet'
-                  ? 'var(--brand-primary)'
-                  : 'var(--text-muted)',
-              borderBottomColor:
-                tab === 'wallet'
-                  ? 'var(--brand-primary)'
-                  : 'transparent',
-            }}
-          >
-            <MdAccountBalanceWallet size={18} />
-            <span>Wallet</span>
-          </button>
-        </div>
+        </header>
 
-        <div style={css.tabContent}>
-          {tab === 'content' && (
-            <>
-              {contentItems.length === 0 ? (
-                <div style={css.empty}>
-                  <div style={css.emptyIcon}>
-                    <MdStorefront
-                      size={28}
-                      color="var(--brand-primary)"
-                    />
-                  </div>
-                  <h3 style={css.emptyTitle}>Nothing here yet</h3>
-                  <p style={css.emptyBody}>
-                    {role === 'shopper'
-                      ? 'Save items you love and they will show up here.'
-                      : role === 'storekeeper'
-                        ? 'Add your first listing to start selling.'
-                        : 'Add your first service to start earning.'}
-                  </p>
+        <div className="ps-body">
+          {/* ═══ LEFT COLUMN ════════════════════════════════════ */}
+          <aside className="ps-left">
+            <div className="ps-hero">
+              <div style={css.heroGlow} aria-hidden />
+
+              <div style={css.identityRow}>
+                <div style={css.avatarRingWrap}>
+                  <button
+                    type="button"
+                    onClick={openAvatarModal}
+                    style={css.avatarWrap}
+                    aria-label="Change profile photo"
+                  >
+                    {avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={avatarUrl} alt="" style={css.avatarImg} />
+                    ) : (
+                      <div style={css.avatarFallback}>{initial}</div>
+                    )}
+                  </button>
+                  <span style={css.cameraBadge} aria-hidden>
+                    <MdCameraAlt size={12} color="var(--brand-primary)" />
+                  </span>
                 </div>
-              ) : (
-                <div className="ps-grid">
-                  {contentItems.map((it) => (
+
+                <div style={css.statsRow}>
+                  {trio.map((s, i) => (
                     <button
-                      key={`${it.kind}-${it.id}`}
-                      type="button"
-                      className="ps-grid-cell"
-                      onClick={() => router.push(it.routeTo)}
-                      aria-label={it.title}
+                      key={i}
+                      onClick={s.onClick}
+                      style={css.statItem}
+                      className="ps-stat-item"
                     >
-                      {it.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={it.imageUrl}
-                          alt=""
-                          loading="lazy"
-                          className="ps-grid-img"
-                        />
-                      ) : (
-                        <div className="ps-grid-fallback">
-                          <MdImage
-                            size={28}
-                            color="var(--text-muted)"
-                          />
-                        </div>
-                      )}
-                      <div className="ps-grid-overlay">
-                        <span className="ps-grid-price">
-                          {it.price || '—'}
-                        </span>
-                      </div>
-                      <div className="ps-grid-meta">
-                        <div className="ps-grid-title">{it.title}</div>
-                      </div>
+                      <span style={css.statValue}>{s.value}</span>
+                      <span style={css.statLabel}>{s.label}</span>
                     </button>
                   ))}
                 </div>
-              )}
-            </>
-          )}
+              </div>
 
-          {tab === 'about' && (
-            <>
-              <h3 style={css.sectionLabel}>Details</h3>
-              <div style={css.section}>
-                {activity.map((row, i) => (
-                  <Row key={i} {...row} />
+              <div style={css.nameBlock}>
+                <div style={css.nameRow}>
+                  <h1 style={css.name}>{name}</h1>
+                  {isVerified && (
+                    <MdVerified
+                      size={16}
+                      color="#A7F3D0"
+                      aria-label="Verified"
+                    />
+                  )}
+                </div>
+
+                <div style={css.roleRow}>
+                  <span style={css.rolePill}>
+                    {ROLE_EMOJI[role]} {ROLE_LABEL[role]}
+                  </span>
+                  {memberSince && (
+                    <>
+                      <span style={css.metaDot}>·</span>
+                      <span style={css.metaText}>Since {memberSince}</span>
+                    </>
+                  )}
+                </div>
+
+                {bio && <p style={css.bio}>{bio}</p>}
+
+                {(email || phone) && (
+                  <div style={css.contactRow}>
+                    {phone && (
+                      <span style={css.contactItem}>
+                        <MdPhone
+                          size={11}
+                          color="color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)"
+                        />
+                        <span>{phone}</span>
+                      </span>
+                    )}
+                    {email && (
+                      <span style={css.contactItem}>
+                        <MdEmail
+                          size={11}
+                          color="color-mix(in srgb, var(--brand-on-gradient) 70%, transparent)"
+                        />
+                        <span>{email}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div style={css.actionsRow}>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/${roleSlug}/wallet`)}
+                  style={css.messageBtn}
+                  className="ps-action"
+                >
+                  <MdAccountBalanceWallet
+                    size={16}
+                    color="var(--brand-on-gradient)"
+                  />
+                  <span>Wallet</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/${roleSlug}/profile/edit`)}
+                  style={css.editBtn}
+                  className="ps-action"
+                >
+                  <MdEdit size={16} color="var(--brand-on-gradient)" />
+                  <span>Edit profile</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Highlights */}
+            <div className="ps-highlights-block">
+              <div className="ps-highlights">
+                <button
+                  type="button"
+                  onClick={() => setShowHighlightModal(true)}
+                  style={css.highlightChip}
+                  className="ps-highlight"
+                  aria-label="Add highlight"
+                >
+                  <span style={css.highlightAddIcon}>
+                    <MdAdd size={20} color="var(--brand-primary)" />
+                  </span>
+                  <span style={css.highlightLabel}>New</span>
+                </button>
+
+                {highlights.map((h) => (
+                  <div key={h.id} style={css.highlightChipWrap}>
+                    <button
+                      type="button"
+                      onClick={() => router.push(h.route)}
+                      style={css.highlightChip}
+                      className="ps-highlight"
+                      aria-label={h.label}
+                    >
+                      <span style={css.highlightRing}>
+                        <span style={css.highlightEmoji}>{h.emoji}</span>
+                      </span>
+                      <span style={css.highlightLabel}>{h.label}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeHighlight(h.id)}
+                      style={css.highlightDelete}
+                      aria-label={`Remove ${h.label}`}
+                      className="ps-highlight-del"
+                    >
+                      <MdClose size={11} color="#fff" />
+                    </button>
+                  </div>
                 ))}
               </div>
+            </div>
+          </aside>
 
-              <h3 style={css.sectionLabel}>Account</h3>
-              <div style={css.section}>
-                <Row
-                  icon={
-                    <MdSwapHoriz
-                      size={18}
-                      color="var(--success-fg)"
-                    />
-                  }
-                  iconBg="var(--success-bg)"
-                  label="Switch role"
-                  subtitle={ROLE_LABEL[role]}
-                  onClick={() =>
-                    router.push('/onboarding?mode=switch')
-                  }
-                />
-              </div>
-            </>
-          )}
+          {/* ═══ RIGHT COLUMN ══════════════════════════════════ */}
+          <section className="ps-right">
+            <div style={css.tabBar} className="ps-tabbar">
+              <button
+                type="button"
+                onClick={() => setTab('content')}
+                className="ps-tab"
+                style={{
+                  ...css.tabBtn,
+                  color:
+                    tab === 'content'
+                      ? 'var(--brand-primary)'
+                      : 'var(--text-muted)',
+                  borderBottomColor:
+                    tab === 'content'
+                      ? 'var(--brand-primary)'
+                      : 'transparent',
+                }}
+              >
+                <MdGridOn size={18} />
+                <span>Content</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('about')}
+                className="ps-tab"
+                style={{
+                  ...css.tabBtn,
+                  color:
+                    tab === 'about'
+                      ? 'var(--brand-primary)'
+                      : 'var(--text-muted)',
+                  borderBottomColor:
+                    tab === 'about'
+                      ? 'var(--brand-primary)'
+                      : 'transparent',
+                }}
+              >
+                <MdInfoOutline size={18} />
+                <span>About</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('wallet')}
+                className="ps-tab"
+                style={{
+                  ...css.tabBtn,
+                  color:
+                    tab === 'wallet'
+                      ? 'var(--brand-primary)'
+                      : 'var(--text-muted)',
+                  borderBottomColor:
+                    tab === 'wallet'
+                      ? 'var(--brand-primary)'
+                      : 'transparent',
+                }}
+              >
+                <MdAccountBalanceWallet size={18} />
+                <span>Wallet</span>
+              </button>
+            </div>
 
-          {tab === 'wallet' && (
-            <>
-              <div style={css.walletCard}>
-                <div style={css.walletTop}>
-                  <div style={css.walletLabelRow}>
-                    <MdAccountBalanceWallet
-                      size={16}
-                      color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)"
-                    />
-                    <span style={css.walletLabel}>{walletTitle}</span>
-                  </div>
-                  <div style={css.walletBalance}>
-                    {fmtBalance(stats?.walletBalance ?? 0)}
-                  </div>
-                  <div style={css.walletFootnote}>
-                    Funds held securely in escrow by our licensed
-                    partner.
-                  </div>
-                </div>
-                <div style={css.walletActions}>
-                  {role === 'shopper' ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        router.push(`/${roleSlug}/wallet`)
-                      }
-                      style={css.walletPrimary}
-                      className="ps-action"
-                    >
-                      <span>Add money</span>
-                    </button>
+            <div style={css.tabContent} className="ps-tabcontent">
+              {tab === 'content' && (
+                <>
+                  {contentItems.length === 0 ? (
+                    <div style={css.empty}>
+                      <div style={css.emptyIcon}>
+                        <MdStorefront
+                          size={28}
+                          color="var(--brand-primary)"
+                        />
+                      </div>
+                      <h3 style={css.emptyTitle}>Nothing here yet</h3>
+                      <p style={css.emptyBody}>
+                        {role === 'shopper'
+                          ? 'Save items you love and they will show up here.'
+                          : role === 'storekeeper'
+                            ? 'Add your first listing to start selling.'
+                            : 'Add your first service to start earning.'}
+                      </p>
+                    </div>
                   ) : (
+                    <div className="ps-grid">
+                      {contentItems.map((it) => (
+                        <button
+                          key={`${it.kind}-${it.id}`}
+                          type="button"
+                          className="ps-grid-cell"
+                          onClick={() => router.push(it.routeTo)}
+                          aria-label={it.title}
+                        >
+                          {it.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={it.imageUrl}
+                              alt=""
+                              loading="lazy"
+                              className="ps-grid-img"
+                            />
+                          ) : (
+                            <div className="ps-grid-fallback">
+                              <MdImage
+                                size={28}
+                                color="var(--text-muted)"
+                              />
+                            </div>
+                          )}
+                          <div className="ps-grid-overlay">
+                            <span className="ps-grid-price">
+                              {it.price || '—'}
+                            </span>
+                          </div>
+                          <div className="ps-grid-meta">
+                            <div className="ps-grid-title">{it.title}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {tab === 'about' && (
+                <>
+                  <h3 style={css.sectionLabel}>Details</h3>
+                  <div style={css.section}>
+                    {activity.map((row, i) => (
+                      <Row key={i} {...row} />
+                    ))}
+                  </div>
+
+                  <h3 style={css.sectionLabel}>Account</h3>
+                  <div style={css.section}>
+                    <Row
+                      icon={
+                        <MdSwapHoriz
+                          size={18}
+                          color="var(--success-fg)"
+                        />
+                      }
+                      iconBg="var(--success-bg)"
+                      label="Switch role"
+                      subtitle={ROLE_LABEL[role]}
+                      onClick={() =>
+                        router.push('/onboarding?mode=switch')
+                      }
+                    />
+                  </div>
+                </>
+              )}
+
+              {tab === 'wallet' && (
+                <div style={css.walletCard}>
+                  <div style={css.walletTop}>
+                    <div style={css.walletLabelRow}>
+                      <MdAccountBalanceWallet
+                        size={16}
+                        color="color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)"
+                      />
+                      <span style={css.walletLabel}>{walletTitle}</span>
+                    </div>
+                    <div style={css.walletBalance}>
+                      {fmtBalance(stats?.walletBalance ?? 0)}
+                    </div>
+                    <div style={css.walletFootnote}>
+                      Funds held securely in escrow by our licensed
+                      partner.
+                    </div>
+                  </div>
+                  <div style={css.walletActions}>
                     <button
                       type="button"
-                      onClick={() =>
-                        router.push(`/${roleSlug}/wallet`)
-                      }
+                      onClick={() => router.push(`/${roleSlug}/wallet`)}
                       style={css.walletPrimary}
                       className="ps-action"
                     >
-                      <span>Withdraw</span>
+                      <span>
+                        {role === 'shopper' ? 'Add money' : 'Withdraw'}
+                      </span>
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      router.push(`/${roleSlug}/wallet`)
-                    }
-                    style={css.walletSecondary}
-                    className="ps-action"
-                  >
-                    <span>View wallet</span>
-                    <MdArrowForward
-                      size={16}
-                      color="var(--brand-on-gradient)"
-                    />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/${roleSlug}/wallet`)}
+                      style={css.walletSecondary}
+                      className="ps-action"
+                    >
+                      <span>View wallet</span>
+                      <MdArrowForward
+                        size={16}
+                        color="var(--brand-on-gradient)"
+                      />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              )}
+            </div>
+          </section>
+        </div>
 
-          <div style={css.logoutWrap}>
-            <button
-              onClick={handleLogout}
-              style={css.logoutBtn}
-              className="ps-logout"
-            >
-              <MdLogout size={20} color="var(--danger-fg)" />
-              <span>Log Out</span>
-            </button>
-          </div>
+        <div className="ps-footer">
+          <button
+            onClick={handleLogout}
+            style={css.logoutBtn}
+            className="ps-logout"
+          >
+            <MdLogout size={20} color="var(--danger-fg)" />
+            <span>Log Out</span>
+          </button>
         </div>
       </div>
 
@@ -1385,28 +1353,64 @@ function Row({
   );
 }
 
+/* ─── Layout CSS (media queries) ──────────────────────────────── */
 const CSS = `
+  .ps-root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    transition: background-color 0.18s ease, color 0.18s ease;
+  }
+
   .ps-shell {
+    display: flex;
+    flex-direction: column;
     width: 100%;
-    max-width: 560px;
     margin: 0 auto;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Top bar — full-bleed gradient on mobile */
+  .ps-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 12px;
+    background: var(--brand-gradient);
+    transition: background 0.18s ease;
+  }
+  .ps-topbar-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--brand-on-gradient);
+    letter-spacing: 0.3px;
+  }
+
+  .ps-body {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
   }
-  .ps-stat-item:hover { opacity: 0.85; }
-  .ps-stat-item:active { transform: scale(0.97); }
-  .ps-action:active { transform: scale(0.97); }
-  .ps-action:hover { opacity: 0.94; }
-  .ps-row:hover { background-color: var(--bg-hover); }
-  .ps-logout:hover { background-color: var(--danger-bg); }
-  .ps-logout:active { transform: scale(0.99); }
-  .ps-highlight:active { transform: scale(0.95); }
-  .ps-highlight:hover { opacity: 0.92; }
-  .ps-highlight-del:hover { opacity: 1; }
+  .ps-left {
+    display: flex;
+    flex-direction: column;
+  }
+  .ps-right {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
 
-  /* Highlights horizontal scroll */
+  /* Highlights strip — horizontal scroll */
+  .ps-highlights-block {
+    padding-top: 18px;
+    padding-bottom: 4px;
+  }
   .ps-highlights {
     display: flex;
     gap: 14px;
@@ -1417,10 +1421,10 @@ const CSS = `
   }
   .ps-highlights::-webkit-scrollbar { display: none; }
 
-  /* Content grid */
+  /* Content grid — responsive via container */
   .ps-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 3px;
   }
   .ps-grid-cell {
@@ -1489,21 +1493,121 @@ const CSS = `
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
   }
 
-  @media (min-width: 720px) {
-    .ps-grid { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  /* Rounded corners on the hero — only on desktop */
+  .ps-hero {
+    position: relative;
+    background: var(--brand-gradient);
+    padding: 0 20px 22px;
+    overflow: hidden;
+    transition: background 0.18s ease;
   }
 
+  /* Tab content padding */
+  .ps-tabcontent {
+    padding: 16px 16px 40px;
+  }
+
+  /* Footer */
+  .ps-footer {
+    padding: 8px 20px 40px;
+  }
+
+  /* ─── Micro-interactions ─────────────────────────────── */
+  .ps-stat-item:hover { opacity: 0.85; }
+  .ps-stat-item:active { transform: scale(0.97); }
+  .ps-action:active { transform: scale(0.97); }
+  .ps-action:hover { opacity: 0.94; }
+  .ps-row:hover { background-color: var(--bg-hover); }
+  .ps-logout:hover { background-color: var(--danger-bg); }
+  .ps-logout:active { transform: scale(0.99); }
+  .ps-highlight:active { transform: scale(0.95); }
+  .ps-highlight:hover { opacity: 0.92; }
+  .ps-highlight-del:hover { opacity: 1; }
+  .ps-tab:hover { color: var(--text-primary) !important; }
+
+  /* ═══════════════════════════════════════════════════════════
+     Desktop: two-column layout
+     ═══════════════════════════════════════════════════════════ */
   @media (min-width: 1024px) {
-    .ps-modal-overlay {
-      align-items: center !important;
-      padding: 24px;
+    .ps-shell {
+      max-width: 1180px;
+      padding: 24px 32px 48px;
+      gap: 24px;
     }
-    .ps-modal-card {
-      border-radius: 24px !important;
-      max-height: 80vh;
-      overflow-y: auto;
+    .ps-topbar {
+      background: transparent;
+      padding: 0 0 8px;
+      border-bottom: none;
     }
-    .ps-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .ps-topbar-title {
+      color: var(--text-primary);
+      font-size: 24px;
+      font-weight: 850;
+      letter-spacing: -0.03em;
+    }
+    .ps-body {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 28px;
+      align-items: flex-start;
+    }
+    .ps-left {
+      position: sticky;
+      top: 16px;
+      gap: 20px;
+    }
+    .ps-hero {
+      border-radius: 22px;
+      padding: 24px 22px 22px;
+      box-shadow: var(--shadow-sm);
+    }
+    .ps-highlights-block {
+      padding: 0;
+      border-radius: 22px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      padding: 18px 4px 16px;
+    }
+    .ps-highlights {
+      padding: 0 14px;
+    }
+    .ps-right {
+      gap: 0;
+      border-radius: 22px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      overflow: hidden;
+      min-width: 0;
+    }
+    .ps-tabbar {
+      padding: 4px 8px 0;
+      border-bottom: 1px solid var(--border-default);
+    }
+    .ps-tab {
+      padding: 16px 12px;
+      font-size: 12.5px;
+    }
+    .ps-tabcontent {
+      padding: 20px 16px 24px;
+    }
+    .ps-grid {
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+    }
+    .ps-footer {
+      padding: 0;
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .ps-shell {
+      max-width: 1280px;
+    }
+    .ps-body {
+      grid-template-columns: 400px 1fr;
+      gap: 36px;
+    }
   }
 `;
 
@@ -1522,13 +1626,6 @@ const css: Record<string, React.CSSProperties> = {
     overflowX: 'hidden',
     transition: 'background-color 0.18s ease, color 0.18s ease',
   },
-  hero: {
-    position: 'relative',
-    background: 'var(--brand-gradient)',
-    padding: '0 20px 22px',
-    overflow: 'hidden',
-    transition: 'background 0.18s ease',
-  },
   heroGlow: {
     position: 'absolute',
     top: -100,
@@ -1539,19 +1636,6 @@ const css: Record<string, React.CSSProperties> = {
     background:
       'radial-gradient(circle, color-mix(in srgb, var(--brand-on-gradient) 22%, transparent) 0%, transparent 70%)',
     pointerEvents: 'none',
-  },
-  topBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-    paddingBottom: 12,
-  },
-  topTitle: {
-    fontSize: 15,
-    fontWeight: 700,
-    color: 'var(--brand-on-gradient)',
-    letterSpacing: 0.3,
   },
   ghostBtn: {
     background:
@@ -1777,17 +1861,6 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     transition: 'transform 0.12s, opacity 0.15s',
   },
-
-  highlightsSection: {
-    paddingTop: 18,
-    paddingBottom: 4,
-  },
-  highlightsScroll: {
-    display: 'flex',
-    gap: 14,
-    padding: '0 20px',
-    overflowX: 'auto',
-  },
   highlightChipWrap: {
     position: 'relative',
     flexShrink: 0,
@@ -1865,7 +1938,6 @@ const css: Record<string, React.CSSProperties> = {
     transition: 'opacity 0.15s',
     boxSizing: 'border-box',
   },
-
   tabBar: {
     display: 'flex',
     borderBottom: '1px solid var(--border-default)',
@@ -1893,8 +1965,8 @@ const css: Record<string, React.CSSProperties> = {
   },
   tabContent: {
     padding: '16px 16px 0',
-    minHeight: 200,
     paddingBottom: 40,
+    minHeight: 200,
   },
   sectionLabel: {
     fontSize: 11.5,
@@ -1955,7 +2027,6 @@ const css: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     color: 'var(--text-muted)',
   },
-
   empty: {
     display: 'flex',
     flexDirection: 'column',
@@ -1989,7 +2060,6 @@ const css: Record<string, React.CSSProperties> = {
     maxWidth: 300,
     lineHeight: 1.5,
   },
-
   walletCard: {
     background: 'var(--brand-gradient)',
     borderRadius: 20,
@@ -2072,9 +2142,6 @@ const css: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
     transition: 'transform 0.12s',
   },
-  logoutWrap: {
-    padding: '30px 0 0',
-  },
   logoutBtn: {
     display: 'flex',
     alignItems: 'center',
@@ -2094,7 +2161,6 @@ const css: Record<string, React.CSSProperties> = {
     transition:
       'background-color 0.15s, transform 0.12s, border-color 0.18s ease, color 0.18s ease',
   },
-
   modalOverlay: {
     position: 'fixed',
     inset: 0,
@@ -2231,22 +2297,6 @@ const css: Record<string, React.CSSProperties> = {
     fontSize: 14.5,
     fontWeight: 700,
     color: 'var(--text-primary)',
-  },
-  avatarSkeleton: {
-    width: 88,
-    height: 88,
-    borderRadius: '50%',
-    backgroundColor:
-      'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
-    marginTop: 8,
-  },
-  skelLine: {
-    width: 180,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor:
-      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
-    marginTop: 16,
   },
   errorRoot: {
     display: 'flex',
