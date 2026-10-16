@@ -73,6 +73,7 @@ interface ShopperStats extends BaseStats {
 
 interface StorekeeperStats extends BaseStats {
   storeId: string | null;
+  storeName: string | null;
   listingsCount: number;
   ordersCount: number;
   viewsCount: number;
@@ -198,10 +199,6 @@ function fmtPrice(raw: unknown): string {
   return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
 }
 
-/**
- * Person's own name — never prefers business_name. Business name is
- * rendered separately so the profile can show both side by side.
- */
 function personName(p: Profile | null): string {
   if (!p) return 'User';
   const full = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
@@ -215,9 +212,28 @@ function personName(p: Profile | null): string {
   );
 }
 
-function businessName(p: Profile | null): string {
+/**
+ * Public-facing business name for a profile.
+ *   service_provider → users.business_name
+ *   storekeeper      → stores.name (falls back to users.business_name if set)
+ *   shopper          → none
+ */
+function businessName(
+  p: Profile | null,
+  role: ProfileRole,
+  stats: Stats | null,
+): string {
   if (!p) return '';
-  return (p.business_name || '').trim();
+  const userBiz = (p.business_name || '').trim();
+  if (role === 'storekeeper') {
+    const storeBiz =
+      ((stats as StorekeeperStats | null)?.storeName || '').trim();
+    return storeBiz || userBiz;
+  }
+  if (role === 'service_provider') {
+    return userBiz;
+  }
+  return '';
 }
 
 function buildBio(p: Profile | null, role: ProfileRole): string {
@@ -272,11 +288,17 @@ async function loadShopperStats(): Promise<ShopperStats> {
 
 async function loadStorekeeperStats(): Promise<StorekeeperStats> {
   let storeId: string | null = null;
+  let storeName: string | null = null;
   try {
-    const store = (await api.getMyStore()) as { store_id?: string } | null;
+    const store = (await api.getMyStore()) as {
+      store_id?: string;
+      name?: string;
+    } | null;
     storeId = store?.store_id ?? null;
+    storeName = (store?.name || '').trim() || null;
   } catch {
     storeId = null;
+    storeName = null;
   }
   const [items, orders, stats, balance] = await Promise.allSettled([
     storeId ? api.getStoreItems(storeId) : Promise.resolve([]),
@@ -286,6 +308,7 @@ async function loadStorekeeperStats(): Promise<StorekeeperStats> {
   ]);
   return {
     storeId,
+    storeName,
     listingsCount:
       items.status === 'fulfilled' && isNumberArray(items.value)
         ? items.value.length
@@ -394,12 +417,6 @@ async function loadContentItems(
   }
 }
 
-/**
- * Role-aware stat trio.
- *   shopper     → Saved / Wanted / Orders (private activity)
- *   storekeeper → Listings / Patronizers / Followers (public social proof)
- *   provider    → Services / Patronizers / Followers
- */
 function statTrio(
   role: ProfileRole,
   stats: Stats | null,
@@ -422,6 +439,7 @@ function statTrio(
   if (role === 'storekeeper') {
     const s = (stats as StorekeeperStats | null) ?? {
       storeId: null,
+      storeName: null,
       listingsCount: 0,
       ordersCount: 0,
       viewsCount: 0,
@@ -490,7 +508,6 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         if (seq !== reqSeq.current || !isMountedRef.current) return;
         setProfile(profileData);
 
-        // Followers only matter for public profiles. Shopper skips the call.
         const wantsFollowers =
           role === 'storekeeper' || role === 'service_provider';
 
@@ -693,19 +710,15 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
   }
 
   const name = personName(profile);
-  const bizName = businessName(profile);
+  const bizName = businessName(profile, role, stats);
   const isPublicRole =
     role === 'storekeeper' || role === 'service_provider';
 
-  // For storekeeper + service provider, business name leads (it's the
-  // public identity). Person name follows in a softer color, but is
-  // hidden if it's identical to the business name.
   const showPersonNameAfterBiz =
     isPublicRole &&
     Boolean(bizName) &&
     bizName.toLowerCase() !== name.toLowerCase();
-  const showBizAsPrimary =
-    isPublicRole && Boolean(bizName);
+  const showBizAsPrimary = isPublicRole && Boolean(bizName);
 
   const phone = profile.phone || '';
   const email = profile.email || '';
@@ -731,7 +744,6 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
       <style>{CSS}</style>
 
       <div className="ps-shell">
-        {/* ═══ TOP BAR ═════════════════════════════════════════ */}
         <header className="ps-topbar">
           <span className="ps-topbar-title">Profile</span>
           <button
@@ -744,7 +756,6 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         </header>
 
         <div className="ps-body">
-          {/* ═══ LEFT COLUMN ════════════════════════════════════ */}
           <aside className="ps-left">
             <div className="ps-hero">
               <div style={css.heroGlow} aria-hidden />
@@ -868,7 +879,6 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
               </div>
             </div>
 
-            {/* Highlights */}
             <div className="ps-highlights-block">
               <div className="ps-highlights">
                 <button
@@ -913,7 +923,6 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
             </div>
           </aside>
 
-          {/* ═══ RIGHT COLUMN ══════════════════════════════════ */}
           <section className="ps-right">
             <div style={css.tabBar} className="ps-tabbar">
               <button
@@ -1133,7 +1142,6 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         </div>
       </div>
 
-      {/* Avatar modal */}
       {showAvatarModal && (
         <div
           style={css.modalOverlay}
@@ -1234,7 +1242,6 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         </div>
       )}
 
-      {/* Highlights modal */}
       {showHighlightModal && (
         <div
           style={css.modalOverlay}
@@ -1327,6 +1334,7 @@ function buildActivityRows(
   if (role === 'storekeeper') {
     const s = (stats as StorekeeperStats | null) ?? {
       storeId: null,
+      storeName: null,
       listingsCount: 0,
       ordersCount: 0,
       viewsCount: 0,
@@ -1423,7 +1431,6 @@ function Row({
   );
 }
 
-/* ─── Layout CSS (media queries) ──────────────────────────────── */
 const CSS = `
   .ps-root {
     display: flex;
@@ -1444,7 +1451,6 @@ const CSS = `
     min-height: 0;
   }
 
-  /* Top bar — full-bleed gradient on mobile */
   .ps-topbar {
     display: flex;
     align-items: center;
@@ -1476,7 +1482,6 @@ const CSS = `
     min-width: 0;
   }
 
-  /* Highlights strip — horizontal scroll */
   .ps-highlights-block {
     padding-top: 18px;
     padding-bottom: 4px;
@@ -1491,7 +1496,6 @@ const CSS = `
   }
   .ps-highlights::-webkit-scrollbar { display: none; }
 
-  /* Content grid — responsive via container */
   .ps-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -1564,7 +1568,6 @@ const CSS = `
     text-shadow: 0 1px 3px rgba(0,0,0,0.6);
   }
 
-  /* Rounded corners on the hero — only on desktop */
   .ps-hero {
     position: relative;
     background: var(--brand-gradient);
@@ -1573,17 +1576,14 @@ const CSS = `
     transition: background 0.18s ease;
   }
 
-  /* Tab content padding */
   .ps-tabcontent {
     padding: 16px 16px 40px;
   }
 
-  /* Footer */
   .ps-footer {
     padding: 8px 20px 40px;
   }
 
-  /* ─── Micro-interactions ─────────────────────────────── */
   .ps-stat-item:hover { opacity: 0.85; }
   .ps-stat-item:active { transform: scale(0.97); }
   .ps-action:active { transform: scale(0.97); }
@@ -1596,9 +1596,6 @@ const CSS = `
   .ps-highlight-del:hover { opacity: 1; }
   .ps-tab:hover { color: var(--text-primary) !important; }
 
-  /* ═══════════════════════════════════════════════════════════
-     Desktop: single-column full-width
-     ═══════════════════════════════════════════════════════════ */
   @media (min-width: 1024px) {
     .ps-shell {
       max-width: 960px;
