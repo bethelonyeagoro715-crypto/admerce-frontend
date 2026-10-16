@@ -1350,89 +1350,75 @@ const CSS = `
   }
 
   @media (min-width: 1024px) {
-    .sp-page { padding-bottom: 60px; }
-    .sp-topbarInner {
-      width: min(1180px, 100%);
-      padding: 8px 32px;
-    }
-    .sp-searchBar {
-      width: min(1180px, 100%);
-      padding: 0 32px 10px;
-    }
-    .sp-shell {
-      display: grid;
-      grid-template-columns: 380px 1fr;
-      gap: 32px;
-      align-items: flex-start;
-      width: min(1180px, 100%);
-      padding: 24px 32px 0;
-    }
-    .sp-profileCard {
-      position: sticky;
-      top: 76px;
-      margin-top: 0;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      border-radius: 22px;
-      overflow: hidden;
-      box-shadow: var(--shadow-sm);
-    }
-    .sp-banner {
-      border-radius: 0;
-      box-shadow: none;
-      aspect-ratio: 16 / 7;
-    }
-    .sp-identityRow {
-      padding: 0 22px;
-      margin-top: -34px;
-    }
-    .sp-identityText { padding: 14px 22px 0; }
-    .sp-displayName { font-size: 24px; }
-    .sp-stats {
-      margin-top: 18px;
-      padding: 14px 22px;
-      border-top: 1px solid var(--border-default);
-      border-bottom: none;
-    }
-    .sp-right {
-      border-radius: 22px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      overflow: hidden;
-      padding-bottom: 8px;
-    }
-    .sp-tabs {
-      margin-top: 0;
-      padding: 4px 12px 0;
-      background: transparent;
-    }
-    .sp-tab { padding: 16px 12px; font-size: 12.5px; }
-    .sp-content { padding: 20px 20px 24px; }
-    .sp-grid {
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 14px;
-    }
+  .sp-page { padding-bottom: 60px; }
+  .sp-topbarInner {
+    width: min(960px, 100%);
+    padding: 8px 32px;
   }
+  .sp-searchBar {
+    width: min(960px, 100%);
+    padding: 0 32px 10px;
+  }
+  .sp-shell {
+    display: flex;
+    flex-direction: column;
+    width: min(960px, 100%);
+    padding: 24px 32px 0;
+    gap: 20px;
+  }
+  .sp-profileCard {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+    border-radius: 22px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    margin-top: 0;
+  }
+  .sp-banner {
+    border-radius: 0;
+    box-shadow: none;
+    aspect-ratio: 16 / 6;
+  }
+  .sp-identityRow {
+    padding: 0 22px;
+    margin-top: -34px;
+  }
+  .sp-identityText { padding: 14px 22px 0; }
+  .sp-displayName { font-size: 24px; }
+  .sp-stats {
+    margin-top: 18px;
+    padding: 14px 22px;
+    border-top: 1px solid var(--border-default);
+    border-bottom: none;
+  }
+  .sp-right {
+    border-radius: 22px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+    overflow: hidden;
+    padding-bottom: 8px;
+  }
+  .sp-tabs {
+    margin-top: 0;
+    padding: 4px 12px 0;
+    background: transparent;
+  }
+  .sp-tab { padding: 16px 12px; font-size: 13px; }
+  .sp-content { padding: 20px 20px 24px; }
+  .sp-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 14px;
+  }
+}
 
-  @media (min-width: 1440px) {
-    .sp-topbarInner,
-    .sp-searchBar,
-    .sp-shell {
-      width: min(1280px, 100%);
-    }
-    .sp-shell {
-      grid-template-columns: 420px 1fr;
-      gap: 40px;
-    }
-    .sp-grid {
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    }
+@media (min-width: 1440px) {
+  .sp-topbarInner,
+  .sp-searchBar,
+  .sp-shell {
+    width: min(1100px, 100%);
   }
-
-  @media (prefers-reduced-motion: reduce) {
-    .sp-item, .sp-followBtn, .sp-retry, .sp-iconBtn {
-      transition: none;
-    }
-    .sp-skelMedia, .sp-skelLine { animation: none; }
+  .sp-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
+}
 `;
