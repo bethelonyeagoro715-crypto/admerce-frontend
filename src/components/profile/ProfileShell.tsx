@@ -694,7 +694,19 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
 
   const name = personName(profile);
   const bizName = businessName(profile);
-  const showBiz = Boolean(bizName) && bizName.toLowerCase() !== name.toLowerCase();
+  const isPublicRole =
+    role === 'storekeeper' || role === 'service_provider';
+
+  // For storekeeper + service provider, business name leads (it's the
+  // public identity). Person name follows in a softer color, but is
+  // hidden if it's identical to the business name.
+  const showPersonNameAfterBiz =
+    isPublicRole &&
+    Boolean(bizName) &&
+    bizName.toLowerCase() !== name.toLowerCase();
+  const showBizAsPrimary =
+    isPublicRole && Boolean(bizName);
+
   const phone = profile.phone || '';
   const email = profile.email || '';
   const avatarUrl = resolveImageUrl(profile.avatar_url);
@@ -774,9 +786,15 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
 
               <div style={css.nameBlock}>
                 <div style={css.nameRow}>
-                  <h1 style={css.name}>{name}</h1>
-                  {showBiz && (
-                    <span style={css.nameBiz}>· {bizName}</span>
+                  {showBizAsPrimary ? (
+                    <>
+                      <h1 style={css.name}>{bizName}</h1>
+                      {showPersonNameAfterBiz && (
+                        <span style={css.nameAlt}>· {name}</span>
+                      )}
+                    </>
+                  ) : (
+                    <h1 style={css.name}>{name}</h1>
                   )}
                   {isVerified && (
                     <MdVerified
@@ -1809,7 +1827,7 @@ const css: Record<string, React.CSSProperties> = {
     margin: 0,
     letterSpacing: -0.3,
   },
-  nameBiz: {
+  nameAlt: {
     fontSize: 15,
     fontWeight: 700,
     color:
