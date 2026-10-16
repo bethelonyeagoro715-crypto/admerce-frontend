@@ -473,7 +473,7 @@ function VoiceBubblePlayer({
           alignItems: 'center',
           gap: 10,
           padding: '4px 2px',
-          minWidth: 200,
+          minWidth: 160,
         }}
       >
         <div
@@ -543,7 +543,8 @@ function VoiceBubblePlayer({
         alignItems: 'center',
         gap: 10,
         padding: '2px 0',
-        minWidth: 200,
+        minWidth: 160,
+        maxWidth: '100%',
       }}
     >
       <div
@@ -1634,8 +1635,6 @@ function ChatContent() {
             )}
           </button>
 
-          <div style={{ flex: 1 }} />
-
           <button
             style={s.iconBtn}
             onClick={() => startCall(false)}
@@ -1827,7 +1826,7 @@ function ChatContent() {
                                   }
                                   alt=""
                                   style={{
-                                    maxWidth: 220,
+                                    maxWidth: '100%',
                                     borderRadius: 8,
                                     marginBottom: msg.text ? 4 : 0,
                                     display: 'block',
@@ -2241,6 +2240,7 @@ const s: Record<string, React.CSSProperties> = {
     zIndex: 10,
     gap: 2,
     transition: 'background-color 0.18s ease',
+    width: '100%',
   },
   iconBtn: {
     background: 'none',
@@ -2329,6 +2329,7 @@ const s: Record<string, React.CSSProperties> = {
   messages: {
     flex: 1,
     overflowY: 'auto',
+    overflowX: 'hidden',
     padding: '8px 12px',
     position: 'relative',
     zIndex: 1,
