@@ -1157,6 +1157,17 @@ class ApiService {
     return res.data;
   }
 
+  // Public patronizer count for a provider — unique customers whose
+  // booking reached 'completed'. Same idea as the store's patronizer count.
+  public async getProviderPatronizerCount(
+    providerId: string,
+  ): Promise<{ patronizer_count: number }> {
+    const res = await this.axios.get(
+      `/services/provider/${providerId}/patronizers`,
+    );
+    return res.data;
+  }
+
   public async uploadServiceImage(serviceId: string, image: File): Promise<void> {
     const form = new FormData();
     form.append('image', image, image.name || 'service.jpg');
