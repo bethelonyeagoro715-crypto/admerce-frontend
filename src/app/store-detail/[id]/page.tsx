@@ -18,8 +18,6 @@ import {
   MdGridOn,
   MdInfoOutline,
   MdStarOutline,
-  MdMoreHoriz,
-  MdLink,
   MdCheck,
 } from 'react-icons/md';
 import api from '../../../services/api';
@@ -218,6 +216,7 @@ export default function StoreDetailPage() {
   const [searchOpen, setSearchOpen] = useState(false);
 
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -236,16 +235,20 @@ export default function StoreDetailPage() {
       setError(null);
 
       try {
-        const [storeData, itemsData, followStatus] = await Promise.all([
+        const [storeData, itemsData, followData] = await Promise.all([
           api.getStoreById(storeId) as unknown as Store,
           api.getStoreItems(storeId) as unknown as RawItem[],
-          api.getFollowStatus(storeId).catch(() => false),
+          api.getFollowStatus(storeId).catch(() => ({
+            is_following: false,
+            followers_count: 0,
+          })),
         ]);
 
         if (cancelled) return;
 
         setStore(storeData);
-        setIsFollowing(Boolean(followStatus));
+        setIsFollowing(Boolean(followData?.is_following));
+        setFollowersCount(Number(followData?.followers_count) || 0);
 
         if (!Array.isArray(itemsData)) {
           setItems([]);
@@ -332,14 +335,23 @@ export default function StoreDetailPage() {
   const toggleFollow = async () => {
     if (followLoading || !storeId) return;
     setFollowLoading(true);
+
+    const prevFollowing = isFollowing;
+    const prevCount = followersCount;
+    // Optimistic
+    setIsFollowing(!prevFollowing);
+    setFollowersCount(prevCount + (prevFollowing ? -1 : 1));
+
     try {
-      if (isFollowing) {
-        await api.unfollowStore(storeId);
-      } else {
-        await api.followStore(storeId);
-      }
-      setIsFollowing((v) => !v);
+      const res = prevFollowing
+        ? await api.unfollowStore(storeId)
+        : await api.followStore(storeId);
+      setIsFollowing(Boolean(res?.is_following ?? !prevFollowing));
+      setFollowersCount(Number(res?.followers_count ?? 0));
     } catch (err) {
+      // Roll back
+      setIsFollowing(prevFollowing);
+      setFollowersCount(prevCount);
       alert('Error: ' + (err instanceof Error ? err.message : ''));
     } finally {
       setFollowLoading(false);
@@ -446,7 +458,6 @@ export default function StoreDetailPage() {
         {/* ═══ LEFT COLUMN ═══════════════════════════════════ */}
         <aside className="sp-left">
           <div className="sp-profileCard">
-            {/* Banner */}
             <div className="sp-banner">
               {storeImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -459,7 +470,6 @@ export default function StoreDetailPage() {
               <div className="sp-bannerGradient" aria-hidden />
             </div>
 
-            {/* Avatar + actions */}
             <div className="sp-identityRow">
               <div className="sp-avatarWrap">
                 {storeImage ? (
@@ -505,8 +515,9 @@ export default function StoreDetailPage() {
                   type="button"
                   onClick={openChat}
                   disabled={loading || !store?.owner_id}
-                  className="sp-messageBtn"
+                  className="sp-iconBtn sp-iconBtnSmall"
                   aria-label="Message store"
+                  title="Message store"
                 >
                   <MdChatBubbleOutline size={18} />
                 </button>
@@ -517,6 +528,7 @@ export default function StoreDetailPage() {
                   disabled={loading || !store}
                   className="sp-iconBtn sp-iconBtnSmall"
                   aria-label="Share store"
+                  title="Share"
                 >
                   {linkCopied ? (
                     <MdCheck size={18} color="var(--success-fg)" />
@@ -527,7 +539,6 @@ export default function StoreDetailPage() {
               </div>
             </div>
 
-            {/* Identity text */}
             <div className="sp-identityText">
               <div className="sp-nameRow">
                 <h1 className="sp-displayName">{storeName}</h1>
@@ -572,7 +583,6 @@ export default function StoreDetailPage() {
               )}
             </div>
 
-            {/* Stats — just item count, no fake followers/rating */}
             <div className="sp-stats">
               <button
                 type="button"
@@ -582,6 +592,10 @@ export default function StoreDetailPage() {
                 <span className="sp-statNum">{items.length}</span>
                 <span className="sp-statLabel">Items</span>
               </button>
+              <div className="sp-stat sp-statStatic">
+                <span className="sp-statNum">{followersCount}</span>
+                <span className="sp-statLabel">Followers</span>
+              </div>
             </div>
           </div>
         </aside>
@@ -692,6 +706,10 @@ export default function StoreDetailPage() {
                   <span className="sp-aboutLabel">Handle</span>
                   <span className="sp-aboutValue">@{handle}</span>
                 </div>
+                <div className="sp-aboutRow">
+                  <span className="sp-aboutLabel">Followers</span>
+                  <span className="sp-aboutValue">{followersCount}</span>
+                </div>
                 {store?.address && (
                   <div className="sp-aboutRow">
                     <span className="sp-aboutLabel">Address</span>
@@ -758,7 +776,6 @@ const CSS = `
     padding-bottom: 40px;
   }
 
-  /* ── Top bar ─────────────────────────────────────── */
   .sp-topbar {
     position: sticky;
     top: 0;
@@ -854,7 +871,6 @@ const CSS = `
     background: var(--bg-secondary);
   }
 
-  /* ── Shell — mobile stacks, desktop 2 columns ──── */
   .sp-shell {
     display: flex;
     flex-direction: column;
@@ -874,8 +890,6 @@ const CSS = `
     flex-direction: column;
     margin-top: 14px;
   }
-
-  /* ── Banner ──────────────────────────────────────── */
   .sp-banner {
     position: relative;
     width: 100%;
@@ -909,8 +923,6 @@ const CSS = `
     );
     pointer-events: none;
   }
-
-  /* ── Identity row: avatar + actions ──────────────── */
   .sp-identityRow {
     display: flex;
     align-items: flex-end;
@@ -996,26 +1008,6 @@ const CSS = `
     border-color: var(--border-default);
     box-shadow: none;
   }
-  .sp-messageBtn {
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
-    border: 1.5px solid var(--border-default);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: border-color 0.15s, color 0.15s, transform 0.12s;
-  }
-  .sp-messageBtn:hover:not(:disabled) {
-    border-color: var(--brand-primary);
-    color: var(--brand-primary);
-  }
-  .sp-messageBtn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-  /* ── Identity text ───────────────────────────────── */
   .sp-identityText {
     display: flex;
     flex-direction: column;
@@ -1078,8 +1070,6 @@ const CSS = `
     font-weight: 700;
     letter-spacing: 0.01em;
   }
-
-  /* ── Stats (single item count) ───────────────────── */
   .sp-stats {
     display: flex;
     margin-top: 14px;
@@ -1100,6 +1090,7 @@ const CSS = `
     padding: 4px;
     transition: opacity 0.15s;
   }
+  .sp-statStatic { cursor: default; }
   .sp-stat:hover { opacity: 0.85; }
   .sp-statNum {
     font-size: 16px;
@@ -1114,8 +1105,6 @@ const CSS = `
     color: var(--text-tertiary);
     letter-spacing: 0.02em;
   }
-
-  /* ── Tabs ────────────────────────────────────────── */
   .sp-tabs {
     display: flex;
     margin-top: 14px;
@@ -1145,15 +1134,11 @@ const CSS = `
     color: var(--brand-primary);
     border-bottom-color: var(--brand-primary);
   }
-
-  /* ── Content ─────────────────────────────────────── */
   .sp-content {
     padding-top: 14px;
     padding-bottom: 40px;
     min-height: 240px;
   }
-
-  /* ── Items grid ──────────────────────────────────── */
   .sp-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -1247,8 +1232,6 @@ const CSS = `
     color: var(--text-tertiary);
     font-weight: 600;
   }
-
-  /* ── About ───────────────────────────────────────── */
   .sp-about {
     display: flex;
     flex-direction: column;
@@ -1283,8 +1266,6 @@ const CSS = `
     text-align: right;
     word-break: break-word;
   }
-
-  /* ── Empty states ────────────────────────────────── */
   .sp-empty {
     display: flex;
     flex-direction: column;
@@ -1337,8 +1318,6 @@ const CSS = `
   }
   .sp-retry:hover { opacity: 0.94; }
   .sp-retry:active { transform: scale(0.97); }
-
-  /* ── Skeleton ────────────────────────────────────── */
   .sp-skeleton { pointer-events: none; cursor: default; }
   .sp-skelMedia {
     width: 100%;
@@ -1360,13 +1339,8 @@ const CSS = `
     50% { opacity: 0.55; }
   }
 
-  /* ═══════════════════════════════════════════════════════════
-     Desktop: two-column layout
-     ═══════════════════════════════════════════════════════════ */
   @media (min-width: 1024px) {
-    .sp-page {
-      padding-bottom: 60px;
-    }
+    .sp-page { padding-bottom: 60px; }
     .sp-topbarInner {
       width: min(1180px, 100%);
       padding: 8px 32px;
@@ -1387,7 +1361,6 @@ const CSS = `
       position: sticky;
       top: 76px;
       margin-top: 0;
-      padding: 0;
       background: var(--bg-secondary);
       border: 1px solid var(--border-default);
       border-radius: 22px;
@@ -1403,9 +1376,7 @@ const CSS = `
       padding: 0 22px;
       margin-top: -34px;
     }
-    .sp-identityText {
-      padding: 14px 22px 0;
-    }
+    .sp-identityText { padding: 14px 22px 0; }
     .sp-displayName { font-size: 24px; }
     .sp-stats {
       margin-top: 18px;
@@ -1413,8 +1384,6 @@ const CSS = `
       border-top: 1px solid var(--border-default);
       border-bottom: none;
     }
-    .sp-stats + * { padding-bottom: 22px; }
-
     .sp-right {
       border-radius: 22px;
       background: var(--bg-secondary);
@@ -1425,16 +1394,10 @@ const CSS = `
     .sp-tabs {
       margin-top: 0;
       padding: 4px 12px 0;
-      border-bottom: 1px solid var(--border-default);
       background: transparent;
     }
-    .sp-tab {
-      padding: 16px 12px;
-      font-size: 12.5px;
-    }
-    .sp-content {
-      padding: 20px 20px 24px;
-    }
+    .sp-tab { padding: 16px 12px; font-size: 12.5px; }
+    .sp-content { padding: 20px 20px 24px; }
     .sp-grid {
       grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
       gap: 14px;
@@ -1457,7 +1420,7 @@ const CSS = `
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .sp-item, .sp-followBtn, .sp-retry, .sp-iconBtn, .sp-messageBtn {
+    .sp-item, .sp-followBtn, .sp-retry, .sp-iconBtn {
       transition: none;
     }
     .sp-skelMedia, .sp-skelLine { animation: none; }
