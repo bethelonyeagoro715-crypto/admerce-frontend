@@ -107,6 +107,7 @@ interface ContentItem {
   title: string;
   price?: string;
   imageUrl: string | null;
+  videoUrl: string | null;
   kind: 'listing' | 'service';
   routeTo: string;
 }
@@ -355,6 +356,7 @@ async function loadContentItems(
           title: String(r.title ?? 'Listing'),
           price: fmtPrice(r.price),
           imageUrl: resolveImageUrl((r.image_url as string) ?? null),
+          videoUrl: null,
           kind: 'listing' as const,
           routeTo: `/item-detail/${r.listing_id}`,
         }));
@@ -370,6 +372,7 @@ async function loadContentItems(
           title: String(r.title ?? 'Service'),
           price: fmtPrice(r.price),
           imageUrl: resolveImageUrl((r.image_url as string) ?? null),
+          videoUrl: resolveImageUrl((r.video_url as string) ?? null),
           kind: 'service' as const,
           routeTo: `/service-detail/${r.service_id}`,
         }));
@@ -382,6 +385,7 @@ async function loadContentItems(
         title: String(r.title ?? 'Saved item'),
         price: fmtPrice(r.price),
         imageUrl: resolveImageUrl((r.image_url as string) ?? null),
+        videoUrl: null,
         kind: 'listing' as const,
         routeTo: `/item-detail/${r.listing_id}`,
       }));
@@ -991,6 +995,14 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
                               loading="lazy"
                               className="ps-grid-img"
                             />
+                          ) : it.videoUrl ? (
+                            <video
+                              src={it.videoUrl}
+                              className="ps-grid-img"
+                              muted
+                              playsInline
+                              preload="metadata"
+                            />
                           ) : (
                             <div className="ps-grid-fallback">
                               <MdImage
@@ -1484,6 +1496,7 @@ const CSS = `
     height: 100%;
     object-fit: cover;
     display: block;
+    background: #000;
   }
   .ps-grid-fallback {
     width: 100%;
