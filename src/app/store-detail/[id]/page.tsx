@@ -152,6 +152,7 @@ function ItemCard({
     >
       <div className="sp-itemMedia">
         {!mediaError && item.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             className="sp-itemAsset"
             src={item.image}
@@ -387,7 +388,7 @@ export default function StoreDetailPage() {
     <main className="sp-page">
       <style>{CSS}</style>
 
-      {/* ── Top bar (X-style) ───────────────────────────────── */}
+      {/* ── Top bar ──────────────────────────────────────── */}
       <header className="sp-topbar">
         <div className="sp-topbarInner">
           <button
@@ -442,309 +443,304 @@ export default function StoreDetailPage() {
       </header>
 
       <div className="sp-shell">
-        {/* ── Profile header ─────────────────────────────── */}
-        <section className="sp-profile">
-          {/* Banner — uses store image, fallback to gradient */}
-          <div className="sp-banner">
-            {storeImage ? (
-              <img src={storeImage} alt="" className="sp-bannerImg" />
-            ) : (
-              <div className="sp-bannerFallback" aria-hidden>
-                <MdStorefront size={56} />
-              </div>
-            )}
-            <div className="sp-bannerGradient" aria-hidden />
-          </div>
-
-          {/* Identity row — avatar + action buttons */}
-          <div className="sp-identityRow">
-            <div className="sp-avatarWrap">
+        {/* ═══ LEFT COLUMN ═══════════════════════════════════ */}
+        <aside className="sp-left">
+          <div className="sp-profileCard">
+            {/* Banner */}
+            <div className="sp-banner">
               {storeImage ? (
-                <img src={storeImage} alt="" className="sp-avatarImg" />
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={storeImage} alt="" className="sp-bannerImg" />
               ) : (
-                <div className="sp-avatarFallback">
-                  {storeName.charAt(0).toUpperCase()}
+                <div className="sp-bannerFallback" aria-hidden>
+                  <MdStorefront size={56} />
                 </div>
               )}
-              {isVerified && (
-                <span className="sp-avatarBadge" aria-hidden>
-                  <MdVerified size={16} color="#FFFFFF" />
-                </span>
-              )}
+              <div className="sp-bannerGradient" aria-hidden />
             </div>
 
-            <div className="sp-actionRow">
-              <button
-                type="button"
-                onClick={toggleFollow}
-                disabled={followLoading || loading || !store}
-                className={
-                  isFollowing
-                    ? 'sp-followBtn sp-followBtnFollowing'
-                    : 'sp-followBtn'
-                }
-              >
-                {isFollowing ? (
-                  <>
-                    <MdStar size={15} />
-                    <span>Following</span>
-                  </>
+            {/* Avatar + actions */}
+            <div className="sp-identityRow">
+              <div className="sp-avatarWrap">
+                {storeImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={storeImage} alt="" className="sp-avatarImg" />
                 ) : (
-                  <>
-                    <MdStarBorder size={15} />
-                    <span>Follow</span>
-                  </>
+                  <div className="sp-avatarFallback">
+                    {storeName.charAt(0).toUpperCase()}
+                  </div>
                 )}
-              </button>
-
-              <button
-                type="button"
-                onClick={openChat}
-                disabled={loading || !store?.owner_id}
-                className="sp-messageBtn"
-                aria-label="Message store"
-              >
-                <MdChatBubbleOutline size={18} />
-              </button>
-
-              <button
-                type="button"
-                onClick={shareStore}
-                disabled={loading || !store}
-                className="sp-iconBtn sp-iconBtnSmall"
-                aria-label="Share store"
-              >
-                {linkCopied ? (
-                  <MdCheck size={18} color="var(--success-fg)" />
-                ) : (
-                  <MdShare size={18} />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Identity text */}
-          <div className="sp-identityText">
-            <div className="sp-nameRow">
-              <h1 className="sp-displayName">{storeName}</h1>
-              {isVerified && (
-                <MdVerified
-                  size={18}
-                  color="var(--brand-primary)"
-                  aria-label="Verified"
-                />
-              )}
-            </div>
-
-            <span className="sp-handle">@{handle}</span>
-
-            {store?.description && (
-              <p className="sp-bio">{String(store.description)}</p>
-            )}
-
-            <div className="sp-metaRow">
-              {store?.address && (
-                <span className="sp-metaItem">
-                  <MdLocationOn size={14} aria-hidden />
-                  <span>{store.address}</span>
-                </span>
-              )}
-              {since && (
-                <span className="sp-metaItem">
-                  <MdStorefront size={13} aria-hidden />
-                  <span>Since {since}</span>
-                </span>
-              )}
-            </div>
-
-            {categories.length > 0 && (
-              <div className="sp-chips">
-                {categories.map((cat, idx) => (
-                  <span key={`${cat}-${idx}`} className="sp-chip">
-                    {cat}
+                {isVerified && (
+                  <span className="sp-avatarBadge" aria-hidden>
+                    <MdVerified size={16} color="#FFFFFF" />
                   </span>
-                ))}
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Stats row — X style */}
-          <div className="sp-stats">
+              <div className="sp-actionRow">
+                <button
+                  type="button"
+                  onClick={toggleFollow}
+                  disabled={followLoading || loading || !store}
+                  className={
+                    isFollowing
+                      ? 'sp-followBtn sp-followBtnFollowing'
+                      : 'sp-followBtn'
+                  }
+                >
+                  {isFollowing ? (
+                    <>
+                      <MdStar size={15} />
+                      <span>Following</span>
+                    </>
+                  ) : (
+                    <>
+                      <MdStarBorder size={15} />
+                      <span>Follow</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={openChat}
+                  disabled={loading || !store?.owner_id}
+                  className="sp-messageBtn"
+                  aria-label="Message store"
+                >
+                  <MdChatBubbleOutline size={18} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={shareStore}
+                  disabled={loading || !store}
+                  className="sp-iconBtn sp-iconBtnSmall"
+                  aria-label="Share store"
+                >
+                  {linkCopied ? (
+                    <MdCheck size={18} color="var(--success-fg)" />
+                  ) : (
+                    <MdShare size={18} />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Identity text */}
+            <div className="sp-identityText">
+              <div className="sp-nameRow">
+                <h1 className="sp-displayName">{storeName}</h1>
+                {isVerified && (
+                  <MdVerified
+                    size={18}
+                    color="var(--brand-primary)"
+                    aria-label="Verified"
+                  />
+                )}
+              </div>
+
+              <span className="sp-handle">@{handle}</span>
+
+              {store?.description && (
+                <p className="sp-bio">{String(store.description)}</p>
+              )}
+
+              <div className="sp-metaRow">
+                {store?.address && (
+                  <span className="sp-metaItem">
+                    <MdLocationOn size={14} aria-hidden />
+                    <span>{store.address}</span>
+                  </span>
+                )}
+                {since && (
+                  <span className="sp-metaItem">
+                    <MdStorefront size={13} aria-hidden />
+                    <span>Since {since}</span>
+                  </span>
+                )}
+              </div>
+
+              {categories.length > 0 && (
+                <div className="sp-chips">
+                  {categories.map((cat, idx) => (
+                    <span key={`${cat}-${idx}`} className="sp-chip">
+                      {cat}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Stats — just item count, no fake followers/rating */}
+            <div className="sp-stats">
+              <button
+                type="button"
+                className="sp-stat"
+                onClick={() => setTab('items')}
+              >
+                <span className="sp-statNum">{items.length}</span>
+                <span className="sp-statLabel">Items</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        {/* ═══ RIGHT COLUMN ══════════════════════════════════ */}
+        <section className="sp-right">
+          <nav className="sp-tabs" role="tablist">
             <button
-              type="button"
-              className="sp-stat"
+              role="tab"
+              aria-selected={tab === 'items'}
+              className={
+                tab === 'items' ? 'sp-tab sp-tabActive' : 'sp-tab'
+              }
               onClick={() => setTab('items')}
             >
-              <span className="sp-statNum">{items.length}</span>
-              <span className="sp-statLabel">Items</span>
-            </button>
-            <button type="button" className="sp-stat" disabled>
-              <span className="sp-statNum">—</span>
-              <span className="sp-statLabel">Followers</span>
+              <MdGridOn size={16} />
+              <span>Items</span>
             </button>
             <button
-              type="button"
-              className="sp-stat"
+              role="tab"
+              aria-selected={tab === 'about'}
+              className={
+                tab === 'about' ? 'sp-tab sp-tabActive' : 'sp-tab'
+              }
+              onClick={() => setTab('about')}
+            >
+              <MdInfoOutline size={16} />
+              <span>About</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === 'reviews'}
+              className={
+                tab === 'reviews' ? 'sp-tab sp-tabActive' : 'sp-tab'
+              }
               onClick={() => setTab('reviews')}
             >
-              <span className="sp-statNum">—</span>
-              <span className="sp-statLabel">Rating</span>
+              <MdStarOutline size={16} />
+              <span>Reviews</span>
             </button>
-          </div>
-        </section>
+          </nav>
 
-        {/* ── Tabs ───────────────────────────────────────── */}
-        <nav className="sp-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={tab === 'items'}
-            className={
-              tab === 'items' ? 'sp-tab sp-tabActive' : 'sp-tab'
-            }
-            onClick={() => setTab('items')}
-          >
-            <MdGridOn size={16} />
-            <span>Items</span>
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === 'about'}
-            className={
-              tab === 'about' ? 'sp-tab sp-tabActive' : 'sp-tab'
-            }
-            onClick={() => setTab('about')}
-          >
-            <MdInfoOutline size={16} />
-            <span>About</span>
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === 'reviews'}
-            className={
-              tab === 'reviews' ? 'sp-tab sp-tabActive' : 'sp-tab'
-            }
-            onClick={() => setTab('reviews')}
-          >
-            <MdStarOutline size={16} />
-            <span>Reviews</span>
-          </button>
-        </nav>
-
-        {/* ── Tab content ────────────────────────────────── */}
-        <section className="sp-content">
-          {tab === 'items' && (
-            <>
-              {loading ? (
-                <div className="sp-grid" aria-busy="true">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <ItemSkeleton key={i} />
-                  ))}
-                </div>
-              ) : error ? (
-                <div className="sp-empty">
-                  <div className="sp-emptyIcon" aria-hidden>
-                    <MdStorefront size={28} />
-                  </div>
-                  <h2 className="sp-emptyTitle">
-                    We couldn&apos;t load this store
-                  </h2>
-                  <p className="sp-emptyBody">{error}</p>
-                  <button
-                    type="button"
-                    className="sp-retry"
-                    onClick={handleRetry}
-                  >
-                    <MdRefresh size={17} />
-                    Try again
-                  </button>
-                </div>
-              ) : items.length === 0 ? (
-                <div className="sp-empty">
-                  <div className="sp-emptyIcon" aria-hidden>
-                    <MdStorefront size={28} />
-                  </div>
-                  <h2 className="sp-emptyTitle">No items yet</h2>
-                  <p className="sp-emptyBody">
-                    This store hasn&apos;t listed any items yet.
-                  </p>
-                </div>
-              ) : filteredItems.length === 0 ? (
-                <div className="sp-empty">
-                  <p className="sp-emptyBody">
-                    No items match{' '}
-                    <strong>&quot;{search.trim()}&quot;</strong>.
-                  </p>
-                </div>
-              ) : (
-                <div className="sp-grid">
-                  {filteredItems.map((item) => (
-                    <ItemCard
-                      key={item.id}
-                      item={item}
-                      onOpen={handleOpenItem}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
-          {tab === 'about' && (
-            <div className="sp-about">
-              <div className="sp-aboutRow">
-                <span className="sp-aboutLabel">Name</span>
-                <span className="sp-aboutValue">{storeName}</span>
-              </div>
-              <div className="sp-aboutRow">
-                <span className="sp-aboutLabel">Handle</span>
-                <span className="sp-aboutValue">@{handle}</span>
-              </div>
-              {store?.address && (
-                <div className="sp-aboutRow">
-                  <span className="sp-aboutLabel">Address</span>
-                  <span className="sp-aboutValue">
-                    {String(store.address)}
-                  </span>
-                </div>
-              )}
-              {since && (
-                <div className="sp-aboutRow">
-                  <span className="sp-aboutLabel">Member since</span>
-                  <span className="sp-aboutValue">{since}</span>
-                </div>
-              )}
-              <div className="sp-aboutRow">
-                <span className="sp-aboutLabel">Status</span>
-                <span className="sp-aboutValue">
-                  {isVerified ? 'Verified store' : 'Unverified'}
-                </span>
-              </div>
-              {categories.length > 0 && (
-                <div className="sp-aboutRow sp-aboutRowBlock">
-                  <span className="sp-aboutLabel">Categories</span>
-                  <div className="sp-chips">
-                    {categories.map((cat, idx) => (
-                      <span key={`${cat}-${idx}`} className="sp-chip">
-                        {cat}
-                      </span>
+          <section className="sp-content">
+            {tab === 'items' && (
+              <>
+                {loading ? (
+                  <div className="sp-grid" aria-busy="true">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <ItemSkeleton key={i} />
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                ) : error ? (
+                  <div className="sp-empty">
+                    <div className="sp-emptyIcon" aria-hidden>
+                      <MdStorefront size={28} />
+                    </div>
+                    <h2 className="sp-emptyTitle">
+                      We couldn&apos;t load this store
+                    </h2>
+                    <p className="sp-emptyBody">{error}</p>
+                    <button
+                      type="button"
+                      className="sp-retry"
+                      onClick={handleRetry}
+                    >
+                      <MdRefresh size={17} />
+                      Try again
+                    </button>
+                  </div>
+                ) : items.length === 0 ? (
+                  <div className="sp-empty">
+                    <div className="sp-emptyIcon" aria-hidden>
+                      <MdStorefront size={28} />
+                    </div>
+                    <h2 className="sp-emptyTitle">No items yet</h2>
+                    <p className="sp-emptyBody">
+                      This store hasn&apos;t listed any items yet.
+                    </p>
+                  </div>
+                ) : filteredItems.length === 0 ? (
+                  <div className="sp-empty">
+                    <p className="sp-emptyBody">
+                      No items match{' '}
+                      <strong>&quot;{search.trim()}&quot;</strong>.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="sp-grid">
+                    {filteredItems.map((item) => (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        onOpen={handleOpenItem}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
 
-          {tab === 'reviews' && (
-            <div className="sp-empty">
-              <div className="sp-emptyIcon" aria-hidden>
-                <MdStarOutline size={28} />
+            {tab === 'about' && (
+              <div className="sp-about">
+                <div className="sp-aboutRow">
+                  <span className="sp-aboutLabel">Name</span>
+                  <span className="sp-aboutValue">{storeName}</span>
+                </div>
+                <div className="sp-aboutRow">
+                  <span className="sp-aboutLabel">Handle</span>
+                  <span className="sp-aboutValue">@{handle}</span>
+                </div>
+                {store?.address && (
+                  <div className="sp-aboutRow">
+                    <span className="sp-aboutLabel">Address</span>
+                    <span className="sp-aboutValue">
+                      {String(store.address)}
+                    </span>
+                  </div>
+                )}
+                {since && (
+                  <div className="sp-aboutRow">
+                    <span className="sp-aboutLabel">Member since</span>
+                    <span className="sp-aboutValue">{since}</span>
+                  </div>
+                )}
+                <div className="sp-aboutRow">
+                  <span className="sp-aboutLabel">Status</span>
+                  <span className="sp-aboutValue">
+                    {isVerified ? 'Verified store' : 'Unverified'}
+                  </span>
+                </div>
+                {categories.length > 0 && (
+                  <div className="sp-aboutRow sp-aboutRowBlock">
+                    <span className="sp-aboutLabel">Categories</span>
+                    <div className="sp-chips">
+                      {categories.map((cat, idx) => (
+                        <span key={`${cat}-${idx}`} className="sp-chip">
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <h2 className="sp-emptyTitle">No reviews yet</h2>
-              <p className="sp-emptyBody">
-                Be the first to buy from {storeName} and leave a review.
-              </p>
-            </div>
-          )}
+            )}
+
+            {tab === 'reviews' && (
+              <div className="sp-empty">
+                <div className="sp-emptyIcon" aria-hidden>
+                  <MdStarOutline size={28} />
+                </div>
+                <h2 className="sp-emptyTitle">Reviews coming soon</h2>
+                <p className="sp-emptyBody">
+                  We&rsquo;re building a reviews system so buyers can
+                  rate stores and items. It&apos;ll be live in a future
+                  update.
+                </p>
+              </div>
+            )}
+          </section>
         </section>
       </div>
     </main>
@@ -762,7 +758,7 @@ const CSS = `
     padding-bottom: 40px;
   }
 
-  /* ── Top bar ──────────────────────────────────────── */
+  /* ── Top bar ─────────────────────────────────────── */
   .sp-topbar {
     position: sticky;
     top: 0;
@@ -773,7 +769,6 @@ const CSS = `
     border-bottom: 1px solid var(--border-default);
     transition: background-color 0.18s ease, border-color 0.18s ease;
   }
-
   .sp-topbarInner {
     width: min(720px, 100%);
     margin: 0 auto;
@@ -784,7 +779,6 @@ const CSS = `
     gap: 10px;
     box-sizing: border-box;
   }
-
   .sp-topbarTitle {
     flex: 1;
     min-width: 0;
@@ -792,14 +786,12 @@ const CSS = `
     flex-direction: column;
     gap: 1px;
   }
-
   .sp-topbarNameRow {
     display: flex;
     align-items: center;
     gap: 4px;
     min-width: 0;
   }
-
   .sp-topbarName {
     font-size: 15.5px;
     font-weight: 800;
@@ -808,13 +800,11 @@ const CSS = `
     overflow: hidden;
     text-overflow: ellipsis;
   }
-
   .sp-topbarMeta {
     font-size: 12px;
     color: var(--text-tertiary);
     font-weight: 600;
   }
-
   .sp-iconBtn {
     width: 38px;
     height: 38px;
@@ -834,12 +824,10 @@ const CSS = `
     color: var(--brand-primary);
   }
   .sp-iconBtn:disabled { opacity: 0.45; cursor: not-allowed; }
-
   .sp-iconBtnSmall {
     border: 1.5px solid var(--border-default);
     background: var(--bg-secondary);
   }
-
   .sp-searchBar {
     width: min(720px, 100%);
     margin: 0 auto;
@@ -866,22 +854,28 @@ const CSS = `
     background: var(--bg-secondary);
   }
 
-  /* ── Shell ────────────────────────────────────────── */
+  /* ── Shell — mobile stacks, desktop 2 columns ──── */
   .sp-shell {
+    display: flex;
+    flex-direction: column;
     width: min(720px, 100%);
     margin: 0 auto;
     padding: 0 14px;
     box-sizing: border-box;
   }
-
-  /* ── Profile header ──────────────────────────────── */
-  .sp-profile {
+  .sp-left,
+  .sp-right {
     display: flex;
     flex-direction: column;
-    gap: 0;
+    min-width: 0;
+  }
+  .sp-profileCard {
+    display: flex;
+    flex-direction: column;
     margin-top: 14px;
   }
 
+  /* ── Banner ──────────────────────────────────────── */
   .sp-banner {
     position: relative;
     width: 100%;
@@ -916,6 +910,7 @@ const CSS = `
     pointer-events: none;
   }
 
+  /* ── Identity row: avatar + actions ──────────────── */
   .sp-identityRow {
     display: flex;
     align-items: flex-end;
@@ -926,13 +921,10 @@ const CSS = `
     position: relative;
     z-index: 1;
   }
-
   .sp-avatarWrap {
     position: relative;
     width: 84px;
     height: 84px;
-    border-radius: 24px;
-    overflow: visible;
     flex: 0 0 84px;
   }
   .sp-avatarImg {
@@ -973,14 +965,12 @@ const CSS = `
     justify-content: center;
     box-sizing: border-box;
   }
-
   .sp-actionRow {
     display: flex;
     align-items: center;
     gap: 8px;
     padding-bottom: 4px;
   }
-
   .sp-followBtn {
     display: inline-flex;
     align-items: center;
@@ -997,17 +987,15 @@ const CSS = `
     transition: transform 0.12s, opacity 0.15s;
     box-shadow: var(--shadow-brand);
   }
-  .sp-followBtn:hover { opacity: 0.94; }
+  .sp-followBtn:hover:not(:disabled) { opacity: 0.94; }
   .sp-followBtn:active { transform: scale(0.97); }
   .sp-followBtn:disabled { opacity: 0.5; cursor: not-allowed; }
-
   .sp-followBtnFollowing {
     background: var(--bg-secondary);
     color: var(--text-primary);
     border-color: var(--border-default);
     box-shadow: none;
   }
-
   .sp-messageBtn {
     width: 38px;
     height: 38px;
@@ -1027,13 +1015,13 @@ const CSS = `
   }
   .sp-messageBtn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+  /* ── Identity text ───────────────────────────────── */
   .sp-identityText {
     display: flex;
     flex-direction: column;
     gap: 6px;
     padding: 14px 6px 0;
   }
-
   .sp-nameRow {
     display: flex;
     align-items: center;
@@ -1046,13 +1034,11 @@ const CSS = `
     font-weight: 850;
     letter-spacing: -0.03em;
   }
-
   .sp-handle {
     color: var(--text-tertiary);
     font-size: 13.5px;
     font-weight: 600;
   }
-
   .sp-bio {
     margin: 4px 0 0;
     font-size: 14px;
@@ -1061,7 +1047,6 @@ const CSS = `
     white-space: pre-wrap;
     word-break: break-word;
   }
-
   .sp-metaRow {
     display: flex;
     flex-wrap: wrap;
@@ -1075,8 +1060,8 @@ const CSS = `
     font-size: 12.5px;
     color: var(--text-tertiary);
     font-weight: 600;
+    word-break: break-word;
   }
-
   .sp-chips {
     display: flex;
     flex-wrap: wrap;
@@ -1094,10 +1079,9 @@ const CSS = `
     letter-spacing: 0.01em;
   }
 
-  /* ── Stats ────────────────────────────────────────── */
+  /* ── Stats (single item count) ───────────────────── */
   .sp-stats {
     display: flex;
-    gap: 0;
     margin-top: 14px;
     padding: 12px 4px;
     border-top: 1px solid var(--border-default);
@@ -1116,8 +1100,7 @@ const CSS = `
     padding: 4px;
     transition: opacity 0.15s;
   }
-  .sp-stat:disabled { cursor: default; opacity: 0.7; }
-  .sp-stat:hover:not(:disabled) { opacity: 0.85; }
+  .sp-stat:hover { opacity: 0.85; }
   .sp-statNum {
     font-size: 16px;
     font-weight: 800;
@@ -1132,17 +1115,13 @@ const CSS = `
     letter-spacing: 0.02em;
   }
 
-  /* ── Tabs ─────────────────────────────────────────── */
+  /* ── Tabs ────────────────────────────────────────── */
   .sp-tabs {
     display: flex;
-    gap: 0;
-    margin-top: 10px;
+    margin-top: 14px;
     border-bottom: 1px solid var(--border-default);
-    position: sticky;
-    top: 56px;
     background: var(--bg-primary);
-    z-index: 5;
-    transition: background-color 0.18s ease;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .sp-tab {
     flex: 1;
@@ -1167,17 +1146,18 @@ const CSS = `
     border-bottom-color: var(--brand-primary);
   }
 
-  /* ── Content ──────────────────────────────────────── */
+  /* ── Content ─────────────────────────────────────── */
   .sp-content {
     padding-top: 14px;
+    padding-bottom: 40px;
     min-height: 240px;
   }
 
-  /* ── Items grid ───────────────────────────────────── */
+  /* ── Items grid ──────────────────────────────────── */
   .sp-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
   }
   .sp-item {
     display: flex;
@@ -1196,7 +1176,6 @@ const CSS = `
     box-shadow: var(--shadow-md);
   }
   .sp-item:active { transform: scale(0.99); }
-
   .sp-itemMedia {
     position: relative;
     aspect-ratio: 1 / 1;
@@ -1243,7 +1222,6 @@ const CSS = `
     font-variant-numeric: tabular-nums;
     backdrop-filter: blur(4px);
   }
-
   .sp-itemBody {
     padding: 10px 12px 12px;
     display: flex;
@@ -1270,7 +1248,7 @@ const CSS = `
     font-weight: 600;
   }
 
-  /* ── About ────────────────────────────────────────── */
+  /* ── About ───────────────────────────────────────── */
   .sp-about {
     display: flex;
     flex-direction: column;
@@ -1306,7 +1284,7 @@ const CSS = `
     word-break: break-word;
   }
 
-  /* ── Empty / error states ─────────────────────────── */
+  /* ── Empty states ────────────────────────────────── */
   .sp-empty {
     display: flex;
     flex-direction: column;
@@ -1360,7 +1338,7 @@ const CSS = `
   .sp-retry:hover { opacity: 0.94; }
   .sp-retry:active { transform: scale(0.97); }
 
-  /* ── Skeletons ────────────────────────────────────── */
+  /* ── Skeleton ────────────────────────────────────── */
   .sp-skeleton { pointer-events: none; cursor: default; }
   .sp-skelMedia {
     width: 100%;
@@ -1382,19 +1360,100 @@ const CSS = `
     50% { opacity: 0.55; }
   }
 
-  /* ── Desktop breakpoint ───────────────────────────── */
-  @media (min-width: 720px) {
-    .sp-shell { padding: 0 20px; }
-    .sp-topbarInner { padding: 8px 20px; }
-    .sp-searchBar { padding: 0 20px 10px; }
-    .sp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-    .sp-avatarWrap { width: 96px; height: 96px; flex: 0 0 96px; }
-    .sp-avatarImg, .sp-avatarFallback { border-radius: 28px; }
+  /* ═══════════════════════════════════════════════════════════
+     Desktop: two-column layout
+     ═══════════════════════════════════════════════════════════ */
+  @media (min-width: 1024px) {
+    .sp-page {
+      padding-bottom: 60px;
+    }
+    .sp-topbarInner {
+      width: min(1180px, 100%);
+      padding: 8px 32px;
+    }
+    .sp-searchBar {
+      width: min(1180px, 100%);
+      padding: 0 32px 10px;
+    }
+    .sp-shell {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 32px;
+      align-items: flex-start;
+      width: min(1180px, 100%);
+      padding: 24px 32px 0;
+    }
+    .sp-profileCard {
+      position: sticky;
+      top: 76px;
+      margin-top: 0;
+      padding: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .sp-banner {
+      border-radius: 0;
+      box-shadow: none;
+      aspect-ratio: 16 / 7;
+    }
+    .sp-identityRow {
+      padding: 0 22px;
+      margin-top: -34px;
+    }
+    .sp-identityText {
+      padding: 14px 22px 0;
+    }
     .sp-displayName { font-size: 24px; }
+    .sp-stats {
+      margin-top: 18px;
+      padding: 14px 22px;
+      border-top: 1px solid var(--border-default);
+      border-bottom: none;
+    }
+    .sp-stats + * { padding-bottom: 22px; }
+
+    .sp-right {
+      border-radius: 22px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      overflow: hidden;
+      padding-bottom: 8px;
+    }
+    .sp-tabs {
+      margin-top: 0;
+      padding: 4px 12px 0;
+      border-bottom: 1px solid var(--border-default);
+      background: transparent;
+    }
+    .sp-tab {
+      padding: 16px 12px;
+      font-size: 12.5px;
+    }
+    .sp-content {
+      padding: 20px 20px 24px;
+    }
+    .sp-grid {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 14px;
+    }
   }
 
-  @media (min-width: 1024px) {
-    .sp-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (min-width: 1440px) {
+    .sp-topbarInner,
+    .sp-searchBar,
+    .sp-shell {
+      width: min(1280px, 100%);
+    }
+    .sp-shell {
+      grid-template-columns: 420px 1fr;
+      gap: 40px;
+    }
+    .sp-grid {
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
