@@ -197,12 +197,15 @@ function fmtPrice(raw: unknown): string {
   return `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
 }
 
-function displayName(p: Profile | null): string {
+/**
+ * Person's own name — never prefers business_name. Business name is
+ * rendered separately so the profile can show both side by side.
+ */
+function personName(p: Profile | null): string {
   if (!p) return 'User';
   const full = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
   return (
     p.nickname ||
-    p.business_name ||
     full ||
     p.real_name ||
     p.username ||
@@ -211,13 +214,17 @@ function displayName(p: Profile | null): string {
   );
 }
 
+function businessName(p: Profile | null): string {
+  if (!p) return '';
+  return (p.business_name || '').trim();
+}
+
 function buildBio(p: Profile | null, role: ProfileRole): string {
   if (!p) return '';
   if (p.bio && String(p.bio).trim()) return String(p.bio).trim();
   const parts: string[] = [];
   if (role === 'storekeeper') {
     parts.push('🏪 Storekeeper on Admerce');
-    if (p.business_name) parts.push(`· ${p.business_name}`);
   } else if (role === 'service_provider') {
     parts.push('🛠️ Service provider on Admerce');
   } else {
@@ -384,14 +391,16 @@ async function loadContentItems(
 }
 
 /**
- * Role-aware stat trio. Followers count is only meaningful for public
- * profiles — storekeeper and service_provider. Shoppers get their
- * own activity stats instead.
+ * Role-aware stat trio.
+ *   shopper     → Saved / Wanted / Orders (private activity)
+ *   storekeeper → Listings / Patronizers / Followers (public social proof)
+ *   provider    → Services / Patronizers / Followers
  */
 function statTrio(
   role: ProfileRole,
   stats: Stats | null,
   followersCount: number,
+  patronizerCount: number,
 ): { value: string; label: string; onClick: () => void }[] {
   if (role === 'shopper') {
     const s = (stats as ShopperStats | null) ?? {
@@ -415,9 +424,9 @@ function statTrio(
       walletBalance: 0,
     };
     return [
-      { value: String(s.listingsCount), label: 'Listings',  onClick: () => {} },
-      { value: String(s.ordersCount),   label: 'Orders',    onClick: () => {} },
-      { value: String(followersCount),  label: 'Followers', onClick: () => {} },
+      { value: String(s.listingsCount), label: 'Listings',    onClick: () => {} },
+      { value: String(patronizerCount), label: 'Patronizers', onClick: () => {} },
+      { value: String(followersCount),  label: 'Followers',   onClick: () => {} },
     ];
   }
   const s = (stats as ProviderStats | null) ?? {
@@ -427,9 +436,9 @@ function statTrio(
     walletBalance: 0,
   };
   return [
-    { value: String(s.servicesCount), label: 'Services',  onClick: () => {} },
-    { value: String(s.bookingsCount), label: 'Bookings',  onClick: () => {} },
-    { value: String(followersCount),  label: 'Followers', onClick: () => {} },
+    { value: String(s.servicesCount), label: 'Services',    onClick: () => {} },
+    { value: String(patronizerCount), label: 'Patronizers', onClick: () => {} },
+    { value: String(followersCount),  label: 'Followers',   onClick: () => {} },
   ];
 }
 
@@ -443,6 +452,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [followersCount, setFollowersCount] = useState(0);
+  const [patronizerCount, setPatronizerCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [errored, setErrored] = useState(false);
   const [tab, setTab] = useState<Tab>('content');
@@ -504,6 +514,31 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
         setStats(roleStats);
         setHighlights(Array.isArray(hi) ? hi : []);
         setFollowersCount(follow.followers_count || 0);
+
+        // Patronizer count — only meaningful for public roles.
+        let patrons = 0;
+        if (role === 'storekeeper') {
+          const s = roleStats as StorekeeperStats;
+          if (s?.storeId) {
+            try {
+              const store = (await api.getStoreById(s.storeId)) as {
+                patronizer_count?: number;
+              };
+              patrons = Number(store?.patronizer_count) || 0;
+            } catch {
+              patrons = 0;
+            }
+          }
+        } else if (role === 'service_provider' && profileData.id) {
+          try {
+            const res = await api.getProviderPatronizerCount(profileData.id);
+            patrons = Number(res?.patronizer_count) || 0;
+          } catch {
+            patrons = 0;
+          }
+        }
+        if (seq !== reqSeq.current || !isMountedRef.current) return;
+        setPatronizerCount(patrons);
 
         const items = await loadContentItems(role, roleStats);
         if (seq !== reqSeq.current || !isMountedRef.current) return;
@@ -653,7 +688,9 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
     );
   }
 
-  const name = displayName(profile);
+  const name = personName(profile);
+  const bizName = businessName(profile);
+  const showBiz = Boolean(bizName) && bizName.toLowerCase() !== name.toLowerCase();
   const phone = profile.phone || '';
   const email = profile.email || '';
   const avatarUrl = resolveImageUrl(profile.avatar_url);
@@ -661,7 +698,7 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
   const memberSince = fmtMemberSince(profile.created_at);
   const initial = (name.charAt(0) || '?').toUpperCase();
   const bio = buildBio(profile, role);
-  const trio = statTrio(role, stats, followersCount);
+  const trio = statTrio(role, stats, followersCount, patronizerCount);
 
   const walletTitle =
     role === 'storekeeper'
@@ -734,6 +771,9 @@ export function ProfileShell({ role }: { role: ProfileRole }) {
               <div style={css.nameBlock}>
                 <div style={css.nameRow}>
                   <h1 style={css.name}>{name}</h1>
+                  {showBiz && (
+                    <span style={css.nameBiz}>· {bizName}</span>
+                  )}
                   {isVerified && (
                     <MdVerified
                       size={16}
@@ -1746,6 +1786,8 @@ const css: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'wrap',
+    minWidth: 0,
   },
   name: {
     fontSize: 20,
@@ -1753,6 +1795,17 @@ const css: Record<string, React.CSSProperties> = {
     color: 'var(--brand-on-gradient)',
     margin: 0,
     letterSpacing: -0.3,
+  },
+  nameBiz: {
+    fontSize: 15,
+    fontWeight: 700,
+    color:
+      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
+    letterSpacing: -0.1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
   },
   roleRow: {
     display: 'flex',
