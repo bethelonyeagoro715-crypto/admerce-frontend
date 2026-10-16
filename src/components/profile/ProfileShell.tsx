@@ -1526,13 +1526,13 @@ const CSS = `
   .ps-tab:hover { color: var(--text-primary) !important; }
 
   /* ═══════════════════════════════════════════════════════════
-     Desktop: two-column layout
+     Desktop: single-column full-width
      ═══════════════════════════════════════════════════════════ */
   @media (min-width: 1024px) {
     .ps-shell {
-      max-width: 1180px;
+      max-width: 960px;
       padding: 24px 32px 48px;
-      gap: 24px;
+      gap: 20px;
     }
     .ps-topbar {
       background: transparent;
@@ -1546,14 +1546,13 @@ const CSS = `
       letter-spacing: -0.03em;
     }
     .ps-body {
-      display: grid;
-      grid-template-columns: 360px 1fr;
-      gap: 28px;
-      align-items: flex-start;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: stretch;
     }
     .ps-left {
-      position: sticky;
-      top: 16px;
+      position: static;
       gap: 20px;
     }
     .ps-hero {
@@ -1562,15 +1561,12 @@ const CSS = `
       box-shadow: var(--shadow-sm);
     }
     .ps-highlights-block {
-      padding: 0;
+      padding: 18px 4px 16px;
       border-radius: 22px;
       background: var(--bg-secondary);
       border: 1px solid var(--border-default);
-      padding: 18px 4px 16px;
     }
-    .ps-highlights {
-      padding: 0 14px;
-    }
+    .ps-highlights { padding: 0 14px; }
     .ps-right {
       gap: 0;
       border-radius: 22px;
@@ -1582,31 +1578,26 @@ const CSS = `
     .ps-tabbar {
       padding: 4px 8px 0;
       border-bottom: 1px solid var(--border-default);
+      margin-top: 0;
     }
     .ps-tab {
       padding: 16px 12px;
-      font-size: 12.5px;
+      font-size: 13px;
     }
     .ps-tabcontent {
-      padding: 20px 16px 24px;
+      padding: 20px 20px 24px;
     }
     .ps-grid {
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
       gap: 8px;
     }
-    .ps-footer {
-      padding: 0;
-      grid-column: 1 / -1;
-    }
+    .ps-footer { padding: 0; }
   }
 
   @media (min-width: 1440px) {
-    .ps-shell {
-      max-width: 1280px;
-    }
-    .ps-body {
-      grid-template-columns: 400px 1fr;
-      gap: 36px;
+    .ps-shell { max-width: 1100px; }
+    .ps-grid {
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     }
   }
 `;
@@ -1941,7 +1932,7 @@ const css: Record<string, React.CSSProperties> = {
   tabBar: {
     display: 'flex',
     borderBottom: '1px solid var(--border-default)',
-    marginTop: 14,
+    marginTop: 0,
     backgroundColor: 'var(--bg-primary)',
     transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },

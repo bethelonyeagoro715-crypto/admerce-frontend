@@ -667,7 +667,7 @@ const CSS = `
     z-index: 20;
     box-sizing: border-box;
     width: 100%;
-    max-width: 720px;
+    max-width: 960px;
     margin: 0 auto;
     transition: background-color 0.18s ease, border-color 0.18s ease;
   }
@@ -719,7 +719,7 @@ const CSS = `
     z-index: 19;
     box-sizing: border-box;
     width: 100%;
-    max-width: 720px;
+    max-width: 960px;
     margin: 0 auto;
     transition: background-color 0.18s ease, border-color 0.18s ease;
   }
@@ -834,7 +834,7 @@ const CSS = `
     gap: 16px;
     box-sizing: border-box;
     width: 100%;
-    max-width: 720px;
+    max-width: 960px;
     margin: 0 auto;
   }
 
@@ -1106,6 +1106,23 @@ const CSS = `
     width: 90px;
     border-radius: 4px;
     margin: 14px 0 6px;
+  }
+
+  /* ── Desktop: wider container ───────────────────────────── */
+  @media (min-width: 1024px) {
+    .ibx-header,
+    .ibx-controls,
+    .ibx-body {
+      max-width: 960px;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .ibx-header,
+    .ibx-controls,
+    .ibx-body {
+      max-width: 1100px;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

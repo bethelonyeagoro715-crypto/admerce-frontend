@@ -797,8 +797,18 @@ const CSS = `
     flex: 1;
     min-height: 0;
   }
+
   @media (min-width: 1024px) {
-    .wallet-shell { padding: 0 8px; }
+    .wallet-shell {
+      max-width: 720px;
+      padding: 0 8px;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .wallet-shell {
+      max-width: 840px;
+    }
   }
 `;
 
