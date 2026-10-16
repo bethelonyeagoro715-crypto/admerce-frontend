@@ -127,9 +127,10 @@ function ProviderServicesContent() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  // ── Follow state ─────────────────────────────────────────
+  // ── Follow + patronizer state ────────────────────────────
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
+  const [patronizerCount, setPatronizerCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
   const [isSelf, setIsSelf] = useState(false);
 
@@ -229,6 +230,26 @@ function ProviderServicesContent() {
           setFollowersCount(0);
           setIsSelf(false);
         }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [providerId]);
+
+  // ── Fetch patronizer count (unique customers who completed) ─
+  useEffect(() => {
+    if (!providerId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await api.getProviderPatronizerCount(providerId);
+        if (cancelled) return;
+        setPatronizerCount(Number(data?.patronizer_count) || 0);
+      } catch {
+        if (!cancelled) setPatronizerCount(0);
       }
     })();
 
@@ -401,7 +422,6 @@ function ProviderServicesContent() {
       </header>
 
       <div className="pp-shell">
-        {/* ═══ LEFT COLUMN ═══════════════════════════════════ */}
         <aside className="pp-left">
           <div className="pp-profileCard">
             <div className="pp-banner">
@@ -521,6 +541,10 @@ function ProviderServicesContent() {
                 <span className="pp-statLabel">Services</span>
               </button>
               <div className="pp-stat pp-statStatic">
+                <span className="pp-statNum">{patronizerCount}</span>
+                <span className="pp-statLabel">Patronizers</span>
+              </div>
+              <div className="pp-stat pp-statStatic">
                 <span className="pp-statNum">{followersCount}</span>
                 <span className="pp-statLabel">Followers</span>
               </div>
@@ -528,7 +552,6 @@ function ProviderServicesContent() {
           </div>
         </aside>
 
-        {/* ═══ RIGHT COLUMN ══════════════════════════════════ */}
         <section className="pp-right">
           <nav className="pp-tabs" role="tablist">
             <button
@@ -638,6 +661,10 @@ function ProviderServicesContent() {
                 <div className="pp-aboutRow">
                   <span className="pp-aboutLabel">Role</span>
                   <span className="pp-aboutValue">Service Provider</span>
+                </div>
+                <div className="pp-aboutRow">
+                  <span className="pp-aboutLabel">Patronizers</span>
+                  <span className="pp-aboutValue">{patronizerCount}</span>
                 </div>
                 <div className="pp-aboutRow">
                   <span className="pp-aboutLabel">Followers</span>
@@ -1189,75 +1216,75 @@ const CSS = `
   }
 
   @media (min-width: 1024px) {
-  .pp-page { padding-bottom: 60px; }
-  .pp-topbarInner {
-    width: min(960px, 100%);
-    padding: 8px 32px;
+    .pp-page { padding-bottom: 60px; }
+    .pp-topbarInner {
+      width: min(960px, 100%);
+      padding: 8px 32px;
+    }
+    .pp-searchBar {
+      width: min(960px, 100%);
+      padding: 0 32px 10px;
+    }
+    .pp-shell {
+      display: flex;
+      flex-direction: column;
+      width: min(960px, 100%);
+      padding: 24px 32px 0;
+      gap: 20px;
+    }
+    .pp-profileCard {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      margin-top: 0;
+    }
+    .pp-banner {
+      border-radius: 0;
+      box-shadow: none;
+      aspect-ratio: 16 / 6;
+    }
+    .pp-identityRow {
+      padding: 0 22px;
+      margin-top: -34px;
+    }
+    .pp-identityText { padding: 14px 22px 0; }
+    .pp-displayName { font-size: 24px; }
+    .pp-stats {
+      margin-top: 18px;
+      padding: 14px 22px;
+      border-top: 1px solid var(--border-default);
+      border-bottom: none;
+    }
+    .pp-right {
+      border-radius: 22px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      overflow: hidden;
+      padding-bottom: 8px;
+    }
+    .pp-tabs {
+      margin-top: 0;
+      padding: 4px 12px 0;
+      background: transparent;
+    }
+    .pp-tab { padding: 16px 12px; font-size: 13px; }
+    .pp-content { padding: 20px 20px 24px; }
+    .pp-grid {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 14px;
+    }
   }
-  .pp-searchBar {
-    width: min(960px, 100%);
-    padding: 0 32px 10px;
-  }
-  .pp-shell {
-    display: flex;
-    flex-direction: column;
-    width: min(960px, 100%);
-    padding: 24px 32px 0;
-    gap: 20px;
-  }
-  .pp-profileCard {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-default);
-    border-radius: 22px;
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
-    margin-top: 0;
-  }
-  .pp-banner {
-    border-radius: 0;
-    box-shadow: none;
-    aspect-ratio: 16 / 6;
-  }
-  .pp-identityRow {
-    padding: 0 22px;
-    margin-top: -34px;
-  }
-  .pp-identityText { padding: 14px 22px 0; }
-  .pp-displayName { font-size: 24px; }
-  .pp-stats {
-    margin-top: 18px;
-    padding: 14px 22px;
-    border-top: 1px solid var(--border-default);
-    border-bottom: none;
-  }
-  .pp-right {
-    border-radius: 22px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-default);
-    overflow: hidden;
-    padding-bottom: 8px;
-  }
-  .pp-tabs {
-    margin-top: 0;
-    padding: 4px 12px 0;
-    background: transparent;
-  }
-  .pp-tab { padding: 16px 12px; font-size: 13px; }
-  .pp-content { padding: 20px 20px 24px; }
-  .pp-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 14px;
-  }
-}
 
-@media (min-width: 1440px) {
-  .pp-topbarInner,
-  .pp-searchBar,
-  .pp-shell {
-    width: min(1100px, 100%);
+  @media (min-width: 1440px) {
+    .pp-topbarInner,
+    .pp-searchBar,
+    .pp-shell {
+      width: min(1100px, 100%);
+    }
+    .pp-grid {
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
   }
-  .pp-grid {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  }
-}
 `;
