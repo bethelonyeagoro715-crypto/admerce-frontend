@@ -16,9 +16,9 @@ import {
   MdVerified,
   MdChatBubbleOutline,
   MdShare,
+  MdCheck,
   MdStar,
   MdStarBorder,
-  MdCheck,
   MdGridOn,
   MdInfoOutline,
   MdStarOutline,
@@ -125,10 +125,13 @@ function ProviderServicesContent() {
   const [retryKey, setRetryKey] = useState(0);
   const [tab, setTab] = useState<Tab>('services');
   const [searchOpen, setSearchOpen] = useState(false);
-
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+
+  // ── Follow state ─────────────────────────────────────────
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [isSelf, setIsSelf] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,6 +211,32 @@ function ProviderServicesContent() {
     };
   }, [providerId, retryKey, urlName]);
 
+  // ── Fetch follow status once we know the provider id ─────
+  useEffect(() => {
+    if (!providerId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await api.getUserFollowStatus(providerId);
+        if (cancelled) return;
+        setIsFollowing(!!data.is_following);
+        setFollowersCount(Number(data.followers_count) || 0);
+        setIsSelf(!!data.is_self);
+      } catch {
+        if (!cancelled) {
+          setIsFollowing(false);
+          setFollowersCount(0);
+          setIsSelf(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [providerId]);
+
   const filteredServices = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return services;
@@ -235,6 +264,34 @@ function ProviderServicesContent() {
 
   const handleRetry = () => setRetryKey((n) => n + 1);
 
+  const toggleFollow = async () => {
+    if (followLoading || !providerId || isSelf) return;
+    setFollowLoading(true);
+    // Optimistic
+    const prevFollowing = isFollowing;
+    const prevCount = followersCount;
+    setIsFollowing(!prevFollowing);
+    setFollowersCount(prevCount + (prevFollowing ? -1 : 1));
+
+    try {
+      if (prevFollowing) {
+        const res = await api.unfollowUser(providerId);
+        setFollowersCount(Number(res.followers_count) || 0);
+        setIsFollowing(false);
+      } else {
+        const res = await api.followUser(providerId);
+        setFollowersCount(Number(res.followers_count) || 0);
+        setIsFollowing(true);
+      }
+    } catch {
+      // Roll back
+      setIsFollowing(prevFollowing);
+      setFollowersCount(prevCount);
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
   const isVerified =
     providerMeta?.verification_status === 'verified' ||
     providerMeta?.business_verification_status === 'verified' ||
@@ -250,16 +307,6 @@ function ProviderServicesContent() {
     (providerMeta?.created_at as string | null) ?? null,
   );
   const bio = (providerMeta?.description as string | null) || '';
-
-  const toggleFollow = () => {
-    if (followLoading) return;
-    setFollowLoading(true);
-    // Local toggle only — wire to a real endpoint when ready.
-    setTimeout(() => {
-      setIsFollowing((v) => !v);
-      setFollowLoading(false);
-    }, 200);
-  };
 
   const shareProvider = async () => {
     const url =
@@ -300,7 +347,6 @@ function ProviderServicesContent() {
     <main className="pp-page">
       <style>{CSS}</style>
 
-      {/* ── Top bar ─────────────────────────────────────── */}
       <header className="pp-topbar">
         <div className="pp-topbarInner">
           <button
@@ -355,281 +401,285 @@ function ProviderServicesContent() {
       </header>
 
       <div className="pp-shell">
-        {/* ── Profile header ──────────────────────────── */}
-        <section className="pp-profile">
-          {/* Banner */}
-          <div className="pp-banner">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="pp-bannerImg" />
-            ) : (
-              <div className="pp-bannerFallback" aria-hidden>
-                <MdBuild size={52} />
-              </div>
-            )}
-            <div className="pp-bannerGradient" aria-hidden />
-          </div>
-
-          {/* Avatar + actions */}
-          <div className="pp-identityRow">
-            <div className="pp-avatarWrap">
+        {/* ═══ LEFT COLUMN ═══════════════════════════════════ */}
+        <aside className="pp-left">
+          <div className="pp-profileCard">
+            <div className="pp-banner">
               {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="pp-avatarImg" />
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt="" className="pp-bannerImg" />
               ) : (
-                <div className="pp-avatarFallback">
-                  {providerName.charAt(0).toUpperCase()}
+                <div className="pp-bannerFallback" aria-hidden>
+                  <MdBuild size={52} />
                 </div>
               )}
-              {isVerified && (
-                <span className="pp-avatarBadge" aria-hidden>
-                  <MdVerified size={16} color="#FFFFFF" />
-                </span>
-              )}
+              <div className="pp-bannerGradient" aria-hidden />
             </div>
 
-            <div className="pp-actionRow">
-              <button
-                type="button"
-                onClick={toggleFollow}
-                disabled={followLoading || loading}
-                className={
-                  isFollowing
-                    ? 'pp-followBtn pp-followBtnFollowing'
-                    : 'pp-followBtn'
-                }
-              >
-                {isFollowing ? (
-                  <>
-                    <MdStar size={15} />
-                    <span>Following</span>
-                  </>
+            <div className="pp-identityRow">
+              <div className="pp-avatarWrap">
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrl} alt="" className="pp-avatarImg" />
                 ) : (
-                  <>
-                    <MdStarBorder size={15} />
-                    <span>Follow</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={openChat}
-                disabled={loading || !providerId}
-                className="pp-messageBtn"
-                aria-label="Message provider"
-              >
-                <MdChatBubbleOutline size={18} />
-              </button>
-
-              <button
-                type="button"
-                onClick={shareProvider}
-                disabled={loading}
-                className="pp-iconBtn pp-iconBtnSmall"
-                aria-label="Share provider"
-              >
-                {linkCopied ? (
-                  <MdCheck size={18} color="var(--success-fg)" />
-                ) : (
-                  <MdShare size={18} />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Identity text */}
-          <div className="pp-identityText">
-            <div className="pp-nameRow">
-              <h1 className="pp-displayName">{providerName}</h1>
-              {isVerified && (
-                <MdVerified
-                  size={18}
-                  color="var(--brand-primary)"
-                  aria-label="Verified"
-                />
-              )}
-            </div>
-
-            <span className="pp-handle">@{handle}</span>
-
-            {bio && <p className="pp-bio">{bio}</p>}
-
-            <div className="pp-metaRow">
-              <span className="pp-rolePill">🛠️ Service Provider</span>
-              {since && (
-                <span className="pp-metaItem">· Since {since}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="pp-stats">
-            <button
-              type="button"
-              className="pp-stat"
-              onClick={() => setTab('services')}
-            >
-              <span className="pp-statNum">{services.length}</span>
-              <span className="pp-statLabel">Services</span>
-            </button>
-            <button type="button" className="pp-stat" disabled>
-              <span className="pp-statNum">—</span>
-              <span className="pp-statLabel">Followers</span>
-            </button>
-            <button
-              type="button"
-              className="pp-stat"
-              onClick={() => setTab('reviews')}
-            >
-              <span className="pp-statNum">—</span>
-              <span className="pp-statLabel">Rating</span>
-            </button>
-          </div>
-        </section>
-
-        {/* ── Tabs ────────────────────────────────────── */}
-        <nav className="pp-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={tab === 'services'}
-            className={
-              tab === 'services' ? 'pp-tab pp-tabActive' : 'pp-tab'
-            }
-            onClick={() => setTab('services')}
-          >
-            <MdGridOn size={16} />
-            <span>Services</span>
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === 'about'}
-            className={
-              tab === 'about' ? 'pp-tab pp-tabActive' : 'pp-tab'
-            }
-            onClick={() => setTab('about')}
-          >
-            <MdInfoOutline size={16} />
-            <span>About</span>
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === 'reviews'}
-            className={
-              tab === 'reviews' ? 'pp-tab pp-tabActive' : 'pp-tab'
-            }
-            onClick={() => setTab('reviews')}
-          >
-            <MdStarOutline size={16} />
-            <span>Reviews</span>
-          </button>
-        </nav>
-
-        {/* ── Content ─────────────────────────────────── */}
-        <section className="pp-content">
-          {tab === 'services' && (
-            <>
-              {loading ? (
-                <div className="pp-grid" aria-busy="true">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <ServiceSkeleton key={i} />
-                  ))}
-                </div>
-              ) : error ? (
-                <div className="pp-empty">
-                  <div className="pp-emptyIcon" aria-hidden>
-                    <MdBuild size={28} />
+                  <div className="pp-avatarFallback">
+                    {providerName.charAt(0).toUpperCase()}
                   </div>
-                  <h2 className="pp-emptyTitle">
-                    We couldn&apos;t load these services
-                  </h2>
-                  <p className="pp-emptyBody">{error}</p>
+                )}
+                {isVerified && (
+                  <span className="pp-avatarBadge" aria-hidden>
+                    <MdVerified size={16} color="#FFFFFF" />
+                  </span>
+                )}
+              </div>
+
+              <div className="pp-actionRow">
+                {!isSelf && (
                   <button
                     type="button"
-                    className="pp-retry"
-                    onClick={handleRetry}
+                    onClick={toggleFollow}
+                    disabled={followLoading || loading}
+                    className={
+                      isFollowing
+                        ? 'pp-followBtn pp-followBtnFollowing'
+                        : 'pp-followBtn'
+                    }
                   >
-                    <MdRefresh size={17} />
-                    Try again
+                    {isFollowing ? (
+                      <>
+                        <MdStar size={15} />
+                        <span>Following</span>
+                      </>
+                    ) : (
+                      <>
+                        <MdStarBorder size={15} />
+                        <span>Follow</span>
+                      </>
+                    )}
                   </button>
-                </div>
-              ) : services.length === 0 ? (
-                <div className="pp-empty">
-                  <div className="pp-emptyIcon" aria-hidden>
-                    <MdBuild size={28} />
-                  </div>
-                  <h2 className="pp-emptyTitle">No services yet</h2>
-                  <p className="pp-emptyBody">
-                    This provider hasn&apos;t published any services yet.
-                  </p>
-                </div>
-              ) : filteredServices.length === 0 ? (
-                <div className="pp-empty">
-                  <p className="pp-emptyBody">
-                    No services match{' '}
-                    <strong>&quot;{search.trim()}&quot;</strong>.
-                  </p>
-                </div>
-              ) : (
-                <div className="pp-grid">
-                  {filteredServices.map((service) => (
-                    <ServiceReelCard
-                      key={service.id}
-                      service={service}
-                      onOpen={handleOpenService}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
+                )}
 
-          {tab === 'about' && (
-            <div className="pp-about">
-              <div className="pp-aboutRow">
-                <span className="pp-aboutLabel">Name</span>
-                <span className="pp-aboutValue">{providerName}</span>
+                <button
+                  type="button"
+                  onClick={openChat}
+                  disabled={loading || !providerId || isSelf}
+                  className="pp-iconBtn pp-iconBtnSmall"
+                  aria-label="Message provider"
+                  title="Message"
+                >
+                  <MdChatBubbleOutline size={18} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={shareProvider}
+                  disabled={loading}
+                  className="pp-iconBtn pp-iconBtnSmall"
+                  aria-label="Share provider"
+                  title="Share"
+                >
+                  {linkCopied ? (
+                    <MdCheck size={18} color="var(--success-fg)" />
+                  ) : (
+                    <MdShare size={18} />
+                  )}
+                </button>
               </div>
-              <div className="pp-aboutRow">
-                <span className="pp-aboutLabel">Handle</span>
-                <span className="pp-aboutValue">@{handle}</span>
+            </div>
+
+            <div className="pp-identityText">
+              <div className="pp-nameRow">
+                <h1 className="pp-displayName">{providerName}</h1>
+                {isVerified && (
+                  <MdVerified
+                    size={18}
+                    color="var(--brand-primary)"
+                    aria-label="Verified"
+                  />
+                )}
               </div>
-              <div className="pp-aboutRow">
-                <span className="pp-aboutLabel">Role</span>
-                <span className="pp-aboutValue">Service Provider</span>
+
+              <span className="pp-handle">@{handle}</span>
+
+              {bio && <p className="pp-bio">{bio}</p>}
+
+              <div className="pp-metaRow">
+                <span className="pp-rolePill">🛠️ Service Provider</span>
+                {since && (
+                  <span className="pp-metaItem">· Since {since}</span>
+                )}
               </div>
-              {since && (
+            </div>
+
+            <div className="pp-stats">
+              <button
+                type="button"
+                className="pp-stat"
+                onClick={() => setTab('services')}
+              >
+                <span className="pp-statNum">{services.length}</span>
+                <span className="pp-statLabel">Services</span>
+              </button>
+              <div className="pp-stat pp-statStatic">
+                <span className="pp-statNum">{followersCount}</span>
+                <span className="pp-statLabel">Followers</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* ═══ RIGHT COLUMN ══════════════════════════════════ */}
+        <section className="pp-right">
+          <nav className="pp-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={tab === 'services'}
+              className={
+                tab === 'services' ? 'pp-tab pp-tabActive' : 'pp-tab'
+              }
+              onClick={() => setTab('services')}
+            >
+              <MdGridOn size={16} />
+              <span>Services</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === 'about'}
+              className={
+                tab === 'about' ? 'pp-tab pp-tabActive' : 'pp-tab'
+              }
+              onClick={() => setTab('about')}
+            >
+              <MdInfoOutline size={16} />
+              <span>About</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === 'reviews'}
+              className={
+                tab === 'reviews' ? 'pp-tab pp-tabActive' : 'pp-tab'
+              }
+              onClick={() => setTab('reviews')}
+            >
+              <MdStarOutline size={16} />
+              <span>Reviews</span>
+            </button>
+          </nav>
+
+          <section className="pp-content">
+            {tab === 'services' && (
+              <>
+                {loading ? (
+                  <div className="pp-grid" aria-busy="true">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <ServiceSkeleton key={i} />
+                    ))}
+                  </div>
+                ) : error ? (
+                  <div className="pp-empty">
+                    <div className="pp-emptyIcon" aria-hidden>
+                      <MdBuild size={28} />
+                    </div>
+                    <h2 className="pp-emptyTitle">
+                      We couldn&apos;t load these services
+                    </h2>
+                    <p className="pp-emptyBody">{error}</p>
+                    <button
+                      type="button"
+                      className="pp-retry"
+                      onClick={handleRetry}
+                    >
+                      <MdRefresh size={17} />
+                      Try again
+                    </button>
+                  </div>
+                ) : services.length === 0 ? (
+                  <div className="pp-empty">
+                    <div className="pp-emptyIcon" aria-hidden>
+                      <MdBuild size={28} />
+                    </div>
+                    <h2 className="pp-emptyTitle">No services yet</h2>
+                    <p className="pp-emptyBody">
+                      This provider hasn&apos;t published any services
+                      yet.
+                    </p>
+                  </div>
+                ) : filteredServices.length === 0 ? (
+                  <div className="pp-empty">
+                    <p className="pp-emptyBody">
+                      No services match{' '}
+                      <strong>&quot;{search.trim()}&quot;</strong>.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="pp-grid">
+                    {filteredServices.map((service) => (
+                      <ServiceReelCard
+                        key={service.id}
+                        service={service}
+                        onOpen={handleOpenService}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {tab === 'about' && (
+              <div className="pp-about">
                 <div className="pp-aboutRow">
-                  <span className="pp-aboutLabel">Member since</span>
-                  <span className="pp-aboutValue">{since}</span>
+                  <span className="pp-aboutLabel">Name</span>
+                  <span className="pp-aboutValue">{providerName}</span>
                 </div>
-              )}
-              <div className="pp-aboutRow">
-                <span className="pp-aboutLabel">Status</span>
-                <span className="pp-aboutValue">
-                  {isVerified ? 'Verified provider' : 'Unverified'}
-                </span>
-              </div>
-              {bio && (
-                <div className="pp-aboutRow pp-aboutRowBlock">
-                  <span className="pp-aboutLabel">Bio</span>
-                  <span className="pp-aboutValue pp-aboutValueLeft">
-                    {bio}
+                <div className="pp-aboutRow">
+                  <span className="pp-aboutLabel">Handle</span>
+                  <span className="pp-aboutValue">@{handle}</span>
+                </div>
+                <div className="pp-aboutRow">
+                  <span className="pp-aboutLabel">Role</span>
+                  <span className="pp-aboutValue">Service Provider</span>
+                </div>
+                <div className="pp-aboutRow">
+                  <span className="pp-aboutLabel">Followers</span>
+                  <span className="pp-aboutValue">{followersCount}</span>
+                </div>
+                {since && (
+                  <div className="pp-aboutRow">
+                    <span className="pp-aboutLabel">Member since</span>
+                    <span className="pp-aboutValue">{since}</span>
+                  </div>
+                )}
+                <div className="pp-aboutRow">
+                  <span className="pp-aboutLabel">Status</span>
+                  <span className="pp-aboutValue">
+                    {isVerified ? 'Verified provider' : 'Unverified'}
                   </span>
                 </div>
-              )}
-            </div>
-          )}
-
-          {tab === 'reviews' && (
-            <div className="pp-empty">
-              <div className="pp-emptyIcon" aria-hidden>
-                <MdStarOutline size={28} />
+                {bio && (
+                  <div className="pp-aboutRow pp-aboutRowBlock">
+                    <span className="pp-aboutLabel">Bio</span>
+                    <span className="pp-aboutValue pp-aboutValueLeft">
+                      {bio}
+                    </span>
+                  </div>
+                )}
               </div>
-              <h2 className="pp-emptyTitle">No reviews yet</h2>
-              <p className="pp-emptyBody">
-                Be the first to book {providerName} and leave a review.
-              </p>
-            </div>
-          )}
+            )}
+
+            {tab === 'reviews' && (
+              <div className="pp-empty">
+                <div className="pp-emptyIcon" aria-hidden>
+                  <MdStarOutline size={28} />
+                </div>
+                <h2 className="pp-emptyTitle">Reviews coming soon</h2>
+                <p className="pp-emptyBody">
+                  We&rsquo;re building a reviews system so customers can
+                  rate providers and services. It&rsquo;ll be live in a
+                  future update.
+                </p>
+              </div>
+            )}
+          </section>
         </section>
       </div>
     </main>
@@ -677,8 +727,6 @@ const CSS = `
     transition: background-color 0.18s ease, color 0.18s ease;
     padding-bottom: 40px;
   }
-
-  /* ── Top bar ─────────────────────────────────────── */
   .pp-topbar {
     position: sticky;
     top: 0;
@@ -725,7 +773,6 @@ const CSS = `
     color: var(--text-tertiary);
     font-weight: 600;
   }
-
   .pp-iconBtn {
     width: 38px;
     height: 38px;
@@ -749,7 +796,6 @@ const CSS = `
     border: 1.5px solid var(--border-default);
     background: var(--bg-secondary);
   }
-
   .pp-searchBar {
     width: min(720px, 100%);
     margin: 0 auto;
@@ -775,22 +821,25 @@ const CSS = `
     border-color: var(--brand-primary);
     background: var(--bg-secondary);
   }
-
-  /* ── Shell ───────────────────────────────────────── */
   .pp-shell {
+    display: flex;
+    flex-direction: column;
     width: min(720px, 100%);
     margin: 0 auto;
     padding: 0 14px;
     box-sizing: border-box;
   }
-
-  /* ── Profile ─────────────────────────────────────── */
-  .pp-profile {
+  .pp-left,
+  .pp-right {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pp-profileCard {
     display: flex;
     flex-direction: column;
     margin-top: 14px;
   }
-
   .pp-banner {
     position: relative;
     width: 100%;
@@ -824,7 +873,6 @@ const CSS = `
     );
     pointer-events: none;
   }
-
   .pp-identityRow {
     display: flex;
     align-items: flex-end;
@@ -835,7 +883,6 @@ const CSS = `
     position: relative;
     z-index: 1;
   }
-
   .pp-avatarWrap {
     position: relative;
     width: 84px;
@@ -880,14 +927,12 @@ const CSS = `
     justify-content: center;
     box-sizing: border-box;
   }
-
   .pp-actionRow {
     display: flex;
     align-items: center;
     gap: 8px;
     padding-bottom: 4px;
   }
-
   .pp-followBtn {
     display: inline-flex;
     align-items: center;
@@ -904,7 +949,7 @@ const CSS = `
     transition: transform 0.12s, opacity 0.15s;
     box-shadow: var(--shadow-brand);
   }
-  .pp-followBtn:hover { opacity: 0.94; }
+  .pp-followBtn:hover:not(:disabled) { opacity: 0.94; }
   .pp-followBtn:active { transform: scale(0.97); }
   .pp-followBtn:disabled { opacity: 0.5; cursor: not-allowed; }
   .pp-followBtnFollowing {
@@ -913,26 +958,6 @@ const CSS = `
     border-color: var(--border-default);
     box-shadow: none;
   }
-
-  .pp-messageBtn {
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
-    border: 1.5px solid var(--border-default);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: border-color 0.15s, color 0.15s, transform 0.12s;
-  }
-  .pp-messageBtn:hover:not(:disabled) {
-    border-color: var(--brand-primary);
-    color: var(--brand-primary);
-  }
-  .pp-messageBtn:disabled { opacity: 0.45; cursor: not-allowed; }
-
   .pp-identityText {
     display: flex;
     flex-direction: column;
@@ -986,11 +1011,8 @@ const CSS = `
     color: var(--text-tertiary);
     font-weight: 600;
   }
-
-  /* ── Stats ───────────────────────────────────────── */
   .pp-stats {
     display: flex;
-    gap: 0;
     margin-top: 14px;
     padding: 12px 4px;
     border-top: 1px solid var(--border-default);
@@ -1009,8 +1031,8 @@ const CSS = `
     padding: 4px;
     transition: opacity 0.15s;
   }
-  .pp-stat:disabled { cursor: default; opacity: 0.7; }
-  .pp-stat:hover:not(:disabled) { opacity: 0.85; }
+  .pp-statStatic { cursor: default; }
+  .pp-stat:hover { opacity: 0.85; }
   .pp-statNum {
     font-size: 16px;
     font-weight: 800;
@@ -1024,17 +1046,12 @@ const CSS = `
     color: var(--text-tertiary);
     letter-spacing: 0.02em;
   }
-
-  /* ── Tabs ────────────────────────────────────────── */
   .pp-tabs {
     display: flex;
-    margin-top: 10px;
+    margin-top: 14px;
     border-bottom: 1px solid var(--border-default);
-    position: sticky;
-    top: 56px;
     background: var(--bg-primary);
-    z-index: 5;
-    transition: background-color 0.18s ease;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
   }
   .pp-tab {
     flex: 1;
@@ -1058,20 +1075,16 @@ const CSS = `
     color: var(--brand-primary);
     border-bottom-color: var(--brand-primary);
   }
-
-  /* ── Content ─────────────────────────────────────── */
   .pp-content {
     padding-top: 14px;
+    padding-bottom: 40px;
     min-height: 240px;
   }
-
-  /* ── Services grid (reels stay 9:16) ────────────── */
   .pp-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
-
   .pp-skel {
     width: 100%;
     aspect-ratio: 9 / 16;
@@ -1079,8 +1092,6 @@ const CSS = `
     background: var(--bg-tertiary);
     animation: ppShimmer 1.4s ease-in-out infinite;
   }
-
-  /* ── About ───────────────────────────────────────── */
   .pp-about {
     display: flex;
     flex-direction: column;
@@ -1120,8 +1131,6 @@ const CSS = `
     font-weight: 500;
     line-height: 1.5;
   }
-
-  /* ── Empty ───────────────────────────────────────── */
   .pp-empty {
     display: flex;
     flex-direction: column;
@@ -1174,29 +1183,94 @@ const CSS = `
   }
   .pp-retry:hover { opacity: 0.94; }
   .pp-retry:active { transform: scale(0.97); }
-
   @keyframes ppShimmer {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.55; }
   }
 
-  /* ── Desktop ─────────────────────────────────────── */
-  @media (min-width: 720px) {
-    .pp-shell { padding: 0 20px; }
-    .pp-topbarInner { padding: 8px 20px; }
-    .pp-searchBar { padding: 0 20px 10px; }
-    .pp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    .pp-avatarWrap { width: 96px; height: 96px; flex: 0 0 96px; }
-    .pp-avatarImg, .pp-avatarFallback { border-radius: 28px; }
+  /* Desktop 2-column */
+  @media (min-width: 1024px) {
+    .pp-page { padding-bottom: 60px; }
+    .pp-topbarInner {
+      width: min(1180px, 100%);
+      padding: 8px 32px;
+    }
+    .pp-searchBar {
+      width: min(1180px, 100%);
+      padding: 0 32px 10px;
+    }
+    .pp-shell {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 32px;
+      align-items: flex-start;
+      width: min(1180px, 100%);
+      padding: 24px 32px 0;
+    }
+    .pp-profileCard {
+      position: sticky;
+      top: 76px;
+      margin-top: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .pp-banner {
+      border-radius: 0;
+      box-shadow: none;
+      aspect-ratio: 16 / 7;
+    }
+    .pp-identityRow {
+      padding: 0 22px;
+      margin-top: -34px;
+    }
+    .pp-identityText { padding: 14px 22px 0; }
     .pp-displayName { font-size: 24px; }
+    .pp-stats {
+      margin-top: 18px;
+      padding: 14px 22px;
+      border-top: 1px solid var(--border-default);
+      border-bottom: none;
+    }
+    .pp-right {
+      border-radius: 22px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      overflow: hidden;
+      padding-bottom: 8px;
+    }
+    .pp-tabs {
+      margin-top: 0;
+      padding: 4px 12px 0;
+      background: transparent;
+    }
+    .pp-tab { padding: 16px 12px; font-size: 12.5px; }
+    .pp-content { padding: 20px 20px 24px; }
+    .pp-grid {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 14px;
+    }
   }
 
-  @media (min-width: 1024px) {
-    .pp-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (min-width: 1440px) {
+    .pp-topbarInner,
+    .pp-searchBar,
+    .pp-shell {
+      width: min(1280px, 100%);
+    }
+    .pp-shell {
+      grid-template-columns: 420px 1fr;
+      gap: 40px;
+    }
+    .pp-grid {
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .pp-skel, .pp-followBtn, .pp-retry, .pp-iconBtn, .pp-messageBtn {
+    .pp-skel, .pp-followBtn, .pp-retry, .pp-iconBtn {
       animation: none;
       transition: none;
     }

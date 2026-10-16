@@ -801,21 +801,34 @@ class ApiService {
     const res = await this.axios.get(`/storekeeper/items/${storeId}/search`, { params: { q: query } });
     return res.data;
   }
-
-  public async followStore(storeId: string): Promise<void> {
-    await this.axios.post(`/storekeeper/${storeId}/follow`);
+  public async followStore(storeId: string): Promise<{
+    is_following: boolean;
+    followers_count: number;
+  }> {
+    const res = await this.axios.post(`/storekeeper/${storeId}/follow`);
+    return res.data;
   }
 
-  public async unfollowStore(storeId: string): Promise<void> {
-    await this.axios.delete(`/storekeeper/${storeId}/unfollow`);
+  public async unfollowStore(storeId: string): Promise<{
+    is_following: boolean;
+    followers_count: number;
+  }> {
+    const res = await this.axios.delete(`/storekeeper/${storeId}/unfollow`);
+    return res.data;
   }
 
-  public async getFollowStatus(storeId: string): Promise<boolean> {
+  public async getFollowStatus(storeId: string): Promise<{
+    is_following: boolean;
+    followers_count: number;
+  }> {
     try {
       const res = await this.axios.get(`/storekeeper/${storeId}/follow-status`);
-      return (res.data.is_following as boolean) ?? false;
+      return {
+        is_following: Boolean(res.data?.is_following),
+        followers_count: Number(res.data?.followers_count) || 0,
+      };
     } catch {
-      return false;
+      return { is_following: false, followers_count: 0 };
     }
   }
 
