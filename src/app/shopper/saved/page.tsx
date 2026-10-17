@@ -506,6 +506,53 @@ function SavedPageContent() {
     });
   };
 
+  // ─── Delete Handlers ──────────────────────────────────────────────
+  const handleDeleteSaved = async (listingId: string) => {
+    if (!window.confirm('Remove this item from your saved list?')) return;
+    try {
+      await api.unsaveListing(listingId);
+      setSavedItems((prev) => prev.filter((i) => i.listing_id !== listingId));
+    } catch {
+      alert('Failed to remove saved item.');
+    }
+  };
+
+  const handleDeleteBasket = async (basketItemId: number) => {
+    if (!window.confirm('Remove this item from your basket?')) return;
+    try {
+      await api.removeBasketItem(basketItemId);
+      setBasketItems((prev) => prev.filter((i) => i.id !== basketItemId));
+    } catch {
+      alert('Failed to remove basket item.');
+    }
+  };
+
+  const handleLocalRemove = (
+    tab: Tab,
+    id: string | number,
+  ) => {
+    if (!window.confirm(`Remove this ${tab.toLowerCase()} from your view?`))
+      return;
+    if (tab === 'Pickups')
+      setInstantPickups((prev) =>
+        prev.filter((i) => (i.id || i.reference) !== id),
+      );
+    else if (tab === 'Jobs')
+      setInstantJobs((prev) =>
+        prev.filter((i) => (i.id || i.reference) !== id),
+      );
+    else if (tab === 'Reservations')
+      setReservations((prev) => prev.filter((i) => i.order_id !== id));
+    else if (tab === 'Deliveries')
+      setDeliveries((prev) => prev.filter((i) => i.order_id !== id));
+    else if (tab === 'Bookings')
+      setBookings((prev) =>
+        prev.filter((i) => (i.booking_id || i.service_id) !== id),
+      );
+    else if (tab === 'History')
+      setHistory((prev) => prev.filter((i) => i.order_id !== id));
+  };
+
   const openReservation = (order: WalletOrder) =>
     router.push(`/reservation-confirmed?order_id=${order.order_id}`);
 
@@ -521,15 +568,6 @@ function SavedPageContent() {
 
   const openInstantReceipt = (reference: string) =>
     router.push(`/receipt/instant/${encodeURIComponent(reference)}`);
-
-  const openStoreOnMap = (order: WalletOrder, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const lat = Number(order.store_latitude ?? NaN);
-    const lng = Number(order.store_longitude ?? NaN);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    const dest = encodeURIComponent(order.store_name || 'Store');
-    router.push(`/map?lat=${lat}&lng=${lng}&destination=${dest}&navigate=true`);
-  };
 
   const handleCreateWanted = async () => {
     const title = newWantedTitle.trim();
@@ -743,6 +781,7 @@ function SavedPageContent() {
     footerLeft?: React.ReactNode;
     onPrimary: () => void;
     primaryLabel: string;
+    onDelete?: () => void;
   }
 
   const renderPost = ({
@@ -765,10 +804,11 @@ function SavedPageContent() {
     footerLeft,
     onPrimary,
     primaryLabel,
+    onDelete,
   }: PostProps) => {
     const isLiked = liked.has(postKey);
     return (
-      <article key={postKey} style={styles.post}>
+      <article key={postKey} style={styles.post} className="sv-post">
         {/* ─── Post header ─── */}
         <div style={styles.postHeader}>
           <div style={styles.postAvatar}>
@@ -808,13 +848,28 @@ function SavedPageContent() {
             )}
           </div>
 
-          <button
-            type="button"
-            style={styles.postMenuBtn}
-            aria-label="More"
-          >
-            <MdMoreHoriz size={20} color="var(--text-tertiary)" />
-          </button>
+          {onDelete ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              style={styles.postMenuBtn}
+              aria-label="Delete"
+              title="Delete / Remove"
+            >
+              <MdDeleteOutline size={20} color="var(--text-tertiary)" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              style={styles.postMenuBtn}
+              aria-label="More"
+            >
+              <MdMoreHoriz size={20} color="var(--text-tertiary)" />
+            </button>
+          )}
         </div>
 
         {/* ─── Media ─── */}
@@ -949,7 +1004,7 @@ function SavedPageContent() {
     }
 
     return (
-      <div style={styles.feed}>
+      <div style={styles.feed} className="sv-feed">
         {filteredSaved.map((item) => {
           const image = resolveImageUrl(item.image_url);
           const key = `saved-${item.listing_id}`;
@@ -971,6 +1026,7 @@ function SavedPageContent() {
             price: fmtNaira(item.price),
             primaryLabel: 'View listing',
             onPrimary: () => router.push(`/item-detail/${item.listing_id}`),
+            onDelete: () => handleDeleteSaved(item.listing_id),
           });
         })}
       </div>
@@ -1005,11 +1061,11 @@ function SavedPageContent() {
             }
           />
         ) : (
-          <div style={styles.feed}>
+          <div style={styles.feed} className="sv-feed">
             {filteredWanted.map((alert) => {
               const key = `wanted-${alert.id}`;
               return (
-                <article key={key} style={styles.post}>
+                <article key={key} style={styles.post} className="sv-post">
                   <div style={styles.postHeader}>
                     <div
                       style={{
@@ -1053,6 +1109,15 @@ function SavedPageContent() {
                         </span>
                       )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteWanted(alert.id)}
+                      style={styles.postMenuBtn}
+                      aria-label="Delete Alert"
+                      title="Delete Alert"
+                    >
+                      <MdDeleteOutline size={20} color="var(--text-tertiary)" />
+                    </button>
                   </div>
 
                   <div style={styles.wantedBody}>
@@ -1074,17 +1139,6 @@ function SavedPageContent() {
                     >
                       {alert.is_active ? 'Pause' : 'Resume'}
                     </button>
-                    <button
-                      onClick={() => handleDeleteWanted(alert.id)}
-                      style={{
-                        ...styles.wantedActionBtn,
-                        color: 'var(--danger-fg)',
-                        borderColor: 'var(--danger-strong)',
-                      }}
-                    >
-                      <MdDeleteOutline size={16} />
-                      Delete
-                    </button>
                   </div>
                 </article>
               );
@@ -1097,7 +1151,7 @@ function SavedPageContent() {
 
   const renderOrderPost = (
     order: WalletOrder,
-    opts: { showExpiry: boolean }
+    opts: { showExpiry: boolean; tab: Tab }
   ) => {
     const storeImage = resolveImageUrl(order.store_image_url);
     const listingImage = resolveImageUrl(order.listing_image_url);
@@ -1161,6 +1215,7 @@ function SavedPageContent() {
       ),
       primaryLabel: 'Open order',
       onPrimary: () => openReservation(order),
+      onDelete: () => handleLocalRemove(opts.tab, order.order_id),
     });
   };
 
@@ -1202,6 +1257,11 @@ function SavedPageContent() {
       chipFg: meta.fg,
       primaryLabel: 'View booking',
       onPrimary: () => openBooking(booking),
+      onDelete: () =>
+        handleLocalRemove(
+          'Bookings',
+          booking.booking_id || booking.service_id || ''
+        ),
     });
   };
 
@@ -1257,6 +1317,8 @@ function SavedPageContent() {
       chipFg: statusChip.fg,
       primaryLabel: 'View receipt',
       onPrimary: () => openInstantReceipt(ref),
+      onDelete: () =>
+        handleLocalRemove(kind === 'pickup' ? 'Pickups' : 'Jobs', txn.id || ref),
     });
   };
 
@@ -1283,6 +1345,7 @@ function SavedPageContent() {
       price: fmtNaira(lineTotal),
       primaryLabel: 'View listing',
       onPrimary: () => router.push(`/item-detail/${item.listing_id}`),
+      onDelete: () => handleDeleteBasket(item.id),
     });
   };
 
@@ -1311,7 +1374,7 @@ function SavedPageContent() {
           );
         }
         return (
-          <div style={styles.feed}>
+          <div style={styles.feed} className="sv-feed">
             {filteredPickups.map((p) => renderInstantPost(p, 'pickup'))}
           </div>
         );
@@ -1334,7 +1397,7 @@ function SavedPageContent() {
           );
         }
         return (
-          <div style={styles.feed}>
+          <div style={styles.feed} className="sv-feed">
             {filteredJobs.map((j) => renderInstantPost(j, 'job'))}
           </div>
         );
@@ -1357,7 +1420,7 @@ function SavedPageContent() {
           );
         }
         return (
-          <div style={styles.feed}>
+          <div style={styles.feed} className="sv-feed">
             {[...filteredReservations]
               .sort((a, b) => {
                 const ta = parseAsUtc(a.expires_at);
@@ -1366,7 +1429,12 @@ function SavedPageContent() {
                 if (Number.isNaN(tb)) return -1;
                 return ta - tb;
               })
-              .map((order) => renderOrderPost(order, { showExpiry: true }))}
+              .map((order) =>
+                renderOrderPost(order, {
+                  showExpiry: true,
+                  tab: 'Reservations',
+                })
+              )}
           </div>
         );
       case 'Deliveries':
@@ -1388,7 +1456,7 @@ function SavedPageContent() {
           );
         }
         return (
-          <div style={styles.feed}>
+          <div style={styles.feed} className="sv-feed">
             {[...filteredDeliveries]
               .sort((a, b) => {
                 const ta = parseAsUtc(a.created_at);
@@ -1397,7 +1465,12 @@ function SavedPageContent() {
                 if (Number.isNaN(tb)) return -1;
                 return tb - ta;
               })
-              .map((order) => renderOrderPost(order, { showExpiry: false }))}
+              .map((order) =>
+                renderOrderPost(order, {
+                  showExpiry: false,
+                  tab: 'Deliveries',
+                })
+              )}
           </div>
         );
       case 'Bookings':
@@ -1419,7 +1492,7 @@ function SavedPageContent() {
           );
         }
         return (
-          <div style={styles.feed}>
+          <div style={styles.feed} className="sv-feed">
             {[...filteredBookings]
               .sort((a, b) => {
                 const ta = parseAsUtc(a.created_at);
@@ -1448,7 +1521,7 @@ function SavedPageContent() {
           );
         }
         return (
-          <div style={styles.feed}>
+          <div style={styles.feed} className="sv-feed">
             {filteredBasket.map((item, i) => renderBasketPost(item, i))}
             <div style={styles.basketFooter}>
               <div style={styles.basketTotalRow}>
@@ -1483,7 +1556,7 @@ function SavedPageContent() {
           );
         }
         return (
-          <div style={styles.feed}>
+          <div style={styles.feed} className="sv-feed">
             {[...filteredHistory]
               .sort((a, b) => {
                 const ta = parseAsUtc(a.created_at);
@@ -1492,7 +1565,12 @@ function SavedPageContent() {
                 if (Number.isNaN(tb)) return -1;
                 return tb - ta;
               })
-              .map((order) => renderOrderPost(order, { showExpiry: false }))}
+              .map((order) =>
+                renderOrderPost(order, {
+                  showExpiry: false,
+                  tab: 'History',
+                })
+              )}
           </div>
         );
     }
@@ -1809,6 +1887,7 @@ const CSS = `
     background: var(--bg-primary);
     color: var(--text-primary);
     transition: background-color 0.18s ease, color 0.18s ease;
+    max-width: 100%;
   }
 
   /* Pill tabs — horizontal scroll */
@@ -1855,21 +1934,49 @@ const CSS = `
     transform: scale(0.97);
   }
 
-  /* ─── Desktop: wider feed area ─── */
-  @media (min-width: 1024px) {
+  /* Feed base */
+  .sv-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /* ─── Desktop: Full-width grid layout ─── */
+  @media (min-width: 900px) {
     .sv-root {
-      max-width: 720px;
+      max-width: 100%;
       margin: 0 auto;
     }
     .sv-tab-strip {
-      padding: 12px 24px 16px;
+      padding: 12px 32px 16px;
+      justify-content: center;
     }
     .sv-content {
-      padding: 24px 24px 40px !important;
+      padding: 24px 32px 40px !important;
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
     }
     .sv-pill {
-      padding: 10px 16px;
+      padding: 10px 18px;
       font-size: 13.5px;
+    }
+    .sv-feed {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+    .sv-post {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default) !important;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 0;
+      transition: transform 0.2s;
+    }
+    .sv-post:hover {
+      border-color: color-mix(in srgb, var(--brand-primary) 30%, transparent) !important;
     }
     .sv-modal-overlay {
       align-items: center !important;
@@ -1882,8 +1989,8 @@ const CSS = `
   }
 
   @media (min-width: 1440px) {
-    .sv-root {
-      max-width: 820px;
+    .sv-feed {
+      grid-template-columns: repeat(3, 1fr);
     }
   }
 
