@@ -36,6 +36,8 @@ import {
   MdChatBubbleOutline,
   MdSend,
   MdVerified,
+  MdShoppingBag,
+  MdHistory,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -153,16 +155,22 @@ const TABS = [
 
 type Tab = (typeof TABS)[number];
 
-const TAB_EMOJI: Record<Tab, string> = {
-  Items: '🔖',
-  Wanted: '🔍',
-  Pickups: '🛍️',
-  Jobs: '🛠️',
-  Reservations: '📌',
-  Deliveries: '🚚',
-  Bookings: '📅',
-  Basket: '🧺',
-  History: '🕘',
+// ─── Tab icons (Material Design, replaces emoji) ────────────────
+type TabIcon = React.ComponentType<{
+  size?: number | string;
+  color?: string;
+}>;
+
+const TAB_ICON: Record<Tab, TabIcon> = {
+  Items: MdBookmark,
+  Wanted: MdSearch,
+  Pickups: MdShoppingBag,
+  Jobs: MdBuild,
+  Reservations: MdEventNote,
+  Deliveries: MdLocalShipping,
+  Bookings: MdCalendarToday,
+  Basket: MdShoppingBasket,
+  History: MdHistory,
 };
 
 function isValidTab(value: string | null): value is Tab {
@@ -759,7 +767,6 @@ function SavedPageContent() {
     primaryLabel,
   }: PostProps) => {
     const isLiked = liked.has(postKey);
-    const [expanded, setExpanded] = [false, () => {}] as const; // eslint-disable-line @typescript-eslint/no-unused-vars
     return (
       <article key={postKey} style={styles.post}>
         {/* ─── Post header ─── */}
@@ -829,7 +836,6 @@ function SavedPageContent() {
             <div style={styles.postMediaFallback}>{mediaFallback}</div>
           )}
 
-          {/* Chips overlaid on media */}
           {chipLabel && (
             <span
               style={{
@@ -843,7 +849,7 @@ function SavedPageContent() {
           )}
         </button>
 
-        {/* ─── Action row (Instagram style) ─── */}
+        {/* ─── Action row ─── */}
         <div style={styles.postActions}>
           <button
             type="button"
@@ -888,7 +894,7 @@ function SavedPageContent() {
           </button>
         </div>
 
-        {/* ─── Body: price / title / caption ─── */}
+        {/* ─── Body ─── */}
         <div style={styles.postBody}>
           {price && (
             <div style={styles.postPrice}>{price}</div>
@@ -1588,6 +1594,10 @@ function SavedPageContent() {
         {TABS.map((tab) => {
           const active = activeTab === tab;
           const count = tabCounts[tab];
+          const Icon = TAB_ICON[tab];
+          const iconColor = active
+            ? 'var(--brand-on-gradient)'
+            : 'var(--text-secondary)';
           return (
             <button
               key={tab}
@@ -1610,7 +1620,7 @@ function SavedPageContent() {
                 boxShadow: active ? 'var(--shadow-brand)' : 'none',
               }}
             >
-              <span aria-hidden>{TAB_EMOJI[tab]}</span>
+              <Icon size={16} color={iconColor} />
               <span>{tab}</span>
               {count > 0 && (
                 <span
@@ -1845,16 +1855,17 @@ const CSS = `
     transform: scale(0.97);
   }
 
+  /* ─── Desktop: wider feed area ─── */
   @media (min-width: 1024px) {
     .sv-root {
-      max-width: 640px;
+      max-width: 720px;
       margin: 0 auto;
     }
     .sv-tab-strip {
-      padding: 12px 20px 16px;
+      padding: 12px 24px 16px;
     }
     .sv-content {
-      padding: 24px 20px 40px !important;
+      padding: 24px 24px 40px !important;
     }
     .sv-pill {
       padding: 10px 16px;
@@ -1867,6 +1878,12 @@ const CSS = `
     .sv-sheet {
       border-radius: 20px !important;
       max-height: 80vh;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .sv-root {
+      max-width: 820px;
     }
   }
 
@@ -2281,7 +2298,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-muted)',
   },
 
-  // Wanted card (custom, not using renderPost)
+  // Wanted card
   wantedBody: {
     padding: '4px 14px 12px',
     display: 'flex',
