@@ -139,6 +139,13 @@ interface InstantTransaction {
   status?: string;
   created_at?: string;
   counterparty?: InstantCounterparty | null;
+  listing_title?: string;
+  listing_image_url?: string;
+  store_image_url?: string;
+  service_title?: string;
+  service_image_url?: string;
+  provider_image_url?: string;
+  [key: string]: unknown;
 }
 
 const TABS = [
@@ -155,7 +162,7 @@ const TABS = [
 
 type Tab = (typeof TABS)[number];
 
-// ─── Tab icons (Material Design, replaces emoji) ────────────────
+// ─── Tab icons ──────────────────────────────────────────────────
 type TabIcon = React.ComponentType<{
   size?: number | string;
   color?: string;
@@ -234,15 +241,28 @@ function fmtRelative(iso?: string | null): string {
   return `${Math.floor(days / 365)}y`;
 }
 
+/** 
+ * Fixed: Handles local uploads by prepending /storekeeper to relative paths, 
+ * otherwise leaves absolute (Cloudinary) URLs alone.
+ */
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
+  const t = url.trim();
+  if (!t) return null;
+  if (t.startsWith('http') || t.startsWith('blob:') || t.startsWith('data:')) {
+    return t;
+  }
   const base =
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_API_BASE ||
     '';
-  if (!base) return url;
-  return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+  if (!base) return t;
+
+  const cleanBase = base.replace(/\/+$/, '');
+  // If it's a legacy local upload, route it to the storekeeper prefix
+  const path = t.startsWith('/uploads/') ? `/storekeeper${t}` : t;
+
+  return `${cleanBase}${path.startsWith('/') ? '' : '/'}${path}`;
 }
 
 function parseAsUtc(iso?: string | null): number {
@@ -324,8 +344,6 @@ function shortAddress(addr?: string | null): string {
   if (s.length <= 42) return s;
   return `${s.slice(0, 40)}…`;
 }
-
-const EXPIRING_SOON_MS = 30 * 60 * 1000;
 
 // ─── Main component ─────────────────────────────────────────────
 function SavedPageContent() {
@@ -527,10 +545,7 @@ function SavedPageContent() {
     }
   };
 
-  const handleLocalRemove = (
-    tab: Tab,
-    id: string | number,
-  ) => {
+  const handleLocalRemove = (tab: Tab, id: string | number) => {
     if (!window.confirm(`Remove this ${tab.toLowerCase()} from your view?`))
       return;
     if (tab === 'Pickups')
@@ -1291,6 +1306,13 @@ function SavedPageContent() {
 
     const key = `instant-${ref}`;
 
+    // FIX: Fetch the actual image from the transaction payload
+    const mediaUrl = resolveImageUrl(
+      kind === 'pickup'
+        ? txn.listing_image_url || txn.store_image_url
+        : txn.service_image_url || txn.provider_image_url
+    );
+
     return renderPost({
       postKey: key,
       avatarUrl: null,
@@ -1302,7 +1324,7 @@ function SavedPageContent() {
         ),
       authorName: counterpartyLabel,
       timestamp: txn.created_at ? fmtRelative(txn.created_at) : undefined,
-      mediaUrl: null,
+      mediaUrl: mediaUrl, // <--- Now dynamic!
       mediaFallback:
         kind === 'pickup' ? (
           <MdInventory2 size={44} color="var(--text-muted)" />
