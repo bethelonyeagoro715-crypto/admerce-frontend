@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../services/api';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
+import { alertDialog, confirmDialog } from '../../../components/ui/dialogs';
 import {
   MdRefresh,
   MdNotificationsActive,
@@ -223,7 +224,6 @@ function fmtDateTime(iso: string | undefined | null): string {
   }
 }
 
-/** Instagram-style relative time ("2h", "3d", "6w") */
 function fmtRelative(iso?: string | null): string {
   if (!iso) return '';
   const t = parseAsUtc(iso);
@@ -241,10 +241,6 @@ function fmtRelative(iso?: string | null): string {
   return `${Math.floor(days / 365)}y`;
 }
 
-/** 
- * Fixed: Handles local uploads by prepending /storekeeper to relative paths, 
- * otherwise leaves absolute (Cloudinary) URLs alone.
- */
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const t = url.trim();
@@ -259,7 +255,6 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   if (!base) return t;
 
   const cleanBase = base.replace(/\/+$/, '');
-  // If it's a legacy local upload, route it to the storekeeper prefix
   const path = t.startsWith('/uploads/') ? `/storekeeper${t}` : t;
 
   return `${cleanBase}${path.startsWith('/') ? '' : '/'}${path}`;
@@ -374,7 +369,6 @@ function SavedPageContent() {
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
 
-  // Local-only likes for now — persists visually within the session
   const [liked, setLiked] = useState<Set<string>>(new Set());
 
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
@@ -526,28 +520,51 @@ function SavedPageContent() {
 
   // ─── Delete Handlers ──────────────────────────────────────────────
   const handleDeleteSaved = async (listingId: string) => {
-    if (!window.confirm('Remove this item from your saved list?')) return;
+    const ok = await confirmDialog({
+      title: 'Remove item?',
+      body: 'This will remove the item from your saved list.',
+      kind: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.unsaveListing(listingId);
       setSavedItems((prev) => prev.filter((i) => i.listing_id !== listingId));
     } catch {
-      alert('Failed to remove saved item.');
+      await alertDialog({
+        title: 'Failed',
+        body: 'Could not remove saved item.',
+        kind: 'danger',
+      });
     }
   };
 
   const handleDeleteBasket = async (basketItemId: number) => {
-    if (!window.confirm('Remove this item from your basket?')) return;
+    const ok = await confirmDialog({
+      title: 'Remove from basket?',
+      body: 'This will remove the item from your basket.',
+      kind: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.removeBasketItem(basketItemId);
       setBasketItems((prev) => prev.filter((i) => i.id !== basketItemId));
     } catch {
-      alert('Failed to remove basket item.');
+      await alertDialog({
+        title: 'Failed',
+        body: 'Could not remove basket item.',
+        kind: 'danger',
+      });
     }
   };
 
-  const handleLocalRemove = (tab: Tab, id: string | number) => {
-    if (!window.confirm(`Remove this ${tab.toLowerCase()} from your view?`))
-      return;
+  const handleLocalRemove = async (tab: Tab, id: string | number) => {
+    const ok = await confirmDialog({
+      title: `Remove ${tab.toLowerCase()}?`,
+      body: `This will remove this ${tab.toLowerCase()} from your view.`,
+      kind: 'danger',
+    });
+    if (!ok) return;
+    
     if (tab === 'Pickups')
       setInstantPickups((prev) =>
         prev.filter((i) => (i.id || i.reference) !== id),
@@ -624,12 +641,21 @@ function SavedPageContent() {
   };
 
   const handleDeleteWanted = async (id: number) => {
-    if (!window.confirm('Delete this wanted alert?')) return;
+    const ok = await confirmDialog({
+      title: 'Delete alert?',
+      body: 'This wanted alert will be permanently deleted.',
+      kind: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.deleteWantedAlert(id);
       setWantedAlerts((prev) => prev.filter((a) => a.id !== id));
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete.');
+      await alertDialog({
+        title: 'Failed',
+        body: err instanceof Error ? err.message : 'Failed to delete.',
+        kind: 'danger',
+      });
     }
   };
 
@@ -644,7 +670,11 @@ function SavedPageContent() {
         ),
       );
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to toggle.');
+      await alertDialog({
+        title: 'Failed',
+        body: err instanceof Error ? err.message : 'Failed to toggle.',
+        kind: 'danger',
+      });
     }
   };
 
@@ -834,6 +864,9 @@ function SavedPageContent() {
                 alt=""
                 loading="lazy"
                 style={styles.postAvatarImg}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
               />
             ) : (
               <div style={styles.postAvatarFallback}>{avatarFallback}</div>
@@ -901,10 +934,24 @@ function SavedPageContent() {
               alt=""
               loading="lazy"
               style={styles.postMediaImg}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                const parent = (e.target as HTMLImageElement).parentElement;
+                const fallback = parent?.querySelector('.sv-fallback');
+                if (fallback) (fallback as HTMLElement).style.display = 'flex';
+              }}
             />
-          ) : (
-            <div style={styles.postMediaFallback}>{mediaFallback}</div>
-          )}
+          ) : null}
+          
+          <div 
+            className="sv-fallback" 
+            style={{ 
+              ...styles.postMediaFallback, 
+              display: mediaUrl ? 'none' : 'flex' 
+            }}
+          >
+            {mediaFallback}
+          </div>
 
           {chipLabel && (
             <span
@@ -1306,7 +1353,6 @@ function SavedPageContent() {
 
     const key = `instant-${ref}`;
 
-    // FIX: Fetch the actual image from the transaction payload
     const mediaUrl = resolveImageUrl(
       kind === 'pickup'
         ? txn.listing_image_url || txn.store_image_url
@@ -1324,7 +1370,7 @@ function SavedPageContent() {
         ),
       authorName: counterpartyLabel,
       timestamp: txn.created_at ? fmtRelative(txn.created_at) : undefined,
-      mediaUrl: mediaUrl, // <--- Now dynamic!
+      mediaUrl: mediaUrl,
       mediaFallback:
         kind === 'pickup' ? (
           <MdInventory2 size={44} color="var(--text-muted)" />
@@ -1910,9 +1956,9 @@ const CSS = `
     color: var(--text-primary);
     transition: background-color 0.18s ease, color 0.18s ease;
     max-width: 100%;
+    overflow-x: hidden;
   }
 
-  /* Pill tabs — horizontal scroll */
   .sv-tab-strip {
     display: flex;
     gap: 8px;
@@ -1956,14 +2002,13 @@ const CSS = `
     transform: scale(0.97);
   }
 
-  /* Feed base */
   .sv-feed {
     display: flex;
     flex-direction: column;
     gap: 18px;
+    width: 100%;
   }
 
-  /* ─── Desktop: Full-width grid layout ─── */
   @media (min-width: 900px) {
     .sv-root {
       max-width: 100%;
@@ -1976,8 +2021,9 @@ const CSS = `
     .sv-content {
       padding: 24px 32px 40px !important;
       width: 100%;
-      max-width: 1400px;
+      max-width: 960px;
       margin: 0 auto;
+      box-sizing: border-box;
     }
     .sv-pill {
       padding: 10px 18px;
@@ -1987,6 +2033,7 @@ const CSS = `
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 24px;
+      width: 100%;
     }
     .sv-post {
       background: var(--bg-secondary);
@@ -1996,6 +2043,8 @@ const CSS = `
       box-shadow: var(--shadow-sm);
       margin-bottom: 0;
       transition: transform 0.2s;
+      min-width: 0;
+      width: 100%;
     }
     .sv-post:hover {
       border-color: color-mix(in srgb, var(--brand-primary) 30%, transparent) !important;
@@ -2011,8 +2060,8 @@ const CSS = `
   }
 
   @media (min-width: 1440px) {
-    .sv-feed {
-      grid-template-columns: repeat(3, 1fr);
+    .sv-content {
+      max-width: 1100px;
     }
   }
 
@@ -2205,14 +2254,12 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
   },
 
-  // ─── Feed ─────────────────────────────────────────────────
   feed: {
     display: 'flex',
     flexDirection: 'column',
     gap: 18,
   },
 
-  // ─── Instagram-style post ─────────────────────────────────
   post: {
     backgroundColor: 'var(--bg-primary)',
     borderTop: '1px solid var(--border-default)',
@@ -2220,7 +2267,6 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background-color 0.18s ease, border-color 0.18s ease',
   },
 
-  // Header
   postHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -2301,7 +2347,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
   },
 
-  // Media
   postMedia: {
     position: 'relative',
     width: '100%',
@@ -2343,7 +2388,6 @@ const styles: Record<string, React.CSSProperties> = {
     pointerEvents: 'none',
   },
 
-  // Action row
   postActions: {
     display: 'flex',
     alignItems: 'center',
@@ -2362,7 +2406,6 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'transform 0.12s',
   },
 
-  // Body
   postBody: {
     padding: '0 14px 14px',
     display: 'flex',
@@ -2414,7 +2457,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignSelf: 'flex-start',
   },
 
-  // Expiry row inside post footer
   expiryRow: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -2427,7 +2469,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-muted)',
   },
 
-  // Wanted card
   wantedBody: {
     padding: '4px 14px 12px',
     display: 'flex',
@@ -2483,7 +2524,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
 
-  // Create wanted button
   createAlertBtn: {
     display: 'flex',
     alignItems: 'center',
