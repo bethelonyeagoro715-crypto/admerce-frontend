@@ -16,6 +16,7 @@ import {
   MdClose,
   MdCheckCircle,
   MdVerified,
+  MdAutoAwesome,
 } from 'react-icons/md';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -1311,10 +1312,10 @@ export default function ShopperHomePage() {
             <button
               style={styles.iconBtn}
               onClick={openSearch}
-              aria-label="Search"
-              title="Search"
+              aria-label="Ask SEAI"
+              title="Ask SEAI"
             >
-              <MdSearch size={22} color="var(--brand-primary)" />
+              <MdAutoAwesome size={22} color="var(--brand-primary)" />
             </button>
             <button
               style={styles.iconBtn}
@@ -1638,6 +1639,16 @@ export default function ShopperHomePage() {
           </div>
         </div>
       </div>
+
+      {/* ─── SEAI Floating Action Button ─── */}
+      <button
+        type="button"
+        onClick={openSearch}
+        className="sh-seai-fab"
+        aria-label="Ask SEAI"
+      >
+        <MdAutoAwesome size={26} color="#fff" />
+      </button>
 
       {showFilter && (
         <div
@@ -2574,6 +2585,52 @@ const CSS = `
     max-height: 88vh;
   }
 
+  /* ─── SEAI Floating Action Button ─── */
+  .sh-seai-fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--brand-gradient);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px rgba(5, 4, 170, 0.45), 0 2px 6px rgba(0,0,0,0.1);
+    cursor: pointer;
+    z-index: 100;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  }
+  
+  /* Subtle pulse to draw the eye */
+  .sh-seai-fab::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: var(--brand-primary);
+    opacity: 0.15;
+    animation: sh-seai-pulse 2.5s infinite;
+    z-index: -1;
+  }
+
+  .sh-seai-fab:hover {
+    transform: scale(1.05) translateY(-3px);
+    box-shadow: 0 12px 32px rgba(5, 4, 170, 0.55), 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .sh-seai-fab:active {
+    transform: scale(0.95);
+    box-shadow: 0 4px 12px rgba(5, 4, 170, 0.4);
+  }
+
+  @keyframes sh-seai-pulse {
+    0% { transform: scale(1); opacity: 0.15; }
+    50% { transform: scale(1.15); opacity: 0; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+
   @media (min-width: 1024px) {
     .sh-modal-overlay {
       align-items: center;
@@ -2615,6 +2672,13 @@ const CSS = `
       font-size: 14px;
       letter-spacing: 0.8px;
       min-height: 52px;
+    }
+
+    .sh-seai-fab {
+      bottom: 32px;
+      right: 32px;
+      width: 64px;
+      height: 64px;
     }
   }
 
