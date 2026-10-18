@@ -773,6 +773,10 @@ export default function ShopperHomePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
+  // Home search bar state
+  const [homeQuery, setHomeQuery] = useState('');
+  const [homeIsAIMode, setHomeIsAIMode] = useState(false);
+
   const sessionItemsShown = useRef<string[]>([]);
 
   const itemsReqSeq = useRef(0);
@@ -1237,8 +1241,17 @@ export default function ShopperHomePage() {
     pullTriggered.current = false;
   };
 
-  // Route directly to the chat interface
-  const openSearch = () => router.push('/seai/ask'); 
+  const handleHomeSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = homeQuery.trim();
+    
+    if (homeIsAIMode) {
+      router.push(`/seai/ask${trimmed ? `?query=${encodeURIComponent(trimmed)}` : ''}`);
+    } else {
+      router.push(`/seai-search${trimmed ? `?query=${encodeURIComponent(trimmed)}` : ''}`);
+    }
+  };
+
   const openBasket = () => router.push('/basket');
   const openNotifications = () => router.push('/notifications');
   const openFilter = () => setShowFilter(true);
@@ -1310,19 +1323,62 @@ export default function ShopperHomePage() {
             <span className="hide-mobile" style={styles.brandName}>Admerce</span>
           </div>
 
-          {/* ─── Top SEAI Search Bar (flex: 1) ─── */}
-          <div style={styles.searchBarContainer} onClick={openSearch}>
-            <img
-              src="/admerce_symbol.png"
-              alt=""
-              style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }}
+          {/* ─── Interactive Search Bar ─── */}
+          <form onSubmit={handleHomeSearch} style={styles.searchBarContainer} className="sh-home-search">
+            <input
+              type="text"
+              value={homeQuery}
+              onChange={(e) => setHomeQuery(e.target.value)}
+              placeholder={homeIsAIMode ? 'Ask SEAI anything…' : 'Search items, stores, services…'}
+              style={styles.searchInput}
             />
-            <span style={styles.searchBarText}>Ask SEAI anything...</span>
-            <MdSearch size={20} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-          </div>
+            {homeQuery ? (
+              <button type="button" onClick={() => setHomeQuery('')} style={styles.suffixBtn}>
+                <MdClose size={20} color="var(--text-muted)" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setHomeIsAIMode((v) => !v)}
+                style={{
+                  ...styles.aiPill,
+                  backgroundColor: homeIsAIMode ? 'var(--brand-primary)' : 'var(--bg-tertiary)',
+                  borderColor: homeIsAIMode ? 'transparent' : 'var(--border-default)',
+                }}
+              >
+                <img
+                  src="/admerce_symbol.png"
+                  alt=""
+                  style={{
+                    width: 14,
+                    height: 14,
+                    objectFit: 'contain',
+                    filter: homeIsAIMode ? 'brightness(0) invert(1)' : 'none',
+                  }}
+                />
+                <span
+                  style={{
+                    color: homeIsAIMode ? 'var(--brand-on-primary)' : 'var(--brand-primary)',
+                    fontWeight: 600,
+                    fontSize: 12,
+                  }}
+                >
+                  SEAI
+                </span>
+              </button>
+            )}
+          </form>
 
           {/* Actions */}
           <div style={styles.appBarActions}>
+            <button
+              style={styles.iconBtn}
+              onClick={() => handleHomeSearch()}
+              aria-label="Search"
+              title="Search"
+            >
+              <MdSearch size={26} color="var(--brand-primary)" />
+            </button>
             <button
               style={styles.iconBtn}
               onClick={openBasket}
@@ -1907,21 +1963,40 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    padding: '8px 14px',
+    padding: '6px 12px',
     backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 12,
-    cursor: 'pointer',
     maxWidth: 600,
-    transition: 'background-color 0.18s ease',
     border: '1.5px solid transparent',
+    transition: 'border-color 0.15s, background 0.15s',
   },
-  searchBarText: {
+  searchInput: {
     flex: 1,
+    minWidth: 0,
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
     fontSize: 14.5,
-    color: 'var(--text-muted)',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
+    color: 'var(--text-primary)',
+    fontFamily: 'inherit',
+  },
+  suffixBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0,
+    display: 'flex',
+    alignItems: 'center',
+  },
+  aiPill: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '4px 10px',
+    borderRadius: 16,
+    border: '1px solid',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
   },
   appBarActions: { display: 'flex', gap: 4 },
   iconBtn: {
@@ -2419,6 +2494,11 @@ const CSS = `
     .hide-mobile {
       display: block;
     }
+  }
+
+  .sh-home-search:focus-within {
+    border-color: var(--brand-primary) !important;
+    background: var(--bg-secondary) !important;
   }
 
   .sh-reel:active {
