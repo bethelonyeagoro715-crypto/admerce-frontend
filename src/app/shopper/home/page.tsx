@@ -1298,6 +1298,7 @@ export default function ShopperHomePage() {
 
       <div style={styles.appBar}>
         <div style={styles.appBarInner}>
+          {/* Brand (hidden text on mobile to make room for search) */}
           <div style={styles.brand}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -1306,21 +1307,22 @@ export default function ShopperHomePage() {
               style={styles.brandLogo}
               aria-hidden="true"
             />
-            <span style={styles.brandName}>Admerce</span>
+            <span className="hide-mobile" style={styles.brandName}>Admerce</span>
           </div>
+
+          {/* ─── Top SEAI Search Bar (flex: 1) ─── */}
+          <div style={styles.searchBarContainer} onClick={openSearch}>
+            <img
+              src="/admerce_symbol.png"
+              alt=""
+              style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }}
+            />
+            <span style={styles.searchBarText}>Ask SEAI anything...</span>
+            <MdSearch size={20} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+          </div>
+
+          {/* Actions */}
           <div style={styles.appBarActions}>
-            <button
-              style={styles.iconBtn}
-              onClick={openSearch}
-              aria-label="Ask SEAI"
-              title="Ask SEAI"
-            >
-              <img
-                src="/admerce_symbol.png"
-                alt=""
-                style={{ width: 22, height: 22, objectFit: 'contain' }}
-              />
-            </button>
             <button
               style={styles.iconBtn}
               onClick={openBasket}
@@ -1328,7 +1330,7 @@ export default function ShopperHomePage() {
               title="Basket"
             >
               <MdShoppingBasket
-                size={22}
+                size={26}
                 color="var(--brand-primary)"
               />
             </button>
@@ -1338,10 +1340,25 @@ export default function ShopperHomePage() {
               aria-label="Notifications"
               title="Notifications"
             >
-              <MdNotificationsNone
-                size={22}
-                color="var(--brand-primary)"
-              />
+              <div style={{ position: 'relative', display: 'flex' }}>
+                <MdNotificationsNone
+                  size={28}
+                  color="var(--brand-primary)"
+                />
+                {/* Social media style unread dot */}
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    width: 9,
+                    height: 9,
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--danger-fg)',
+                    border: '2px solid var(--bg-secondary)',
+                  }}
+                />
+              </div>
             </button>
             <button
               style={{
@@ -1354,22 +1371,9 @@ export default function ShopperHomePage() {
               aria-label="Feed options"
               title="Feed options"
             >
-              <MdTune size={22} color="var(--brand-primary)" />
+              <MdTune size={26} color="var(--brand-primary)" />
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* ─── Top SEAI Search Bar ─── */}
-      <div style={styles.askBarWrapper}>
-        <div style={styles.askBar} onClick={openSearch}>
-          <img
-            src="/admerce_symbol.png"
-            alt=""
-            style={{ width: 22, height: 22, objectFit: 'contain' }}
-          />
-          <span style={styles.askBarText}>Ask SEAI anything...</span>
-          <MdSearch size={20} color="var(--text-muted)" />
         </div>
       </div>
 
@@ -1872,10 +1876,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '8px 16px',
+    padding: '8px 12px',
     maxWidth: CONTENT_MAX_WIDTH,
     margin: '0 auto',
     width: '100%',
+    gap: 12,
   },
   brand: {
     display: 'flex',
@@ -1897,6 +1902,27 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '-0.3px',
     lineHeight: 1,
   },
+  searchBarContainer: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 14px',
+    backgroundColor: 'var(--bg-tertiary)',
+    borderRadius: 12,
+    cursor: 'pointer',
+    maxWidth: 600,
+    transition: 'background-color 0.18s ease',
+    border: '1.5px solid transparent',
+  },
+  searchBarText: {
+    flex: 1,
+    fontSize: 14.5,
+    color: 'var(--text-muted)',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
   appBarActions: { display: 'flex', gap: 4 },
   iconBtn: {
     background: 'none',
@@ -1909,31 +1935,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     transition: 'background 0.15s',
     fontFamily: 'inherit',
-  },
-  askBarWrapper: {
-    padding: '12px 16px',
-    backgroundColor: 'var(--bg-primary)',
-    borderBottom: '1px solid var(--border-default)',
-    maxWidth: CONTENT_MAX_WIDTH,
-    margin: '0 auto',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  askBar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '10px 14px',
-    backgroundColor: 'var(--bg-tertiary)',
-    borderRadius: 12,
-    cursor: 'pointer',
-    transition: 'background-color 0.18s ease',
-    border: '1.5px solid transparent',
-  },
-  askBarText: {
-    flex: 1,
-    fontSize: 15,
-    color: 'var(--text-muted)',
   },
   contentColumn: {
     flex: 1,
@@ -2409,6 +2410,15 @@ const CSS = `
   .sh-home *::before,
   .sh-home *::after {
     box-sizing: border-box;
+  }
+
+  .hide-mobile {
+    display: none;
+  }
+  @media (min-width: 600px) {
+    .hide-mobile {
+      display: block;
+    }
   }
 
   .sh-reel:active {
