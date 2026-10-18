@@ -773,9 +773,9 @@ export default function ShopperHomePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
-  // Home search bar state
+  // Home search state
   const [homeQuery, setHomeQuery] = useState('');
-  const [homeIsAIMode, setHomeIsAIMode] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   const sessionItemsShown = useRef<string[]>([]);
 
@@ -1109,9 +1109,10 @@ export default function ShopperHomePage() {
   }, [feedFilter, selectedCategory, serviceItems]);
 
   const feedItems = useMemo(
-    () => interleave(filteredListingItems, filteredServiceItems),
-    [filteredListingItems, filteredServiceItems],
+    () => (isSearching ? listingItems : interleave(filteredListingItems, filteredServiceItems)),
+    [isSearching, listingItems, filteredListingItems, filteredServiceItems],
   );
+  
   const displayedFeed = feedItems.slice(0, visibleCount);
 
   useEffect(() => {
@@ -1241,15 +1242,50 @@ export default function ShopperHomePage() {
     pullTriggered.current = false;
   };
 
-  const handleHomeSearch = (e?: React.FormEvent) => {
+  const handleHomeSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = homeQuery.trim();
-    
-    if (homeIsAIMode) {
-      router.push(`/seai/ask${trimmed ? `?query=${encodeURIComponent(trimmed)}` : ''}`);
-    } else {
-      router.push(`/seai-search${trimmed ? `?query=${encodeURIComponent(trimmed)}` : ''}`);
+    if (!trimmed) {
+      handleClearSearch();
+      return;
     }
+    
+    setIsSearching(true);
+    setLoadingItems(true);
+    setCurrentTab(0);
+    setVisibleCount(INITIAL_VISIBLE);
+    
+    const lat = cachedPosition?.coords.latitude ?? 5.5103;
+    const lng = cachedPosition?.coords.longitude ?? 7.0265;
+
+    try {
+      const data = await api.search(trimmed, lat, lng, 500, 0, 50) as any[];
+      const mapped: Item[] = data.map((item) => ({
+        id: item.listing_id?.toString() || item.service_id?.toString() || item.store_id?.toString() || '',
+        kind: item.type === 'service' ? 'service' : 'item',
+        image: resolveImageUrl(item.image_url),
+        video: null,
+        title: item.title ?? 'No Title',
+        price: formatPrice(item.price),
+        storeName: item.store_name ?? 'Unknown',
+        category: item.category ?? null,
+        aspect: computeAspect(item.image_width, item.image_height),
+        verified: item.store_verification_status === 'verified',
+      }));
+      setListingItems(mapped);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingItems(false);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setHomeQuery('');
+    setIsSearching(false);
+    const lat = cachedPosition?.coords.latitude ?? 5.5103;
+    const lng = cachedPosition?.coords.longitude ?? 7.0265;
+    loadItems(lat, lng, false);
   };
 
   const openBasket = () => router.push('/basket');
@@ -1329,36 +1365,27 @@ export default function ShopperHomePage() {
               type="text"
               value={homeQuery}
               onChange={(e) => setHomeQuery(e.target.value)}
-              placeholder={homeIsAIMode ? 'Ask SEAI anything…' : 'Search items, stores, services…'}
+              placeholder="Search items, stores, services..."
               style={styles.searchInput}
             />
             {homeQuery ? (
-              <button type="button" onClick={() => setHomeQuery('')} style={styles.suffixBtn}>
+              <button type="button" onClick={handleClearSearch} style={styles.suffixBtn}>
                 <MdClose size={20} color="var(--text-muted)" />
               </button>
             ) : (
               <button
                 type="button"
-                onClick={() => setHomeIsAIMode((v) => !v)}
-                style={{
-                  ...styles.aiPill,
-                  backgroundColor: homeIsAIMode ? 'var(--brand-primary)' : 'var(--bg-tertiary)',
-                  borderColor: homeIsAIMode ? 'transparent' : 'var(--border-default)',
-                }}
+                onClick={() => router.push('/seai/ask')}
+                style={styles.aiPill}
               >
                 <img
                   src="/admerce_symbol.png"
                   alt=""
-                  style={{
-                    width: 14,
-                    height: 14,
-                    objectFit: 'contain',
-                    filter: homeIsAIMode ? 'brightness(0) invert(1)' : 'none',
-                  }}
+                  style={{ width: 14, height: 14, objectFit: 'contain' }}
                 />
                 <span
                   style={{
-                    color: homeIsAIMode ? 'var(--brand-on-primary)' : 'var(--brand-primary)',
+                    color: 'var(--brand-primary)',
                     fontWeight: 600,
                     fontSize: 12,
                   }}
@@ -1439,7 +1466,7 @@ export default function ShopperHomePage() {
       />
 
       <div style={styles.contentColumn}>
-        {!loadingStores && (
+        {!loadingStores && !isSearching && (
           <StoreSpotlight
             stores={stores}
             collapsed={isSpotlightCollapsed}
@@ -1450,45 +1477,47 @@ export default function ShopperHomePage() {
           />
         )}
 
-        <div
-          style={styles.tabsWrap}
-          className="sh-tabs-wrap"
-          role="tablist"
-        >
-          <div style={styles.tabsInner} className="sh-tabs-inner">
-            {TAB_LABELS.map((label, i) => {
-              const active = currentTab === i;
-              return (
-                <button
-                  key={i}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setCurrentTab(i)}
-                  style={{
-                    ...styles.tabBtn,
-                    background: active
-                      ? 'var(--brand-gradient)'
-                      : 'var(--bg-tertiary)',
-                    color: active
-                      ? 'var(--brand-on-gradient)'
-                      : 'var(--text-secondary)',
-                    borderColor: active
-                      ? 'transparent'
-                      : 'var(--border-default)',
-                    boxShadow: active
-                      ? '0 8px 22px rgba(232,232,236,0.22), inset 0 1px 0 rgba(255,255,255,0.7)'
-                      : 'none',
-                  }}
-                  className="sh-tab-pill"
-                >
-                  {label}
-                </button>
-              );
-            })}
+        {!isSearching && (
+          <div
+            style={styles.tabsWrap}
+            className="sh-tabs-wrap"
+            role="tablist"
+          >
+            <div style={styles.tabsInner} className="sh-tabs-inner">
+              {TAB_LABELS.map((label, i) => {
+                const active = currentTab === i;
+                return (
+                  <button
+                    key={i}
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setCurrentTab(i)}
+                    style={{
+                      ...styles.tabBtn,
+                      background: active
+                        ? 'var(--brand-gradient)'
+                        : 'var(--bg-tertiary)',
+                      color: active
+                        ? 'var(--brand-on-gradient)'
+                        : 'var(--text-secondary)',
+                      borderColor: active
+                        ? 'transparent'
+                        : 'var(--border-default)',
+                      boxShadow: active
+                        ? '0 8px 22px rgba(232,232,236,0.22), inset 0 1px 0 rgba(255,255,255,0.7)'
+                        : 'none',
+                    }}
+                    className="sh-tab-pill"
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
-        {currentTab === 0 && hasActiveFilters && (
+        {!isSearching && currentTab === 0 && hasActiveFilters && (
           <div style={styles.activeFilters}>
             <span style={styles.activeFiltersLabel}>Showing:</span>
             {feedFilter !== 'mixed' && (
@@ -1527,6 +1556,20 @@ export default function ShopperHomePage() {
               type="button"
               onClick={clearAllFilters}
               style={styles.activeFiltersClear}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
+        {isSearching && (
+          <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-default)' }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Search results for &ldquo;<span style={{ color: 'var(--text-primary)' }}>{homeQuery}</span>&rdquo;
+            </span>
+            <button
+              onClick={handleClearSearch}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brand-primary)', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}
             >
               Clear
             </button>
@@ -1574,7 +1617,7 @@ export default function ShopperHomePage() {
                     rowGap={rowGap}
                   />
                 ) : feedItems.length === 0 ? (
-                  hasActiveFilters ? (
+                  hasActiveFilters && !isSearching ? (
                     <FeedEmpty
                       icon={
                         <MdTune
@@ -1594,8 +1637,9 @@ export default function ShopperHomePage() {
                           color="var(--text-muted)"
                         />
                       }
-                      title="Nothing to show yet"
-                      body="Pull down to refresh, or check back soon."
+                      title={isSearching ? "No results found" : "Nothing to show yet"}
+                      body={isSearching ? `We couldn't find anything matching "${homeQuery}".` : "Pull down to refresh, or check back soon."}
+                      onClear={isSearching ? handleClearSearch : undefined}
                     />
                   )
                 ) : (
@@ -1994,7 +2038,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 4,
     padding: '4px 10px',
     borderRadius: 16,
-    border: '1px solid',
+    border: '1px solid var(--border-default)',
+    backgroundColor: 'var(--bg-tertiary)',
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
