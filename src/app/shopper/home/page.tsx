@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../services/api';
 import ServiceReelCard from '../../../components/ServiceReelCard';
 import {
@@ -16,6 +16,11 @@ import {
   MdClose,
   MdCheckCircle,
   MdVerified,
+  MdClear,
+  MdErrorOutline,
+  MdSearchOff,
+  MdStore,
+  MdBuild,
 } from 'react-icons/md';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -69,6 +74,100 @@ const SERVICE_CATEGORIES: { id: string; label: string; emoji: string }[] = [
   { id: 'digital_creative', label: 'Digital', emoji: '🎨' },
 ];
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface SearchResult {
+  listing_id?: string;
+  store_id?: string;
+  title?: string;
+  price?: number | string;
+  image_url?: string;
+  store_name?: string;
+  type?: 'product' | 'service' | 'store';
+  [key: string]: unknown;
+}
+
+interface Suggestion {
+  label: string;
+  type: 'product' | 'service' | 'store';
+  listing_id: string;
+}
+
+interface RecallCandidate {
+  listing_id: string | number;
+}
+interface RankedItem {
+  listing_id: string | number;
+  image_url?: string;
+  title?: string;
+  price?: number;
+  store_name?: string;
+  store_verification_status?: string;
+  category?: string | null;
+  image_width?: number | null;
+  image_height?: number | null;
+}
+interface StoreLocation {
+  store_id: string;
+  store_name?: string;
+  image_url?: string;
+  lat: number;
+  lng: number;
+  verification_status?: string;
+  image_width?: number | null;
+  image_height?: number | null;
+}
+interface ServiceItem {
+  service_id: string;
+  provider_id: string;
+  title?: string;
+  price?: number | string;
+  image_url?: string;
+  video_url?: string | null;
+  category?: string | null;
+  duration_minutes?: number;
+  description?: string;
+  business_name?: string;
+  username?: string;
+  business_image_url?: string;
+  avatar_url?: string;
+  verification_status?: string;
+  business_verification_status?: string;
+  provider_verification_status?: string;
+}
+
+type FeedKind = 'item' | 'service';
+
+interface Item {
+  id: string;
+  kind: FeedKind;
+  image: string | null;
+  video: string | null;
+  title: string;
+  price: string;
+  storeName: string;
+  category: string | null;
+  aspect: number;
+  verified: boolean;
+}
+interface Store {
+  id: string;
+  name: string;
+  image: string | null;
+  lat: number;
+  lng: number;
+  aspect: number;
+  verified: boolean;
+}
+interface Provider {
+  id: string;
+  name: string;
+  image: string | null;
+  serviceCount: number;
+  aspect: number;
+  verified: boolean;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith('http')) return url;
@@ -184,94 +283,32 @@ function LensIcon({
   );
 }
 
-interface RecallCandidate {
-  listing_id: string | number;
-}
-interface RankedItem {
-  listing_id: string | number;
-  image_url?: string;
-  title?: string;
-  price?: number;
-  store_name?: string;
-  store_verification_status?: string;
-  category?: string | null;
-  image_width?: number | null;
-  image_height?: number | null;
-}
-interface StoreLocation {
-  store_id: string;
-  store_name?: string;
-  image_url?: string;
-  lat: number;
-  lng: number;
-  verification_status?: string;
-  image_width?: number | null;
-  image_height?: number | null;
-}
-interface ServiceItem {
-  service_id: string;
-  provider_id: string;
-  title?: string;
-  price?: number | string;
-  image_url?: string;
-  video_url?: string | null;
-  category?: string | null;
-  duration_minutes?: number;
-  description?: string;
-  business_name?: string;
-  username?: string;
-  business_image_url?: string;
-  avatar_url?: string;
-  verification_status?: string;
-  business_verification_status?: string;
-  provider_verification_status?: string;
-}
+// ─── Components ───────────────────────────────────────────────────────────────
+function SearchResultItem({ item, onPress }: { item: SearchResult; onPress: () => void }) {
+  const title = item.title ?? 'Untitled';
+  const price = item.price != null ? `₦${Number(item.price).toFixed(0)}` : 'Price N/A';
+  const image = resolveImageUrl(item.image_url);
+  const storeName = item.store_name ?? '';
+  const type = item.type ?? 'product';
 
-interface SearchResult {
-  listing_id?: string | number;
-  service_id?: string | number;
-  store_id?: string | number;
-  type?: string;
-  image_url?: string | null;
-  title?: string;
-  price?: number | string | null;
-  store_name?: string;
-  store_verification_status?: string;
-  category?: string | null;
-  image_width?: number | null;
-  image_height?: number | null;
-}
-
-type FeedKind = 'item' | 'service';
-
-interface Item {
-  id: string;
-  kind: FeedKind;
-  image: string | null;
-  video: string | null;
-  title: string;
-  price: string;
-  storeName: string;
-  category: string | null;
-  aspect: number;
-  verified: boolean;
-}
-interface Store {
-  id: string;
-  name: string;
-  image: string | null;
-  lat: number;
-  lng: number;
-  aspect: number;
-  verified: boolean;
-}
-interface Provider {
-  id: string;
-  name: string;
-  image: string | null;
-  serviceCount: number;
-  aspect: number;
-  verified: boolean;
+  return (
+    <div style={styles.resultItem} onClick={onPress}>
+      <div style={styles.resultImage}>
+        {image
+          ? <img src={image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : type === 'service'
+            ? <MdBuild size={28} color="var(--text-muted)" />
+            : <MdStore size={28} color="var(--text-muted)" />
+        }
+      </div>
+      <div style={styles.resultInfo}>
+        <p style={styles.resultTitle}>{title}</p>
+        <p style={styles.resultPrice}>{price}</p>
+        {storeName ? <p style={styles.resultStore}>{storeName}</p> : null}
+        <span style={styles.typeBadge}>{type}</span>
+      </div>
+    </div>
+  );
 }
 
 function MasonryColumns<T>({
@@ -752,8 +789,12 @@ function FeedSkeleton({
   );
 }
 
-export default function ShopperHomePage() {
+function ShopperHomeContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const lat = parseFloat(searchParams.get('lat') || '') || 5.5103;
+  const lng = parseFloat(searchParams.get('lng') || '') || 7.0265;
 
   const [currentTab, setCurrentTab] = useState(0);
   const [isSpotlightCollapsed, setIsSpotlightCollapsed] =
@@ -788,9 +829,18 @@ export default function ShopperHomePage() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
-  // Home search state
-  const [homeQuery, setHomeQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  // Search state (integrated from search screen)
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [isLoadingSearch, setIsLoadingSearch] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
 
   const sessionItemsShown = useRef<string[]>([]);
 
@@ -810,6 +860,38 @@ export default function ShopperHomePage() {
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const totalRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      return;
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const data = (await api.suggest(query.trim(), lat, lng, 500, 10)) as Suggestion[];
+        if (!isMountedRef.current) return;
+        setSuggestions(data);
+        setShowSuggestions(data.length > 0);
+      } catch {
+        if (!isMountedRef.current) return;
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query, lat, lng]);
 
   const isAtTop = () => {
     const panel = activePanelRef.current;
@@ -1124,10 +1206,9 @@ export default function ShopperHomePage() {
   }, [feedFilter, selectedCategory, serviceItems]);
 
   const feedItems = useMemo(
-    () => (isSearching ? listingItems : interleave(filteredListingItems, filteredServiceItems)),
-    [isSearching, listingItems, filteredListingItems, filteredServiceItems],
+    () => interleave(filteredListingItems, filteredServiceItems),
+    [filteredListingItems, filteredServiceItems],
   );
-  
   const displayedFeed = feedItems.slice(0, visibleCount);
 
   useEffect(() => {
@@ -1257,50 +1338,54 @@ export default function ShopperHomePage() {
     pullTriggered.current = false;
   };
 
-  const handleHomeSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const trimmed = homeQuery.trim();
-    if (!trimmed) {
-      handleClearSearch();
-      return;
-    }
-    
-    setIsSearching(true);
-    setLoadingItems(true);
-    setCurrentTab(0);
-    setVisibleCount(INITIAL_VISIBLE);
-    
-    const lat = cachedPosition?.coords.latitude ?? 5.5103;
-    const lng = cachedPosition?.coords.longitude ?? 7.0265;
-
+  // Search execution
+  const runSearch = async (text: string) => {
+    setIsLoadingSearch(true);
+    setHasSearched(true);
+    setSearchError(null);
     try {
-      const data = (await api.search(trimmed, lat, lng, 500, 0, 50)) as SearchResult[];
-      const mapped: Item[] = data.map((item) => ({
-        id: item.listing_id?.toString() || item.service_id?.toString() || item.store_id?.toString() || '',
-        kind: item.type === 'service' ? 'service' : 'item',
-        image: resolveImageUrl(item.image_url),
-        video: null,
-        title: item.title ?? 'No Title',
-        price: formatPrice(item.price),
-        storeName: item.store_name ?? 'Unknown',
-        category: item.category ?? null,
-        aspect: computeAspect(item.image_width, item.image_height),
-        verified: item.store_verification_status === 'verified',
-      }));
-      setListingItems(mapped);
-    } catch (err) {
-      console.error(err);
+      const data = (await api.search(text, lat, lng, 500, 0, 50)) as SearchResult[];
+      if (!isMountedRef.current) return;
+      setResults(data);
+    } catch (err: unknown) {
+      if (!isMountedRef.current) return;
+      setSearchError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
-      setLoadingItems(false);
+      if (isMountedRef.current) setIsLoadingSearch(false);
     }
   };
 
-  const handleClearSearch = () => {
-    setHomeQuery('');
-    setIsSearching(false);
-    const lat = cachedPosition?.coords.latitude ?? 5.5103;
-    const lng = cachedPosition?.coords.longitude ?? 7.0265;
-    loadItems(lat, lng, false);
+  const performSearch = async () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    setShowSuggestions(false);
+    await runSearch(trimmed);
+  };
+
+  const handleSuggestionTap = (s: Suggestion) => {
+    setQuery(s.label);
+    setShowSuggestions(false);
+    runSearch(s.label);
+  };
+
+  const clearSearch = () => {
+    setQuery('');
+    setResults([]);
+    setSuggestions([]);
+    setHasSearched(false);
+    setSearchError(null);
+    setShowSuggestions(false);
+    inputRef.current?.focus();
+  };
+
+  const handleResultPress = (item: SearchResult) => {
+    if (item.type === 'service') {
+      if (item.listing_id) router.push(`/service-detail/${item.listing_id}`);
+    } else if (item.type === 'store') {
+      if (item.store_id) router.push(`/store-detail/${item.store_id}`);
+    } else {
+      if (item.listing_id) router.push(`/item-detail/${item.listing_id}`);
+    }
   };
 
   const openBasket = () => router.push('/basket');
@@ -1356,132 +1441,40 @@ export default function ShopperHomePage() {
       selectedCategory
     : null;
 
-  return (
-    <div style={styles.container} className="sh-home">
-      <style>{CSS}</style>
-
-      <div style={styles.appBar}>
-        <div style={styles.appBarInner}>
-          {/* Brand (hidden text on mobile to make room for search) */}
-          <div style={styles.brand}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/admerce_symbol.png"
-              alt=""
-              style={styles.brandLogo}
-              aria-hidden="true"
-            />
-            <span className="hide-mobile" style={styles.brandName}>Admerce</span>
-          </div>
-
-          {/* ─── Interactive Search Bar ─── */}
-          <form onSubmit={handleHomeSearch} style={styles.searchBarContainer} className="sh-home-search">
-            <input
-              type="text"
-              value={homeQuery}
-              onChange={(e) => setHomeQuery(e.target.value)}
-              placeholder="Search items, stores, services..."
-              style={styles.searchInput}
-            />
-            {homeQuery ? (
-              <button type="button" onClick={handleClearSearch} style={styles.suffixBtn}>
-                <MdClose size={20} color="var(--text-muted)" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => router.push('/seai/ask')}
-                style={styles.aiPill}
-              >
-                <img
-                  src="/admerce_symbol.png"
-                  alt=""
-                  style={{ width: 14, height: 14, objectFit: 'contain' }}
-                />
-                <span
-                  style={{
-                    color: 'var(--brand-primary)',
-                    fontWeight: 600,
-                    fontSize: 12,
-                  }}
-                >
-                  SEAI
-                </span>
-              </button>
-            )}
-          </form>
-
-          {/* Actions */}
-          <div style={styles.appBarActions}>
-            <button
-              style={styles.iconBtn}
-              onClick={() => handleHomeSearch()}
-              aria-label="Search"
-              title="Search"
-            >
-              <MdSearch size={26} color="var(--brand-primary)" />
-            </button>
-            <button
-              style={styles.iconBtn}
-              onClick={openBasket}
-              aria-label="Basket"
-              title="Basket"
-            >
-              <MdShoppingBasket
-                size={26}
-                color="var(--brand-primary)"
-              />
-            </button>
-            <button
-              style={styles.iconBtn}
-              onClick={openNotifications}
-              aria-label="Notifications"
-              title="Notifications"
-            >
-              <div style={{ position: 'relative', display: 'flex' }}>
-                <MdNotificationsNone
-                  size={28}
-                  color="var(--brand-primary)"
-                />
-                {/* Social media style unread dot */}
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 2,
-                    right: 2,
-                    width: 9,
-                    height: 9,
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--danger-fg)',
-                    border: '2px solid var(--bg-secondary)',
-                  }}
-                />
-              </div>
-            </button>
-            <button
-              style={{
-                ...styles.iconBtn,
-                backgroundColor: hasActiveFilters
-                  ? 'var(--brand-soft)'
-                  : 'transparent',
-              }}
-              onClick={openFilter}
-              aria-label="Feed options"
-              title="Feed options"
-            >
-              <MdTune size={26} color="var(--brand-primary)" />
-            </button>
-          </div>
+  // Determine what body to show
+  const renderBody = () => {
+    if (hasSearched) {
+      if (isLoadingSearch) return (
+        <div style={styles.center}><div style={styles.spinner} /></div>
+      );
+      if (searchError) return (
+        <div style={styles.center}>
+          <MdErrorOutline size={48} color="var(--danger-fg)" />
+          <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>Something went wrong</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center' }}>{searchError}</p>
+          <button onClick={performSearch} style={styles.retryBtn}>Retry</button>
         </div>
-      </div>
+      );
+      if (results.length === 0) return (
+        <div style={styles.center}>
+          <MdSearchOff size={48} color="var(--border-strong)" />
+          <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>No results found</p>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Try a different keyword or location</p>
+        </div>
+      );
+      return (
+        <div style={styles.resultsList}>
+          {results.map((item, idx) => (
+            <SearchResultItem key={idx} item={item} onPress={() => handleResultPress(item)} />
+          ))}
+        </div>
+      );
+    }
 
-      <LocationBanner
-        locationDenied={locationDenied}
-        onEnableLocation={requestLocationManually}
-      />
-
-      <div style={styles.contentColumn}>
-        {!loadingStores && !isSearching && (
+    // Default Feed
+    return (
+      <>
+        {!loadingStores && (
           <StoreSpotlight
             stores={stores}
             collapsed={isSpotlightCollapsed}
@@ -1492,47 +1485,45 @@ export default function ShopperHomePage() {
           />
         )}
 
-        {!isSearching && (
-          <div
-            style={styles.tabsWrap}
-            className="sh-tabs-wrap"
-            role="tablist"
-          >
-            <div style={styles.tabsInner} className="sh-tabs-inner">
-              {TAB_LABELS.map((label, i) => {
-                const active = currentTab === i;
-                return (
-                  <button
-                    key={i}
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setCurrentTab(i)}
-                    style={{
-                      ...styles.tabBtn,
-                      background: active
-                        ? 'var(--brand-gradient)'
-                        : 'var(--bg-tertiary)',
-                      color: active
-                        ? 'var(--brand-on-gradient)'
-                        : 'var(--text-secondary)',
-                      borderColor: active
-                        ? 'transparent'
-                        : 'var(--border-default)',
-                      boxShadow: active
-                        ? '0 8px 22px rgba(232,232,236,0.22), inset 0 1px 0 rgba(255,255,255,0.7)'
-                        : 'none',
-                    }}
-                    className="sh-tab-pill"
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+        <div
+          style={styles.tabsWrap}
+          className="sh-tabs-wrap"
+          role="tablist"
+        >
+          <div style={styles.tabsInner} className="sh-tabs-inner">
+            {TAB_LABELS.map((label, i) => {
+              const active = currentTab === i;
+              return (
+                <button
+                  key={i}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setCurrentTab(i)}
+                  style={{
+                    ...styles.tabBtn,
+                    background: active
+                      ? 'var(--brand-gradient)'
+                      : 'var(--bg-tertiary)',
+                    color: active
+                      ? 'var(--brand-on-gradient)'
+                      : 'var(--text-secondary)',
+                    borderColor: active
+                      ? 'transparent'
+                      : 'var(--border-default)',
+                    boxShadow: active
+                      ? '0 8px 22px rgba(232,232,236,0.22), inset 0 1px 0 rgba(255,255,255,0.7)'
+                      : 'none',
+                  }}
+                  className="sh-tab-pill"
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
 
-        {!isSearching && currentTab === 0 && hasActiveFilters && (
+        {currentTab === 0 && hasActiveFilters && (
           <div style={styles.activeFilters}>
             <span style={styles.activeFiltersLabel}>Showing:</span>
             {feedFilter !== 'mixed' && (
@@ -1571,20 +1562,6 @@ export default function ShopperHomePage() {
               type="button"
               onClick={clearAllFilters}
               style={styles.activeFiltersClear}
-            >
-              Clear
-            </button>
-          </div>
-        )}
-
-        {isSearching && (
-          <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-default)' }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Search results for &ldquo;<span style={{ color: 'var(--text-primary)' }}>{homeQuery}</span>&rdquo;
-            </span>
-            <button
-              onClick={handleClearSearch}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brand-primary)', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}
             >
               Clear
             </button>
@@ -1632,7 +1609,7 @@ export default function ShopperHomePage() {
                     rowGap={rowGap}
                   />
                 ) : feedItems.length === 0 ? (
-                  hasActiveFilters && !isSearching ? (
+                  hasActiveFilters ? (
                     <FeedEmpty
                       icon={
                         <MdTune
@@ -1652,9 +1629,8 @@ export default function ShopperHomePage() {
                           color="var(--text-muted)"
                         />
                       }
-                      title={isSearching ? "No results found" : "Nothing to show yet"}
-                      body={isSearching ? `We couldn't find anything matching "${homeQuery}".` : "Pull down to refresh, or check back soon."}
-                      onClear={isSearching ? handleClearSearch : undefined}
+                      title="Nothing to show yet"
+                      body="Pull down to refresh, or check back soon."
                     />
                   )
                 ) : (
@@ -1774,6 +1750,166 @@ export default function ShopperHomePage() {
             </div>
           </div>
         </div>
+      </>
+    );
+  };
+
+  return (
+    <div style={styles.container} className="sh-home">
+      <style>{CSS}</style>
+
+      <div style={styles.appBar}>
+        <div style={styles.appBarInner}>
+          {/* Brand (hidden text on mobile to make room for search) */}
+          <div style={styles.brand}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/admerce_symbol.png"
+              alt=""
+              style={styles.brandLogo}
+              aria-hidden="true"
+            />
+            <span className="hide-mobile" style={styles.brandName}>Admerce</span>
+          </div>
+
+          {/* ─── Interactive Search Bar ─── */}
+          <div style={styles.searchBarContainer} className="sh-home-search">
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setSuggestions([]);
+                setShowSuggestions(false);
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') performSearch(); }}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              placeholder="Search items, stores, services..."
+              style={styles.searchInput}
+              autoComplete="off"
+            />
+            <div style={styles.suffixContainer}>
+              {query ? (
+                <button onClick={clearSearch} style={styles.suffixBtn} title="Clear">
+                  <MdClear size={20} color="var(--text-muted)" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => router.push('/seai/ask')}
+                  style={styles.aiPill}
+                  title="Ask SEAI"
+                >
+                  <img
+                    src="/admerce_symbol.png"
+                    alt=""
+                    style={{ width: 14, height: 14, objectFit: 'contain' }}
+                  />
+                  <span
+                    style={{
+                      color: 'var(--brand-primary)',
+                      fontWeight: 600,
+                      fontSize: 12,
+                    }}
+                  >
+                    SEAI
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div style={styles.appBarActions}>
+            <button
+              style={styles.iconBtn}
+              onClick={performSearch}
+              aria-label="Search"
+              title="Search"
+            >
+              <MdSearch size={26} color="var(--brand-primary)" />
+            </button>
+            <button
+              style={styles.iconBtn}
+              onClick={openBasket}
+              aria-label="Basket"
+              title="Basket"
+            >
+              <MdShoppingBasket
+                size={26}
+                color="var(--brand-primary)"
+              />
+            </button>
+            <button
+              style={styles.iconBtn}
+              onClick={openNotifications}
+              aria-label="Notifications"
+              title="Notifications"
+            >
+              <div style={{ position: 'relative', display: 'flex' }}>
+                <MdNotificationsNone
+                  size={28}
+                  color="var(--brand-primary)"
+                />
+                {/* Social media style unread dot */}
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 2,
+                    right: 2,
+                    width: 9,
+                    height: 9,
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--danger-fg)',
+                    border: '2px solid var(--bg-secondary)',
+                  }}
+                />
+              </div>
+            </button>
+            <button
+              style={{
+                ...styles.iconBtn,
+                backgroundColor: hasActiveFilters
+                  ? 'var(--brand-soft)'
+                  : 'transparent',
+              }}
+              onClick={openFilter}
+              aria-label="Feed options"
+              title="Feed options"
+            >
+              <MdTune size={26} color="var(--brand-primary)" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Autocomplete dropdown */}
+      {showSuggestions && suggestions.length > 0 && (
+        <div style={styles.suggestionsDropdown}>
+          {suggestions.map((s, idx) => (
+            <button
+              key={idx}
+              style={styles.suggestionItem}
+              onMouseDown={(e) => { e.preventDefault(); handleSuggestionTap(s); }}
+            >
+              <span style={{ marginRight: 8, display: 'flex', alignItems: 'center' }}>
+                {s.type === 'service' ? <MdBuild size={18} color="var(--text-muted)" /> :
+                 s.type === 'store'   ? <MdStore size={18} color="var(--text-muted)" /> :
+                                        <MdSearch size={18} color="var(--text-muted)" />}
+              </span>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <LocationBanner
+        locationDenied={locationDenied}
+        onEnableLocation={requestLocationManually}
+      />
+
+      <div style={styles.contentColumn}>
+        {renderBody()}
       </div>
 
       {showFilter && (
@@ -1973,6 +2109,14 @@ export default function ShopperHomePage() {
   );
 }
 
+export default function ShopperHomePage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--text-primary)' }}>Loading…</div>}>
+      <ShopperHomeContent />
+    </Suspense>
+  );
+}
+
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -2021,10 +2165,10 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
-    padding: '6px 12px',
+    padding: '0 12px',
     backgroundColor: 'var(--bg-tertiary)',
-    borderRadius: 12,
+    borderRadius: 10,
+    height: 40,
     maxWidth: 600,
     border: '1.5px solid transparent',
     transition: 'border-color 0.15s, background 0.15s',
@@ -2035,9 +2179,13 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     outline: 'none',
     background: 'transparent',
-    fontSize: 14.5,
+    fontSize: 15,
     color: 'var(--text-primary)',
     fontFamily: 'inherit',
+  },
+  suffixContainer: {
+    display: 'flex',
+    alignItems: 'center',
   },
   suffixBtn: {
     background: 'none',
@@ -2071,6 +2219,26 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background 0.15s',
     fontFamily: 'inherit',
   },
+  suggestionsDropdown: {
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-subtle)',
+    boxShadow: 'var(--shadow-md)',
+    zIndex: 9,
+  },
+  suggestionItem: {
+    display: 'flex',
+    alignItems: 'center',
+    width: '100%',
+    padding: '12px 16px',
+    background: 'none',
+    border: 'none',
+    borderBottom: '1px solid var(--border-subtle)',
+    cursor: 'pointer',
+    fontSize: 14,
+    color: 'var(--text-primary)',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+  },
   contentColumn: {
     flex: 1,
     minHeight: 0,
@@ -2080,6 +2248,93 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: CONTENT_MAX_WIDTH,
     margin: '0 auto',
     alignSelf: 'center',
+  },
+  center: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    padding: 20,
+    textAlign: 'center',
+  },
+  spinner: {
+    width: 36,
+    height: 36,
+    border: '4px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  retryBtn: {
+    marginTop: 16,
+    padding: '10px 20px',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
+    border: 'none',
+    borderRadius: 8,
+    cursor: 'pointer',
+    fontWeight: 600,
+    fontFamily: 'inherit',
+  },
+  resultsList: { padding: '12px 16px' },
+  resultItem: {
+    display: 'flex',
+    gap: 12,
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: 'var(--bg-secondary)',
+    borderRadius: 12,
+    border: '1px solid var(--border-default)',
+    boxShadow: 'var(--shadow-sm)',
+    cursor: 'pointer',
+  },
+  resultImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: 'var(--bg-tertiary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultInfo: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' },
+  resultTitle: {
+    fontSize: 15,
+    fontWeight: 500,
+    color: 'var(--text-primary)',
+    margin: 0,
+    lineHeight: 1.3,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  resultPrice: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: 'var(--brand-primary)',
+    margin: '4px 0 0',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  resultStore: {
+    fontSize: 12,
+    color: 'var(--text-secondary)',
+    margin: '2px 0 0',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  typeBadge: {
+    display: 'inline-block',
+    marginTop: 4,
+    padding: '2px 8px',
+    backgroundColor: 'var(--bg-tertiary)',
+    borderRadius: 10,
+    fontSize: 10,
+    fontWeight: 500,
+    color: 'var(--text-tertiary)',
+    alignSelf: 'flex-start',
   },
   tabsWrap: {
     backgroundColor: 'var(--bg-primary)',
@@ -2518,13 +2773,13 @@ const styles: Record<string, React.CSSProperties> = {
     zIndex: 10,
     pointerEvents: 'none',
   },
-  spinner: {
-    width: 24,
-    height: 24,
-    border: '3px solid var(--border-default)',
-    borderTopColor: 'var(--brand-primary)',
+  spinnerMini: {
+    width: 18,
+    height: 18,
+    border: '2px solid currentColor',
+    borderTopColor: 'transparent',
     borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
+    animation: 'spin 0.7s linear infinite',
   },
 };
 
