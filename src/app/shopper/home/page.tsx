@@ -16,7 +16,6 @@ import {
   MdClose,
   MdCheckCircle,
   MdVerified,
-  MdAutoAwesome,
 } from 'react-icons/md';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -1238,7 +1237,8 @@ export default function ShopperHomePage() {
     pullTriggered.current = false;
   };
 
-  const openSearch = () => router.push('/seai-search');
+  // Changed routing to the actual SEAI Home screen (chat interface), not the search screen.
+  const openSearch = () => router.push('/seai/ask'); 
   const openBasket = () => router.push('/basket');
   const openNotifications = () => router.push('/notifications');
   const openFilter = () => setShowFilter(true);
@@ -1315,7 +1315,12 @@ export default function ShopperHomePage() {
               aria-label="Ask SEAI"
               title="Ask SEAI"
             >
-              <MdAutoAwesome size={22} color="var(--brand-primary)" />
+              {/* Replaced sparkle with the brand logo */}
+              <img
+                src="/admerce_symbol.png"
+                alt=""
+                style={{ width: 22, height: 22, objectFit: 'contain' }}
+              />
             </button>
             <button
               style={styles.iconBtn}
@@ -1354,6 +1359,17 @@ export default function ShopperHomePage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* ─── New AI Search Bar on the Home Page ─── */}
+      <div style={styles.askBar} onClick={openSearch}>
+        <img
+          src="/admerce_symbol.png"
+          alt=""
+          style={{ width: 24, height: 24, objectFit: 'contain' }}
+        />
+        <span style={styles.askBarText}>Ask SEAI anything...</span>
+        <MdSearch size={20} color="var(--text-muted)" />
       </div>
 
       <LocationBanner
@@ -1647,7 +1663,11 @@ export default function ShopperHomePage() {
         className="sh-seai-fab"
         aria-label="Ask SEAI"
       >
-        <MdAutoAwesome size={26} color="#fff" />
+        <img
+          src="/admerce_symbol.png"
+          alt=""
+          style={{ width: 32, height: 32, objectFit: 'contain' }}
+        />
       </button>
 
       {showFilter && (
@@ -1902,6 +1922,21 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     transition: 'background 0.15s',
     fontFamily: 'inherit',
+  },
+  askBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '12px 16px',
+    backgroundColor: 'var(--bg-secondary)',
+    borderBottom: '1px solid var(--border-default)',
+    cursor: 'pointer',
+    transition: 'background-color 0.18s ease',
+  },
+  askBarText: {
+    flex: 1,
+    fontSize: 15,
+    color: 'var(--text-muted)',
   },
   contentColumn: {
     flex: 1,
@@ -2201,7 +2236,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
     background: 'var(--skeleton)',
     backgroundSize: '800px 100%',
-    animation: 'shimmer 1.4s infinite linear',
+    animation: 'shimmer 1.4s linear infinite',
   },
 
   modalOverlay: {
@@ -2593,12 +2628,12 @@ const CSS = `
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    background: var(--brand-gradient);
-    border: none;
+    background: var(--bg-secondary);
+    border: 2px solid var(--brand-primary);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 8px 24px rgba(5, 4, 170, 0.45), 0 2px 6px rgba(0,0,0,0.1);
+    box-shadow: 0 8px 24px rgba(5, 4, 170, 0.25), 0 2px 6px rgba(0,0,0,0.1);
     cursor: pointer;
     z-index: 100;
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
@@ -2618,7 +2653,7 @@ const CSS = `
 
   .sh-seai-fab:hover {
     transform: scale(1.05) translateY(-3px);
-    box-shadow: 0 12px 32px rgba(5, 4, 170, 0.55), 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 12px 32px rgba(5, 4, 170, 0.35), 0 4px 12px rgba(0,0,0,0.15);
   }
   .sh-seai-fab:active {
     transform: scale(0.95);
