@@ -227,6 +227,21 @@ interface ServiceItem {
   provider_verification_status?: string;
 }
 
+interface SearchResult {
+  listing_id?: string | number;
+  service_id?: string | number;
+  store_id?: string | number;
+  type?: string;
+  image_url?: string | null;
+  title?: string;
+  price?: number | string | null;
+  store_name?: string;
+  store_verification_status?: string;
+  category?: string | null;
+  image_width?: number | null;
+  image_height?: number | null;
+}
+
 type FeedKind = 'item' | 'service';
 
 interface Item {
@@ -1259,7 +1274,7 @@ export default function ShopperHomePage() {
     const lng = cachedPosition?.coords.longitude ?? 7.0265;
 
     try {
-      const data = await api.search(trimmed, lat, lng, 500, 0, 50) as any[];
+      const data = (await api.search(trimmed, lat, lng, 500, 0, 50)) as SearchResult[];
       const mapped: Item[] = data.map((item) => ({
         id: item.listing_id?.toString() || item.service_id?.toString() || item.store_id?.toString() || '',
         kind: item.type === 'service' ? 'service' : 'item',
