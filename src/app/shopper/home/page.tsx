@@ -1237,7 +1237,7 @@ export default function ShopperHomePage() {
     pullTriggered.current = false;
   };
 
-  // Changed routing to the actual SEAI Home screen (chat interface), not the search screen.
+  // Route directly to the chat interface
   const openSearch = () => router.push('/seai/ask'); 
   const openBasket = () => router.push('/basket');
   const openNotifications = () => router.push('/notifications');
@@ -1315,7 +1315,6 @@ export default function ShopperHomePage() {
               aria-label="Ask SEAI"
               title="Ask SEAI"
             >
-              {/* Replaced sparkle with the brand logo */}
               <img
                 src="/admerce_symbol.png"
                 alt=""
@@ -1361,15 +1360,17 @@ export default function ShopperHomePage() {
         </div>
       </div>
 
-      {/* ─── New AI Search Bar on the Home Page ─── */}
-      <div style={styles.askBar} onClick={openSearch}>
-        <img
-          src="/admerce_symbol.png"
-          alt=""
-          style={{ width: 24, height: 24, objectFit: 'contain' }}
-        />
-        <span style={styles.askBarText}>Ask SEAI anything...</span>
-        <MdSearch size={20} color="var(--text-muted)" />
+      {/* ─── Top SEAI Search Bar ─── */}
+      <div style={styles.askBarWrapper}>
+        <div style={styles.askBar} onClick={openSearch}>
+          <img
+            src="/admerce_symbol.png"
+            alt=""
+            style={{ width: 22, height: 22, objectFit: 'contain' }}
+          />
+          <span style={styles.askBarText}>Ask SEAI anything...</span>
+          <MdSearch size={20} color="var(--text-muted)" />
+        </div>
       </div>
 
       <LocationBanner
@@ -1656,20 +1657,6 @@ export default function ShopperHomePage() {
         </div>
       </div>
 
-      {/* ─── SEAI Floating Action Button ─── */}
-      <button
-        type="button"
-        onClick={openSearch}
-        className="sh-seai-fab"
-        aria-label="Ask SEAI"
-      >
-        <img
-          src="/admerce_symbol.png"
-          alt=""
-          style={{ width: 32, height: 32, objectFit: 'contain' }}
-        />
-      </button>
-
       {showFilter && (
         <div
           style={styles.modalOverlay}
@@ -1923,15 +1910,25 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background 0.15s',
     fontFamily: 'inherit',
   },
+  askBarWrapper: {
+    padding: '12px 16px',
+    backgroundColor: 'var(--bg-primary)',
+    borderBottom: '1px solid var(--border-default)',
+    maxWidth: CONTENT_MAX_WIDTH,
+    margin: '0 auto',
+    width: '100%',
+    boxSizing: 'border-box',
+  },
   askBar: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
-    padding: '12px 16px',
-    backgroundColor: 'var(--bg-secondary)',
-    borderBottom: '1px solid var(--border-default)',
+    padding: '10px 14px',
+    backgroundColor: 'var(--bg-tertiary)',
+    borderRadius: 12,
     cursor: 'pointer',
     transition: 'background-color 0.18s ease',
+    border: '1.5px solid transparent',
   },
   askBarText: {
     flex: 1,
@@ -2620,52 +2617,6 @@ const CSS = `
     max-height: 88vh;
   }
 
-  /* ─── SEAI Floating Action Button ─── */
-  .sh-seai-fab {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: var(--bg-secondary);
-    border: 2px solid var(--brand-primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 8px 24px rgba(5, 4, 170, 0.25), 0 2px 6px rgba(0,0,0,0.1);
-    cursor: pointer;
-    z-index: 100;
-    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
-  }
-  
-  /* Subtle pulse to draw the eye */
-  .sh-seai-fab::before {
-    content: '';
-    position: absolute;
-    inset: -4px;
-    border-radius: 50%;
-    background: var(--brand-primary);
-    opacity: 0.15;
-    animation: sh-seai-pulse 2.5s infinite;
-    z-index: -1;
-  }
-
-  .sh-seai-fab:hover {
-    transform: scale(1.05) translateY(-3px);
-    box-shadow: 0 12px 32px rgba(5, 4, 170, 0.35), 0 4px 12px rgba(0,0,0,0.15);
-  }
-  .sh-seai-fab:active {
-    transform: scale(0.95);
-    box-shadow: 0 4px 12px rgba(5, 4, 170, 0.4);
-  }
-
-  @keyframes sh-seai-pulse {
-    0% { transform: scale(1); opacity: 0.15; }
-    50% { transform: scale(1.15); opacity: 0; }
-    100% { transform: scale(1); opacity: 0; }
-  }
-
   @media (min-width: 1024px) {
     .sh-modal-overlay {
       align-items: center;
@@ -2707,13 +2658,6 @@ const CSS = `
       font-size: 14px;
       letter-spacing: 0.8px;
       min-height: 52px;
-    }
-
-    .sh-seai-fab {
-      bottom: 32px;
-      right: 32px;
-      width: 64px;
-      height: 64px;
     }
   }
 
