@@ -829,7 +829,7 @@ function ShopperHomeContent() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
-  // Search state (integrated from search screen)
+  // Search state
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -1338,7 +1338,6 @@ function ShopperHomeContent() {
     pullTriggered.current = false;
   };
 
-  // Search execution
   const runSearch = async (text: string) => {
     setIsLoadingSearch(true);
     setHasSearched(true);
@@ -1441,7 +1440,6 @@ function ShopperHomeContent() {
       selectedCategory
     : null;
 
-  // Determine what body to show
   const renderBody = () => {
     if (hasSearched) {
       if (isLoadingSearch) return (
@@ -1471,7 +1469,6 @@ function ShopperHomeContent() {
       );
     }
 
-    // Default Feed
     return (
       <>
         {!loadingStores && (
@@ -1760,7 +1757,7 @@ function ShopperHomeContent() {
 
       <div style={styles.appBar}>
         <div style={styles.appBarInner}>
-          {/* Brand (hidden text on mobile to make room for search) */}
+          {/* Brand */}
           <div style={styles.brand}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -1806,6 +1803,7 @@ function ShopperHomeContent() {
                     style={{ width: 14, height: 14, objectFit: 'contain' }}
                   />
                   <span
+                    className="hide-mobile"
                     style={{
                       color: 'var(--brand-primary)',
                       fontWeight: 600,
@@ -1823,20 +1821,12 @@ function ShopperHomeContent() {
           <div style={styles.appBarActions}>
             <button
               style={styles.iconBtn}
-              onClick={performSearch}
-              aria-label="Search"
-              title="Search"
-            >
-              <MdSearch size={26} color="var(--brand-primary)" />
-            </button>
-            <button
-              style={styles.iconBtn}
               onClick={openBasket}
               aria-label="Basket"
               title="Basket"
             >
               <MdShoppingBasket
-                size={26}
+                size={24}
                 color="var(--brand-primary)"
               />
             </button>
@@ -1848,7 +1838,7 @@ function ShopperHomeContent() {
             >
               <div style={{ position: 'relative', display: 'flex' }}>
                 <MdNotificationsNone
-                  size={28}
+                  size={26}
                   color="var(--brand-primary)"
                 />
                 {/* Social media style unread dot */}
@@ -1857,8 +1847,8 @@ function ShopperHomeContent() {
                     position: 'absolute',
                     top: 2,
                     right: 2,
-                    width: 9,
-                    height: 9,
+                    width: 8,
+                    height: 8,
                     borderRadius: '50%',
                     backgroundColor: 'var(--danger-fg)',
                     border: '2px solid var(--bg-secondary)',
@@ -1877,7 +1867,7 @@ function ShopperHomeContent() {
               aria-label="Feed options"
               title="Feed options"
             >
-              <MdTune size={26} color="var(--brand-primary)" />
+              <MdTune size={24} color="var(--brand-primary)" />
             </button>
           </div>
         </div>
@@ -2135,21 +2125,22 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '8px 12px',
+    padding: '8px 10px',
     maxWidth: CONTENT_MAX_WIDTH,
     margin: '0 auto',
     width: '100%',
-    gap: 12,
+    gap: 8,
   },
   brand: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
     minWidth: 0,
+    flexShrink: 0,
   },
   brandLogo: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     objectFit: 'contain',
     display: 'block',
     flexShrink: 0,
@@ -2165,11 +2156,11 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     display: 'flex',
     alignItems: 'center',
-    padding: '0 12px',
+    padding: '0 10px',
     backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 10,
-    height: 40,
-    maxWidth: 600,
+    height: 38,
+    minWidth: 0,
     border: '1.5px solid transparent',
     transition: 'border-color 0.15s, background 0.15s',
   },
@@ -2179,13 +2170,14 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     outline: 'none',
     background: 'transparent',
-    fontSize: 15,
+    fontSize: 14.5,
     color: 'var(--text-primary)',
     fontFamily: 'inherit',
   },
   suffixContainer: {
     display: 'flex',
     alignItems: 'center',
+    flexShrink: 0,
   },
   suffixBtn: {
     background: 'none',
@@ -2199,19 +2191,19 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 4,
-    padding: '4px 10px',
+    padding: '4px 8px',
     borderRadius: 16,
     border: '1px solid var(--border-default)',
     backgroundColor: 'var(--bg-tertiary)',
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
-  appBarActions: { display: 'flex', gap: 4 },
+  appBarActions: { display: 'flex', gap: 2, flexShrink: 0 },
   iconBtn: {
     background: 'none',
     border: 'none',
     cursor: 'pointer',
-    padding: 8,
+    padding: 6,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
