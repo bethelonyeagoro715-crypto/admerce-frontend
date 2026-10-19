@@ -11,9 +11,6 @@ import {
   MdPhone,
   MdAccessTime,
   MdGpsFixed,
-  MdCameraAlt,
-  MdPhotoLibrary,
-  MdClose,
 } from 'react-icons/md';
 import {
   setOnboardingStatus,
@@ -60,27 +57,55 @@ function StoreDetailsContent() {
     setIsDetectingLocation(true);
 
     if (!navigator.geolocation) {
-      setAddress('Owerri, Imo');
-      setLat(5.5103);
-      setLng(7.0265);
+      setAddress('GPS not supported by this browser');
       setIsDetectingLocation(false);
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLat(pos.coords.latitude);
-        setLng(pos.coords.longitude);
-        setAddress('Owerri, Imo');
-        setIsDetectingLocation(false);
+      async (pos) => {
+        const currentLat = pos.coords.latitude;
+        const currentLng = pos.coords.longitude;
+        setLat(currentLat);
+        setLng(currentLng);
+
+        // Fetch exact address from OpenStreetMap (Free)
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${currentLat}&lon=${currentLng}&zoom=18&addressdetails=1`);
+          const data = await res.json();
+          
+          if (data && data.address) {
+            const addr = data.address;
+            
+            // Build a clean, short address: "House Number Street Name, Neighborhood"
+            const street = [addr.house_number, addr.road].filter(Boolean).join(' ');
+            const area = addr.suburb || addr.neighbourhood || addr.city || 'Owerri';
+            
+            if (street) {
+              setAddress(`${street}, ${area}`);
+            } else if (addr.road) {
+              setAddress(`${addr.road}, ${area}`);
+            } else if (addr.suburb || addr.neighbourhood) {
+              setAddress(`${area}, ${addr.state || 'Imo'}`);
+            } else {
+              setAddress(data.display_name || `Lat: ${currentLat.toFixed(4)}, Lng: ${currentLng.toFixed(4)}`);
+            }
+          } else {
+            setAddress(`Lat: ${currentLat.toFixed(4)}, Lng: ${currentLng.toFixed(4)}`);
+          }
+        } catch {
+          setAddress(`Lat: ${currentLat.toFixed(4)}, Lng: ${currentLng.toFixed(4)}`);
+        } finally {
+          setIsDetectingLocation(false);
+        }
       },
       () => {
+        setAddress('Owerri, Imo (Please type exact address)');
         setLat(5.5103);
         setLng(7.0265);
-        setAddress('Owerri, Imo');
         setIsDetectingLocation(false);
       },
-      { timeout: 10000 }
+      { timeout: 10000, enableHighAccuracy: true }
     );
   }, [isDetectingLocation]);
 
@@ -187,7 +212,7 @@ function StoreDetailsContent() {
     <main style={styles.container}>
       <div style={styles.header}>
         <button style={styles.backBtn} onClick={() => router.back()}>
-          <MdArrowBack size={24} color="#000" />
+          <MdArrowBack size={24} color="var(--text-primary)" />
         </button>
         <h1 style={styles.headerTitle}>Open Your Store</h1>
         <div style={{ width: 24 }} />
@@ -220,7 +245,7 @@ function StoreDetailsContent() {
             </div>
           ) : (
             <div style={styles.imagePlaceholder}>
-              <MdAddPhotoAlternate size={40} color="#888" />
+              <MdAddPhotoAlternate size={40} color="var(--text-muted)" />
               <p>Tap to add store photo</p>
             </div>
           )}
@@ -234,7 +259,7 @@ function StoreDetailsContent() {
         />
 
         <div style={styles.inputWrapper}>
-          <MdStore size={20} color="#888" style={styles.inputIcon} />
+          <MdStore size={20} color="var(--text-muted)" style={styles.inputIcon} />
           <input
             type="text"
             placeholder="Store Name"
@@ -252,9 +277,9 @@ function StoreDetailsContent() {
               onClick={() => setSelectedCategory(cat.id)}
               style={{
                 ...styles.categoryButton,
-                backgroundColor: selectedCategory === cat.id ? '#0504AA' : '#f0f0f0',
-                color: selectedCategory === cat.id ? '#fff' : '#333',
-                borderColor: selectedCategory === cat.id ? '#0504AA' : '#ccc',
+                backgroundColor: selectedCategory === cat.id ? 'var(--brand-primary)' : 'var(--bg-secondary)',
+                color: selectedCategory === cat.id ? 'var(--brand-on-gradient)' : 'var(--text-primary)',
+                borderColor: selectedCategory === cat.id ? 'var(--brand-primary)' : 'var(--border-default)',
               }}
             >
               {cat.label}
@@ -264,10 +289,10 @@ function StoreDetailsContent() {
 
         <div style={styles.cityRow}>
           <div style={styles.inputWrapper}>
-            <MdLocationOn size={20} color="#888" style={styles.inputIcon} />
+            <MdLocationOn size={20} color="var(--text-muted)" style={styles.inputIcon} />
             <input
               type="text"
-              placeholder="Store Address"
+              placeholder="Exact Store Address"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               style={styles.input}
@@ -282,13 +307,13 @@ function StoreDetailsContent() {
             {isDetectingLocation ? (
               <div style={styles.spinnerSmall} />
             ) : (
-              <MdGpsFixed size={24} color="#0504AA" />
+              <MdGpsFixed size={24} color="var(--brand-primary)" />
             )}
           </button>
         </div>
 
         <div style={styles.inputWrapper}>
-          <MdPhone size={20} color="#888" style={styles.inputIcon} />
+          <MdPhone size={20} color="var(--text-muted)" style={styles.inputIcon} />
           <input
             type="tel"
             placeholder="Contact Phone"
@@ -299,7 +324,7 @@ function StoreDetailsContent() {
         </div>
 
         <div style={styles.inputWrapper}>
-          <MdAccessTime size={20} color="#888" style={styles.inputIcon} />
+          <MdAccessTime size={20} color="var(--text-muted)" style={styles.inputIcon} />
           <input
             type="text"
             placeholder="Business Hours (Optional)"
@@ -328,7 +353,7 @@ function StoreDetailsContent() {
 
 export default function StorekeeperOnboardingStoreDetailsPage() {
   return (
-    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading store details…</div>}>
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--text-primary)' }}>Loading store details…</div>}>
       <StoreDetailsContent />
     </Suspense>
   );
@@ -339,14 +364,14 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-primary)',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '12px 16px',
-    borderBottom: '1px solid #eee',
+    borderBottom: '1px solid var(--border-default)',
   },
   backBtn: {
     background: 'none',
@@ -359,7 +384,7 @@ const styles: Record<string, React.CSSProperties> = {
   headerTitle: {
     fontSize: 18,
     fontWeight: 600,
-    color: '#000',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   scrollArea: {
@@ -375,35 +400,35 @@ const styles: Record<string, React.CSSProperties> = {
   },
   stepText: {
     fontSize: 13,
-    color: '#888',
+    color: 'var(--text-secondary)',
   },
   progressBar: {
     width: 100,
     height: 4,
-    backgroundColor: '#eee',
+    backgroundColor: 'var(--bg-secondary)',
     borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#0504AA',
+    backgroundColor: 'var(--brand-primary)',
     borderRadius: 2,
   },
   heading: {
     fontSize: 24,
     fontWeight: 700,
-    color: '#000',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   subHeading: {
     fontSize: 14,
-    color: '#888',
+    color: 'var(--text-secondary)',
     marginBottom: 32,
   },
   label: {
     fontSize: 14,
     fontWeight: 500,
-    color: '#000',
+    color: 'var(--text-primary)',
     marginBottom: 6,
     display: 'block',
   },
@@ -411,8 +436,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     height: 120,
     borderRadius: 16,
-    backgroundColor: '#f0f0f0',
-    border: '1px solid #ccc',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-default)',
     cursor: 'pointer',
     overflow: 'hidden',
     marginBottom: 20,
@@ -443,8 +468,8 @@ const styles: Record<string, React.CSSProperties> = {
   spinnerSmall: {
     width: 20,
     height: 20,
-    border: '2px solid #eee',
-    borderTopColor: '#0504AA',
+    border: '2px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
@@ -454,7 +479,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#888',
+    color: 'var(--text-secondary)',
   },
   inputWrapper: {
     position: 'relative',
@@ -470,10 +495,11 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '12px 14px 12px 36px',
     borderRadius: 12,
-    border: '1px solid #ccc',
+    border: '1px solid var(--border-default)',
     fontSize: 14,
     outline: 'none',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-primary)',
   },
   cityRow: {
     display: 'flex',
@@ -507,8 +533,8 @@ const styles: Record<string, React.CSSProperties> = {
   submitBtn: {
     width: '100%',
     padding: '16px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-gradient)',
     border: 'none',
     borderRadius: 14,
     fontSize: 16,
