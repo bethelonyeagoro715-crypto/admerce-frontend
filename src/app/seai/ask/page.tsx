@@ -42,9 +42,6 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// All values resolve via CSS vars so both themes share one code path.
-// Light theme resolves to the same blue palette as before; dark theme
-// resolves to charcoal + silver.
 const Brand = {
   bg: 'var(--bg-primary)',
   bgWarm: 'var(--bg-secondary)',
@@ -161,8 +158,6 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   return url.startsWith('/') ? `${base}${url}` : `${base}/${url}`;
 }
 
-// Type-badge colors are semantic (what kind of result) not theme colors —
-// they sit on top of an image and always carry white text. Kept hardcoded.
 function typeBadgeColor(type: string | undefined): string {
   if (type === 'service') return '#7C3AED';
   if (type === 'store') return '#059669';
@@ -175,7 +170,6 @@ function typeBadgeLabel(type: string | undefined): string {
   return 'ITEM';
 }
 
-// ─── Inline markdown renderer ───────────────────────────────────────
 interface MdToken {
   kind: 'text' | 'bold' | 'italic' | 'code' | 'price';
   value: string;
@@ -397,8 +391,10 @@ function SeaiAskContent() {
   const searchParams = useSearchParams();
 
   const initialQuery = searchParams.get('query') || '';
-  const userLat = parseFloat(searchParams.get('lat') || '') || 5.5103;
-  const userLng = parseFloat(searchParams.get('lng') || '') || 7.0265;
+  
+  // Changed to state so we can update it via geolocation
+  const [userLat, setUserLat] = useState<number>(parseFloat(searchParams.get('lat') || '') || 5.5103);
+  const [userLng, setUserLng] = useState<number>(parseFloat(searchParams.get('lng') || '') || 7.0265);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -436,6 +432,21 @@ function SeaiAskContent() {
   useEffect(() => {
     setGreeting(greetingForHour(new Date().getHours()));
   }, []);
+
+  // Ask for GPS if URL params are missing
+  useEffect(() => {
+    if (!searchParams.get('lat') && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserLat(pos.coords.latitude);
+          setUserLng(pos.coords.longitude);
+        },
+        (err) => {
+          console.log('Geolocation denied or failed:', err);
+        }
+      );
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -565,7 +576,6 @@ function SeaiAskContent() {
     });
   }, []);
 
-  // ── Voice ───────────────────────────────────────────────────────
   const startRecording = async () => {
     if (isRecording || isTranscribing) return;
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -648,7 +658,6 @@ function SeaiAskContent() {
     else void startRecording();
   };
 
-  // ── Attach ──────────────────────────────────────────────────────
   const handleAttachClick = () => {
     if (isUploadingImage) return;
     fileInputRef.current?.click();
@@ -1421,7 +1430,6 @@ export default function SeaiAskPage() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -1980,7 +1988,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-// ─── Global CSS ─────────────────────────────────────────────────────
 const GLOBAL_CSS = `
   html, body { overflow-x: hidden; max-width: 100vw; }
 
