@@ -17,6 +17,7 @@ import {
   MdArrowBack,
   MdLocalShipping,
   MdStar,
+  MdClose,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -43,7 +44,7 @@ type NotificationKind =
   | 'review'
   | 'system';
 
-// ─── Time formatting ────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────
 function timeAgo(isoString: string): string {
   try {
     const now = Date.now();
@@ -74,16 +75,8 @@ function dateGroup(isoString?: string): string {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return 'Earlier';
     const now = new Date();
-    const startOfToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-    ).getTime();
-    const startOfNotif = new Date(
-      d.getFullYear(),
-      d.getMonth(),
-      d.getDate(),
-    ).getTime();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfNotif = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     const dayDiff = Math.floor((startOfToday - startOfNotif) / 86_400_000);
     if (dayDiff <= 0) return 'Today';
     if (dayDiff === 1) return 'Yesterday';
@@ -95,10 +88,7 @@ function dateGroup(isoString?: string): string {
   }
 }
 
-// ─── Extract data payload ───────────────────────────────────────────
-function extractDataPayload(
-  raw: unknown,
-): Record<string, unknown> | null {
+function extractDataPayload(raw: unknown): Record<string, unknown> | null {
   if (!raw) return null;
   if (typeof raw === 'object' && !Array.isArray(raw)) {
     return raw as Record<string, unknown>;
@@ -116,7 +106,6 @@ function extractDataPayload(
   return null;
 }
 
-// ─── Classify notification ──────────────────────────────────────────
 function classify(n: NotificationItem): NotificationKind {
   const raw = (n.type || '').toLowerCase();
   if (raw) {
@@ -125,8 +114,7 @@ function classify(n: NotificationItem): NotificationKind {
     if (raw.includes('store')) return 'store';
     if (raw.includes('verif')) return 'verified';
     if (raw.includes('favorite') || raw.includes('save')) return 'favorite';
-    if (raw.includes('deliver') || raw.includes('ship') || raw.includes('courier'))
-      return 'delivery';
+    if (raw.includes('deliver') || raw.includes('ship') || raw.includes('courier')) return 'delivery';
     if (raw.includes('review') || raw.includes('rating')) return 'review';
   }
   const t = (n.title || '').toLowerCase();
@@ -153,7 +141,6 @@ const KIND_META: Record<
   system:   { color: 'var(--text-tertiary)',  soft: 'var(--bg-tertiary)', Icon: MdNotifications },
 };
 
-// ─── Deep link resolution ───────────────────────────────────────────
 function resolveDeepLink(n: NotificationItem): string | null {
   if (typeof n.url === 'string' && n.url.trim()) return n.url.trim();
   const data = extractDataPayload(n.data);
@@ -165,14 +152,10 @@ function resolveDeepLink(n: NotificationItem): string | null {
   if (fromData) return fromData;
 
   if (typeof data.order_id === 'string') return `/wallet/order/${data.order_id}`;
-  if (typeof data.booking_id === 'string')
-    return `/receipt/service/${data.booking_id}`;
-  if (typeof data.listing_id === 'string')
-    return `/item-detail/${data.listing_id}`;
-  if (typeof data.store_id === 'string')
-    return `/store-detail/${data.store_id}`;
-  if (typeof data.conversation_id === 'string')
-    return `/chat/${data.conversation_id}`;
+  if (typeof data.booking_id === 'string') return `/receipt/service/${data.booking_id}`;
+  if (typeof data.listing_id === 'string') return `/item-detail/${data.listing_id}`;
+  if (typeof data.store_id === 'string') return `/store-detail/${data.store_id}`;
+  if (typeof data.conversation_id === 'string') return `/chat/${data.conversation_id}`;
 
   return null;
 }
@@ -183,7 +166,6 @@ function isRead(n: NotificationItem): boolean {
   return false;
 }
 
-// ─── Response normalizer ────────────────────────────────────────────
 function extractNotifications(data: unknown): NotificationItem[] {
   if (Array.isArray(data)) return data as NotificationItem[];
   if (data && typeof data === 'object') {
@@ -195,7 +177,7 @@ function extractNotifications(data: unknown): NotificationItem[] {
   return [];
 }
 
-// ─── Main page ──────────────────────────────────────────────────────
+// ─── Main Component ─────────────────────────────────────────────────
 export default function NotificationsPage() {
   const router = useRouter();
 
@@ -204,6 +186,9 @@ export default function NotificationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
 
+  // State for the custom Bottom Sheet Modal
+  const [selectedNotif, setSelectedNotif] = useState<NotificationItem | null>(null);
+
   const loadNotifications = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -211,9 +196,7 @@ export default function NotificationsPage() {
       const data = await api.getNotifications();
       setNotifications(extractNotifications(data));
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to load notifications',
-      );
+      setError(err instanceof Error ? err.message : 'Failed to load notifications');
     } finally {
       setIsLoading(false);
     }
@@ -224,28 +207,33 @@ export default function NotificationsPage() {
     return () => clearTimeout(t);
   }, [loadNotifications]);
 
-  const markAsRead = useCallback(
-    async (id: number) => {
-      try {
-        await api.markNotificationRead(id);
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
-        );
-      } catch {
-        // ignore
-      }
-    },
-    [],
-  );
+  const markAsRead = useCallback(async (id: number) => {
+    try {
+      await api.markNotificationRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
+    } catch {
+      // ignore
+    }
+  }, []);
 
+  // Opens the custom modal instead of immediate routing
   const handleNotificationTap = async (n: NotificationItem) => {
     if (!isRead(n)) {
       await markAsRead(n.id);
     }
-    const url = resolveDeepLink(n);
+    setSelectedNotif(n);
+  };
+
+  // Triggered from inside the modal
+  const handleViewContent = () => {
+    if (!selectedNotif) return;
+    const url = resolveDeepLink(selectedNotif);
     if (url) {
       router.push(url);
     }
+    setSelectedNotif(null);
   };
 
   const handleMarkAll = async () => {
@@ -253,21 +241,14 @@ export default function NotificationsPage() {
     if (unread.length === 0 || markingAll) return;
     setMarkingAll(true);
     try {
-      await Promise.all(
-        unread.map((n) => api.markNotificationRead(n.id).catch(() => null)),
-      );
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, is_read: true })),
-      );
+      await Promise.all(unread.map((n) => api.markNotificationRead(n.id).catch(() => null)));
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     } finally {
       setMarkingAll(false);
     }
   };
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !isRead(n)).length,
-    [notifications],
-  );
+  const unreadCount = useMemo(() => notifications.filter((n) => !isRead(n)).length, [notifications]);
 
   const groups = useMemo(() => {
     const out: { label: string; items: NotificationItem[] }[] = [];
@@ -288,40 +269,21 @@ export default function NotificationsPage() {
       <style>{CSS}</style>
 
       <header className="nf-header">
-        <button
-          className="nf-backBtn"
-          onClick={() => router.back()}
-          aria-label="Go back"
-        >
+        <button className="nf-backBtn" onClick={() => router.back()} aria-label="Go back">
           <MdArrowBack size={22} color="var(--text-primary)" />
         </button>
         <div className="nf-headerText">
           <h1 className="nf-title">Notifications</h1>
-          {unreadCount > 0 && (
-            <span className="nf-unread">
-              {unreadCount} unread
-            </span>
-          )}
+          {unreadCount > 0 && <span className="nf-unread">{unreadCount} unread</span>}
         </div>
-        <button
-          className="nf-iconBtn"
-          onClick={loadNotifications}
-          aria-label="Refresh"
-          title="Refresh"
-          disabled={isLoading}
-        >
+        <button className="nf-iconBtn" onClick={loadNotifications} aria-label="Refresh" disabled={isLoading}>
           <MdRefresh size={20} color="var(--brand-primary)" />
         </button>
       </header>
 
       {unreadCount > 0 && !isLoading && (
         <div className="nf-actionsBar">
-          <button
-            type="button"
-            className="nf-markAllBtn"
-            onClick={handleMarkAll}
-            disabled={markingAll}
-          >
+          <button type="button" className="nf-markAllBtn" onClick={handleMarkAll} disabled={markingAll}>
             <MdDoneAll size={18} color="var(--brand-primary)" />
             <span>{markingAll ? 'Marking…' : 'Mark all as read'}</span>
           </button>
@@ -336,14 +298,8 @@ export default function NotificationsPage() {
                 <div className="nf-skel nf-skelIcon" />
                 <div className="nf-skelBody">
                   <div className="nf-skel nf-skelLine" />
-                  <div
-                    className="nf-skel nf-skelLine"
-                    style={{ width: '65%' }}
-                  />
-                  <div
-                    className="nf-skel nf-skelLineShort"
-                    style={{ width: '30%' }}
-                  />
+                  <div className="nf-skel nf-skelLine" style={{ width: '65%' }} />
+                  <div className="nf-skel nf-skelLineShort" style={{ width: '30%' }} />
                 </div>
               </div>
             ))}
@@ -352,13 +308,7 @@ export default function NotificationsPage() {
           <div className="nf-center">
             <MdErrorOutline size={48} color="var(--danger-fg)" />
             <p className="nf-centerText">{error}</p>
-            <button
-              type="button"
-              className="nf-retryBtn"
-              onClick={loadNotifications}
-            >
-              Retry
-            </button>
+            <button type="button" className="nf-retryBtn" onClick={loadNotifications}>Retry</button>
           </div>
         ) : notifications.length === 0 ? (
           <div className="nf-center">
@@ -366,9 +316,7 @@ export default function NotificationsPage() {
               <MdNotifications size={40} color="var(--brand-primary)" />
             </div>
             <h2 className="nf-centerTitle">You&apos;re all caught up</h2>
-            <p className="nf-centerText">
-              Order updates, messages, and store activity will appear here.
-            </p>
+            <p className="nf-centerText">Order updates, messages, and store activity will appear here.</p>
           </div>
         ) : (
           groups.map((group) => (
@@ -386,42 +334,21 @@ export default function NotificationsPage() {
                   <button
                     key={n.id}
                     type="button"
-                    className={
-                      read ? 'nf-card nf-cardRead' : 'nf-card nf-cardUnread'
-                    }
+                    className={read ? 'nf-card nf-cardRead' : 'nf-card nf-cardUnread'}
                     onClick={() => handleNotificationTap(n)}
                   >
-                    <span
-                      className="nf-iconWrap"
-                      style={{ backgroundColor: meta.soft }}
-                      aria-hidden="true"
-                    >
+                    <span className="nf-iconWrap" style={{ backgroundColor: meta.soft }} aria-hidden="true">
                       <Icon size={20} color={meta.color} />
                     </span>
-
                     <span className="nf-content">
                       <span className="nf-topRow">
-                        <span className="nf-titleText">
-                          {n.title || 'Notification'}
-                        </span>
+                        <span className="nf-titleText">{n.title || 'Notification'}</span>
                         {!read && <span className="nf-dot" aria-hidden="true" />}
                       </span>
-                      {n.body && (
-                        <span className="nf-bodyText">{n.body}</span>
-                      )}
-                      {timeText && (
-                        <span className="nf-timeText">{timeText}</span>
-                      )}
+                      {n.body && <span className="nf-bodyText">{n.body}</span>}
+                      {timeText && <span className="nf-timeText">{timeText}</span>}
                     </span>
-
-                    {hasLink && (
-                      <MdChevronRight
-                        size={22}
-                        color="var(--border-strong)"
-                        className="nf-chevron"
-                        aria-hidden="true"
-                      />
-                    )}
+                    {hasLink && <MdChevronRight size={22} color="var(--border-strong)" className="nf-chevron" aria-hidden="true" />}
                   </button>
                 );
               })}
@@ -429,6 +356,53 @@ export default function NotificationsPage() {
           ))
         )}
       </div>
+
+      {/* ─── Beautiful Custom Bottom Sheet Modal ─── */}
+      {selectedNotif && (
+        <div className="nf-modalOverlay" onClick={() => setSelectedNotif(null)}>
+          <div className="nf-modalSheet" onClick={(e) => e.stopPropagation()}>
+            <div className="nf-modalGrabber" />
+            
+            <button className="nf-modalClose" onClick={() => setSelectedNotif(null)}>
+              <MdClose size={24} color="var(--text-muted)" />
+            </button>
+
+            {(() => {
+              const kind = classify(selectedNotif);
+              const meta = KIND_META[kind];
+              const Icon = meta.Icon;
+              return (
+                <div className="nf-modalContent">
+                  <div className="nf-modalIconWrap" style={{ backgroundColor: meta.soft }}>
+                    <Icon size={36} color={meta.color} />
+                  </div>
+                  
+                  <h2 className="nf-modalTitle">{selectedNotif.title || 'Notification'}</h2>
+                  
+                  {selectedNotif.created_at && (
+                    <span className="nf-modalTime">{timeAgo(selectedNotif.created_at)}</span>
+                  )}
+
+                  <div className="nf-modalBody">
+                    {selectedNotif.body || 'No further details provided.'}
+                  </div>
+
+                  {/* Show Action Button only if there's somewhere to go */}
+                  {resolveDeepLink(selectedNotif) ? (
+                    <button className="nf-modalActionBtn" onClick={handleViewContent}>
+                      View Details <MdChevronRight size={20} />
+                    </button>
+                  ) : (
+                    <button className="nf-modalActionBtnSecondary" onClick={() => setSelectedNotif(null)}>
+                      Done
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -442,6 +416,14 @@ const CSS = `
   @keyframes nf-fadeIn {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes nf-slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes nf-modalFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   .nf-root {
@@ -463,277 +445,118 @@ const CSS = `
     z-index: 10;
   }
   .nf-backBtn {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s;
-    flex: 0 0 36px;
+    width: 36px; height: 36px; border-radius: 10px; border: none;
+    background: transparent; cursor: pointer; display: inline-flex;
+    align-items: center; justify-content: center; flex: 0 0 36px;
   }
   .nf-backBtn:hover { background: var(--bg-hover); }
-  .nf-headerText {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-  .nf-title {
-    font-size: 18px;
-    font-weight: 800;
-    color: var(--text-primary);
-    margin: 0;
-    letter-spacing: -0.02em;
-    white-space: nowrap;
-  }
-  .nf-unread {
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--brand-soft);
-    color: var(--brand-primary);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-  }
-  .nf-iconBtn {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s;
-    flex: 0 0 36px;
-  }
-  .nf-iconBtn:hover:not(:disabled) { background: var(--bg-hover); }
-  .nf-iconBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .nf-headerText { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+  .nf-title { font-size: 18px; font-weight: 800; color: var(--text-primary); margin: 0; letter-spacing: -0.02em; }
+  .nf-unread { padding: 2px 8px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-primary); font-size: 11px; font-weight: 800; }
+  .nf-iconBtn { width: 36px; height: 36px; border-radius: 10px; border: none; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; }
+  .nf-iconBtn:disabled { opacity: 0.5; }
 
-  .nf-actionsBar {
-    display: flex;
-    justify-content: flex-end;
-    padding: 10px 14px 0;
-  }
+  .nf-actionsBar { display: flex; justify-content: flex-end; padding: 10px 14px 0; }
   .nf-markAllBtn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    border-radius: 10px;
-    border: 1px solid var(--border-default);
-    background: var(--bg-secondary);
-    color: var(--brand-primary);
-    font-size: 12.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
-    font-family: inherit;
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 10px;
+    border: 1px solid var(--border-default); background: var(--bg-secondary); color: var(--brand-primary);
+    font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit;
   }
-  .nf-markAllBtn:hover:not(:disabled) {
-    background: var(--brand-soft);
-    border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
-  }
-  .nf-markAllBtn:disabled { opacity: 0.6; cursor: not-allowed; }
-
-  .nf-body {
-    flex: 1;
-    padding: 12px 14px 40px;
-  }
-
+  .nf-body { flex: 1; padding: 12px 14px 40px; }
   .nf-group { margin-bottom: 20px; }
-  .nf-groupLabel {
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 1px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    padding: 4px 4px 10px;
-  }
+  .nf-groupLabel { font-size: 11px; font-weight: 800; letter-spacing: 1px; color: var(--text-muted); text-transform: uppercase; padding: 4px 4px 10px; }
 
   .nf-card {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    width: 100%;
-    padding: 14px;
-    margin-bottom: 8px;
-    border-radius: 14px;
-    border: 1px solid var(--border-default);
-    background: var(--bg-secondary);
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit;
-    transition: background 0.15s, border-color 0.15s, transform 0.12s;
-    animation: nf-fadeIn 0.2s ease;
+    display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 14px; margin-bottom: 8px;
+    border-radius: 14px; border: 1px solid var(--border-default); background: var(--bg-secondary);
+    cursor: pointer; text-align: left; font-family: inherit; animation: nf-fadeIn 0.2s ease;
   }
-  .nf-card:hover {
-    border-color: color-mix(in srgb, var(--brand-primary) 40%, transparent);
-  }
-  .nf-cardUnread {
-    border-color: color-mix(in srgb, var(--brand-primary) 28%, transparent);
-    box-shadow: var(--shadow-sm);
-  }
-  .nf-cardUnread:hover {
-    background: var(--bg-hover);
-  }
+  .nf-cardUnread { border-color: color-mix(in srgb, var(--brand-primary) 28%, transparent); box-shadow: var(--shadow-sm); }
+  .nf-iconWrap { width: 40px; height: 40px; flex: 0 0 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; }
+  .nf-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .nf-topRow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .nf-titleText { font-size: 14px; font-weight: 700; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nf-cardRead .nf-titleText { font-weight: 600; color: var(--text-secondary); }
+  .nf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand-primary); flex: 0 0 8px; }
+  .nf-bodyText { font-size: 13.5px; color: var(--text-secondary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .nf-timeText { font-size: 11.5px; color: var(--text-muted); font-weight: 600; margin-top: 2px; }
+  .nf-chevron { flex: 0 0 22px; align-self: center; }
 
-  .nf-iconWrap {
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 12px;
-  }
-
-  .nf-content {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .nf-topRow {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-  .nf-titleText {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text-primary);
-    line-height: 1.3;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    flex: 1;
-    min-width: 0;
-  }
-  .nf-cardRead .nf-titleText {
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-  .nf-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--brand-primary);
-    flex: 0 0 8px;
-  }
-  .nf-bodyText {
-    font-size: 13.5px;
-    color: var(--text-secondary);
-    line-height: 1.45;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-  .nf-timeText {
-    font-size: 11.5px;
-    color: var(--text-muted);
-    font-weight: 600;
-    margin-top: 2px;
-  }
-  .nf-chevron {
-    flex: 0 0 22px;
-    align-self: center;
-  }
-
-  .nf-center {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 80px 24px 40px;
-    gap: 8px;
-    text-align: center;
-  }
-  .nf-emptyIconWrap {
-    width: 76px;
-    height: 76px;
-    border-radius: 26px;
-    background: var(--brand-soft);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 12px;
-  }
-  .nf-centerTitle {
-    font-size: 18px;
-    font-weight: 800;
-    color: var(--text-primary);
-    margin: 0;
-    letter-spacing: -0.01em;
-  }
-  .nf-centerText {
-    font-size: 13.5px;
-    color: var(--text-tertiary);
-    margin: 4px 0 0;
-    max-width: 340px;
-    line-height: 1.55;
-  }
-  .nf-retryBtn {
-    margin-top: 14px;
-    padding: 10px 22px;
-    background: var(--brand-primary);
-    color: var(--brand-on-primary);
-    border: none;
-    border-radius: 12px;
-    font-weight: 700;
-    font-size: 14px;
-    cursor: pointer;
-    font-family: inherit;
-  }
-
-  .nf-skeletonCard {
-    display: flex;
-    gap: 14px;
-    padding: 14px;
-    margin-bottom: 8px;
-    border-radius: 14px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-default);
-  }
-  .nf-skel {
-    background: var(--skeleton);
-    background-size: 800px 100%;
-    animation: nf-shimmer 1.4s infinite linear;
-    border-radius: 8px;
-  }
+  .nf-center { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 24px; text-align: center; }
+  .nf-emptyIconWrap { width: 76px; height: 76px; border-radius: 26px; background: var(--brand-soft); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .nf-centerTitle { font-size: 18px; font-weight: 800; color: var(--text-primary); margin: 0; }
+  .nf-centerText { font-size: 13.5px; color: var(--text-tertiary); margin-top: 4px; }
+  
+  .nf-skeletonCard { display: flex; gap: 14px; padding: 14px; margin-bottom: 8px; border-radius: 14px; background: var(--bg-secondary); border: 1px solid var(--border-default); }
+  .nf-skel { background: var(--skeleton); background-size: 800px 100%; animation: nf-shimmer 1.4s infinite linear; border-radius: 8px; }
   .nf-skelIcon { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 12px; }
   .nf-skelBody { flex: 1; display: flex; flex-direction: column; gap: 8px; }
   .nf-skelLine { height: 12px; width: 90%; }
   .nf-skelLineShort { height: 10px; }
 
-  @media (min-width: 1024px) {
-    .nf-header,
-    .nf-actionsBar,
-    .nf-body {
-      max-width: 720px;
-      margin-left: auto;
-      margin-right: auto;
-      width: 100%;
-    }
+  /* Modal Styles */
+  .nf-modalOverlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px); z-index: 100; display: flex;
+    align-items: flex-end; justify-content: center;
+    animation: nf-modalFade 0.2s ease-out;
+  }
+  .nf-modalSheet {
+    width: 100%; max-width: 600px; background: var(--bg-secondary);
+    border-top-left-radius: 28px; border-top-right-radius: 28px;
+    padding: 12px 24px 40px; position: relative;
+    animation: nf-slideUp 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.1);
+  }
+  .nf-modalGrabber {
+    width: 44px; height: 5px; background: var(--border-strong);
+    border-radius: 10px; margin: 0 auto 20px;
+  }
+  .nf-modalClose {
+    position: absolute; top: 20px; right: 20px;
+    background: var(--bg-tertiary); border: none; border-radius: 50%;
+    width: 36px; height: 36px; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; transition: background 0.2s;
+  }
+  .nf-modalClose:hover { background: var(--border-default); }
+  .nf-modalContent { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .nf-modalIconWrap {
+    width: 80px; height: 80px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px; box-shadow: var(--shadow-sm);
+  }
+  .nf-modalTitle {
+    font-size: 22px; font-weight: 800; color: var(--text-primary);
+    margin: 0 0 8px; letter-spacing: -0.02em; line-height: 1.2;
+  }
+  .nf-modalTime {
+    font-size: 13px; font-weight: 600; color: var(--text-muted);
+    margin-bottom: 24px; background: var(--bg-tertiary);
+    padding: 4px 12px; border-radius: 999px;
+  }
+  .nf-modalBody {
+    font-size: 15px; line-height: 1.6; color: var(--text-secondary);
+    margin-bottom: 32px; width: 100%; text-align: left;
+    background: var(--bg-primary); padding: 16px;
+    border-radius: 16px; border: 1px solid var(--border-subtle);
+  }
+  .nf-modalActionBtn {
+    width: 100%; padding: 16px; border-radius: 16px; border: none;
+    background: var(--brand-gradient); color: var(--brand-on-gradient);
+    font-size: 16px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    box-shadow: var(--shadow-brand); transition: transform 0.1s;
+  }
+  .nf-modalActionBtn:active { transform: scale(0.98); }
+  .nf-modalActionBtnSecondary {
+    width: 100%; padding: 16px; border-radius: 16px;
+    background: var(--bg-tertiary); color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    font-size: 16px; font-weight: 700; cursor: pointer;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    * {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-    }
+  @media (min-width: 1024px) {
+    .nf-modalOverlay { align-items: center; }
+    .nf-modalSheet { border-radius: 28px; padding-bottom: 32px; }
   }
 `;
