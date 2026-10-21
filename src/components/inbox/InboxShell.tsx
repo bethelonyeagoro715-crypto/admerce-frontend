@@ -11,7 +11,7 @@ import {
   MdSearch,
   MdClose,
   MdStorefront,
-  MdChatBubbleOutline,
+  MdEdit,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -24,13 +24,10 @@ interface Conversation {
   last_sender_id?: string;
   last_time?: string;
   unread_count?: number;
+  is_online?: boolean; // Added for the green dot
 }
 
-type Filter = 'all' | 'unread';
-type Bucket = 'today' | 'yesterday' | 'week' | 'older';
-
 interface DecoratedConversation extends Conversation {
-  _bucket: Bucket | null;
   _name: string;
   _preview: string;
   _unread: number;
@@ -64,58 +61,28 @@ function parseAsUtc(iso?: string | null): number {
   return new Date(hasTz ? trimmed : `${trimmed}Z`).getTime();
 }
 
-function formatRelativeTime(isoString?: string): string {
+function formatChatTime(isoString?: string): string {
   if (!isoString) return '';
   const t = parseAsUtc(isoString);
   if (Number.isNaN(t)) return '';
-  const now = Date.now();
-  const diffSec = Math.floor((now - t) / 1000);
-  if (diffSec < 45) return 'now';
-  const mins = Math.floor(diffSec / 60);
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d`;
-  try {
-    return new Date(t).toLocaleDateString([], {
-      day: 'numeric',
-      month: 'short',
-    });
-  } catch {
-    return '';
-  }
-}
-
-function getBucket(iso?: string): Bucket | null {
-  const t = parseAsUtc(iso);
-  if (Number.isNaN(t)) return null;
+  
   const now = new Date();
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  ).getTime();
-  const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
-  const startOfWeek = startOfToday - 6 * 24 * 60 * 60 * 1000;
-  if (t >= startOfToday) return 'today';
-  if (t >= startOfYesterday) return 'yesterday';
-  if (t >= startOfWeek) return 'week';
-  return 'older';
-}
-
-function bucketLabel(b: Bucket): string {
-  switch (b) {
-    case 'today':
-      return 'Today';
-    case 'yesterday':
-      return 'Yesterday';
-    case 'week':
-      return 'Earlier this week';
-    case 'older':
-      return 'Older';
+  const d = new Date(t);
+  
+  // If today, show time (e.g., "10:42 AM")
+  if (now.toDateString() === d.toDateString()) {
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }
+  
+  // If yesterday, show "Yesterday"
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (yesterday.toDateString() === d.toDateString()) {
+    return 'Yesterday';
+  }
+  
+  // Otherwise, show date (e.g., "12/10/2026" or "Oct 12")
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 function buildPreview(
@@ -131,63 +98,20 @@ function buildPreview(
   return isMine ? `You: ${body}` : body;
 }
 
-function highlight(text: string, query: string): React.ReactNode {
-  const q = query.trim().toLowerCase();
-  if (!q) return text;
-  const idx = text.toLowerCase().indexOf(q);
-  if (idx === -1) return text;
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark className="ibx-mark">
-        {text.slice(idx, idx + q.length)}
-      </mark>
-      {text.slice(idx + q.length)}
-    </>
-  );
-}
-
 // ─── Skeleton ───────────────────────────────────────────────────────
 function InboxSkeleton() {
   return (
-    <>
-      <div className="ibx-skeletonGroup">
-        <div className="ibx-skel ibx-skelSection" />
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="ibx-skeletonRow">
-            <div className="ibx-skel ibx-skelAvatar" />
-            <div className="ibx-skeletonBody">
-              <div
-                className="ibx-skel ibx-skelLine"
-                style={{ width: '48%' }}
-              />
-              <div
-                className="ibx-skel ibx-skelLine"
-                style={{ width: '78%', marginTop: 9 }}
-              />
-            </div>
+    <div className="ibx-skeletonGroup">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div key={i} className="ibx-skeletonRow">
+          <div className="ibx-skel ibx-skelAvatar" />
+          <div className="ibx-skeletonBody">
+            <div className="ibx-skel ibx-skelLine" style={{ width: '48%' }} />
+            <div className="ibx-skel ibx-skelLine" style={{ width: '78%', marginTop: 9 }} />
           </div>
-        ))}
-      </div>
-      <div className="ibx-skeletonGroup">
-        <div className="ibx-skel ibx-skelSection" />
-        {[0, 1].map((i) => (
-          <div key={i} className="ibx-skeletonRow">
-            <div className="ibx-skel ibx-skelAvatar" />
-            <div className="ibx-skeletonBody">
-              <div
-                className="ibx-skel ibx-skelLine"
-                style={{ width: '55%' }}
-              />
-              <div
-                className="ibx-skel ibx-skelLine"
-                style={{ width: '72%', marginTop: 9 }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -202,7 +126,6 @@ export function InboxShell() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const reqSeq = useRef(0);
@@ -252,7 +175,7 @@ export function InboxShell() {
         const me = (await api.getMyProfile()) as { id?: string };
         if (!cancelled) setCurrentUserId(me?.id ?? null);
       } catch {
-        /* silent — previews fall back to no "You:" prefix */
+        /* silent */
       }
     })();
     return () => {
@@ -277,12 +200,6 @@ export function InboxShell() {
     }
   };
 
-  const totalUnread = useMemo(
-    () =>
-      conversations.reduce((sum, c) => sum + (c.unread_count ?? 0), 0),
-    [conversations],
-  );
-
   const decorated = useMemo<DecoratedConversation[]>(() => {
     const q = query.trim().toLowerCase();
     const list: DecoratedConversation[] = [];
@@ -292,7 +209,6 @@ export function InboxShell() {
       const preview = buildPreview(conv, currentUserId);
       const unread = conv.unread_count ?? 0;
 
-      if (filter === 'unread' && unread === 0) continue;
       if (q) {
         const hay = `${name} ${preview}`.toLowerCase();
         if (!hay.includes(q)) continue;
@@ -300,7 +216,6 @@ export function InboxShell() {
 
       list.push({
         ...conv,
-        _bucket: getBucket(conv.last_time),
         _name: name,
         _preview: preview,
         _unread: unread,
@@ -311,187 +226,104 @@ export function InboxShell() {
 
     list.sort((a, b) => b._sortKey - a._sortKey);
     return list;
-  }, [conversations, query, filter, currentUserId]);
-
-  const grouped = useMemo(() => {
-    const order: Bucket[] = ['today', 'yesterday', 'week', 'older'];
-    const map = new Map<Bucket, DecoratedConversation[]>();
-    for (const c of decorated) {
-      const b = c._bucket;
-      if (!b) continue;
-      if (!map.has(b)) map.set(b, []);
-      map.get(b)!.push(c);
-    }
-    return order
-      .filter((b) => map.has(b))
-      .map((b) => ({ bucket: b, items: map.get(b)! }));
-  }, [decorated]);
+  }, [conversations, query, currentUserId]);
 
   const openChat = (conv: Conversation) => {
     const conversationId = conv.conversation_id;
-    if (!conversationId) {
-      console.warn('[inbox] skipping conversation with no id', conv);
-      return;
-    }
+    if (!conversationId) return;
+    
     const params = new URLSearchParams();
     if (conv.other_user_id) params.set('otherUserId', conv.other_user_id);
-    if (conv.other_user_name)
-      params.set('otherUserName', conv.other_user_name);
-    if (conv.other_user_avatar)
-      params.set('otherUserAvatar', conv.other_user_avatar);
+    if (conv.other_user_name) params.set('otherUserName', conv.other_user_name);
+    if (conv.other_user_avatar) params.set('otherUserAvatar', conv.other_user_avatar);
+    
     const qs = params.toString();
     router.push(`/chat/${conversationId}${qs ? `?${qs}` : ''}`);
   };
 
-  const unreadFilterCount = totalUnread;
   const hasAnyConversations = conversations.length > 0;
   const hasResults = decorated.length > 0;
-  const searching = query.trim().length > 0;
 
   return (
     <main className="ibx-root">
       <style>{CSS}</style>
 
+      {/* Header */}
       <header className="ibx-header">
-        <div className="ibx-headerText">
-          <h1 className="ibx-title">Chats</h1>
-          <p className="ibx-subtitle">
-            {isLoading
-              ? 'Loading…'
-              : totalUnread > 0
-                ? `${totalUnread} unread`
-                : hasAnyConversations
-                  ? `${conversations.length} conversation${
-                      conversations.length === 1 ? '' : 's'
-                    }`
-                  : 'Your chats live here'}
-          </p>
+        <h1 className="ibx-title">Chats</h1>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            className="ibx-iconBtn"
+            onClick={handleRefresh}
+            disabled={isRefreshing || isLoading}
+            aria-label="Refresh"
+          >
+            <MdRefresh
+              size={22}
+              color="var(--text-primary)"
+              style={{
+                animation: isRefreshing ? 'ibxSpin 0.8s linear infinite' : 'none',
+              }}
+            />
+          </button>
+          <button type="button" className="ibx-iconBtn" aria-label="New chat">
+            <MdEdit size={22} color="var(--text-primary)" />
+          </button>
         </div>
-        <button
-          type="button"
-          className="ibx-iconBtn"
-          onClick={handleRefresh}
-          disabled={isRefreshing || isLoading}
-          aria-label="Refresh"
-          title="Refresh"
-        >
-          <MdRefresh
-            size={20}
-            color="var(--brand-primary)"
-            style={{
-              animation: isRefreshing
-                ? 'ibxSpin 0.8s linear infinite'
-                : 'none',
-            }}
-          />
-        </button>
       </header>
 
-      {(hasAnyConversations || searching) && (
-        <div className="ibx-controls">
+      {/* Search Bar */}
+      {hasAnyConversations && (
+        <div className="ibx-searchContainer">
           <div className="ibx-searchBox">
-            <MdSearch size={18} color="var(--text-muted)" aria-hidden />
+            <MdSearch size={20} color="var(--text-muted)" />
             <input
               ref={searchInputRef}
               type="text"
               className="ibx-searchInput"
-              placeholder="Search"
+              placeholder="Search messages..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onSearchKeyDown}
-              aria-label="Search conversations"
             />
             {query && (
               <button
                 type="button"
                 className="ibx-searchClear"
-                onClick={() => {
-                  setQuery('');
-                  searchInputRef.current?.focus();
-                }}
-                aria-label="Clear search"
+                onClick={() => setQuery('')}
               >
-                <MdClose size={14} color="var(--text-tertiary)" />
+                <MdClose size={16} color="var(--text-tertiary)" />
               </button>
             )}
-          </div>
-
-          <div className="ibx-pillRow" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filter === 'all'}
-              className={
-                filter === 'all'
-                  ? 'ibx-pill ibx-pillActive'
-                  : 'ibx-pill'
-              }
-              onClick={() => setFilter('all')}
-            >
-              All
-              {hasAnyConversations && (
-                <span className="ibx-pillCount">
-                  {conversations.length}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filter === 'unread'}
-              className={
-                filter === 'unread'
-                  ? 'ibx-pill ibx-pillActive'
-                  : 'ibx-pill'
-              }
-              onClick={() => setFilter('unread')}
-              disabled={unreadFilterCount === 0 && filter !== 'unread'}
-            >
-              Unread
-              {unreadFilterCount > 0 && (
-                <span
-                  className={
-                    filter === 'unread'
-                      ? 'ibx-pillCount ibx-pillCountOn'
-                      : 'ibx-pillCount'
-                  }
-                >
-                  {unreadFilterCount}
-                </span>
-              )}
-            </button>
           </div>
         </div>
       )}
 
+      {/* Chat List */}
       <div className="ibx-body">
         {isLoading ? (
           <InboxSkeleton />
         ) : error ? (
           <div className="ibx-center">
-            <div className="ibx-stateIconError" aria-hidden>
+            <div className="ibx-stateIconError">
               <MdErrorOutline size={32} color="var(--danger-fg)" />
             </div>
             <h2 className="ibx-stateTitle">Couldn&apos;t load your chats</h2>
             <p className="ibx-stateBody">{error}</p>
-            <button
-              type="button"
-              className="ibx-primaryBtn"
-              onClick={handleRefresh}
-            >
+            <button type="button" className="ibx-primaryBtn" onClick={handleRefresh}>
               <MdRefresh size={16} color="var(--brand-on-primary)" />
               Try again
             </button>
           </div>
         ) : !hasAnyConversations ? (
           <div className="ibx-center">
-            <div className="ibx-stateIconInfo" aria-hidden>
+            <div className="ibx-stateIconInfo">
               <MdInbox size={34} color="var(--brand-primary)" />
             </div>
             <h2 className="ibx-stateTitle">No conversations yet</h2>
             <p className="ibx-stateBody">
-              Message a store or a service provider and your chats will show
-              up here.
+              Message a store or a service provider and your chats will show up here.
             </p>
             <button
               type="button"
@@ -503,141 +335,80 @@ export function InboxShell() {
             </button>
           </div>
         ) : !hasResults ? (
-          <div className="ibx-center ibx-centerTight">
-            <div className="ibx-stateIconMuted" aria-hidden>
-              <MdChatBubbleOutline
-                size={30}
-                color="var(--text-muted)"
-              />
-            </div>
+          <div className="ibx-center">
             <h2 className="ibx-stateTitle">No matches</h2>
-            <p className="ibx-stateBody">
-              {searching
-                ? `Nothing matches “${query.trim()}”${
-                    filter === 'unread' ? ' in unread chats' : ''
-                  }.`
-                : 'No unread conversations right now.'}
-            </p>
-            {(searching || filter === 'unread') && (
-              <button
-                type="button"
-                className="ibx-ghostBtn"
-                onClick={() => {
-                  setQuery('');
-                  setFilter('all');
-                }}
-              >
-                Clear filters
-              </button>
-            )}
+            <p className="ibx-stateBody">Nothing matches “{query.trim()}”.</p>
+            <button type="button" className="ibx-ghostBtn" onClick={() => setQuery('')}>
+              Clear search
+            </button>
           </div>
         ) : (
-          <>
-            {grouped.map(({ bucket, items }) => (
-              <section key={bucket} className="ibx-group">
-                <div className="ibx-groupHeader">
-                  <span className="ibx-groupLabel">
-                    {bucketLabel(bucket)}
-                  </span>
-                </div>
-                <div className="ibx-groupItems">
-                  {items.map((conv) => {
-                    const conversationId = conv.conversation_id!;
-                    const timeLabel = formatRelativeTime(conv.last_time);
-                    const initials = conv._name.charAt(0).toUpperCase();
-                    const unread = conv._unread;
+          <div className="ibx-list">
+            {decorated.map((conv) => {
+              const conversationId = conv.conversation_id!;
+              const timeLabel = formatChatTime(conv.last_time);
+              const initials = conv._name.charAt(0).toUpperCase();
+              const unread = conv._unread;
+              // MOCK ONLINE STATUS (You can replace this with conv.is_online later)
+              const isOnline = conv.is_online ?? (conv._sortKey % 2 === 0); 
 
-                    return (
-                      <button
-                        type="button"
-                        key={conversationId}
-                        className={
-                          unread > 0
-                            ? 'ibx-row ibx-rowUnread'
-                            : 'ibx-row'
-                        }
-                        onClick={() => openChat(conv)}
-                        aria-label={`Open chat with ${conv._name}${
-                          unread > 0 ? `, ${unread} unread` : ''
-                        }`}
-                      >
-                        <span className="ibx-avatarWrap" aria-hidden>
-                          {conv._avatar ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={conv._avatar}
-                              alt=""
-                              className="ibx-avatarImg"
-                            />
-                          ) : (
-                            <span className="ibx-avatarInitials">
-                              {initials}
-                            </span>
-                          )}
-                        </span>
+              return (
+                <button
+                  type="button"
+                  key={conversationId}
+                  className="ibx-row"
+                  onClick={() => openChat(conv)}
+                >
+                  {/* Avatar with Online Dot */}
+                  <div className="ibx-avatarWrap">
+                    {conv._avatar ? (
+                      <img src={conv._avatar} alt="" className="ibx-avatarImg" />
+                    ) : (
+                      <span className="ibx-avatarInitials">{initials}</span>
+                    )}
+                    {isOnline && <span className="ibx-onlineDot" />}
+                  </div>
 
-                        <span className="ibx-itemBody">
-                          <span className="ibx-nameRow">
-                            <span
-                              className={
-                                unread > 0
-                                  ? 'ibx-name ibx-nameUnread'
-                                  : 'ibx-name'
-                              }
-                              title={conv._name}
-                            >
-                              {highlight(conv._name, query)}
-                            </span>
-                            {timeLabel && (
-                              <span
-                                className={
-                                  unread > 0
-                                    ? 'ibx-time ibx-timeUnread'
-                                    : 'ibx-time'
-                                }
-                              >
-                                {timeLabel}
-                              </span>
-                            )}
-                          </span>
-                          <span className="ibx-previewRow">
-                            <span
-                              className={
-                                unread > 0
-                                  ? 'ibx-preview ibx-previewUnread'
-                                  : 'ibx-preview'
-                              }
-                            >
-                              {highlight(conv._preview, query)}
-                            </span>
-                            {unread > 0 && (
-                              <span className="ibx-badge">
-                                {unread > 99 ? '99+' : unread}
-                              </span>
-                            )}
-                          </span>
+                  {/* Message Content */}
+                  <div className="ibx-itemBody">
+                    <div className="ibx-nameRow">
+                      <span className={`ibx-name ${unread > 0 ? 'ibx-nameUnread' : ''}`}>
+                        {conv._name}
+                      </span>
+                      <span className={`ibx-time ${unread > 0 ? 'ibx-timeUnread' : ''}`}>
+                        {timeLabel}
+                      </span>
+                    </div>
+                    
+                    <div className="ibx-previewRow">
+                      <span className={`ibx-preview ${unread > 0 ? 'ibx-previewUnread' : ''}`}>
+                        {conv._preview}
+                      </span>
+                      {unread > 0 && (
+                        <span className="ibx-badge">
+                          {unread > 99 ? '99+' : unread}
                         </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
     </main>
   );
 }
 
-// ─── CSS ─────────────────────────────────────────────────────────────
+// ─── CSS (WhatsApp Style) ───────────────────────────────────────────
 const CSS = `
   @keyframes ibxShimmer {
     0% { background-position: -400px 0; }
     100% { background-position: 400px 0; }
   }
   @keyframes ibxFadeIn {
-    from { opacity: 0; transform: translateY(2px); }
+    from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
   }
   @keyframes ibxSpin { to { transform: rotate(360deg); } }
@@ -648,84 +419,59 @@ const CSS = `
     min-height: 100vh;
     background: var(--bg-primary);
     color: var(--text-primary);
-    transition: background-color 0.18s ease, color 0.18s ease;
+    max-width: 800px;
+    margin: 0 auto;
+    border-left: 1px solid var(--border-subtle);
+    border-right: 1px solid var(--border-subtle);
   }
 
+  /* Header */
   .ibx-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 14px 16px 12px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-default);
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--bg-primary);
     position: sticky;
     top: 0;
     z-index: 20;
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 960px;
-    margin: 0 auto;
-    transition: background-color 0.18s ease, border-color 0.18s ease;
-  }
-  .ibx-headerText {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
   }
   .ibx-title {
-    font-size: 21px;
+    font-size: 26px;
     font-weight: 800;
     color: var(--text-primary);
     margin: 0;
-    letter-spacing: -0.03em;
-    line-height: 1.15;
-  }
-  .ibx-subtitle {
-    font-size: 12.5px;
-    color: var(--text-tertiary);
-    margin: 0;
-    font-weight: 500;
-    letter-spacing: 0.01em;
+    letter-spacing: -0.5px;
   }
   .ibx-iconBtn {
-    width: 38px;
-    height: 38px;
-    border-radius: 11px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
     border: none;
     background: transparent;
     cursor: pointer;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
     transition: background 0.15s;
-    flex-shrink: 0;
   }
   .ibx-iconBtn:hover:not(:disabled) { background: var(--bg-hover); }
-  .ibx-iconBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .ibx-controls {
-    background: var(--bg-secondary);
-    padding: 0 16px 12px;
-    border-bottom: 1px solid var(--border-default);
-    position: sticky;
-    top: 67px;
-    z-index: 19;
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 960px;
-    margin: 0 auto;
-    transition: background-color 0.18s ease, border-color 0.18s ease;
+  /* Search Bar */
+  .ibx-searchContainer {
+    padding: 0 20px 12px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-subtle);
   }
   .ibx-searchBox {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 14px;
+    gap: 8px;
+    padding: 0 12px;
+    height: 44px;
     background: var(--bg-tertiary);
-    border: 1.5px solid transparent;
     border-radius: 12px;
+    border: 1.5px solid transparent;
     transition: border-color 0.15s, background 0.15s;
   }
   .ibx-searchBox:focus-within {
@@ -734,7 +480,6 @@ const CSS = `
   }
   .ibx-searchInput {
     flex: 1;
-    min-width: 0;
     border: none;
     outline: none;
     background: transparent;
@@ -742,219 +487,118 @@ const CSS = `
     color: var(--text-primary);
     font-family: inherit;
   }
-  .ibx-searchInput::placeholder { color: var(--text-muted); }
   .ibx-searchClear {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
+    background: none;
     border: none;
-    background: var(--border-default);
-    display: inline-flex;
+    padding: 0;
+    display: flex;
     align-items: center;
-    justify-content: center;
     cursor: pointer;
-    flex-shrink: 0;
-    transition: background 0.15s;
-  }
-  .ibx-searchClear:hover { background: var(--border-strong); }
-
-  .ibx-pillRow {
-    display: flex;
-    gap: 8px;
-    margin-top: 10px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .ibx-pillRow::-webkit-scrollbar { display: none; }
-  .ibx-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
-    border-radius: 999px;
-    border: 1px solid var(--border-default);
-    background: var(--bg-secondary);
-    color: var(--text-tertiary);
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    font-family: inherit;
-    flex-shrink: 0;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
-  }
-  .ibx-pill:hover:not(:disabled) {
-    border-color: var(--brand-primary);
-    color: var(--brand-primary);
-  }
-  .ibx-pill:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .ibx-pillActive {
-    background: var(--brand-primary);
-    border-color: var(--brand-primary);
-    color: var(--brand-on-primary);
-  }
-  .ibx-pillActive:hover { color: var(--brand-on-primary); }
-  .ibx-pillCount {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
-    font-size: 10.5px;
-    font-weight: 800;
-    line-height: 1;
-  }
-  .ibx-pillActive .ibx-pillCount,
-  .ibx-pillCountOn {
-    background: color-mix(
-      in srgb,
-      var(--brand-on-primary) 18%,
-      transparent
-    );
-    color: var(--brand-on-primary);
   }
 
-  .ibx-body {
-    flex: 1;
-    padding: 8px 0 40px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    box-sizing: border-box;
-    width: 100%;
-    max-width: 960px;
-    margin: 0 auto;
-  }
-
-  .ibx-group { display: flex; flex-direction: column; }
-  .ibx-groupHeader {
-    padding: 10px 16px 6px;
-    display: flex;
-    align-items: center;
-  }
-  .ibx-groupLabel {
-    font-size: 11.5px;
-    font-weight: 800;
-    color: var(--text-tertiary);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .ibx-groupItems {
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-default);
-    border-bottom: 1px solid var(--border-default);
-    transition: background-color 0.18s ease, border-color 0.18s ease;
-  }
+  /* Chat List */
+  .ibx-body { flex: 1; }
+  .ibx-list { display: flex; flex-direction: column; }
 
   .ibx-row {
-    position: relative;
     display: flex;
     align-items: center;
     gap: 14px;
     width: 100%;
-    padding: 12px 16px;
-    background: var(--bg-secondary);
+    padding: 14px 20px;
+    background: var(--bg-primary);
     border: none;
-    border-bottom: 1px solid var(--border-default);
+    border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
     text-align: left;
     font-family: inherit;
-    transition: background 0.12s;
-    animation: ibxFadeIn 0.18s ease both;
-    box-sizing: border-box;
+    transition: background 0.1s;
+    animation: ibxFadeIn 0.2s ease both;
   }
-  .ibx-row:last-child { border-bottom: none; }
   .ibx-row:hover { background: var(--bg-hover); }
   .ibx-row:active { background: var(--bg-tertiary); }
-  .ibx-row:focus-visible {
-    outline: 2px solid var(--brand-primary);
-    outline-offset: -2px;
-  }
-  .ibx-rowUnread { background: var(--bg-secondary); }
 
+  /* Avatar */
   .ibx-avatarWrap {
-    width: 48px;
-    height: 48px;
-    flex: 0 0 48px;
+    position: relative;
+    width: 56px;
+    height: 56px;
+    flex: 0 0 56px;
     border-radius: 50%;
-    overflow: hidden;
     background: var(--brand-soft);
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
   }
   .ibx-avatarImg {
     width: 100%;
     height: 100%;
+    border-radius: 50%;
     object-fit: cover;
-    display: block;
   }
   .ibx-avatarInitials {
     color: var(--brand-primary);
-    font-weight: 800;
-    font-size: 17px;
-    letter-spacing: 0.01em;
+    font-weight: 700;
+    font-size: 20px;
+  }
+  .ibx-onlineDot {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4ADE80; /* WhatsApp Green */
+    border: 2.5px solid var(--bg-primary);
   }
 
+  /* Text Content */
   .ibx-itemBody {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
   }
   .ibx-nameRow {
     display: flex;
+    justify-content: space-between;
     align-items: baseline;
     gap: 8px;
-    min-width: 0;
   }
   .ibx-name {
-    flex: 1;
-    min-width: 0;
-    font-size: 15.5px;
+    font-size: 16.5px;
     font-weight: 600;
     color: var(--text-primary);
-    letter-spacing: -0.01em;
-    line-height: 1.25;
+    letter-spacing: -0.2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .ibx-nameUnread { font-weight: 800; }
+  
   .ibx-time {
-    flex-shrink: 0;
-    font-size: 11.5px;
+    font-size: 12.5px;
     color: var(--text-muted);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.01em;
+    font-weight: 500;
+    white-space: nowrap;
   }
   .ibx-timeUnread {
     color: var(--brand-primary);
-    font-weight: 800;
+    font-weight: 700;
   }
 
   .ibx-previewRow {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
-    min-width: 0;
   }
   .ibx-preview {
     flex: 1;
-    min-width: 0;
-    font-size: 13.5px;
-    color: var(--text-tertiary);
-    line-height: 1.35;
+    font-size: 14.5px;
+    color: var(--text-muted);
+    line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -965,150 +609,49 @@ const CSS = `
   }
 
   .ibx-badge {
-    flex-shrink: 0;
     min-width: 20px;
     height: 20px;
     padding: 0 6px;
-    border-radius: 999px;
+    border-radius: 10px;
     background: var(--brand-primary);
-    color: var(--brand-on-primary);
+    color: #fff;
     font-size: 11px;
     font-weight: 800;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
-    letter-spacing: 0.02em;
   }
 
-  .ibx-mark {
-    background: var(--warning-bg);
-    color: var(--warning-fg);
-    padding: 0 2px;
-    border-radius: 3px;
-  }
-
+  /* States (Empty, Error, Loading) */
   .ibx-center {
-    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 80px 24px 40px;
-    gap: 6px;
+    padding: 80px 24px;
     text-align: center;
   }
-  .ibx-centerTight { padding-top: 60px; }
-  .ibx-stateIconInfo,
-  .ibx-stateIconError,
-  .ibx-stateIconMuted {
-    width: 78px;
-    height: 78px;
-    border-radius: 26px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 14px;
+  .ibx-stateIconInfo, .ibx-stateIconError {
+    width: 80px; height: 80px; border-radius: 30px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
   }
-  .ibx-stateIconInfo {
-    background: var(--brand-soft);
-    box-shadow: 0 10px 28px
-      color-mix(in srgb, var(--brand-primary) 10%, transparent);
-  }
+  .ibx-stateIconInfo { background: var(--brand-soft); }
   .ibx-stateIconError { background: var(--danger-bg); }
-  .ibx-stateIconMuted { background: var(--bg-tertiary); }
-  .ibx-stateTitle {
-    font-size: 18px;
-    font-weight: 800;
-    color: var(--text-primary);
-    margin: 0;
-    letter-spacing: -0.02em;
-  }
-  .ibx-stateBody {
-    font-size: 13.5px;
-    color: var(--text-tertiary);
-    margin: 6px 0 20px;
-    max-width: 340px;
-    line-height: 1.55;
-  }
+  
+  .ibx-stateTitle { font-size: 20px; font-weight: 800; margin: 0 0 8px; }
+  .ibx-stateBody { font-size: 14px; color: var(--text-tertiary); margin: 0 0 20px; max-width: 300px; }
+  
   .ibx-primaryBtn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 11px 22px;
-    background: var(--brand-primary);
-    color: var(--brand-on-primary);
-    border: none;
-    border-radius: 14px;
-    font-weight: 700;
-    font-size: 13.5px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: opacity 0.15s, transform 0.1s;
-    box-shadow: var(--shadow-brand);
-  }
-  .ibx-primaryBtn:hover { opacity: 0.92; }
-  .ibx-primaryBtn:active { transform: scale(0.98); }
-  .ibx-ghostBtn {
-    padding: 10px 18px;
-    background: transparent;
-    color: var(--brand-primary);
-    border: 1.5px solid
-      color-mix(in srgb, var(--brand-primary) 40%, transparent);
-    border-radius: 12px;
-    font-weight: 700;
-    font-size: 13px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background 0.15s;
-  }
-  .ibx-ghostBtn:hover { background: var(--brand-soft); }
-
-  .ibx-skeletonGroup {
-    display: flex;
-    flex-direction: column;
-    padding: 0 16px;
-  }
-  .ibx-skeletonRow {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border-default);
-  }
-  .ibx-skeletonBody { flex: 1; min-width: 0; }
-  .ibx-skel {
-    background: var(--skeleton);
-    background-size: 800px 100%;
-    animation: ibxShimmer 1.4s infinite linear;
-    border-radius: 8px;
-  }
-  .ibx-skelAvatar {
-    width: 48px;
-    height: 48px;
-    flex: 0 0 48px;
-    border-radius: 50%;
-  }
-  .ibx-skelLine { height: 12px; }
-  .ibx-skelSection {
-    height: 12px;
-    width: 90px;
-    border-radius: 4px;
-    margin: 14px 0 6px;
+    padding: 12px 24px; border-radius: 12px; background: var(--brand-primary);
+    color: #fff; border: none; font-weight: 700; font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
   }
 
-  @media (min-width: 1440px) {
-    .ibx-header,
-    .ibx-controls,
-    .ibx-body {
-      max-width: 1100px;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    * {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-    }
-  }
+  .ibx-skeletonGroup { display: flex; flex-direction: column; padding: 0 20px; }
+  .ibx-skeletonRow { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border-subtle); }
+  .ibx-skeletonBody { flex: 1; }
+  .ibx-skel { background: var(--skeleton); border-radius: 8px; animation: ibxShimmer 1.4s infinite linear; }
+  .ibx-skelAvatar { width: 56px; height: 56px; border-radius: 50%; }
+  .ibx-skelLine { height: 14px; }
 `;
