@@ -143,24 +143,34 @@ const KIND_META: Record<
   system:   { color: 'var(--text-tertiary)',  soft: 'var(--bg-tertiary)', Icon: MdNotifications, actionText: 'View Details' },
 };
 
-// ─── FIXED: Deep link resolution matching your exact folder structure ───
 function resolveDeepLink(n: NotificationItem): string | null {
-  if (typeof n.url === 'string' && n.url.trim()) return n.url.trim();
   const data = extractDataPayload(n.data);
-  if (!data) return null;
+  const title = (n.title || '').toLowerCase();
+  const type = (n.type || '').toLowerCase();
 
-  const fromData = (typeof data.url === 'string' && data.url) || (typeof data.link === 'string' && data.link);
-  if (fromData) return fromData;
+  // 1. Prioritize explicit URLs from backend (like instant receipts)
+  if (typeof n.url === 'string' && n.url.trim()) return n.url.trim();
+  if (data) {
+    const fromData = (typeof data.url === 'string' && data.url) || (typeof data.link === 'string' && data.link);
+    if (fromData) return fromData;
+  }
 
-  // These routes now perfectly match your `find src/app -type d` output
-  if (typeof data.order_id === 'string') return `/shopper/orders/receipt/${data.order_id}`;
-  if (typeof data.conversation_id === 'string') return `/chat/${data.conversation_id}`;
-  if (typeof data.listing_id === 'string') return `/item-detail/${data.listing_id}`;
-  if (typeof data.store_id === 'string') return `/store-detail/${data.store_id}`;
+  // 2. Role-Aware Routing for Orders
+  if (title.includes('new order') || title.includes('new reservation') || type.includes('store')) {
+    // Storekeepers should go to their dashboard orders
+    return `/storekeeper/orders`;
+  }
   
-  // Fallbacks
-  if (typeof data.booking_id === 'string') return `/shopper/orders/receipt/${data.booking_id}`;
-  if (typeof data.wallet_txn_id === 'string') return `/shopper/wallet`;
+  if (data && typeof data.order_id === 'string') {
+    // Shoppers go to the shopper receipt
+    return `/shopper/orders/receipt/${data.order_id}`;
+  }
+
+  // 3. Fallbacks for other types
+  if (data && typeof data.conversation_id === 'string') return `/chat/${data.conversation_id}`;
+  if (data && typeof data.listing_id === 'string') return `/item-detail/${data.listing_id}`;
+  if (data && typeof data.store_id === 'string') return `/store-detail/${data.store_id}`;
+  
   if (classify(n) === 'wallet') return `/shopper/wallet`;
 
   return null;
