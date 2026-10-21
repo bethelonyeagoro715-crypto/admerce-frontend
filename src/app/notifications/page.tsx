@@ -143,6 +143,7 @@ const KIND_META: Record<
   system:   { color: 'var(--text-tertiary)',  soft: 'var(--bg-tertiary)', Icon: MdNotifications, actionText: 'View Details' },
 };
 
+// ─── FIXED: Deep link resolution matching your exact folder structure ───
 function resolveDeepLink(n: NotificationItem): string | null {
   if (typeof n.url === 'string' && n.url.trim()) return n.url.trim();
   const data = extractDataPayload(n.data);
@@ -151,12 +152,16 @@ function resolveDeepLink(n: NotificationItem): string | null {
   const fromData = (typeof data.url === 'string' && data.url) || (typeof data.link === 'string' && data.link);
   if (fromData) return fromData;
 
-  if (typeof data.order_id === 'string') return `/wallet/order/${data.order_id}`;
-  if (typeof data.booking_id === 'string') return `/receipt/service/${data.booking_id}`;
+  // These routes now perfectly match your `find src/app -type d` output
+  if (typeof data.order_id === 'string') return `/shopper/orders/receipt/${data.order_id}`;
+  if (typeof data.conversation_id === 'string') return `/chat/${data.conversation_id}`;
   if (typeof data.listing_id === 'string') return `/item-detail/${data.listing_id}`;
   if (typeof data.store_id === 'string') return `/store-detail/${data.store_id}`;
-  if (typeof data.conversation_id === 'string') return `/chat/${data.conversation_id}`;
-  if (typeof data.wallet_txn_id === 'string') return `/wallet`; 
+  
+  // Fallbacks
+  if (typeof data.booking_id === 'string') return `/shopper/orders/receipt/${data.booking_id}`;
+  if (typeof data.wallet_txn_id === 'string') return `/shopper/wallet`;
+  if (classify(n) === 'wallet') return `/shopper/wallet`;
 
   return null;
 }
@@ -187,10 +192,7 @@ export default function NotificationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   
-  // Tabs State
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
-  
-  // Modal State
   const [selectedNotif, setSelectedNotif] = useState<NotificationItem | null>(null);
 
   const loadNotifications = useCallback(async () => {
@@ -290,7 +292,6 @@ export default function NotificationsPage() {
         </button>
       </header>
 
-      {/* X (Twitter) Style Filter Tabs */}
       <div className="nf-tabsContainer">
         <div className="nf-tabsScroll">
           {tabs.map((tab) => (
@@ -378,7 +379,6 @@ export default function NotificationsPage() {
         )}
       </div>
 
-      {/* Amazon/Opay Style Bottom Sheet Modal */}
       {selectedNotif && (
         <div className="nf-modalOverlay" onClick={() => setSelectedNotif(null)}>
           <div className="nf-modalSheet" onClick={(e) => e.stopPropagation()}>
@@ -429,7 +429,7 @@ export default function NotificationsPage() {
   );
 }
 
-// ─── CSS ─────────────────────────────────────────────────────────────
+// ─── CSS (Keep as previously provided, it hasn't changed) ─────────────
 const CSS = `
   @keyframes nf-shimmer {
     0% { background-position: -400px 0; }
@@ -451,7 +451,6 @@ const CSS = `
     background: var(--bg-primary);
   }
 
-  /* Header */
   .nf-header {
     display: flex;
     align-items: center;
@@ -470,118 +469,47 @@ const CSS = `
   .nf-backBtn:hover { background: var(--bg-hover); }
   .nf-headerText { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
   .nf-title { font-size: 22px; font-weight: 800; color: var(--text-primary); margin: 0; letter-spacing: -0.03em; }
-  .nf-unread { 
-    padding: 2px 8px; border-radius: 999px; background: var(--brand-primary); 
-    color: #fff; font-size: 12px; font-weight: 800; 
-  }
+  .nf-unread { padding: 2px 8px; border-radius: 999px; background: var(--brand-primary); color: #fff; font-size: 12px; font-weight: 800; }
   .nf-iconBtn { width: 36px; height: 36px; border-radius: 50%; border: none; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; }
   .nf-iconBtn:hover { background: var(--bg-hover); }
 
-  /* Tabs (X style) */
   .nf-tabsContainer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border-default);
-    background: var(--bg-primary);
-    position: sticky;
-    top: 60px;
-    z-index: 15;
+    display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
+    border-bottom: 1px solid var(--border-default); background: var(--bg-primary);
+    position: sticky; top: 60px; z-index: 15;
   }
-  .nf-tabsScroll {
-    display: flex;
-    gap: 16px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    flex: 1;
-    padding: 12px 0;
-  }
+  .nf-tabsScroll { display: flex; gap: 16px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; flex: 1; padding: 12px 0; }
   .nf-tabsScroll::-webkit-scrollbar { display: none; }
-  .nf-tabBtn {
-    background: transparent;
-    border: none;
-    padding: 0;
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-muted);
-    cursor: pointer;
-    white-space: nowrap;
-    position: relative;
-    font-family: inherit;
-    transition: color 0.2s;
-  }
+  .nf-tabBtn { background: transparent; border: none; padding: 0; font-size: 15px; font-weight: 600; color: var(--text-muted); cursor: pointer; white-space: nowrap; position: relative; font-family: inherit; transition: color 0.2s; }
   .nf-tabBtn:hover { color: var(--text-primary); }
   .nf-tabBtnActive { color: var(--text-primary); font-weight: 800; }
-  .nf-tabBtnActive::after {
-    content: '';
-    position: absolute;
-    bottom: -12px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100%;
-    height: 3px;
-    background: var(--brand-primary);
-    border-radius: 3px 3px 0 0;
-  }
-  .nf-markAllBtn {
-    display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 8px;
-    border: 1px solid var(--border-default); background: var(--bg-secondary); color: var(--brand-primary);
-    font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap;
-    margin-left: 12px;
-  }
+  .nf-tabBtnActive::after { content: ''; position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); width: 100%; height: 3px; background: var(--brand-primary); border-radius: 3px 3px 0 0; }
+  .nf-markAllBtn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-default); background: var(--bg-secondary); color: var(--brand-primary); font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; margin-left: 12px; }
   .nf-markAllBtn:hover { background: var(--brand-soft); }
 
-  /* Feed */
   .nf-body { flex: 1; padding: 16px; }
   .nf-group { margin-bottom: 24px; }
   .nf-groupLabel { font-size: 12px; font-weight: 800; letter-spacing: 0.5px; color: var(--text-primary); margin-bottom: 12px; }
 
-  .nf-card {
-    display: flex; align-items: flex-start; gap: 14px; width: 100%; padding: 16px; margin-bottom: 10px;
-    border-radius: 16px; border: 1px solid var(--border-default); background: var(--bg-secondary);
-    cursor: pointer; text-align: left; font-family: inherit; transition: all 0.15s ease;
-    animation: nf-fadeIn 0.2s ease;
-  }
-  .nf-card:hover {
-    border-color: var(--border-strong);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  }
-  .nf-cardUnread { 
-    border-color: color-mix(in srgb, var(--brand-primary) 30%, transparent); 
-    background: color-mix(in srgb, var(--brand-primary) 4%, var(--bg-secondary));
-    box-shadow: inset 3px 0 0 var(--brand-primary);
-  }
-  
-  .nf-iconWrap { 
-    width: 44px; height: 44px; flex: 0 0 44px; display: inline-flex; align-items: center; 
-    justify-content: center; border-radius: 14px; 
-  }
+  .nf-card { display: flex; align-items: flex-start; gap: 14px; width: 100%; padding: 16px; margin-bottom: 10px; border-radius: 16px; border: 1px solid var(--border-default); background: var(--bg-secondary); cursor: pointer; text-align: left; font-family: inherit; transition: all 0.15s ease; animation: nf-fadeIn 0.2s ease; }
+  .nf-card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+  .nf-cardUnread { border-color: color-mix(in srgb, var(--brand-primary) 30%, transparent); background: color-mix(in srgb, var(--brand-primary) 4%, var(--bg-secondary)); box-shadow: inset 3px 0 0 var(--brand-primary); }
+  .nf-iconWrap { width: 44px; height: 44px; flex: 0 0 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 14px; }
   .nf-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .nf-topRow { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-  .nf-titleText { 
-    font-size: 15px; font-weight: 700; color: var(--text-primary); flex: 1; 
-    line-height: 1.3;
-  }
+  .nf-titleText { font-size: 15px; font-weight: 700; color: var(--text-primary); flex: 1; line-height: 1.3; }
   .nf-cardRead .nf-titleText { font-weight: 600; color: var(--text-secondary); }
   .nf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand-primary); flex: 0 0 8px; margin-top: 6px; }
-  .nf-bodyText { 
-    font-size: 14px; color: var(--text-secondary); line-height: 1.45; 
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; 
-  }
+  .nf-bodyText { font-size: 14px; color: var(--text-secondary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .nf-timeText { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-top: 2px; }
   .nf-chevron { flex: 0 0 20px; align-self: center; opacity: 0.5; }
 
-  /* Empty / Error states */
   .nf-center { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 24px; text-align: center; }
   .nf-emptyIconWrap { width: 80px; height: 80px; border-radius: 30px; background: var(--bg-secondary); border: 1px solid var(--border-default); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; }
   .nf-centerTitle { font-size: 20px; font-weight: 800; color: var(--text-primary); margin: 0 0 8px; }
   .nf-centerText { font-size: 14px; color: var(--text-tertiary); margin: 0; max-width: 280px; line-height: 1.5; }
   .nf-retryBtn { margin-top: 16px; padding: 10px 24px; border-radius: 12px; background: var(--brand-primary); color: #fff; border: none; font-weight: 700; cursor: pointer; }
 
-  /* Skeletons */
   .nf-skeletonCard { display: flex; gap: 14px; padding: 16px; margin-bottom: 10px; border-radius: 16px; background: var(--bg-secondary); border: 1px solid var(--border-default); }
   .nf-skel { background: var(--skeleton); background-size: 800px 100%; animation: nf-shimmer 1.4s infinite linear; border-radius: 8px; }
   .nf-skelIcon { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 14px; }
@@ -589,56 +517,19 @@ const CSS = `
   .nf-skelLine { height: 14px; width: 90%; }
   .nf-skelLineShort { height: 12px; }
 
-  /* Modal (Bottom Sheet) */
-  .nf-modalOverlay {
-    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px); z-index: 100; display: flex;
-    align-items: flex-end; justify-content: center;
-    animation: nf-fadeIn 0.2s ease-out;
-  }
-  .nf-modalSheet {
-    width: 100%; max-width: 600px; background: var(--bg-secondary);
-    border-top-left-radius: 32px; border-top-right-radius: 32px;
-    padding: 12px 24px 40px; position: relative;
-    animation: nf-slideUp 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-    box-shadow: 0 -10px 40px rgba(0,0,0,0.2);
-  }
+  .nf-modalOverlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: flex-end; justify-content: center; animation: nf-fadeIn 0.2s ease-out; }
+  .nf-modalSheet { width: 100%; max-width: 600px; background: var(--bg-secondary); border-top-left-radius: 32px; border-top-right-radius: 32px; padding: 12px 24px 40px; position: relative; animation: nf-slideUp 0.3s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: 0 -10px 40px rgba(0,0,0,0.2); }
   .nf-modalGrabber { width: 40px; height: 5px; background: var(--border-strong); border-radius: 10px; margin: 0 auto 24px; }
-  .nf-modalClose {
-    position: absolute; top: 20px; right: 20px;
-    background: var(--bg-tertiary); border: none; border-radius: 50%;
-    width: 36px; height: 36px; display: flex; align-items: center;
-    justify-content: center; cursor: pointer; transition: background 0.2s;
-  }
+  .nf-modalClose { position: absolute; top: 20px; right: 20px; background: var(--bg-tertiary); border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; }
   .nf-modalClose:hover { background: var(--border-default); }
-  
   .nf-modalContent { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 8px; }
-  .nf-modalIconWrap {
-    width: 80px; height: 80px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  }
+  .nf-modalIconWrap { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
   .nf-modalTitle { font-size: 24px; font-weight: 800; color: var(--text-primary); margin: 0 0 8px; letter-spacing: -0.02em; line-height: 1.2; }
   .nf-modalTime { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 24px; background: var(--bg-tertiary); padding: 6px 14px; border-radius: 999px; }
-  .nf-modalBody { 
-    font-size: 16px; line-height: 1.6; color: var(--text-secondary); 
-    margin-bottom: 32px; width: 100%; text-align: left; 
-    background: var(--bg-primary); padding: 20px; border-radius: 16px; 
-    border: 1px solid var(--border-default);
-  }
-  .nf-modalActionBtn {
-    width: 100%; padding: 18px; border-radius: 16px; border: none;
-    background: var(--brand-primary); color: #fff;
-    font-size: 16px; font-weight: 800; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    transition: transform 0.1s; box-shadow: var(--shadow-brand);
-  }
+  .nf-modalBody { font-size: 16px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 32px; width: 100%; text-align: left; background: var(--bg-primary); padding: 20px; border-radius: 16px; border: 1px solid var(--border-default); }
+  .nf-modalActionBtn { width: 100%; padding: 18px; border-radius: 16px; border: none; background: var(--brand-primary); color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.1s; box-shadow: var(--shadow-brand); }
   .nf-modalActionBtn:active { transform: scale(0.98); }
-  .nf-modalActionBtnSecondary {
-    width: 100%; padding: 18px; border-radius: 16px; background: var(--bg-tertiary);
-    color: var(--text-primary); border: 1px solid var(--border-default);
-    font-size: 16px; font-weight: 800; cursor: pointer;
-  }
+  .nf-modalActionBtnSecondary { width: 100%; padding: 18px; border-radius: 16px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-default); font-size: 16px; font-weight: 800; cursor: pointer; }
 
   @media (min-width: 1024px) {
     .nf-modalOverlay { align-items: center; }
