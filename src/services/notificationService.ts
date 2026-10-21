@@ -1,3 +1,4 @@
+// src/services/notificationService.ts
 'use client';
 
 import { getToken, onMessage, type Messaging, type MessagePayload } from 'firebase/messaging';
@@ -25,7 +26,8 @@ class NotificationService {
     this.router = router;
 
     // Request permission
-    await this.requestPermission();
+    const permission = await this.requestPermission();
+    if (permission !== 'granted') return;
 
     // Get messaging instance
     const messaging = await getMessagingInstance();
@@ -93,19 +95,33 @@ class NotificationService {
   private navigateFromPayload(data: Record<string, string>): void {
     if (!this.router) return;
 
-    const type = data.type;
-    switch (type) {
-      case 'order':
-        this.router.push('/order-history');
-        break;
-      case 'message':
-        this.router.push('/inbox');
-        break;
-      case 'promotion':
-        this.router.push('/notifications');
-        break;
-      default:
-        this.router.push('/notifications');
+    // 1. Direct URL from backend
+    if (data.url) {
+      this.router.push(data.url);
+      return;
+    }
+
+    // 2. Construct URL from IDs (Meta-style deep linking)
+    if (data.conversation_id) {
+      this.router.push(`/chat/${data.conversation_id}`);
+    } else if (data.order_id) {
+      this.router.push(`/wallet/order/${data.order_id}`);
+    } else if (data.listing_id) {
+      this.router.push(`/item-detail/${data.listing_id}`);
+    } else if (data.store_id) {
+      this.router.push(`/store-detail/${data.store_id}`);
+    } else {
+      // 3. Fallback to generic pages based on type
+      switch (data.type) {
+        case 'order':
+          this.router.push('/order-history');
+          break;
+        case 'message':
+          this.router.push('/inbox');
+          break;
+        default:
+          this.router.push('/notifications');
+      }
     }
   }
 }

@@ -18,11 +18,12 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('📩 Background message:', payload);
 
-  // Optional: customise the notification that appears
   const notificationTitle = payload.notification?.title || 'Admerce';
   const notificationOptions = {
     body: payload.notification?.body || '',
     icon: '/admerce_symbol.png',
+    badge: '/admerce_symbol.png',
+    data: payload.data || {}, // Crucial for deep linking on tap
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
@@ -41,16 +42,33 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  // This opens the app and focuses an existing window or opens a new one
+  const data = event.notification.data || {};
+  
+  // Determine the target URL based on the payload data
+  let targetUrl = '/notifications';
+  if (data.url) {
+    targetUrl = data.url;
+  } else if (data.conversation_id) {
+    targetUrl = `/chat/${data.conversation_id}`;
+  } else if (data.order_id) {
+    targetUrl = `/wallet/order/${data.order_id}`;
+  } else if (data.listing_id) {
+    targetUrl = `/item-detail/${data.listing_id}`;
+  } else if (data.store_id) {
+    targetUrl = `/store-detail/${data.store_id}`;
+  }
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // If a window is already open, focus it and navigate
       for (const client of clientList) {
-        if ('focus' in client) {
+        if (client.url.includes(targetUrl) && 'focus' in client) {
           return client.focus();
         }
       }
+      // Otherwise, open a new window
       if (clients.openWindow) {
-        return clients.openWindow('/');
+        return clients.openWindow(targetUrl);
       }
     })
   );
