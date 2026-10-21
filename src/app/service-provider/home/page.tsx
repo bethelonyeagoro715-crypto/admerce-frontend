@@ -1,1579 +1,544 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import api, { extractErrorDetail } from '../../../services/api';
-import { useAuthGuard } from '../../../hooks/useAuthGuard';
+import api from '../../../services/api';
 import {
-  alertDialog,
-  confirmDialog,
-} from '../../../components/ui/dialogs';
-import {
-  MdRefresh,
-  MdAutoAwesome,
-  MdEdit,
-  MdAdd,
-  MdCalendarToday,
-  MdToday,
-  MdStar,
-  MdAccountBalanceWallet,
-  MdDesignServices,
-  MdToggleOn,
-  MdToggleOff,
-  MdGroups,
-  MdChevronRight,
+  MdNotifications,
+  MdShoppingBag,
+  MdChat,
+  MdStorefront,
+  MdVerified,
+  MdFavorite,
   MdErrorOutline,
+  MdRefresh,
+  MdChevronRight,
+  MdDoneAll,
+  MdArrowBack,
+  MdLocalShipping,
+  MdStar,
+  MdClose,
+  MdAccountBalanceWallet,
+  MdOutlineCampaign,
 } from 'react-icons/md';
 
-interface ServiceItem {
-  service_id: string;
+// ─── Types ──────────────────────────────────────────────────────────
+interface NotificationItem {
+  id: number;
   title?: string;
-  description?: string;
-  price?: number;
-  duration_minutes?: number;
-  is_active?: boolean | number;
-  image_url?: string;
-  video_url?: string;
+  body?: string;
+  created_at?: string;
+  is_read?: boolean;
+  read?: boolean;
+  type?: string;
+  url?: string;
+  data?: Record<string, unknown> | string;
   [key: string]: unknown;
 }
 
-interface Booking {
-  id?: string;
-  booking_id?: string;
-  service_title?: string;
-  user_name?: string;
-  customer_name?: string;
-  booking_date?: string;
-  scheduled_for?: string;
-  amount?: number;
-  status?: string;
-  [key: string]: unknown;
-}
+type NotificationKind =
+  | 'order'
+  | 'message'
+  | 'store'
+  | 'verified'
+  | 'favorite'
+  | 'delivery'
+  | 'review'
+  | 'wallet'
+  | 'promotion'
+  | 'system';
 
-interface Stats {
-  today_bookings?: number;
-  total_earnings?: number;
-  rating?: number;
-  [key: string]: unknown;
-}
+type FilterTab = 'all' | 'orders' | 'messages' | 'updates';
 
-interface Profile {
-  business_name?: string;
-  nickname?: string;
-  username?: string;
-  avatar_url?: string;
-  business_image_url?: string;
-  is_available?: boolean;
-  [key: string]: unknown;
-}
-
-interface CommunityStats {
-  room: string;
-  total_messages: number;
-  active_senders_7d: number;
-}
-
-interface CommunityStatsApi {
-  communityGetStats?: (room: string) => Promise<CommunityStats | null>;
-}
-
-function resolveImageUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (
-    url.startsWith('http') ||
-    url.startsWith('blob:') ||
-    url.startsWith('data:')
-  )
-    return url;
-  const base =
-    process.env.NEXT_PUBLIC_API_BASE ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    '';
-  if (!base) return url;
-  if (url.startsWith('/')) return `${base}${url}`;
-  return `${base}/${url}`;
-}
-
-function formatNaira(v: number): string {
-  if (!Number.isFinite(v) || v <= 0) return '₦0';
-  if (v >= 1_000_000) return `₦${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 10_000) return `₦${(v / 1_000).toFixed(1)}k`;
-  return `₦${Math.round(v).toLocaleString('en-NG')}`;
-}
-
-function isServiceActive(s: ServiceItem): boolean {
-  return typeof s.is_active === 'boolean' ? s.is_active : s.is_active === 1;
-}
-
-function bookingId(b: Booking): string {
-  return String(b.booking_id ?? b.id ?? '');
-}
-
-function isActiveBooking(b: Booking): boolean {
-  const s = (b.status || '').toLowerCase();
-  return s === 'pending' || s === 'locked' || s === 'accepted';
-}
-
-function bookingStatusMeta(status: string): {
-  label: string;
-  bg: string;
-  fg: string;
-} {
-  const s = (status || 'pending').toLowerCase();
-  if (s === 'locked' || s === 'pending') {
-    return {
-      label: 'New',
-      bg: 'var(--warning-bg)',
-      fg: 'var(--warning-fg)',
-    };
+// ─── Helpers ────────────────────────────────────────────────────────
+function timeAgo(isoString: string): string {
+  try {
+    const now = Date.now();
+    const then = new Date(isoString).getTime();
+    const seconds = Math.floor((now - then) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks}w ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}mo ago`;
+    return `${Math.floor(days / 365)}y ago`;
+  } catch {
+    return '';
   }
-  if (s === 'accepted') {
-    return {
-      label: 'Confirmed',
-      bg: 'var(--info-bg)',
-      fg: 'var(--info-fg)',
-    };
-  }
-  if (s === 'completed') {
-    return {
-      label: 'Completed',
-      bg: 'var(--success-bg)',
-      fg: 'var(--success-fg)',
-    };
-  }
-  if (s === 'cancelled' || s === 'declined') {
-    return {
-      label: 'Cancelled',
-      bg: 'var(--danger-bg)',
-      fg: 'var(--danger-fg)',
-    };
-  }
-  return {
-    label: status || 'Pending',
-    bg: 'var(--bg-tertiary)',
-    fg: 'var(--text-secondary)',
-  };
 }
 
-export default function ServiceProviderDashboardPage() {
-  useAuthGuard();
+function dateGroup(isoString?: string): string {
+  if (!isoString) return 'Earlier';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return 'Earlier';
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfNotif = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const dayDiff = Math.floor((startOfToday - startOfNotif) / 86_400_000);
+    if (dayDiff <= 0) return 'Today';
+    if (dayDiff === 1) return 'Yesterday';
+    if (dayDiff < 7) return 'This week';
+    if (dayDiff < 30) return 'This month';
+    return 'Older';
+  } catch {
+    return 'Earlier';
+  }
+}
+
+function extractDataPayload(raw: unknown): Record<string, unknown> | null {
+  if (!raw) return null;
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function classify(n: NotificationItem): NotificationKind {
+  const raw = (n.type || '').toLowerCase();
+  if (raw.includes('wallet') || raw.includes('payment') || raw.includes('refund')) return 'wallet';
+  if (raw.includes('order')) return 'order';
+  if (raw.includes('message') || raw.includes('chat')) return 'message';
+  if (raw.includes('store')) return 'store';
+  if (raw.includes('verif')) return 'verified';
+  if (raw.includes('favorite') || raw.includes('save')) return 'favorite';
+  if (raw.includes('deliver') || raw.includes('ship') || raw.includes('courier')) return 'delivery';
+  if (raw.includes('review') || raw.includes('rating')) return 'review';
+  if (raw.includes('promo') || raw.includes('announce')) return 'promotion';
+
+  const t = (n.title || '').toLowerCase();
+  if (t.includes('refund') || t.includes('wallet')) return 'wallet';
+  if (t.includes('order')) return 'order';
+  if (t.includes('message')) return 'message';
+  if (t.includes('deliver')) return 'delivery';
+  if (t.includes('verified')) return 'verified';
+  return 'system';
+}
+
+const KIND_META: Record<
+  NotificationKind,
+  { color: string; soft: string; Icon: React.ComponentType<{ size: number; color: string }>; actionText: string }
+> = {
+  order:    { color: 'var(--brand-primary)',  soft: 'var(--brand-soft)',  Icon: MdShoppingBag, actionText: 'View Order' },
+  message:  { color: 'var(--info-fg)',        soft: 'var(--info-bg)',     Icon: MdChat, actionText: 'Reply' },
+  store:    { color: 'var(--purple-fg)',      soft: 'var(--purple-bg)',   Icon: MdStorefront, actionText: 'View Store' },
+  verified: { color: 'var(--success-fg)',     soft: 'var(--success-bg)',  Icon: MdVerified, actionText: 'View Profile' },
+  favorite: { color: '#DB2777',               soft: 'color-mix(in srgb, #DB2777 15%, transparent)', Icon: MdFavorite, actionText: 'View Item' },
+  delivery: { color: '#EA580C',               soft: 'color-mix(in srgb, #EA580C 15%, transparent)', Icon: MdLocalShipping, actionText: 'Track Package' },
+  review:   { color: 'var(--warning-fg)',     soft: 'var(--warning-bg)',  Icon: MdStar, actionText: 'View Review' },
+  wallet:   { color: '#059669',               soft: 'color-mix(in srgb, #059669 15%, transparent)', Icon: MdAccountBalanceWallet, actionText: 'Open Wallet' },
+  promotion:{ color: '#D946EF',               soft: 'color-mix(in srgb, #D946EF 15%, transparent)', Icon: MdOutlineCampaign, actionText: 'See Offer' },
+  system:   { color: 'var(--text-tertiary)',  soft: 'var(--bg-tertiary)', Icon: MdNotifications, actionText: 'View Details' },
+};
+
+function resolveDeepLink(n: NotificationItem): string | null {
+  if (typeof n.url === 'string' && n.url.trim()) return n.url.trim();
+  const data = extractDataPayload(n.data);
+  if (!data) return null;
+
+  const fromData = (typeof data.url === 'string' && data.url) || (typeof data.link === 'string' && data.link);
+  if (fromData) return fromData;
+
+  // ─── FIX: Role-Aware Deep Linking ───
+  const title = (n.title || '').toLowerCase();
+  const type = (n.type || '').toLowerCase();
+  
+  // If it's a storekeeper notification, route to their dashboard orders
+  if (title.includes('new order') || title.includes('new reservation') || type.includes('store')) {
+    return `/storekeeper/orders`;
+  }
+
+  if (typeof data.order_id === 'string') return `/shopper/orders/receipt/${data.order_id}`;
+  if (typeof data.conversation_id === 'string') return `/chat/${data.conversation_id}`;
+  if (typeof data.listing_id === 'string') return `/item-detail/${data.listing_id}`;
+  if (typeof data.store_id === 'string') return `/store-detail/${data.store_id}`;
+  
+  if (typeof data.wallet_txn_id === 'string') return `/shopper/wallet`;
+  if (classify(n) === 'wallet') return `/shopper/wallet`;
+
+  return null;
+}
+
+function isRead(n: NotificationItem): boolean {
+  if (typeof n.is_read === 'boolean') return n.is_read;
+  if (typeof n.read === 'boolean') return n.read;
+  return false;
+}
+
+function extractNotifications(data: unknown): NotificationItem[] {
+  if (Array.isArray(data)) return data as NotificationItem[];
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    for (const key of ['notifications', 'items', 'results', 'data', 'list']) {
+      if (Array.isArray(obj[key])) return obj[key] as NotificationItem[];
+    }
+  }
+  return [];
+}
+
+// ─── Main Component ─────────────────────────────────────────────────
+export default function NotificationsPage() {
   const router = useRouter();
 
-  const [services, setServices] = useState<ServiceItem[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [stats, setStats] = useState<Stats>({});
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [communityStats, setCommunityStats] =
-    useState<CommunityStats | null>(null);
-  const [isAvailable, setIsAvailable] = useState(true);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [errored, setErrored] = useState(false);
-  const [togglingAvailability, setTogglingAvailability] =
-    useState(false);
-  const [busyBookingId, setBusyBookingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
+  
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [selectedNotif, setSelectedNotif] = useState<NotificationItem | null>(null);
 
-  const reqSeq = useRef(0);
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const loadDashboardData = useCallback(async (showSpinner = true) => {
-    const seq = ++reqSeq.current;
-    if (showSpinner) setIsLoading(true);
-    setErrored(false);
+  const loadNotifications = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
     try {
-      const communityApi = api as unknown as CommunityStatsApi;
-      const [
-        servicesData,
-        bookingsData,
-        statsData,
-        profileData,
-        communityData,
-      ] = await Promise.all([
-        api.getProviderServices() as Promise<ServiceItem[]>,
-        api.getProviderBookings() as Promise<Booking[]>,
-        api.getProviderStats() as Promise<Stats>,
-        api.getMyProfile().catch(() => ({
-          nickname: 'Service Provider',
-          username: 'Provider',
-          avatar_url: null,
-        })) as Promise<Profile>,
-        communityApi.communityGetStats?.('global').catch(() => null) ??
-          Promise.resolve(null),
-      ]);
-      if (seq !== reqSeq.current || !isMountedRef.current) return;
-      setServices(Array.isArray(servicesData) ? servicesData : []);
-      setBookings(Array.isArray(bookingsData) ? bookingsData : []);
-      setStats(statsData || {});
-      setProfile(profileData);
-      setCommunityStats(communityData as CommunityStats | null);
-      if (typeof profileData?.is_available === 'boolean') {
-        setIsAvailable(profileData.is_available);
-      }
-    } catch {
-      if (seq === reqSeq.current && isMountedRef.current) setErrored(true);
+      const data = await api.getNotifications();
+      setNotifications(extractNotifications(data));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load notifications');
     } finally {
-      if (seq === reqSeq.current && isMountedRef.current)
-        setIsLoading(false);
+      setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const t = window.setTimeout(() => void loadDashboardData(), 0);
-    return () => window.clearTimeout(t);
-  }, [loadDashboardData]);
+    const t = setTimeout(() => loadNotifications(), 0);
+    return () => clearTimeout(t);
+  }, [loadNotifications]);
 
-  const toggleAvailability = async (value: boolean) => {
-    if (togglingAvailability) return;
-    setTogglingAvailability(true);
-    const previous = isAvailable;
-    setIsAvailable(value);
+  const markAsRead = useCallback(async (id: number) => {
     try {
-      await api.updateProviderAvailability(value);
-    } catch (err) {
-      if (isMountedRef.current) setIsAvailable(previous);
-      await alertDialog({
-        title: "Couldn't update availability",
-        body: extractErrorDetail(err, 'Please try again.'),
-        kind: 'danger',
-      });
+      await api.markNotificationRead(id);
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    } catch {}
+  }, []);
+
+  const handleNotificationTap = async (n: NotificationItem) => {
+    if (!isRead(n)) await markAsRead(n.id);
+    setSelectedNotif(n);
+  };
+
+  const handleViewContent = () => {
+    if (!selectedNotif) return;
+    const url = resolveDeepLink(selectedNotif);
+    if (url) router.push(url);
+    setSelectedNotif(null);
+  };
+
+  const handleMarkAll = async () => {
+    const unread = notifications.filter((n) => !isRead(n));
+    if (unread.length === 0 || markingAll) return;
+    setMarkingAll(true);
+    try {
+      await Promise.all(unread.map((n) => api.markNotificationRead(n.id).catch(() => null)));
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     } finally {
-      if (isMountedRef.current) setTogglingAvailability(false);
+      setMarkingAll(false);
     }
   };
 
-  const handleConfirmBooking = async (b: Booking) => {
-    const id = bookingId(b);
-    if (!id) return;
-    const customer = b.customer_name || b.user_name || 'this customer';
-    const ok = await confirmDialog({
-      title: 'Confirm this booking?',
-      body: `${b.service_title || 'The service'} for ${customer}. Once confirmed, they'll be notified to expect you.`,
-      kind: 'info',
-      confirmLabel: 'Confirm booking',
-      cancelLabel: 'Not yet',
+  const unreadCount = useMemo(() => notifications.filter((n) => !isRead(n)).length, [notifications]);
+
+  const filteredNotifications = useMemo(() => {
+    return notifications.filter((n) => {
+      if (activeTab === 'all') return true;
+      const kind = classify(n);
+      if (activeTab === 'orders') return kind === 'order' || kind === 'delivery' || kind === 'wallet';
+      if (activeTab === 'messages') return kind === 'message';
+      if (activeTab === 'updates') return kind === 'system' || kind === 'promotion' || kind === 'verified' || kind === 'favorite' || kind === 'review';
+      return true;
     });
-    if (!ok) return;
-    setBusyBookingId(id);
-    try {
-      await api.confirmBooking(id);
-      await loadDashboardData(false);
-    } catch (err) {
-      await alertDialog({
-        title: "Couldn't confirm booking",
-        body: extractErrorDetail(err, 'Please try again.'),
-        kind: 'danger',
-      });
-    } finally {
-      if (isMountedRef.current) setBusyBookingId(null);
+  }, [notifications, activeTab]);
+
+  const groups = useMemo(() => {
+    const out: { label: string; items: NotificationItem[] }[] = [];
+    for (const n of filteredNotifications) {
+      const label = dateGroup(n.created_at);
+      const last = out[out.length - 1];
+      if (last && last.label === label) last.items.push(n);
+      else out.push({ label, items: [n] });
     }
-  };
+    return out;
+  }, [filteredNotifications]);
 
-  const handleCompleteBooking = async (b: Booking) => {
-    const id = bookingId(b);
-    if (!id) return;
-    const customer = b.customer_name || b.user_name || 'this customer';
-    const ok = await confirmDialog({
-      title: 'Mark as complete?',
-      body: `Confirm that you've finished ${b.service_title || 'this job'} for ${customer}. Payment will be released to your wallet.`,
-      kind: 'info',
-      confirmLabel: 'Complete & release',
-      cancelLabel: 'Not yet',
-    });
-    if (!ok) return;
-    setBusyBookingId(id);
-    try {
-      await api.completeBooking(id);
-      await loadDashboardData(false);
-    } catch (err) {
-      await alertDialog({
-        title: "Couldn't complete booking",
-        body: extractErrorDetail(err, 'Please try again.'),
-        kind: 'danger',
-      });
-    } finally {
-      if (isMountedRef.current) setBusyBookingId(null);
-    }
-  };
-
-  const goAddService = () => router.push('/service-provider/add-service');
-  const goServices = () => router.push('/service-provider/services');
-  const goBookings = () => router.push('/service-provider/bookings');
-  const goEditProfile = () =>
-    router.push('/service-provider/edit-profile');
-  const goSeai = () => router.push('/seai/ask?mode=agent');
-  const goCommunity = () => router.push('/service-provider/community');
-  const goSettings = () => router.push('/settings/service-provider');
-
-  const name =
-    profile?.business_name ||
-    profile?.nickname ||
-    profile?.username ||
-    'Service Provider';
-  const businessImageUrl =
-    resolveImageUrl(profile?.business_image_url) ||
-    resolveImageUrl(profile?.avatar_url);
-  const initial = (name.charAt(0) || '?').toUpperCase();
-
-  const servicesActiveCount = services.filter(isServiceActive).length;
-  const pendingBookings = bookings.filter(isActiveBooking);
-  const todayBookings = Number(stats.today_bookings ?? 0);
-  const totalEarnings = Number(stats.total_earnings ?? 0);
-  const rating = Number(stats.rating ?? 0);
-
-  if (isLoading) {
-    return (
-      <main style={css.root} className="sp-dash">
-        <style>{CSS}</style>
-        <div style={css.hero}>
-          <div className="sp-hero-inner">
-            <div style={css.topBar}>
-              <span style={css.topTitle}>Dashboard</span>
-              <div style={{ width: 38 }} />
-            </div>
-            <div style={css.identityRow}>
-              <div style={css.thumbSkeleton} />
-              <div style={{ flex: 1 }}>
-                <div style={css.skelLine} />
-                <div
-                  style={{ ...css.skelLine, width: 130, marginTop: 8 }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-        <div style={css.sheet} className="sp-sheet">
-          <div style={css.blockSkeleton} />
-          <div style={css.blockSkeleton} />
-          {[0, 1].map((i) => (
-            <div key={i} style={css.blockSkeleton} />
-          ))}
-        </div>
-      </main>
-    );
-  }
-
-  if (errored) {
-    return (
-      <main style={css.centerRoot} className="sp-dash">
-        <style>{CSS}</style>
-        <div style={css.errorHalo}>
-          <MdErrorOutline size={40} color="var(--danger-fg)" />
-        </div>
-        <h2 style={css.centerTitle}>
-          Couldn&apos;t load your dashboard
-        </h2>
-        <p style={css.centerBody}>
-          Check your connection and try again. If this keeps happening,
-          sign out and back in.
-        </p>
-        <button
-          onClick={() => void loadDashboardData()}
-          style={css.centerPrimary}
-        >
-          <MdRefresh size={18} color="var(--brand-on-gradient)" />
-          <span>Retry</span>
-        </button>
-      </main>
-    );
-  }
+  const tabs: { id: FilterTab; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'orders', label: 'Orders & Wallet' },
+    { id: 'messages', label: 'Messages' },
+    { id: 'updates', label: 'Updates' },
+  ];
 
   return (
-    <main style={css.root} className="sp-dash">
+    <main className="nf-root">
       <style>{CSS}</style>
 
-      <div style={css.hero}>
-        <div style={css.heroGlow} aria-hidden />
-
-        <div className="sp-hero-inner">
-          <div style={css.topBar}>
-            <span style={css.topTitle}>Dashboard</span>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button
-                type="button"
-                onClick={goSettings}
-                style={css.ghostBtn}
-                aria-label="Settings"
-              >
-                <MdEdit size={18} color="var(--brand-on-gradient)" />
-              </button>
-              <button
-                type="button"
-                onClick={() => void loadDashboardData()}
-                style={css.ghostBtn}
-                aria-label="Refresh"
-              >
-                <MdRefresh size={18} color="var(--brand-on-gradient)" />
-              </button>
-            </div>
-          </div>
-
-          <div style={css.identityRow}>
-            <button
-              type="button"
-              onClick={goEditProfile}
-              style={css.bizThumb}
-              aria-label="Edit business profile"
-            >
-              {businessImageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={businessImageUrl}
-                  alt=""
-                  style={css.bizThumbImg}
-                />
-              ) : (
-                <div style={css.bizThumbPlaceholder}>
-                  <span style={css.bizThumbInitial}>{initial}</span>
-                </div>
-              )}
-            </button>
-
-            <div style={css.identityMeta}>
-              <div style={css.nameRow}>
-                <span style={css.businessName}>{name}</span>
-              </div>
-              <div style={css.metaLine}>
-                <span
-                  style={{
-                    ...css.availabilityPill,
-                    backgroundColor: isAvailable
-                      ? 'var(--success-bg)'
-                      : 'var(--bg-tertiary)',
-                    color: isAvailable
-                      ? 'var(--success-fg)'
-                      : 'var(--text-tertiary)',
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: '50%',
-                      backgroundColor: isAvailable
-                        ? 'var(--success-fg)'
-                        : 'var(--text-muted)',
-                      display: 'inline-block',
-                    }}
-                  />
-                  {isAvailable ? 'Available' : 'Paused'}
-                </span>
-              </div>
-            </div>
-          </div>
+      <header className="nf-header">
+        <button className="nf-backBtn" onClick={() => router.back()} aria-label="Go back">
+          <MdArrowBack size={22} color="var(--text-primary)" />
+        </button>
+        <div className="nf-headerText">
+          <h1 className="nf-title">Notifications</h1>
+          {unreadCount > 0 && <span className="nf-unread">{unreadCount}</span>}
         </div>
+        <button className="nf-iconBtn" onClick={loadNotifications} aria-label="Refresh" disabled={isLoading}>
+          <MdRefresh size={20} color="var(--brand-primary)" />
+        </button>
+      </header>
+
+      <div className="nf-tabsContainer">
+        <div className="nf-tabsScroll">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`nf-tabBtn ${activeTab === tab.id ? 'nf-tabBtnActive' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {unreadCount > 0 && !isLoading && (
+          <button className="nf-markAllBtn" onClick={handleMarkAll} disabled={markingAll}>
+            <MdDoneAll size={16} color="var(--brand-primary)" />
+            <span>Mark all</span>
+          </button>
+        )}
       </div>
 
-      <div style={css.sheet} className="sp-sheet">
-        <div style={css.revenueCard} className="sp-revenue-card">
-          <div style={css.revenueTop}>
-            <div style={css.revenueLabelRow}>
-              <MdAccountBalanceWallet
-                size={14}
-                color="color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)"
-              />
-              <span style={css.revenueLabel}>Total earnings</span>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                router.push('/service-provider/wallet')
-              }
-              style={css.revenueLink}
-            >
-              <span>Wallet</span>
-              <MdChevronRight
-                size={16}
-                color="color-mix(in srgb, var(--brand-on-gradient) 85%, transparent)"
-              />
-            </button>
-          </div>
-          <div style={css.revenueAmount} className="sp-revenue-amount">
-            {formatNaira(totalEarnings)}
-          </div>
-          <div style={css.revenueSub}>
-            {rating > 0
-              ? `★ ${rating.toFixed(1)} avg rating across completed jobs`
-              : 'Complete your first job to build your rating'}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => toggleAvailability(!isAvailable)}
-          disabled={togglingAvailability}
-          style={{
-            ...css.availabilityCard,
-            borderColor: isAvailable
-              ? 'var(--success-strong)'
-              : 'var(--border-default)',
-            backgroundColor: isAvailable
-              ? 'var(--success-bg)'
-              : 'var(--bg-secondary)',
-            opacity: togglingAvailability ? 0.6 : 1,
-          }}
-          className="sp-availability-card"
-        >
-          <span
-            style={{
-              ...css.availabilityIcon,
-              backgroundColor: isAvailable
-                ? 'var(--success-bg)'
-                : 'var(--bg-tertiary)',
-            }}
-          >
-            {isAvailable ? (
-              <MdToggleOn size={26} color="var(--success-fg)" />
-            ) : (
-              <MdToggleOff size={26} color="var(--text-tertiary)" />
-            )}
-          </span>
-          <span style={css.availabilityText}>
-            <span
-              style={{
-                ...css.availabilityTitle,
-                color: isAvailable
-                  ? 'var(--success-fg)'
-                  : 'var(--text-primary)',
-              }}
-            >
-              {isAvailable ? 'Available now' : 'Paused'}
-            </span>
-            <span style={css.availabilityHint}>
-              {isAvailable
-                ? 'Buyers can book your services'
-                : 'No new bookings will be accepted'}
-            </span>
-          </span>
-          <span
-            style={{
-              ...css.miniSwitch,
-              backgroundColor: isAvailable
-                ? 'var(--success-fg)'
-                : 'var(--border-strong)',
-            }}
-            aria-hidden
-          >
-            <span
-              style={{
-                ...css.miniSwitchKnob,
-                left: isAvailable ? 20 : 3,
-              }}
-            />
-          </span>
-        </button>
-
-        <div style={css.pulseRow} className="sp-pulse-row">
-          <PulseTile
-            icon={<MdToday size={18} color="var(--brand-primary)" />}
-            tint="var(--brand-soft)"
-            label="Today"
-            value={String(todayBookings)}
-          />
-          <PulseTile
-            icon={<MdStar size={18} color="var(--warning-fg)" />}
-            tint="var(--warning-bg)"
-            label="Rating"
-            value={rating > 0 ? rating.toFixed(1) : '—'}
-          />
-          <PulseTile
-            icon={
-              <MdDesignServices size={18} color="var(--purple-fg)" />
-            }
-            tint="var(--purple-bg)"
-            label="Services"
-            value={`${servicesActiveCount}/${services.length}`}
-          />
-        </div>
-
-        {pendingBookings.length > 0 && (
+      <div className="nf-body">
+        {isLoading ? (
           <>
-            <h3 style={css.sectionLabel}>
-              Needs your attention · {pendingBookings.length}
-            </h3>
-            <div style={css.section}>
-              {pendingBookings.slice(0, 3).map((b) => {
-                const id = bookingId(b);
-                const busy = busyBookingId === id;
-                const status = (b.status || 'pending').toLowerCase();
-                const meta = bookingStatusMeta(status);
-                const isPending =
-                  status === 'locked' || status === 'pending';
-                const isAccepted = status === 'accepted';
-                const customer =
-                  b.customer_name || b.user_name || 'Customer';
-                const when =
-                  b.scheduled_for ||
-                  b.booking_date ||
-                  'Date not set';
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="nf-skeletonCard" aria-hidden="true">
+                <div className="nf-skel nf-skelIcon" />
+                <div className="nf-skelBody">
+                  <div className="nf-skel nf-skelLine" />
+                  <div className="nf-skel nf-skelLine" style={{ width: '65%' }} />
+                  <div className="nf-skel nf-skelLineShort" style={{ width: '30%' }} />
+                </div>
+              </div>
+            ))}
+          </>
+        ) : error ? (
+          <div className="nf-center">
+            <MdErrorOutline size={48} color="var(--danger-fg)" />
+            <p className="nf-centerText">{error}</p>
+            <button type="button" className="nf-retryBtn" onClick={loadNotifications}>Retry</button>
+          </div>
+        ) : filteredNotifications.length === 0 ? (
+          <div className="nf-center">
+            <div className="nf-emptyIconWrap" aria-hidden="true">
+              <MdNotifications size={40} color="var(--brand-primary)" />
+            </div>
+            <h2 className="nf-centerTitle">No notifications here</h2>
+            <p className="nf-centerText">When you get updates in this category, they&apos;ll appear here.</p>
+          </div>
+        ) : (
+          groups.map((group) => (
+            <section key={group.label} className="nf-group">
+              <div className="nf-groupLabel">{group.label}</div>
+              {group.items.map((n) => {
+                const read = isRead(n);
+                const kind = classify(n);
+                const meta = KIND_META[kind];
+                const Icon = meta.Icon;
+                const hasLink = Boolean(resolveDeepLink(n));
+                const timeText = n.created_at ? timeAgo(n.created_at) : '';
 
                 return (
-                  <div
-                    key={id}
-                    style={{
-                      ...css.bookingRow,
-                      opacity: busy ? 0.55 : 1,
-                    }}
+                  <button
+                    key={n.id}
+                    type="button"
+                    className={`nf-card ${read ? 'nf-cardRead' : 'nf-cardUnread'}`}
+                    onClick={() => handleNotificationTap(n)}
                   >
-                    <span style={css.bookingAvatar}>
-                      {(customer.charAt(0) || '?').toUpperCase()}
+                    <span className="nf-iconWrap" style={{ backgroundColor: meta.soft }} aria-hidden="true">
+                      <Icon size={20} color={meta.color} />
                     </span>
-                    <div style={css.bookingBody}>
-                      <div
-                        style={css.bookingService}
-                        title={b.service_title}
-                      >
-                        {b.service_title || 'Service'}
-                      </div>
-                      <div style={css.bookingMeta}>
-                        <span>{customer}</span>
-                        <span style={css.bookingDot}>·</span>
-                        <span style={css.bookingDate}>
-                          {String(when)}
-                        </span>
-                      </div>
-                      <div style={css.bookingStatusRow}>
-                        <span
-                          style={{
-                            ...css.bookingChip,
-                            backgroundColor: meta.bg,
-                            color: meta.fg,
-                          }}
-                        >
-                          {meta.label}
-                        </span>
-                      </div>
-                    </div>
-                    <div style={css.bookingActions}>
-                      {isPending && (
-                        <button
-                          type="button"
-                          onClick={() => handleConfirmBooking(b)}
-                          disabled={busy}
-                          style={{
-                            ...css.bookingPrimary,
-                            opacity: busy ? 0.6 : 1,
-                          }}
-                          className="sp-booking-btn"
-                        >
-                          Confirm
-                        </button>
-                      )}
-                      {isAccepted && (
-                        <button
-                          type="button"
-                          onClick={() => handleCompleteBooking(b)}
-                          disabled={busy}
-                          style={{
-                            ...css.bookingSuccess,
-                            opacity: busy ? 0.6 : 1,
-                          }}
-                          className="sp-booking-btn"
-                        >
-                          Complete
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                    <span className="nf-content">
+                      <span className="nf-topRow">
+                        <span className="nf-titleText">{n.title || 'Notification'}</span>
+                        {!read && <span className="nf-dot" aria-hidden="true" />}
+                      </span>
+                      {n.body && <span className="nf-bodyText">{n.body}</span>}
+                      <span className="nf-timeText">{timeText}</span>
+                    </span>
+                    {hasLink && <MdChevronRight size={20} color="var(--border-strong)" className="nf-chevron" />}
+                  </button>
                 );
               })}
-              {pendingBookings.length > 3 && (
-                <button
-                  type="button"
-                  onClick={goBookings}
-                  style={css.viewAllRow}
-                  className="sp-row"
-                >
-                  <span style={css.viewAllText}>
-                    View all {pendingBookings.length} pending bookings
-                  </span>
-                  <MdChevronRight
-                    size={18}
-                    color="var(--border-strong)"
-                  />
-                </button>
-              )}
-            </div>
-          </>
+            </section>
+          ))
         )}
-
-        <h3 style={css.sectionLabel}>Quick actions</h3>
-        <div style={css.actionGrid} className="sp-action-grid">
-          <button
-            type="button"
-            onClick={goAddService}
-            style={{ ...css.actionTile, ...css.actionTilePrimary }}
-            className="sp-action-tile"
-          >
-            <span style={css.actionIconWrapPrimary}>
-              <MdAdd size={22} color="var(--brand-primary)" />
-            </span>
-            <span style={css.actionTextPrimary}>
-              <span style={css.actionTitlePrimary}>Add service</span>
-              <span style={css.actionHintPrimary}>
-                List a new offering
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={goServices}
-            style={css.actionTile}
-            className="sp-action-tile"
-          >
-            <span
-              style={{
-                ...css.actionIconWrap,
-                backgroundColor: 'var(--purple-bg)',
-              }}
-            >
-              <MdDesignServices
-                size={22}
-                color="var(--purple-fg)"
-              />
-            </span>
-            <span style={css.actionText}>
-              <span style={css.actionTitle}>My services</span>
-              <span style={css.actionHint}>
-                {services.length} listing
-                {services.length === 1 ? '' : 's'}
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={goBookings}
-            style={css.actionTile}
-            className="sp-action-tile"
-          >
-            <span
-              style={{
-                ...css.actionIconWrap,
-                backgroundColor: 'var(--info-bg)',
-              }}
-            >
-              <MdCalendarToday size={22} color="var(--info-fg)" />
-            </span>
-            <span style={css.actionText}>
-              <span style={css.actionTitle}>Bookings</span>
-              <span style={css.actionHint}>
-                {bookings.length} total
-              </span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={goSeai}
-            style={css.actionTile}
-            className="sp-action-tile"
-          >
-            <span
-              style={{
-                ...css.actionIconWrap,
-                backgroundColor: 'var(--warning-bg)',
-              }}
-            >
-              <MdAutoAwesome
-                size={22}
-                color="var(--warning-fg)"
-              />
-            </span>
-            <span style={css.actionText}>
-              <span style={css.actionTitle}>Ask SEAI</span>
-              <span style={css.actionHint}>AI assistant</span>
-            </span>
-          </button>
-        </div>
-
-        <h3 style={css.sectionLabel}>Sellers only</h3>
-        <button
-          type="button"
-          onClick={goCommunity}
-          style={css.communityCard}
-          className="sp-community-card"
-        >
-          <span style={css.communityIcon}>
-            <MdGroups size={22} color="var(--brand-primary)" />
-            <span style={css.communityDot} />
-          </span>
-          <span style={css.communityText}>
-            <span style={css.communityTitle}>
-              Sellers community
-            </span>
-            <span style={css.communityHint}>
-              {communityStats && communityStats.active_senders_7d > 0
-                ? `${communityStats.active_senders_7d} seller${
-                    communityStats.active_senders_7d === 1 ? '' : 's'
-                  } active this week`
-                : 'Chat with other sellers'}
-            </span>
-          </span>
-          <MdChevronRight size={20} color="var(--border-strong)" />
-        </button>
-
-        <div style={{ height: 32 }} />
       </div>
+
+      {selectedNotif && (
+        <div className="nf-modalOverlay" onClick={() => setSelectedNotif(null)}>
+          <div className="nf-modalSheet" onClick={(e) => e.stopPropagation()}>
+            <div className="nf-modalGrabber" />
+            
+            <button className="nf-modalClose" onClick={() => setSelectedNotif(null)}>
+              <MdClose size={24} color="var(--text-muted)" />
+            </button>
+
+            {(() => {
+              const kind = classify(selectedNotif);
+              const meta = KIND_META[kind];
+              const Icon = meta.Icon;
+              const hasLink = Boolean(resolveDeepLink(selectedNotif));
+
+              return (
+                <div className="nf-modalContent">
+                  <div className="nf-modalIconWrap" style={{ backgroundColor: meta.soft }}>
+                    <Icon size={36} color={meta.color} />
+                  </div>
+                  
+                  <h2 className="nf-modalTitle">{selectedNotif.title || 'Notification'}</h2>
+                  
+                  {selectedNotif.created_at && (
+                    <span className="nf-modalTime">{timeAgo(selectedNotif.created_at)}</span>
+                  )}
+
+                  <div className="nf-modalBody">
+                    {selectedNotif.body || 'No further details provided.'}
+                  </div>
+
+                  {hasLink ? (
+                    <button className="nf-modalActionBtn" onClick={handleViewContent}>
+                      {meta.actionText} <MdChevronRight size={20} />
+                    </button>
+                  ) : (
+                    <button className="nf-modalActionBtnSecondary" onClick={() => setSelectedNotif(null)}>
+                      Dismiss
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
-function PulseTile({
-  icon,
-  tint,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  tint: string;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div style={css.pulseTile} className="sp-pulse-tile">
-      <div style={{ ...css.pulseIcon, backgroundColor: tint }}>
-        {icon}
-      </div>
-      <div style={css.pulseValue}>{value}</div>
-      <div style={css.pulseLabel}>{label}</div>
-    </div>
-  );
-}
-
+// ─── CSS (Keep as previously provided, it hasn't changed) ─────────────
 const CSS = `
-  @keyframes spShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-  @keyframes spPulseDot {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.55; transform: scale(1.45); }
+  @keyframes nf-shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  @keyframes nf-slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  @keyframes nf-fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
-  .sp-dash, .sp-dash *, .sp-dash *::before, .sp-dash *::after {
-    box-sizing: border-box;
+  .nf-root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: var(--bg-primary);
   }
 
-  .sp-hero-inner {
-    position: relative;
-    max-width: 720px;
-    margin: 0 auto;
-    width: 100%;
+  .nf-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    position: sticky;
+    top: 0;
+    z-index: 20;
   }
-  .sp-sheet {
-    max-width: 720px;
-    margin-left: auto;
-    margin-right: auto;
-    width: 100%;
+  .nf-backBtn {
+    width: 36px; height: 36px; border-radius: 50%; border: none;
+    background: transparent; cursor: pointer; display: inline-flex;
+    align-items: center; justify-content: center; flex: 0 0 36px;
   }
+  .nf-backBtn:hover { background: var(--bg-hover); }
+  .nf-headerText { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .nf-title { font-size: 22px; font-weight: 800; color: var(--text-primary); margin: 0; letter-spacing: -0.03em; }
+  .nf-unread { padding: 2px 8px; border-radius: 999px; background: var(--brand-primary); color: #fff; font-size: 12px; font-weight: 800; }
+  .nf-iconBtn { width: 36px; height: 36px; border-radius: 50%; border: none; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; }
+  .nf-iconBtn:hover { background: var(--bg-hover); }
 
-  .sp-availability-card {
-    transition: background-color 0.15s, border-color 0.15s, transform 0.12s;
+  .nf-tabsContainer {
+    display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
+    border-bottom: 1px solid var(--border-default); background: var(--bg-primary);
+    position: sticky; top: 60px; z-index: 15;
   }
-  .sp-availability-card:active:not(:disabled) { transform: scale(0.995); }
+  .nf-tabsScroll { display: flex; gap: 16px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; flex: 1; padding: 12px 0; }
+  .nf-tabsScroll::-webkit-scrollbar { display: none; }
+  .nf-tabBtn { background: transparent; border: none; padding: 0; font-size: 15px; font-weight: 600; color: var(--text-muted); cursor: pointer; white-space: nowrap; position: relative; font-family: inherit; transition: color 0.2s; }
+  .nf-tabBtn:hover { color: var(--text-primary); }
+  .nf-tabBtnActive { color: var(--text-primary); font-weight: 800; }
+  .nf-tabBtnActive::after { content: ''; position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); width: 100%; height: 3px; background: var(--brand-primary); border-radius: 3px 3px 0 0; }
+  .nf-markAllBtn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-default); background: var(--bg-secondary); color: var(--brand-primary); font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; margin-left: 12px; }
+  .nf-markAllBtn:hover { background: var(--brand-soft); }
 
-  .sp-action-tile {
-    transition: transform 0.12s ease, box-shadow 0.15s ease;
-  }
-  .sp-action-tile:hover {
-    box-shadow: 0 10px 24px
-      color-mix(in srgb, var(--brand-primary) 10%, transparent);
-  }
-  .sp-action-tile:active { transform: scale(0.98); }
+  .nf-body { flex: 1; padding: 16px; }
+  .nf-group { margin-bottom: 24px; }
+  .nf-groupLabel { font-size: 12px; font-weight: 800; letter-spacing: 0.5px; color: var(--text-primary); margin-bottom: 12px; }
 
-  .sp-community-card:active { transform: scale(0.99); }
+  .nf-card { display: flex; align-items: flex-start; gap: 14px; width: 100%; padding: 16px; margin-bottom: 10px; border-radius: 16px; border: 1px solid var(--border-default); background: var(--bg-secondary); cursor: pointer; text-align: left; font-family: inherit; transition: all 0.15s ease; animation: nf-fadeIn 0.2s ease; }
+  .nf-card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+  .nf-cardUnread { border-color: color-mix(in srgb, var(--brand-primary) 30%, transparent); background: color-mix(in srgb, var(--brand-primary) 4%, var(--bg-secondary)); box-shadow: inset 3px 0 0 var(--brand-primary); }
+  .nf-iconWrap { width: 44px; height: 44px; flex: 0 0 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 14px; }
+  .nf-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .nf-topRow { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+  .nf-titleText { font-size: 15px; font-weight: 700; color: var(--text-primary); flex: 1; line-height: 1.3; }
+  .nf-cardRead .nf-titleText { font-weight: 600; color: var(--text-secondary); }
+  .nf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand-primary); flex: 0 0 8px; margin-top: 6px; }
+  .nf-bodyText { font-size: 14px; color: var(--text-secondary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .nf-timeText { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-top: 2px; }
+  .nf-chevron { flex: 0 0 20px; align-self: center; opacity: 0.5; }
 
-  .sp-pulse-tile {
-    transition: transform 0.12s ease;
-  }
-  .sp-pulse-tile:active { transform: scale(0.97); }
+  .nf-center { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 24px; text-align: center; }
+  .nf-emptyIconWrap { width: 80px; height: 80px; border-radius: 30px; background: var(--bg-secondary); border: 1px solid var(--border-default); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .nf-centerTitle { font-size: 20px; font-weight: 800; color: var(--text-primary); margin: 0 0 8px; }
+  .nf-centerText { font-size: 14px; color: var(--text-tertiary); margin: 0; max-width: 280px; line-height: 1.5; }
+  .nf-retryBtn { margin-top: 16px; padding: 10px 24px; border-radius: 12px; background: var(--brand-primary); color: #fff; border: none; font-weight: 700; cursor: pointer; }
 
-  .sp-booking-btn {
-    transition: transform 0.12s ease, opacity 0.15s;
-  }
-  .sp-booking-btn:active:not(:disabled) { transform: scale(0.97); }
+  .nf-skeletonCard { display: flex; gap: 14px; padding: 16px; margin-bottom: 10px; border-radius: 16px; background: var(--bg-secondary); border: 1px solid var(--border-default); }
+  .nf-skel { background: var(--skeleton); background-size: 800px 100%; animation: nf-shimmer 1.4s infinite linear; border-radius: 8px; }
+  .nf-skelIcon { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 14px; }
+  .nf-skelBody { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .nf-skelLine { height: 14px; width: 90%; }
+  .nf-skelLineShort { height: 12px; }
 
-  .sp-row:hover { background-color: var(--bg-hover); }
+  .nf-modalOverlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: flex-end; justify-content: center; animation: nf-fadeIn 0.2s ease-out; }
+  .nf-modalSheet { width: 100%; max-width: 600px; background: var(--bg-secondary); border-top-left-radius: 32px; border-top-right-radius: 32px; padding: 12px 24px 40px; position: relative; animation: nf-slideUp 0.3s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: 0 -10px 40px rgba(0,0,0,0.2); }
+  .nf-modalGrabber { width: 40px; height: 5px; background: var(--border-strong); border-radius: 10px; margin: 0 auto 24px; }
+  .nf-modalClose { position: absolute; top: 20px; right: 20px; background: var(--bg-tertiary); border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; }
+  .nf-modalClose:hover { background: var(--border-default); }
+  .nf-modalContent { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 8px; }
+  .nf-modalIconWrap { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+  .nf-modalTitle { font-size: 24px; font-weight: 800; color: var(--text-primary); margin: 0 0 8px; letter-spacing: -0.02em; line-height: 1.2; }
+  .nf-modalTime { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 24px; background: var(--bg-tertiary); padding: 6px 14px; border-radius: 999px; }
+  .nf-modalBody { font-size: 16px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 32px; width: 100%; text-align: left; background: var(--bg-primary); padding: 20px; border-radius: 16px; border: 1px solid var(--border-default); }
+  .nf-modalActionBtn { width: 100%; padding: 18px; border-radius: 16px; border: none; background: var(--brand-primary); color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.1s; box-shadow: var(--shadow-brand); }
+  .nf-modalActionBtn:active { transform: scale(0.98); }
+  .nf-modalActionBtnSecondary { width: 100%; padding: 18px; border-radius: 16px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-default); font-size: 16px; font-weight: 800; cursor: pointer; }
 
   @media (min-width: 1024px) {
-    .sp-hero-inner {
-      max-width: 960px;
-      padding-left: 32px;
-      padding-right: 32px;
-    }
-    .sp-sheet {
-      max-width: 960px;
-      padding-left: 32px;
-      padding-right: 32px;
-    }
-    .sp-revenue-amount {
-      font-size: 52px !important;
-      letter-spacing: -1.5px !important;
-    }
-    .sp-revenue-card {
-      padding: 28px 30px 30px !important;
-    }
-    .sp-action-grid {
-      grid-template-columns: repeat(4, 1fr) !important;
-    }
-    .sp-pulse-row {
-      gap: 14px !important;
-    }
-    .sp-pulse-tile {
-      padding: 18px 16px !important;
-    }
-    .sp-community-card {
-      padding: 20px 22px !important;
-    }
+    .nf-modalOverlay { align-items: center; }
+    .nf-modalSheet { border-radius: 32px; padding-bottom: 32px; max-width: 500px; }
+    .nf-header, .nf-tabsContainer, .nf-body { max-width: 760px; margin: 0 auto; width: 100%; }
   }
 `;
-
-const css: Record<string, React.CSSProperties> = {
-  root: {
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: '100vh',
-    backgroundColor: 'var(--bg-primary)',
-    color: 'var(--text-primary)',
-    overflowX: 'hidden',
-    transition: 'background-color 0.18s ease, color 0.18s ease',
-  },
-
-  hero: {
-    position: 'relative',
-    background: 'var(--brand-gradient)',
-    padding: '0 20px 76px',
-    overflow: 'hidden',
-    transition: 'background 0.18s ease',
-  },
-  heroGlow: {
-    position: 'absolute',
-    top: -120,
-    right: -100,
-    width: 320,
-    height: 320,
-    borderRadius: '50%',
-    background:
-      'radial-gradient(circle, color-mix(in srgb, var(--brand-on-gradient) 20%, transparent) 0%, transparent 70%)',
-    pointerEvents: 'none',
-  },
-  topBar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 14,
-    paddingBottom: 4,
-  },
-  topTitle: {
-    fontSize: 15,
-    fontWeight: 600,
-    color: 'var(--brand-on-gradient)',
-    letterSpacing: 0.3,
-  },
-  ghostBtn: {
-    background:
-      'color-mix(in srgb, var(--brand-on-gradient) 10%, transparent)',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 8,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    minWidth: 38,
-    minHeight: 38,
-  },
-
-  identityRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 14,
-    paddingTop: 22,
-  },
-  bizThumb: {
-    position: 'relative',
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    overflow: 'hidden',
-    border:
-      '3px solid color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
-    background:
-      'color-mix(in srgb, var(--brand-on-gradient) 8%, transparent)',
-    cursor: 'pointer',
-    padding: 0,
-    flexShrink: 0,
-  },
-  bizThumbImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    display: 'block',
-  },
-  bizThumbPlaceholder: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background:
-      'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
-  },
-  bizThumbInitial: {
-    fontSize: 30,
-    fontWeight: 800,
-    color: 'var(--brand-on-gradient)',
-    letterSpacing: -0.5,
-  },
-
-  identityMeta: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
-  nameRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  },
-  businessName: {
-    fontSize: 22,
-    fontWeight: 800,
-    color: 'var(--brand-on-gradient)',
-    letterSpacing: -0.4,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    maxWidth: '100%',
-  },
-  metaLine: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-  },
-  availabilityPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '4px 10px',
-    borderRadius: 999,
-    fontSize: 11,
-    fontWeight: 800,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-
-  sheet: {
-    flex: 1,
-    marginTop: -52,
-    position: 'relative',
-    padding: '0 20px 40px',
-  },
-
-  revenueCard: {
-    background: 'var(--brand-gradient)',
-    borderRadius: 22,
-    padding: '20px 22px 22px',
-    color: 'var(--brand-on-gradient)',
-    boxShadow: 'var(--shadow-brand)',
-  },
-  revenueTop: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  revenueLabelRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-  },
-  revenueLabel: {
-    fontSize: 11,
-    fontWeight: 800,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    color:
-      'color-mix(in srgb, var(--brand-on-gradient) 75%, transparent)',
-  },
-  revenueLink: {
-    background:
-      'color-mix(in srgb, var(--brand-on-gradient) 10%, transparent)',
-    border: 'none',
-    cursor: 'pointer',
-    color: 'var(--brand-on-gradient)',
-    fontFamily: 'inherit',
-    fontSize: 12,
-    fontWeight: 700,
-    padding: '6px 10px 6px 12px',
-    borderRadius: 999,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 2,
-  },
-  revenueAmount: {
-    fontSize: 40,
-    fontWeight: 800,
-    letterSpacing: -1,
-    fontVariantNumeric: 'tabular-nums',
-    marginTop: 12,
-    lineHeight: 1.05,
-    color: 'var(--brand-on-gradient)',
-  },
-  revenueSub: {
-    fontSize: 12.5,
-    color:
-      'color-mix(in srgb, var(--brand-on-gradient) 72%, transparent)',
-    fontWeight: 500,
-    marginTop: 6,
-  },
-
-  availabilityCard: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    width: '100%',
-    marginTop: 16,
-    padding: '14px 16px',
-    borderRadius: 18,
-    border: '1.5px solid',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    textAlign: 'left',
-    transition: 'background-color 0.15s, border-color 0.15s',
-  },
-  availabilityIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  availabilityText: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-  },
-  availabilityTitle: {
-    fontSize: 15,
-    fontWeight: 800,
-    letterSpacing: -0.2,
-  },
-  availabilityHint: {
-    fontSize: 12,
-    color: 'var(--text-tertiary)',
-    fontWeight: 500,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  miniSwitch: {
-    position: 'relative',
-    width: 44,
-    height: 24,
-    borderRadius: 999,
-    flexShrink: 0,
-    transition: 'background-color 0.18s',
-  },
-  miniSwitchKnob: {
-    position: 'absolute',
-    top: 3,
-    width: 18,
-    height: 18,
-    borderRadius: '50%',
-    backgroundColor: '#FFFFFF',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-    transition: 'left 0.18s',
-  },
-
-  pulseRow: {
-    display: 'flex',
-    gap: 10,
-    marginTop: 16,
-  },
-  pulseTile: {
-    flex: 1,
-    backgroundColor: 'var(--bg-secondary)',
-    borderRadius: 18,
-    border: '1px solid var(--border-default)',
-    padding: '14px 12px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: 6,
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
-  },
-  pulseIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pulseValue: {
-    fontSize: 20,
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    letterSpacing: -0.4,
-    fontVariantNumeric: 'tabular-nums',
-    marginTop: 2,
-  },
-  pulseLabel: {
-    fontSize: 11,
-    fontWeight: 700,
-    color: 'var(--text-tertiary)',
-    letterSpacing: 0.2,
-    textTransform: 'uppercase',
-  },
-
-  sectionLabel: {
-    fontSize: 11.5,
-    fontWeight: 800,
-    color: 'var(--text-tertiary)',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    margin: '26px 0 10px 4px',
-  },
-  section: {
-    backgroundColor: 'var(--bg-secondary)',
-    borderRadius: 18,
-    border: '1px solid var(--border-default)',
-    overflow: 'hidden',
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
-  },
-
-  bookingRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '14px 16px',
-    borderBottom: '1px solid var(--border-subtle)',
-  },
-  bookingAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    backgroundColor: 'var(--brand-soft)',
-    color: 'var(--brand-primary)',
-    fontSize: 16,
-    fontWeight: 800,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  bookingBody: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 3,
-  },
-  bookingService: {
-    fontSize: 14.5,
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    letterSpacing: -0.1,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  bookingMeta: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    fontSize: 12,
-    color: 'var(--text-tertiary)',
-    fontWeight: 500,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  bookingDot: { color: 'var(--border-strong)' },
-  bookingDate: { color: 'var(--text-muted)' },
-  bookingStatusRow: { marginTop: 4 },
-  bookingChip: {
-    display: 'inline-block',
-    fontSize: 10,
-    fontWeight: 800,
-    letterSpacing: 0.3,
-    padding: '3px 8px',
-    borderRadius: 999,
-    textTransform: 'uppercase',
-  },
-  bookingActions: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    flexShrink: 0,
-  },
-  bookingPrimary: {
-    padding: '9px 16px',
-    background: 'var(--brand-gradient)',
-    color: 'var(--brand-on-gradient)',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 13,
-    fontWeight: 800,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    whiteSpace: 'nowrap',
-  },
-  bookingSuccess: {
-    padding: '9px 16px',
-    backgroundColor: 'var(--success-fg)',
-    color: '#FFFFFF',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 13,
-    fontWeight: 800,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    whiteSpace: 'nowrap',
-  },
-  viewAllRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    padding: '14px 16px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'background-color 0.15s',
-  },
-  viewAllText: {
-    fontSize: 13.5,
-    fontWeight: 700,
-    color: 'var(--brand-primary)',
-  },
-
-  actionGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 12,
-  },
-  actionTile: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-    gap: 12,
-    padding: '16px 16px 18px',
-    backgroundColor: 'var(--bg-secondary)',
-    border: '1px solid var(--border-default)',
-    borderRadius: 20,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    textAlign: 'left',
-    minHeight: 128,
-    boxShadow: 'var(--shadow-sm)',
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
-  },
-  actionTilePrimary: {
-    background: 'var(--brand-gradient)',
-    border: 'none',
-    boxShadow: 'var(--shadow-brand)',
-  },
-  actionIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionIconWrapPrimary: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    backgroundColor: 'var(--bg-secondary)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionText: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    marginTop: 'auto',
-  },
-  actionTextPrimary: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    marginTop: 'auto',
-  },
-  actionTitle: {
-    fontSize: 15,
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    letterSpacing: -0.2,
-  },
-  actionTitlePrimary: {
-    fontSize: 15,
-    fontWeight: 800,
-    color: 'var(--brand-on-gradient)',
-    letterSpacing: -0.2,
-  },
-  actionHint: {
-    fontSize: 11.5,
-    color: 'var(--text-muted)',
-    fontWeight: 500,
-  },
-  actionHintPrimary: {
-    fontSize: 11.5,
-    color:
-      'color-mix(in srgb, var(--brand-on-gradient) 78%, transparent)',
-    fontWeight: 500,
-  },
-
-  communityCard: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    width: '100%',
-    padding: '16px 16px',
-    background: 'var(--bg-secondary)',
-    border: '1px solid var(--border-default)',
-    borderRadius: 20,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    textAlign: 'left',
-    boxShadow: 'var(--shadow-sm)',
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
-  },
-  communityIcon: {
-    position: 'relative',
-    width: 44,
-    height: 44,
-    flexShrink: 0,
-    borderRadius: 13,
-    background: 'var(--brand-soft)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  communityDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 9,
-    height: 9,
-    borderRadius: '50%',
-    backgroundColor: '#22C55E',
-    border: '2px solid var(--bg-secondary)',
-    animation: 'spPulseDot 2s ease-in-out infinite',
-  },
-  communityText: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-  },
-  communityTitle: {
-    fontSize: 15,
-    fontWeight: 800,
-    letterSpacing: -0.1,
-    color: 'var(--brand-primary)',
-  },
-  communityHint: {
-    fontSize: 12.5,
-    color: 'var(--text-tertiary)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-
-  centerRoot: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
-    backgroundColor: 'var(--bg-primary)',
-    color: 'var(--text-primary)',
-    padding: 24,
-    textAlign: 'center',
-    transition: 'background-color 0.18s ease, color 0.18s ease',
-  },
-  errorHalo: {
-    width: 84,
-    height: 84,
-    borderRadius: 24,
-    backgroundColor: 'var(--danger-bg)',
-    border: '1px solid var(--danger-strong)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-  },
-  centerTitle: {
-    fontSize: 20,
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    margin: 0,
-    letterSpacing: -0.3,
-  },
-  centerBody: {
-    fontSize: 14,
-    color: 'var(--text-tertiary)',
-    marginTop: 8,
-    maxWidth: 340,
-    lineHeight: 1.55,
-  },
-  centerPrimary: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 24,
-    padding: '13px 24px',
-    borderRadius: 14,
-    background: 'var(--brand-gradient)',
-    color: 'var(--brand-on-gradient)',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 14,
-    fontWeight: 800,
-    fontFamily: 'inherit',
-    boxShadow: 'var(--shadow-brand)',
-  },
-
-  thumbSkeleton: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor:
-      'color-mix(in srgb, var(--brand-on-gradient) 18%, transparent)',
-    flexShrink: 0,
-  },
-  skelLine: {
-    height: 12,
-    borderRadius: 6,
-    backgroundColor:
-      'color-mix(in srgb, var(--brand-on-gradient) 22%, transparent)',
-    width: 180,
-  },
-  blockSkeleton: {
-    height: 120,
-    borderRadius: 22,
-    backgroundColor: 'var(--bg-secondary)',
-    border: '1px solid var(--border-default)',
-    marginTop: 16,
-    animation: 'spShimmer 1.4s ease-in-out infinite',
-    transition: 'background-color 0.18s ease, border-color 0.18s ease',
-  },
-};

@@ -26,6 +26,7 @@ import {
   MdStorefront,
   MdImage,
   MdAccountBalanceWallet,
+  MdNotificationsNone,
 } from 'react-icons/md';
 
 interface Store {
@@ -430,13 +431,23 @@ export default function StorekeeperDashboardPage() {
         <div className="sk-hero-inner">
           <div style={css.topBar}>
             <span style={css.topTitle}>Dashboard</span>
-            <button
-              onClick={() => void loadDashboardData()}
-              style={css.ghostBtn}
-              aria-label="Refresh"
-            >
-              <MdRefresh size={20} color="var(--brand-on-gradient)" />
-            </button>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                type="button"
+                onClick={() => router.push('/notifications')}
+                style={css.ghostBtn}
+                aria-label="Notifications"
+              >
+                <MdNotificationsNone size={20} color="var(--brand-on-gradient)" />
+              </button>
+              <button
+                onClick={() => void loadDashboardData()}
+                style={css.ghostBtn}
+                aria-label="Refresh"
+              >
+                <MdRefresh size={20} color="var(--brand-on-gradient)" />
+              </button>
+            </div>
           </div>
 
           <div style={css.identityRow}>
