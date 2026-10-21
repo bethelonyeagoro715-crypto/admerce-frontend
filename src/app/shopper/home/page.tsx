@@ -829,6 +829,9 @@ function ShopperHomeContent() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
+  // Notification State
+  const [unreadCount, setUnreadCount] = useState(3);
+
   // Search state
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -1841,19 +1844,33 @@ function ShopperHomeContent() {
                   size={26}
                   color="var(--brand-primary)"
                 />
-                {/* Social media style unread dot */}
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 2,
-                    right: 2,
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--danger-fg)',
-                    border: '2px solid var(--bg-secondary)',
-                  }}
-                />
+                
+                {/* Facebook-style unread badge */}
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: -4,
+                      right: -4,
+                      minWidth: 18,
+                      height: 18,
+                      borderRadius: 9,
+                      backgroundColor: '#E41E3F',
+                      color: '#FFFFFF',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 4px',
+                      border: '2px solid var(--bg-secondary)',
+                      boxSizing: 'border-box',
+                      lineHeight: 1,
+                    }}
+                  >
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </div>
             </button>
             <button
