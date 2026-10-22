@@ -24,7 +24,7 @@ interface Conversation {
   last_sender_id?: string;
   last_time?: string;
   unread_count?: number;
-  is_online?: boolean; // Added for the green dot
+  is_online?: boolean; // <── ADDED
 }
 
 interface DecoratedConversation extends Conversation {
@@ -69,19 +69,16 @@ function formatChatTime(isoString?: string): string {
   const now = new Date();
   const d = new Date(t);
   
-  // If today, show time (e.g., "10:42 AM")
   if (now.toDateString() === d.toDateString()) {
     return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }
   
-  // If yesterday, show "Yesterday"
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (yesterday.toDateString() === d.toDateString()) {
     return 'Yesterday';
   }
   
-  // Otherwise, show date (e.g., "12/10/2026" or "Oct 12")
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
@@ -248,7 +245,6 @@ export function InboxShell() {
     <main className="ibx-root">
       <style>{CSS}</style>
 
-      {/* Header */}
       <header className="ibx-header">
         <h1 className="ibx-title">Chats</h1>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -273,7 +269,6 @@ export function InboxShell() {
         </div>
       </header>
 
-      {/* Search Bar */}
       {hasAnyConversations && (
         <div className="ibx-searchContainer">
           <div className="ibx-searchBox">
@@ -300,7 +295,6 @@ export function InboxShell() {
         </div>
       )}
 
-      {/* Chat List */}
       <div className="ibx-body">
         {isLoading ? (
           <InboxSkeleton />
@@ -349,8 +343,9 @@ export function InboxShell() {
               const timeLabel = formatChatTime(conv.last_time);
               const initials = conv._name.charAt(0).toUpperCase();
               const unread = conv._unread;
-              // MOCK ONLINE STATUS (You can replace this with conv.is_online later)
-              const isOnline = conv.is_online ?? (conv._sortKey % 2 === 0); 
+              
+              // USE REAL BACKEND DATA HERE
+              const isOnline = conv.is_online === true; 
 
               return (
                 <button
@@ -359,7 +354,6 @@ export function InboxShell() {
                   className="ibx-row"
                   onClick={() => openChat(conv)}
                 >
-                  {/* Avatar with Online Dot */}
                   <div className="ibx-avatarWrap">
                     {conv._avatar ? (
                       <img src={conv._avatar} alt="" className="ibx-avatarImg" />
@@ -369,7 +363,6 @@ export function InboxShell() {
                     {isOnline && <span className="ibx-onlineDot" />}
                   </div>
 
-                  {/* Message Content */}
                   <div className="ibx-itemBody">
                     <div className="ibx-nameRow">
                       <span className={`ibx-name ${unread > 0 ? 'ibx-nameUnread' : ''}`}>
@@ -425,7 +418,6 @@ const CSS = `
     border-right: 1px solid var(--border-subtle);
   }
 
-  /* Header */
   .ibx-header {
     display: flex;
     align-items: center;
@@ -457,7 +449,6 @@ const CSS = `
   }
   .ibx-iconBtn:hover:not(:disabled) { background: var(--bg-hover); }
 
-  /* Search Bar */
   .ibx-searchContainer {
     padding: 0 20px 12px;
     background: var(--bg-primary);
@@ -496,7 +487,6 @@ const CSS = `
     cursor: pointer;
   }
 
-  /* Chat List */
   .ibx-body { flex: 1; }
   .ibx-list { display: flex; flex-direction: column; }
 
@@ -518,7 +508,6 @@ const CSS = `
   .ibx-row:hover { background: var(--bg-hover); }
   .ibx-row:active { background: var(--bg-tertiary); }
 
-  /* Avatar */
   .ibx-avatarWrap {
     position: relative;
     width: 56px;
@@ -548,11 +537,10 @@ const CSS = `
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #4ADE80; /* WhatsApp Green */
+    background: #4ADE80;
     border: 2.5px solid var(--bg-primary);
   }
 
-  /* Text Content */
   .ibx-itemBody {
     flex: 1;
     min-width: 0;
@@ -622,7 +610,6 @@ const CSS = `
     justify-content: center;
   }
 
-  /* States (Empty, Error, Loading) */
   .ibx-center {
     display: flex;
     flex-direction: column;
