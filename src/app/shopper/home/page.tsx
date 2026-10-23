@@ -829,8 +829,8 @@ function ShopperHomeContent() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
 
-  // Notification State
-  const [unreadCount, setUnreadCount] = useState(3);
+  // Dynamic Notification State
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Search state
   const [query, setQuery] = useState('');
@@ -870,6 +870,26 @@ function ShopperHomeContent() {
       isMountedRef.current = false;
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+  }, []);
+
+  // Fetch real unread notifications
+  useEffect(() => {
+    let active = true;
+    async function fetchUnread() {
+      try {
+        const notifs = await api.getNotifications();
+        if (!active) return;
+        if (Array.isArray(notifs)) {
+          const notificationItems = notifs as Array<{ is_read?: boolean; read?: boolean }>;
+          const unread = notificationItems.filter((n) => !n.is_read && !n.read).length;
+          setUnreadCount(unread);
+        }
+      } catch (err) {
+        console.error("Failed to fetch unread notifications", err);
+      }
+    }
+    fetchUnread();
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
