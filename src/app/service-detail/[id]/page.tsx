@@ -6,6 +6,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../../services/api';
 import PickTimeBottomSheet from '../../../components/PickTimeBottomSheet';
+// 🚨 IMPORT THE DIALOGS
+import { alertDialog, confirmDialog } from '../../../components/ui/dialogs';
 import {
   MdShare,
   MdFavorite,
@@ -363,8 +365,12 @@ export default function ServiceDetailPage() {
     try {
       const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
       if (nav.share) { await nav.share(payload); return; }
-      if (navigator.clipboard) { await navigator.clipboard.writeText(url); alert('Link copied.'); return; }
-      alert(url);
+      if (navigator.clipboard) { 
+        await navigator.clipboard.writeText(url); 
+        await alertDialog({ title: 'Copied', body: 'Link copied to clipboard.', kind: 'success' });
+        return; 
+      }
+      await alertDialog({ title: 'Share', body: url, kind: 'info' });
     } catch { /* user cancelled */ }
   };
 
@@ -372,14 +378,19 @@ export default function ServiceDetailPage() {
     setMenuOpen(false);
     const url = typeof window !== 'undefined' ? window.location.href : '';
     try {
-      if (navigator.clipboard) { await navigator.clipboard.writeText(url); alert('Link copied.'); }
-      else alert(url);
-    } catch { alert(url); }
+      if (navigator.clipboard) { 
+        await navigator.clipboard.writeText(url); 
+        await alertDialog({ title: 'Copied', body: 'Link copied to clipboard.', kind: 'success' });
+      }
+      else await alertDialog({ title: 'Copy Link', body: url, kind: 'info' });
+    } catch { 
+      await alertDialog({ title: 'Copy Link', body: url, kind: 'info' });
+    }
   };
 
-  const reportService = () => {
+  const reportService = async () => {
     setMenuOpen(false);
-    alert('Reported. Our team will review this service.');
+    await alertDialog({ title: 'Reported', body: 'Our team will review this service.', kind: 'success' });
   };
 
   const openProviderProfile = () => {
@@ -387,8 +398,11 @@ export default function ServiceDetailPage() {
     router.push(`/provider-services/${service.provider_id}?name=${encodeURIComponent(service.business_name || 'Service Provider')}`);
   };
 
-  const openChat = () => {
-    if (!service?.provider_id) { alert('This service has no provider attached.'); return; }
+  const openChat = async () => {
+    if (!service?.provider_id) { 
+      await alertDialog({ title: 'Error', body: 'This service has no provider attached.', kind: 'danger' });
+      return; 
+    }
     const providerName = service.business_name || 'Service Provider';
     router.push(buildChatUrl(service.provider_id, providerName, service.business_image_url ?? null));
   };
@@ -405,8 +419,14 @@ export default function ServiceDetailPage() {
     try {
       const wallet = (await api.getWalletBalance()) as { balance: number };
       if (wallet.balance < service.price) {
-        alert(`Insufficient balance. You need ₦${service.price.toFixed(0)} but have ₦${wallet.balance.toFixed(0)}.`);
-        router.push('/shopper/wallet');
+        const goFund = await confirmDialog({
+          title: 'Insufficient Balance',
+          body: `You need ₦${service.price.toFixed(0)} but have ₦${wallet.balance.toFixed(0)}.`,
+          confirmLabel: 'Fund Wallet',
+          cancelLabel: 'Cancel',
+          kind: 'danger',
+        });
+        if (goFund) router.push('/shopper/wallet');
         return;
       }
     } catch (err) {
@@ -428,7 +448,7 @@ export default function ServiceDetailPage() {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
         (err instanceof Error ? err.message : 'Booking failed');
-      alert(detail);
+      await alertDialog({ title: 'Booking Failed', body: detail, kind: 'danger' });
     } finally {
       setIsLoading(false);
     }
@@ -436,7 +456,10 @@ export default function ServiceDetailPage() {
 
   const handlePayNowClick = async () => {
     if (!service || isPaying) return;
-    if (!service.provider_id) { alert('This service has no provider attached.'); return; }
+    if (!service.provider_id) { 
+      await alertDialog({ title: 'Error', body: 'This service has no provider attached.', kind: 'danger' });
+      return; 
+    }
 
     setIsPaying(true);
     try {
@@ -456,7 +479,7 @@ export default function ServiceDetailPage() {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
         (err instanceof Error ? err.message : 'Payment failed');
-      alert(detail);
+      await alertDialog({ title: 'Payment Failed', body: detail, kind: 'danger' });
     } finally {
       setIsPaying(false);
     }
@@ -472,7 +495,7 @@ export default function ServiceDetailPage() {
       counterparty: service.business_name || 'Provider',
       created_at: new Date().toISOString(),
     });
-        router.replace(`/receipt/instant/${paidInfo.txnId}?${q.toString()}`);
+    router.replace(`/receipt/instant/${paidInfo.txnId}?${q.toString()}`);
   };
 
   if (loading) {
