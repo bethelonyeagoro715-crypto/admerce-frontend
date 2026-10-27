@@ -799,13 +799,13 @@ function ChatContent() {
   const searchParams = useSearchParams();
 
   const conversationId = params.conversationId;
-  const otherUserId = searchParams.get('otherUserId') || '';
+  const urlOtherUserId = searchParams.get('otherUserId') || '';
   const urlName = searchParams.get('otherUserName') || 'User';
   const urlAvatar = searchParams.get('otherUserAvatar') || '';
-  const otherUserIdRef = useRef(otherUserId);
-  useEffect(() => {
-    otherUserIdRef.current = otherUserId;
-  }, [otherUserId]);
+  
+  const [resolvedOtherUserId, setResolvedOtherUserId] = useState(urlOtherUserId);
+  const resolvedOtherUserIdRef = useRef(resolvedOtherUserId);
+  const [isResolving, setIsResolving] = useState(!urlOtherUserId && !!conversationId);
 
   const [presence, setPresence] = useState<PresenceInfo | null>(null);
   const [otherTyping, setOtherTyping] = useState(false);
@@ -850,17 +850,17 @@ function ChatContent() {
   const currentUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    resolvedOtherUserIdRef.current = resolvedOtherUserId;
+  }, [resolvedOtherUserId]);
+
+  useEffect(() => {
     currentUserIdRef.current = currentUserId;
   }, [currentUserId]);
 
-  const isSeaiConversation =
-    otherUserId.toLowerCase() === 'seai' ||
-    conversationId.includes('_seai');
-  const hasRecipient = Boolean(otherUserId);
-  const displayError = !hasRecipient
-    ? 'Missing recipient. Please open this chat from your inbox.'
-    : error;
-  const showLoading = hasRecipient && isLoading;
+  const isSeaiConversation = urlOtherUserId.toLowerCase() === 'seai' || conversationId.includes('_seai');
+  const hasRecipient = Boolean(resolvedOtherUserId);
+  const displayError = !hasRecipient && !isResolving ? 'Missing recipient. Please open this chat from your inbox.' : error;
+  const showLoading = isResolving || (hasRecipient && isLoading);
 
   const displayName = presence?.name || urlName;
   const displayAvatarRaw = presence?.avatar_url || urlAvatar;
@@ -915,23 +915,16 @@ function ChatContent() {
     }
   }, []);
 
-  const fetchPresence = useCallback(async () => {
-    const recipientId = otherUserIdRef.current;
-    if (
-      !recipientId ||
-      recipientId.toLowerCase() === 'seai' ||
-      conversationId.includes('_seai')
-    )
-      return;
+  const fetchPresence = useCallback(async (targetId?: string) => {
+    const recipientId = targetId || resolvedOtherUserIdRef.current;
+    if (!recipientId || recipientId.toLowerCase() === 'seai') return;
     try {
-      const data = (await api.getPresence(
-        recipientId,
-      )) as unknown as PresenceInfo;
+      const data = (await api.getPresence(recipientId)) as unknown as PresenceInfo;
       setPresence(data);
     } catch {
       // silent — we fall back to URL params
     }
-  }, [conversationId]);
+  }, []);
 
   const sendHeartbeat = useCallback(async () => {
     try {
@@ -952,14 +945,14 @@ function ChatContent() {
   }, [conversationId, isSeaiConversation]);
 
   const pollNewMessages = useCallback(async () => {
-    if (!otherUserId || document.hidden) return;
+    const targetId = resolvedOtherUserIdRef.current;
+    if (!targetId || document.hidden) return;
     try {
-      const d = (await api.getMessagesByUser(otherUserId)) as {
+      const d = (await api.getMessagesByUser(targetId)) as {
         messages?: ChatMessage[];
       };
       const incoming = d.messages || [];
 
-      // First call: seed known ids so we don't chime for history
       if (!knownMessageIdsRef.current.size) {
         for (const m of incoming) {
           if (m.id != null) knownMessageIdsRef.current.add(String(m.id));
@@ -998,42 +991,61 @@ function ChatContent() {
         if (!isAtBottomRef.current) setHasNewWhileScrolled(true);
       }
     } catch {
-      /* silent — transient network hiccups shouldn't spam toasts */
+      /* silent */
     }
-  }, [otherUserId]);
+  }, []);
 
   useEffect(() => {
     if (isSeaiConversation) {
       router.replace('/seai/ask');
       return;
     }
-    if (!hasRecipient) return;
+
     let cancelled = false;
     const t = setTimeout(async () => {
-      try {
-        const p = (await api.getMyProfile()) as Record<string, unknown>;
-        if (!cancelled) {
-          const id = (p.id as string) || null;
-          setCurrentUserId(id);
-          currentUserIdRef.current = id;
+      let myId = currentUserIdRef.current;
+      
+      if (!myId) {
+        try {
+          const p = (await api.getMyProfile()) as Record<string, unknown>;
+          if (!cancelled) {
+            myId = (p.id as string) || null;
+            setCurrentUserId(myId);
+            currentUserIdRef.current = myId;
+          }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
       }
+
+      let targetId = urlOtherUserId;
+      if (!targetId && conversationId && myId) {
+        const parts = conversationId.split('_');
+        if (parts.length === 2) {
+          targetId = parts[0] === myId ? parts[1] : parts[0];
+        }
+      }
+
       if (!cancelled) {
-        await Promise.all([loadMessages(otherUserId), fetchPresence()]);
+        if (targetId) {
+          setResolvedOtherUserId(targetId);
+          setIsResolving(false);
+          await Promise.all([loadMessages(targetId), fetchPresence(targetId)]);
+          void sendHeartbeat();
+        } else {
+          setIsResolving(false);
+        }
       }
-      if (!cancelled) void sendHeartbeat();
     }, 0);
+
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
   }, [
     conversationId,
-    otherUserId,
+    urlOtherUserId,
     isSeaiConversation,
-    hasRecipient,
     router,
     loadMessages,
     fetchPresence,
@@ -1067,7 +1079,6 @@ function ChatContent() {
     };
   }, [hasRecipient, isSeaiConversation, fetchPresence, sendHeartbeat]);
 
-  // ── Typing poll ────────────────────────────────────────────────
   useEffect(() => {
     if (!hasRecipient || isSeaiConversation) return;
 
@@ -1084,7 +1095,6 @@ function ChatContent() {
     return () => clearInterval(typingTimer);
   }, [conversationId, hasRecipient, isSeaiConversation]);
 
-  // ── Message poll — new messages without a reload ───────────────
   useEffect(() => {
     if (!hasRecipient || isSeaiConversation) return;
     if (isLoading) return;
@@ -1210,7 +1220,7 @@ function ChatContent() {
     try {
       const replyId = replyDraft ? Number(replyDraft.id) : undefined;
       const result = (await api.sendVoiceNote(
-        otherUserId,
+        resolvedOtherUserId,
         file,
         replyId,
       )) as {
@@ -1227,7 +1237,7 @@ function ChatContent() {
         {
           id: realId,
           sender_id: currentUserId || 'me',
-          receiver_id: otherUserId,
+          receiver_id: resolvedOtherUserId,
           audio_url: result.audio_url,
           created_at: result.created_at || new Date().toISOString(),
           reply_to_id: result.reply_to_id ?? null,
@@ -1246,7 +1256,7 @@ function ChatContent() {
       setSendingVoice(false);
       setRecordSeconds(0);
     }
-  }, [currentUserId, otherUserId, replyDraft, showToast]);
+  }, [currentUserId, resolvedOtherUserId, replyDraft, showToast]);
 
   const cancelRecording = () => {
     const mr = mediaRecorderRef.current;
@@ -1314,7 +1324,7 @@ function ChatContent() {
     try {
       const replyId = replyDraft ? Number(replyDraft.id) : undefined;
       const result = (await api.sendMessage(
-        otherUserId,
+        resolvedOtherUserId,
         text,
         replyId,
       )) as {
@@ -1330,7 +1340,7 @@ function ChatContent() {
         {
           id: realId,
           sender_id: currentUserId || 'me',
-          receiver_id: otherUserId,
+          receiver_id: resolvedOtherUserId,
           text,
           created_at: result.created_at || new Date().toISOString(),
           reply_to_id: result.reply_to_id ?? null,
@@ -1677,7 +1687,7 @@ function ChatContent() {
               <p style={s.stateTitle}>Could not load chat</p>
               <p style={s.stateBody}>{displayError}</p>
               <button
-                onClick={() => loadMessages(otherUserId)}
+                onClick={() => loadMessages(resolvedOtherUserId)}
                 style={s.retryBtn}
                 type="button"
               >
