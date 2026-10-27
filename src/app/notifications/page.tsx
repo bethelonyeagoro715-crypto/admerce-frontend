@@ -151,7 +151,7 @@ function resolveDeepLink(n: NotificationItem): string | null {
   const title = (n.title || '').toLowerCase();
   const type = (n.type || '').toLowerCase();
 
-  // 1. Prioritize explicit URLs from backend (like instant receipts or chats with params)
+  // 1. If backend explicitly sent a URL with params, use it
   if (typeof n.url === 'string' && n.url.trim()) return n.url.trim();
   if (data) {
     const fromData = (typeof data.url === 'string' && data.url) || (typeof data.link === 'string' && data.link);
@@ -167,14 +167,23 @@ function resolveDeepLink(n: NotificationItem): string | null {
     return `/shopper/orders/receipt/${data.order_id}`;
   }
 
-  // 3. Fallback for Chats (ensuring params are included)
+  // 3. 🚨 CHAT FALLBACK: Extract other user from conversation ID
   if (data && typeof data.conversation_id === 'string') {
+    const convId = data.conversation_id;
     const otherId = data.otherUserId || '';
-    const otherName = data.otherUserName || '';
-    return `/chat/${data.conversation_id}?otherUserId=${otherId}&otherUserName=${otherName}`;
+    const otherName = data.otherUserName || 'User';
+
+    // If it's an old notification without the user ID, split the conv ID
+    if (!otherId && convId.includes('_')) {
+        // The current user ID is not known here, but we can pass the whole ID
+        // and let the chat page figure it out, or try to guess.
+        // Best approach: just pass the conversationId and let the chat page fetch it.
+        return `/chat/${convId}`;
+    }
+
+    return `/chat/${convId}?otherUserId=${otherId}&otherUserName=${otherName}`;
   }
 
-  // 4. Fallbacks for other types
   if (data && typeof data.listing_id === 'string') return `/item-detail/${data.listing_id}`;
   if (data && typeof data.store_id === 'string') return `/store-detail/${data.store_id}`;
   
@@ -182,7 +191,6 @@ function resolveDeepLink(n: NotificationItem): string | null {
 
   return null;
 }
-
 function isRead(n: NotificationItem): boolean {
   if (typeof n.is_read === 'boolean') return n.is_read;
   if (typeof n.read === 'boolean') return n.read;
