@@ -1019,10 +1019,13 @@ function ChatContent() {
       }
 
       let targetId = urlOtherUserId;
-      if (!targetId && conversationId && myId) {
-        const parts = conversationId.split('_');
-        if (parts.length === 2) {
+      if (!targetId && conversationId) {
+        if (conversationId.includes('_')) {
+          const parts = conversationId.split('_');
           targetId = parts[0] === myId ? parts[1] : parts[0];
+        } else if (conversationId !== 'undefined' && conversationId !== 'null') {
+          // 🚨 FIX: Handle direct store_id or user_id links safely
+          targetId = conversationId;
         }
       }
 
