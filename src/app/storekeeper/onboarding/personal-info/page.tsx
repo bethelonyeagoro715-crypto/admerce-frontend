@@ -18,46 +18,62 @@ export default function StorekeeperOnboardingPersonalInfoPage() {
   const [fullName, setFullName] = useState('');
   const [city, setCity] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  // Country is stored as both ISO code (for the picker) and display name
-  // (for the URL and downstream pages). They always move together.
   const [countryCode, setCountryCode] = useState('NG');
   const [countryName, setCountryName] = useState('Nigeria');
   const [isLoading, setIsLoading] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // Auto-detect location on mount (parity with prior behavior).
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsDetectingLocation(true);
-      setTimeout(() => {
-        setCity('Owerri, Imo');
-        setIsDetectingLocation(false);
-      }, 500);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
-
   const autoDetectLocation = () => {
     if (isDetectingLocation) return;
     setIsDetectingLocation(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => {
-          setCity('Owerri, Imo');
-          setIsDetectingLocation(false);
-        },
-        () => {
-          setCity('Owerri, Imo');
-          setIsDetectingLocation(false);
-        },
-        { timeout: 10000 },
-      );
-    } else {
-      setCity('Owerri, Imo');
+
+    if (!navigator.geolocation) {
       setIsDetectingLocation(false);
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`
+          );
+          const data = await res.json();
+          if (data && data.address) {
+            const cityName = data.address.city || data.address.town || data.address.village || data.address.suburb || '';
+            const state = data.address.state || '';
+            setCity(cityName ? `${cityName}, ${state}` : state);
+            if (data.address.country_code) {
+              setCountryCode(data.address.country_code.toUpperCase());
+              setCountryName(data.address.country);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to reverse geocode', err);
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      () => {
+        setIsDetectingLocation(false);
+        alertDialog({
+          title: 'Location denied',
+          body: 'Please type your city manually.',
+          kind: 'warning',
+        });
+      },
+      { timeout: 10000, enableHighAccuracy: true },
+    );
   };
+
+  // Detect location after the component mounts.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      autoDetectLocation();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const validate = async (): Promise<boolean> => {
     if (!fullName.trim()) {
@@ -114,7 +130,7 @@ export default function StorekeeperOnboardingPersonalInfoPage() {
     <main style={styles.container}>
       <div style={styles.header}>
         <button style={styles.backBtn} onClick={() => router.back()} aria-label="Back">
-          <MdArrowBack size={24} color="#000" />
+          <MdArrowBack size={24} color="var(--text-primary)" />
         </button>
         <h1 style={styles.headerTitle}>Open Your Store</h1>
         <div style={{ width: 24 }} />
@@ -133,9 +149,8 @@ export default function StorekeeperOnboardingPersonalInfoPage() {
           We&apos;ll use this for your store profile and KYC.
         </p>
 
-        {/* Full Name */}
         <div style={styles.inputWrapper}>
-          <MdPersonOutline size={20} color="#888" style={styles.inputIcon} />
+          <MdPersonOutline size={20} color="var(--text-tertiary)" style={styles.inputIcon} />
           <input
             type="text"
             placeholder="Full Name"
@@ -146,7 +161,6 @@ export default function StorekeeperOnboardingPersonalInfoPage() {
           />
         </div>
 
-        {/* Date of Birth — styled picker (native wheel/calendar underneath) */}
         <div style={{ marginBottom: 20 }}>
           <DateOfBirthPicker
             value={dateOfBirth}
@@ -158,7 +172,6 @@ export default function StorekeeperOnboardingPersonalInfoPage() {
           />
         </div>
 
-        {/* Country — searchable modal picker */}
         <div style={{ marginBottom: 20 }}>
           <CountryPicker
             value={countryCode}
@@ -171,10 +184,9 @@ export default function StorekeeperOnboardingPersonalInfoPage() {
           />
         </div>
 
-        {/* City / State with GPS button */}
         <div style={styles.cityRow}>
           <div style={{ ...styles.inputWrapper, flex: 1, marginBottom: 0 }}>
-            <MdLocationOn size={20} color="#888" style={styles.inputIcon} />
+            <MdLocationOn size={20} color="var(--text-tertiary)" style={styles.inputIcon} />
             <input
               type="text"
               placeholder="City / State"
@@ -194,7 +206,7 @@ export default function StorekeeperOnboardingPersonalInfoPage() {
             {isDetectingLocation ? (
               <div style={styles.spinnerSmall} />
             ) : (
-              <MdGpsFixed size={24} color="#0504AA" />
+              <MdGpsFixed size={24} color="var(--brand-primary)" />
             )}
           </button>
         </div>
@@ -223,14 +235,14 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-primary)',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '12px 16px',
-    borderBottom: '1px solid #eee',
+    borderBottom: '1px solid var(--border-default)',
   },
   backBtn: {
     background: 'none',
@@ -243,7 +255,7 @@ const styles: Record<string, React.CSSProperties> = {
   headerTitle: {
     fontSize: 18,
     fontWeight: 600,
-    color: '#000',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   scrollArea: {
@@ -259,29 +271,29 @@ const styles: Record<string, React.CSSProperties> = {
   },
   stepText: {
     fontSize: 13,
-    color: '#888',
+    color: 'var(--text-tertiary)',
   },
   progressBar: {
     width: 100,
     height: 4,
-    backgroundColor: '#eee',
+    backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#0504AA',
+    backgroundColor: 'var(--brand-primary)',
     borderRadius: 2,
   },
   heading: {
     fontSize: 24,
     fontWeight: 700,
-    color: '#000',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   subHeading: {
     fontSize: 14,
-    color: '#888',
+    color: 'var(--text-tertiary)',
     marginBottom: 32,
     marginTop: 6,
   },
@@ -300,13 +312,13 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '14px 14px 14px 40px',
     borderRadius: 12,
-    border: '1.5px solid #E2E8F0',
+    border: '1.5px solid var(--border-default)',
     fontSize: 15,
     outline: 'none',
-    backgroundColor: '#FAFAFC',
+    backgroundColor: 'var(--bg-secondary)',
     boxSizing: 'border-box',
     fontFamily: 'inherit',
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     transition: 'border-color 0.15s, background-color 0.15s',
   },
   cityRow: {
@@ -316,8 +328,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 32,
   },
   gpsBtn: {
-    background: '#EEF0FF',
-    border: '1.5px solid #C7CCFF',
+    background: 'var(--brand-soft)',
+    border: '1.5px solid var(--brand-primary)',
     borderRadius: 12,
     cursor: 'pointer',
     padding: 12,
@@ -331,23 +343,23 @@ const styles: Record<string, React.CSSProperties> = {
   spinnerSmall: {
     width: 20,
     height: 20,
-    border: '2px solid #E0E7FF',
-    borderTopColor: '#0504AA',
+    border: '2px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   continueBtn: {
     width: '100%',
     padding: '16px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     border: 'none',
     borderRadius: 14,
     fontSize: 16,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
     letterSpacing: -0.1,
   },
 };

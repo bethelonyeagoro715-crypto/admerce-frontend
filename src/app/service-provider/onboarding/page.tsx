@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../services/api';
 import { alertDialog } from '../../../components/ui/dialogs';
@@ -32,38 +32,56 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-detect location on mount (parity with prior behavior)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsDetectingLocation(true);
-      setTimeout(() => {
-        setCity('Owerri, Imo');
-        setIsDetectingLocation(false);
-      }, 500);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const autoDetectLocation = () => {
+  // 🚨 REAL Location detection
+  const autoDetectLocation = useCallback(() => {
     if (isDetectingLocation) return;
     setIsDetectingLocation(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => {
-          setCity('Owerri, Imo');
-          setIsDetectingLocation(false);
-        },
-        () => {
-          setCity('Owerri, Imo');
-          setIsDetectingLocation(false);
-        },
-        { timeout: 10000 },
-      );
-    } else {
-      setCity('Owerri, Imo');
+
+    if (!navigator.geolocation) {
       setIsDetectingLocation(false);
+      return;
     }
-  };
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`
+          );
+          const data = await res.json();
+          if (data && data.address) {
+            const cityName = data.address.city || data.address.town || data.address.village || data.address.suburb || '';
+            const state = data.address.state || '';
+            setCity(cityName ? `${cityName}, ${state}` : state);
+            if (data.address.country_code) {
+              setCountryCode(data.address.country_code.toUpperCase());
+              setCountryName(data.address.country);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to reverse geocode', err);
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      () => {
+        setIsDetectingLocation(false);
+        alertDialog({
+          title: 'Location denied',
+          body: 'Please type your city manually.',
+          kind: 'warning',
+        });
+      },
+      { timeout: 10000, enableHighAccuracy: true },
+    );
+  }, [isDetectingLocation]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      autoDetectLocation();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [autoDetectLocation]);
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -168,7 +186,7 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
           onClick={() => router.back()}
           aria-label="Back"
         >
-          <MdArrowBack size={24} color="#000" />
+          <MdArrowBack size={24} color="var(--text-primary)" />
         </button>
         <h1 style={styles.headerTitle}>Offer Your Service</h1>
         <div style={{ width: 24 }} />
@@ -198,7 +216,7 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={avatarPreview} alt="Avatar" style={styles.avatar} />
             ) : (
-              <MdCameraAlt size={30} color="#aaa" />
+              <MdCameraAlt size={30} color="var(--text-muted)" />
             )}
             {avatarPreview && (
               <div
@@ -230,7 +248,7 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
         <div style={styles.inputWrapper}>
           <MdPersonOutline
             size={20}
-            color="#888"
+            color="var(--text-tertiary)"
             style={styles.inputIcon}
           />
           <input
@@ -273,7 +291,7 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
           <div style={{ ...styles.inputWrapper, flex: 1, marginBottom: 0 }}>
             <MdLocationOn
               size={20}
-              color="#888"
+              color="var(--text-tertiary)"
               style={styles.inputIcon}
             />
             <input
@@ -295,7 +313,7 @@ export default function ServiceProviderOnboardingPersonalInfoPage() {
             {isDetectingLocation ? (
               <div style={styles.spinnerSmall} />
             ) : (
-              <MdGpsFixed size={24} color="#0504AA" />
+              <MdGpsFixed size={24} color="var(--brand-primary)" />
             )}
           </button>
         </div>
@@ -328,14 +346,14 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--bg-primary)',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '12px 16px',
-    borderBottom: '1px solid #eee',
+    borderBottom: '1px solid var(--border-default)',
   },
   backBtn: {
     background: 'none',
@@ -348,7 +366,7 @@ const styles: Record<string, React.CSSProperties> = {
   headerTitle: {
     fontSize: 18,
     fontWeight: 600,
-    color: '#000',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   scrollArea: {
@@ -364,29 +382,29 @@ const styles: Record<string, React.CSSProperties> = {
   },
   stepText: {
     fontSize: 13,
-    color: '#888',
+    color: 'var(--text-tertiary)',
   },
   progressBar: {
     width: 100,
     height: 4,
-    backgroundColor: '#eee',
+    backgroundColor: 'var(--bg-tertiary)',
     borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#0504AA',
+    backgroundColor: 'var(--brand-primary)',
     borderRadius: 2,
   },
   heading: {
     fontSize: 24,
     fontWeight: 700,
-    color: '#000',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   subHeading: {
     fontSize: 14,
-    color: '#888',
+    color: 'var(--text-tertiary)',
     marginBottom: 32,
     marginTop: 6,
   },
@@ -401,8 +419,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 100,
     height: 100,
     borderRadius: '50%',
-    backgroundColor: '#F6F7FB',
-    border: '1.5px dashed #C7CCFF',
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1.5px dashed var(--border-default)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -421,16 +439,16 @@ const styles: Record<string, React.CSSProperties> = {
     width: 24,
     height: 24,
     borderRadius: '50%',
-    backgroundColor: '#DC2626',
+    backgroundColor: 'var(--danger-fg)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    border: '2px solid #FFFFFF',
+    border: '2px solid var(--bg-primary)',
   },
   avatarHint: {
     fontSize: 13,
-    color: '#888',
+    color: 'var(--text-tertiary)',
     marginTop: 10,
   },
   inputWrapper: {
@@ -448,13 +466,13 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '14px 14px 14px 40px',
     borderRadius: 12,
-    border: '1.5px solid #E2E8F0',
+    border: '1.5px solid var(--border-default)',
     fontSize: 15,
     outline: 'none',
-    backgroundColor: '#FAFAFC',
+    backgroundColor: 'var(--bg-secondary)',
     boxSizing: 'border-box',
     fontFamily: 'inherit',
-    color: '#0B0B1A',
+    color: 'var(--text-primary)',
     transition: 'border-color 0.15s, background-color 0.15s',
   },
   cityRow: {
@@ -464,8 +482,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 32,
   },
   gpsBtn: {
-    background: '#EEF0FF',
-    border: '1.5px solid #C7CCFF',
+    background: 'var(--brand-soft)',
+    border: '1.5px solid var(--brand-primary)',
     borderRadius: 12,
     cursor: 'pointer',
     padding: 12,
@@ -479,23 +497,23 @@ const styles: Record<string, React.CSSProperties> = {
   spinnerSmall: {
     width: 20,
     height: 20,
-    border: '2px solid #E0E7FF',
-    borderTopColor: '#0504AA',
+    border: '2px solid var(--border-default)',
+    borderTopColor: 'var(--brand-primary)',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
   continueBtn: {
     width: '100%',
     padding: '16px',
-    backgroundColor: '#0504AA',
-    color: '#fff',
+    backgroundColor: 'var(--brand-primary)',
+    color: 'var(--brand-on-primary)',
     border: 'none',
     borderRadius: 14,
     fontSize: 16,
     fontWeight: 700,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    boxShadow: '0 8px 20px rgba(5,4,170,0.24)',
+    boxShadow: 'var(--shadow-brand)',
     letterSpacing: -0.1,
   },
 };
