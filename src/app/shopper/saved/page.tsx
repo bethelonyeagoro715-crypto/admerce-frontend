@@ -111,6 +111,7 @@ interface BasketItem {
   quantity?: number;
   image_url?: string;
   store_name?: string;
+  store_id?: string;
   [key: string]: unknown;
 }
 
@@ -821,6 +822,7 @@ function SavedPageContent() {
     onPrimary: () => void;
     primaryLabel: string;
     onDelete?: () => void;
+    onChat?: () => void; // 🚨 NEW
   }
 
   const renderPost = ({
@@ -844,10 +846,10 @@ function SavedPageContent() {
     onPrimary,
     primaryLabel,
     onDelete,
+    onChat, // 🚨 NEW
   }: PostProps) => {
     const isLiked = liked.has(postKey);
     
-    // Extract real listing ID if it's a saved item
     const realListingId = postKey.startsWith('saved-') 
       ? postKey.replace('saved-', '') 
       : postKey;
@@ -872,7 +874,7 @@ function SavedPageContent() {
           });
         }
       } catch (err) {
-        // User cancelled or share failed
+        // User cancelled
       }
     };
 
@@ -1007,7 +1009,7 @@ function SavedPageContent() {
 
           <button
             type="button"
-            onClick={onPrimary}
+            onClick={onChat || onPrimary} // 🚨 Changed to use onChat
             style={styles.postActionBtn}
             aria-label="Comment"
           >
@@ -1114,6 +1116,7 @@ function SavedPageContent() {
             primaryLabel: 'View listing',
             onPrimary: () => router.push(`/item-detail/${item.listing_id}`),
             onDelete: () => handleDeleteSaved(item.listing_id),
+            onChat: item.store_id ? () => router.push(`/chat/${item.store_id}`) : undefined,
           });
         })}
       </div>
@@ -1349,6 +1352,7 @@ function SavedPageContent() {
           'Bookings',
           booking.booking_id || booking.service_id || ''
         ),
+      onChat: booking.provider_id ? () => router.push(`/chat/${booking.provider_id}`) : undefined,
     });
   };
 
@@ -1412,6 +1416,7 @@ function SavedPageContent() {
       onPrimary: () => openInstantReceipt(ref),
       onDelete: () =>
         handleLocalRemove(kind === 'pickup' ? 'Pickups' : 'Jobs', txn.id || ref),
+      onChat: cp?.user_id ? () => router.push(`/chat/${cp.user_id}`) : undefined,
     });
   };
 
@@ -1439,6 +1444,7 @@ function SavedPageContent() {
       primaryLabel: 'View listing',
       onPrimary: () => router.push(`/item-detail/${item.listing_id}`),
       onDelete: () => handleDeleteBasket(item.id),
+      onChat: item.store_id ? () => router.push(`/chat/${item.store_id}`) : undefined,
     });
   };
 
