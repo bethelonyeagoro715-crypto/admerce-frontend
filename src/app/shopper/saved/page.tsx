@@ -19,7 +19,6 @@ import {
   MdSearch,
   MdImage,
   MdAdd,
-  MdDeleteOutline,
   MdClose,
   MdAccessTime,
   MdStorefront,
@@ -364,7 +363,15 @@ function SavedPageContent() {
   const [basketTotal, setBasketTotal] = useState<number>(0);
   const [history, setHistory] = useState<WalletOrder[]>([]);
 
-  const [liked, setLiked] = useState<Set<string>>(new Set());
+  const [liked, setLiked] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const saved = localStorage.getItem('admerce_liked_posts');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
 
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   useEffect(() => {
@@ -509,6 +516,9 @@ function SavedPageContent() {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
+      try {
+        localStorage.setItem('admerce_liked_posts', JSON.stringify(Array.from(next)));
+      } catch {}
       return next;
     });
   };
@@ -822,7 +832,7 @@ function SavedPageContent() {
     onPrimary: () => void;
     primaryLabel: string;
     onDelete?: () => void;
-    onChat?: () => void; // 🚨 NEW
+    onChat?: () => void;
   }
 
   const renderPost = ({
@@ -846,7 +856,7 @@ function SavedPageContent() {
     onPrimary,
     primaryLabel,
     onDelete,
-    onChat, // 🚨 NEW
+    onChat,
   }: PostProps) => {
     const isLiked = liked.has(postKey);
     
@@ -880,7 +890,7 @@ function SavedPageContent() {
 
     return (
       <article key={postKey} style={styles.post} className="sv-post">
-        {/* ─── Post header ─── */}
+        {/* ─── Post header (Trash removed) ─── */}
         <div style={styles.postHeader}>
           <div style={styles.postAvatar}>
             {avatarUrl ? (
@@ -922,28 +932,13 @@ function SavedPageContent() {
             )}
           </div>
 
-          {onDelete ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              style={styles.postMenuBtn}
-              aria-label="Delete"
-              title="Delete / Remove"
-            >
-              <MdDeleteOutline size={20} color="var(--text-tertiary)" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              style={styles.postMenuBtn}
-              aria-label="More"
-            >
-              <MdMoreHoriz size={20} color="var(--text-tertiary)" />
-            </button>
-          )}
+          <button
+            type="button"
+            style={styles.postMenuBtn}
+            aria-label="More"
+          >
+            <MdMoreHoriz size={20} color="var(--text-tertiary)" />
+          </button>
         </div>
 
         {/* ─── Media ─── */}
@@ -1009,7 +1004,7 @@ function SavedPageContent() {
 
           <button
             type="button"
-            onClick={onChat || onPrimary} // 🚨 Changed to use onChat
+            onClick={onChat || onPrimary}
             style={styles.postActionBtn}
             aria-label="Comment"
           >
@@ -1027,12 +1022,13 @@ function SavedPageContent() {
 
           <div style={{ flex: 1 }} />
 
+          {/* 🚨 Bookmark icon now triggers the delete/unsave action */}
           <button
             type="button"
             onClick={onDelete || onPrimary}
             style={styles.postActionBtn}
-            aria-label="Save"
-            title="Saved"
+            aria-label="Unsave"
+            title="Unsave"
           >
             <MdBookmark size={24} color="var(--text-primary)" />
           </button>
@@ -1306,6 +1302,7 @@ function SavedPageContent() {
       primaryLabel: 'Open order',
       onPrimary: () => openReservation(order),
       onDelete: () => handleLocalRemove(opts.tab, order.order_id),
+      onChat: order.storekeeper_id ? () => router.push(`/chat/${order.storekeeper_id}`) : undefined,
     });
   };
 
