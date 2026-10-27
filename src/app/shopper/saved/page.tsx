@@ -241,6 +241,7 @@ function fmtRelative(iso?: string | null): string {
   return `${Math.floor(days / 365)}y`;
 }
 
+// 🚨 FIXED IMAGE RESOLVER 🚨
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const t = url.trim();
@@ -255,9 +256,7 @@ function resolveImageUrl(url: string | null | undefined): string | null {
   if (!base) return t;
 
   const cleanBase = base.replace(/\/+$/, '');
-  const path = t.startsWith('/uploads/') ? `/storekeeper${t}` : t;
-
-  return `${cleanBase}${path.startsWith('/') ? '' : '/'}${path}`;
+  return `${cleanBase}${t.startsWith('/') ? '' : '/'}${t}`;
 }
 
 function parseAsUtc(iso?: string | null): number {
