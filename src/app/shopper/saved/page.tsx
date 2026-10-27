@@ -34,6 +34,7 @@ import {
   MdVerified,
   MdShoppingBag,
   MdHistory,
+  MdDeleteOutline,
 } from 'react-icons/md';
 
 // ─── Types ──────────────────────────────────────────────────────
