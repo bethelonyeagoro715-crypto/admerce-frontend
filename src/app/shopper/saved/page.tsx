@@ -22,17 +22,13 @@ import {
   MdDeleteOutline,
   MdClose,
   MdAccessTime,
-  MdTimer,
   MdStorefront,
-  MdLocationOn,
   MdInventory2,
   MdCalendarToday,
-  MdReceiptLong,
   MdClose as MdClear,
   MdFavoriteBorder,
   MdFavorite,
   MdBookmark,
-  MdBookmarkBorder,
   MdMoreHoriz,
   MdChatBubbleOutline,
   MdSend,
@@ -241,7 +237,6 @@ function fmtRelative(iso?: string | null): string {
   return `${Math.floor(days / 365)}y`;
 }
 
-// 🚨 FIXED IMAGE RESOLVER 🚨
 function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const t = url.trim();
@@ -851,6 +846,36 @@ function SavedPageContent() {
     onDelete,
   }: PostProps) => {
     const isLiked = liked.has(postKey);
+    
+    // Extract real listing ID if it's a saved item
+    const realListingId = postKey.startsWith('saved-') 
+      ? postKey.replace('saved-', '') 
+      : postKey;
+
+    const handleShare = async () => {
+      const url = `${window.location.origin}/item-detail/${realListingId}`;
+      const shareData = {
+        title: title || 'Admerce Item',
+        text: `Check out ${title || 'this item'} on Admerce!`,
+        url,
+      };
+
+      try {
+        if (navigator.share) {
+          await navigator.share(shareData);
+        } else {
+          await navigator.clipboard.writeText(url);
+          await alertDialog({
+            title: 'Link Copied',
+            body: 'The item link has been copied to your clipboard.',
+            kind: 'success',
+          });
+        }
+      } catch (err) {
+        // User cancelled or share failed
+      }
+    };
+
     return (
       <article key={postKey} style={styles.post} className="sv-post">
         {/* ─── Post header ─── */}
@@ -991,7 +1016,7 @@ function SavedPageContent() {
 
           <button
             type="button"
-            onClick={onPrimary}
+            onClick={handleShare}
             style={styles.postActionBtn}
             aria-label="Share"
           >
@@ -1002,6 +1027,7 @@ function SavedPageContent() {
 
           <button
             type="button"
+            onClick={onDelete || onPrimary}
             style={styles.postActionBtn}
             aria-label="Save"
             title="Saved"
