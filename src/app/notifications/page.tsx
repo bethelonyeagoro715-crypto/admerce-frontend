@@ -108,9 +108,15 @@ function extractDataPayload(raw: unknown): Record<string, unknown> | null {
 
 function classify(n: NotificationItem): NotificationKind {
   const raw = (n.type || '').toLowerCase();
+  const t = (n.title || '').toLowerCase();
+
+  // 🚨 FIX: Correctly classify voice notes and messages
+  if (raw.includes('message') || raw.includes('chat') || t.includes('message') || t.includes('voice note')) {
+    return 'message';
+  }
+  
   if (raw.includes('wallet') || raw.includes('payment') || raw.includes('refund')) return 'wallet';
-  if (raw.includes('order')) return 'order';
-  if (raw.includes('message') || raw.includes('chat')) return 'message';
+  if (raw.includes('order') || t.includes('order') || t.includes('reservation')) return 'order';
   if (raw.includes('store')) return 'store';
   if (raw.includes('verif')) return 'verified';
   if (raw.includes('favorite') || raw.includes('save')) return 'favorite';
@@ -118,10 +124,7 @@ function classify(n: NotificationItem): NotificationKind {
   if (raw.includes('review') || raw.includes('rating')) return 'review';
   if (raw.includes('promo') || raw.includes('announce')) return 'promotion';
 
-  const t = (n.title || '').toLowerCase();
   if (t.includes('refund') || t.includes('wallet')) return 'wallet';
-  if (t.includes('order')) return 'order';
-  if (t.includes('message')) return 'message';
   if (t.includes('deliver')) return 'delivery';
   if (t.includes('verified')) return 'verified';
   return 'system';
@@ -148,7 +151,7 @@ function resolveDeepLink(n: NotificationItem): string | null {
   const title = (n.title || '').toLowerCase();
   const type = (n.type || '').toLowerCase();
 
-  // 1. Prioritize explicit URLs from backend (like instant receipts)
+  // 1. Prioritize explicit URLs from backend (like instant receipts or chats with params)
   if (typeof n.url === 'string' && n.url.trim()) return n.url.trim();
   if (data) {
     const fromData = (typeof data.url === 'string' && data.url) || (typeof data.link === 'string' && data.link);
@@ -157,17 +160,21 @@ function resolveDeepLink(n: NotificationItem): string | null {
 
   // 2. Role-Aware Routing for Orders
   if (title.includes('new order') || title.includes('new reservation') || type.includes('store')) {
-    // Storekeepers should go to their dashboard orders
     return `/storekeeper/orders`;
   }
   
   if (data && typeof data.order_id === 'string') {
-    // Shoppers go to the shopper receipt
     return `/shopper/orders/receipt/${data.order_id}`;
   }
 
-  // 3. Fallbacks for other types
-  if (data && typeof data.conversation_id === 'string') return `/chat/${data.conversation_id}`;
+  // 3. Fallback for Chats (ensuring params are included)
+  if (data && typeof data.conversation_id === 'string') {
+    const otherId = data.otherUserId || '';
+    const otherName = data.otherUserName || '';
+    return `/chat/${data.conversation_id}?otherUserId=${otherId}&otherUserName=${otherName}`;
+  }
+
+  // 4. Fallbacks for other types
   if (data && typeof data.listing_id === 'string') return `/item-detail/${data.listing_id}`;
   if (data && typeof data.store_id === 'string') return `/store-detail/${data.store_id}`;
   
